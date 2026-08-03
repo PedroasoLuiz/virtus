@@ -136,6 +136,7 @@ function Conteudo({ faturaId, onClose }: { faturaId: number; onClose: () => void
           numero: t.numero,
           titulo: t.titulo,
           valor: t.valor,
+          data: t.encerradoEm,
         })),
         parcelas: fatura.parcelas.map((p) => ({
           numero: p.numero,
@@ -1158,7 +1159,16 @@ function AcoesDaParcela({
         pagoEm: parcela.pagoEm,
         clienteNome: fatura.clienteNome,
         clienteDoc: fatura.clienteDoc,
-        tickets: fatura.tickets.map((t) => ({ numero: t.numero, titulo: t.titulo })),
+        tickets: fatura.tickets.map((t) => ({
+          numero: t.numero,
+          titulo: t.titulo,
+          valor: t.valor,
+          data: t.encerradoEm,
+        })),
+        // As que sobram depois desta. Quem assina quer saber o que falta.
+        emAberto: fatura.parcelas
+          .filter((x) => !x.pago && x.id !== parcela.id)
+          .map((x) => ({ numero: x.numero, vencimento: x.vencimento, total: x.total })),
         emitente: fatura.emitente,
       },
       "",

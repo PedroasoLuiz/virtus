@@ -1,6 +1,7 @@
 import jsPDF from "jspdf";
 import { formatarSemSimbolo, type Centavos } from "@/shared/utils/money";
 import { paraFormatoBR, type DataISO } from "@/shared/utils/datas";
+import { valorPorExtenso } from "@/shared/utils/extenso";
 import { carregarLogo } from "../tickets/pdf";
 
 /**
@@ -33,7 +34,9 @@ export type ReciboParaPDF = {
   clienteNome: string | null;
   clienteDoc: string | null;
   /** Os tickets que a conta cobre. E a referencia que o cliente reconhece. */
-  tickets: { numero: number; titulo: string }[];
+  tickets: { numero: number; titulo: string; valor: number; data: string | null }[];
+  /** As que ainda faltam. Quem assina o recibo quer saber o que sobra. */
+  emAberto: { numero: number; vencimento: string | null; total: number }[];
   emitente: {
     razaoSocial: string | null;
     endereco: string | null;
@@ -79,73 +82,88 @@ export async function imprimirReciboDePagamento(
 
   y += 52;
 
-  // ── Emitente e pagador ────────────────────────────────────────────────────
-  const meio = MARGEM + (largura - MARGEM * 2) / 2;
-
+  // ── Quem pagou ────────────────────────────────────────────────────────────
+  //
+  // So o pagador. Quem emite ja assina no rodape, e repetir os dados da empresa
+  // aqui gastava meia pagina para dizer duas vezes a mesma coisa.
   doc.setFont("helvetica", "bold").setFontSize(7).setTextColor(...CINZA);
   doc.text("RECEBEMOS DE", MARGEM, y);
-  doc.text("EMITIDO POR", meio, y);
 
-  doc.setFont("helvetica", "bold").setFontSize(10).setTextColor(...TINTA);
-  doc.text(r.clienteNome ?? "—", MARGEM, y + 14);
-  doc.text(r.emitente.razaoSocial ?? "—", meio, y + 14);
+  doc.setFont("helvetica", "bold").setFontSize(11).setTextColor(...TINTA);
+  doc.text(r.clienteNome ?? "—", MARGEM, y + 15);
 
-  doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(...CINZA);
-  if (r.clienteDoc) doc.text(r.clienteDoc, MARGEM, y + 26);
-  if (r.emitente.cnpj) doc.text(`CNPJ ${r.emitente.cnpj}`, meio, y + 26);
-  if (r.emitente.endereco) {
-    doc.text(doc.splitTextToSize(r.emitente.endereco, meio - MARGEM - 20), meio, y + 37);
+  if (r.clienteDoc) {
+    doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(...CINZA);
+    doc.text(r.clienteDoc, MARGEM, y + 27);
   }
 
-  y += 62;
+  y += 48;
 
   // ── A quantia, por extenso do jeito que se lê num recibo ─────────────────
   doc.setDrawColor(...REGUA).setLineWidth(0.6);
   doc.line(MARGEM, y, direita, y);
 
-  y += 26;
+  y += 24;
   doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(...CINZA);
   doc.text("A importância de", MARGEM, y);
 
-  doc.setFont("helvetica", "bold").setFontSize(24).setTextColor(...VERDE);
-  doc.text(`R$ ${formatarSemSimbolo(r.valor as Centavos)}`, MARGEM, y + 26);
+  doc.setFont("helvetica", "bold").setFontSize(16).setTextColor(...VERDE);
+  doc.text(`R$ ${formatarSemSimbolo(r.valor as Centavos)}`, MARGEM, y + 20);
 
-  y += 48;
+  /*
+   * O valor tambem por extenso.
+   *
+   * E o que impede alterar um algarismo depois de assinado: "1.500,00" vira
+   * "5.500,00" com uma canetada; "mil e quinhentos reais" nao.
+   */
+  doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(...TINTA);
+  doc.text(
+    doc.splitTextToSize(`(${valorPorExtenso(r.valor)})`, largura - MARGEM * 2),
+    MARGEM,
+    y + 34,
+  );
+
+  y += 52;
   doc.setFont("helvetica", "normal").setFontSize(9.5).setTextColor(...TINTA);
-  const referencia =
-    r.tickets.length === 0
-      ? `referente à conta ${r.numeroConta}`
-      : r.tickets.length === 1
-        ? `referente ao ticket ${r.tickets[0].numero}`
-        : `referente aos tickets ${r.tickets.map((t) => t.numero).join(", ")}`;
+  doc.text(
+    doc.splitTextToSize(
+      "Declaramos para os devidos fins que recebemos a quantia acima, referente ao que segue, " +
+        "dando plena e geral quitação desta parcela.",
+      largura - MARGEM * 2,
+    ),
+    MARGEM,
+    y,
+    { lineHeightFactor: 1.5 },
+  );
 
-  const frase =
-    `Declaramos para os devidos fins que recebemos a quantia acima, ${referencia}` +
-    `${r.vencimento ? `, com vencimento em ${paraFormatoBR(r.vencimento.slice(0, 10) as DataISO)}` : ""}` +
-    `, dando plena e geral quitação desta parcela.`;
+  y += 32;
 
-  doc.text(doc.splitTextToSize(frase, largura - MARGEM * 2), MARGEM, y, { lineHeightFactor: 1.5 });
-
-  // ── Itens cobertos ────────────────────────────────────────────────────────
+  // ── Composição, no mesmo desenho do resumo ────────────────────────────────
   if (r.tickets.length > 0) {
-    y += 46;
-    doc.setFont("helvetica", "bold").setFontSize(7).setTextColor(...CINZA);
-    doc.text("REFERENTE A", MARGEM, y);
+    y = composicao(doc, r.tickets, y, direita);
+  }
 
-    y += 12;
-    doc.setDrawColor(...REGUA);
-    doc.line(MARGEM, y, direita, y);
+  // ── O que ainda falta ─────────────────────────────────────────────────────
+  //
+  // Quem assina um recibo de parcela quer saber o que sobra. Sem isso o
+  // documento comprova o pedaço e cala sobre o todo.
+  if (r.emAberto.length > 0) {
+    y += 18;
+    y = secao(doc, "PARCELAS EM ABERTO", y, MARGEM, direita);
 
-    for (const t of r.tickets) {
-      y += 16;
+    for (const p of r.emAberto) {
+      y += 15;
       doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(...TINTA);
-      doc.text(`Ticket ${t.numero}`, MARGEM, y);
-      if (t.titulo && t.titulo !== String(t.numero)) {
-        doc.setTextColor(...CINZA);
-        doc.text(doc.splitTextToSize(t.titulo, 320), MARGEM + 70, y);
-      }
-      doc.setDrawColor(...REGUA);
-      doc.line(MARGEM, y + 5, direita, y + 5);
+      doc.text(String(p.numero), MARGEM, y);
+      doc.setTextColor(...CINZA);
+      doc.text(
+        p.vencimento ? paraFormatoBR(p.vencimento.slice(0, 10) as DataISO) : "—",
+        MARGEM + 30,
+        y,
+      );
+      doc.setTextColor(...TINTA);
+      doc.text(formatarSemSimbolo(p.total as Centavos), direita, y, { align: "right" });
+      doc.setDrawColor(...REGUA).line(MARGEM, y + 5, direita, y + 5);
     }
   }
 
@@ -153,12 +171,23 @@ export async function imprimirReciboDePagamento(
   //
   // Fixa embaixo e não depois do texto: recibo é documento, e o mesmo desenho
   // em toda emissão é o que faz um documento parecer confiável.
-  const linhaAssinatura = altura - MARGEM - 44;
-  doc.setDrawColor(...TINTA).setLineWidth(0.8);
-  doc.line(largura / 2 - 110, linhaAssinatura, largura / 2 + 110, linhaAssinatura);
+  const linhaAssinatura = altura - MARGEM - 52;
 
-  doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(...TINTA);
-  doc.text(r.emitente.razaoSocial ?? "—", largura / 2, linhaAssinatura + 13, { align: "center" });
+  // Data em branco: recibo se assina na hora da entrega, e a data do papel e a
+  // do gesto, nao a do arquivo.
+  doc.setFont("helvetica", "normal").setFontSize(9.5).setTextColor(...TINTA);
+  doc.text("____ / ____ / ________", largura / 2, linhaAssinatura - 26, { align: "center" });
+
+  doc.setDrawColor(...TINTA).setLineWidth(0.8);
+  doc.line(largura / 2 - 120, linhaAssinatura, largura / 2 + 120, linhaAssinatura);
+
+  doc.setFont("helvetica", "bold").setFontSize(9.5).setTextColor(...TINTA);
+  doc.text(r.emitente.razaoSocial ?? "—", largura / 2, linhaAssinatura + 14, { align: "center" });
+
+  if (r.emitente.cnpj) {
+    doc.setFont("helvetica", "normal").setFontSize(8).setTextColor(...CINZA);
+    doc.text(`CNPJ ${r.emitente.cnpj}`, largura / 2, linhaAssinatura + 25, { align: "center" });
+  }
 
   doc.setFontSize(7.5).setTextColor(...CINZA);
   doc.text(
@@ -186,7 +215,7 @@ export type ResumoParaPDF = {
   clienteDoc: string | null;
   total: number;
   pago: number;
-  tickets: { numero: number; titulo: string; valor: number }[];
+  tickets: { numero: number; titulo: string; valor: number; data: string | null }[];
   parcelas: {
     numero: number;
     vencimento: string | null;
@@ -232,43 +261,28 @@ export async function imprimirResumoDaConta(
 
   y += r.competencia ? 50 : 37;
 
-  // ── Partes ────────────────────────────────────────────────────────────────
-  const meio = MARGEM + (largura - MARGEM * 2) / 2;
-
+  // ── Para quem ─────────────────────────────────────────────────────────────
+  //
+  // So o cliente. A marca ja esta no topo e o emitente e sempre o mesmo: uma
+  // coluna "DE" repetia em toda folha o que ninguem consulta.
   doc.setFont("helvetica", "bold").setFontSize(7).setTextColor(...CINZA);
-  doc.text("DE", MARGEM, y);
-  doc.text("PARA", meio, y);
+  doc.text("CLIENTE", MARGEM, y);
 
-  doc.setFont("helvetica", "bold").setFontSize(10).setTextColor(...TINTA);
-  doc.text(r.emitente.razaoSocial ?? "—", MARGEM, y + 14);
-  doc.text(r.clienteNome ?? "—", meio, y + 14);
+  doc.setFont("helvetica", "bold").setFontSize(11).setTextColor(...TINTA);
+  doc.text(r.clienteNome ?? "—", MARGEM, y + 15);
 
-  doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(...CINZA);
-  if (r.emitente.cnpj) doc.text(`CNPJ ${r.emitente.cnpj}`, MARGEM, y + 26);
-  if (r.clienteDoc) doc.text(r.clienteDoc, meio, y + 26);
-  if (r.emitente.endereco) {
-    doc.text(doc.splitTextToSize(r.emitente.endereco, meio - MARGEM - 20), MARGEM, y + 37);
+  if (r.clienteDoc) {
+    doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(...CINZA);
+    doc.text(r.clienteDoc, MARGEM, y + 27);
   }
 
-  y += 62;
+  y += 48;
 
   // ── De onde vem ───────────────────────────────────────────────────────────
   if (r.tickets.length > 0) {
-    y = secao(doc, "COMPOSIÇÃO", y, MARGEM, direita);
-
-    for (const t of r.tickets) {
-      y += 16;
-      doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(...TINTA);
-      doc.text(`Ticket ${t.numero}`, MARGEM, y);
-      if (t.titulo && t.titulo !== String(t.numero)) {
-        doc.setTextColor(...CINZA);
-        doc.text(doc.splitTextToSize(t.titulo, 280), MARGEM + 70, y);
-      }
-      doc.setFont("helvetica", "normal").setTextColor(...TINTA);
-      doc.text(formatarSemSimbolo(t.valor as Centavos), direita, y, { align: "right" });
-      doc.setDrawColor(...REGUA).line(MARGEM, y + 5, direita, y + 5);
-    }
-    y += 22;
+    y = composicao(doc, r.tickets, y, direita);
+    // Respiro entre as duas tabelas: coladas, pareciam uma so de duas partes.
+    y += 34;
   }
 
   // ── Como se paga ──────────────────────────────────────────────────────────
@@ -301,17 +315,19 @@ export async function imprimirResumoDaConta(
   doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(...CINZA);
   doc.text("Total", rotulo, y);
   doc.text("Recebido", rotulo, y + 15);
+  doc.text("Em aberto", rotulo, y + 30);
 
   doc.setTextColor(...TINTA);
   doc.text(formatarSemSimbolo(r.total as Centavos), direita, y, { align: "right" });
   doc.setTextColor(...VERDE);
   doc.text(formatarSemSimbolo(r.pago as Centavos), direita, y + 15, { align: "right" });
 
-  doc.setDrawColor(...REGUA).line(rotulo, y + 22, direita, y + 22);
-
-  doc.setFont("helvetica", "bold").setFontSize(11).setTextColor(...TINTA);
-  doc.text("Em aberto", rotulo, y + 38);
-  doc.text(formatarSemSimbolo((r.total - r.pago) as Centavos), direita, y + 38, { align: "right" });
+  // Sem regua e no mesmo corpo das outras: a linha separava tres numeros que se
+  // leem juntos, e o negrito ja diz qual e a resposta.
+  doc.setFont("helvetica", "bold").setTextColor(...TINTA);
+  doc.text(formatarSemSimbolo((r.total - r.pago) as Centavos), direita, y + 30, {
+    align: "right",
+  });
 
   doc.setFont("helvetica", "normal").setFontSize(7.5).setTextColor(...CINZA);
   doc.text(
@@ -322,6 +338,35 @@ export async function imprimirResumoDaConta(
   doc.text("1 / 1", direita, altura - MARGEM, { align: "right" });
 
   doc.save(`conta-${r.numeroConta}.pdf`);
+}
+
+/**
+ * A tabela de composicao: de onde vem o dinheiro.
+ *
+ * Sem o numero do ticket, so a DATA e o que foi feito. O numero da conta ja
+ * esta no topo, e o do ticket nao ajuda o cliente a lembrar do servico — a data
+ * ajuda.
+ */
+function composicao(
+  doc: jsPDF,
+  tickets: { titulo: string; valor: number; data: string | null }[],
+  y: number,
+  direita: number,
+): number {
+  let atual = secao(doc, "COMPOSIÇÃO", y, MARGEM, direita);
+
+  for (const t of tickets) {
+    atual += 16;
+    doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(...CINZA);
+    doc.text(t.data ? paraFormatoBR(t.data.slice(0, 10) as DataISO) : "—", MARGEM, atual);
+
+    doc.setTextColor(...TINTA);
+    doc.text(doc.splitTextToSize(t.titulo || "Serviço", 300), MARGEM + 62, atual);
+    doc.text(formatarSemSimbolo(t.valor as Centavos), direita, atual, { align: "right" });
+
+    doc.setDrawColor(...REGUA).line(MARGEM, atual + 5, direita, atual + 5);
+  }
+  return atual;
 }
 
 /** Titulo de secao com a regua embaixo. Repetido tres vezes; vale a funcao. */
