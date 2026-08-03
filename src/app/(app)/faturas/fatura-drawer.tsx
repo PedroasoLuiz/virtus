@@ -39,6 +39,8 @@ type Parcela = {
   desconto: number;
   total: number;
   pago: boolean;
+  /** Data da baixa. E o fato que o recibo comprova — nao e o vencimento. */
+  pagoEm: string | null;
   nfs: string | null;
   boleto: string | null;
 };
@@ -65,6 +67,13 @@ type Fatura = {
   rodape: string | null;
   parcelas: Parcela[];
   tickets: TicketDaFatura[];
+  clienteDoc: string | null;
+  emitente: {
+    razaoSocial: string | null;
+    endereco: string | null;
+    cnpj: string | null;
+    logo: string | null;
+  };
   historico: {
     criadoEm: string | null;
     criadoPor: string | null;
@@ -302,7 +311,7 @@ function Conteudo({ faturaId, onClose }: { faturaId: number; onClose: () => void
                 <MenuDeLinha key="a">
                   {(fechar) => (
                     <AcoesDaParcela
-                      faturaId={fatura.id}
+                      fatura={fatura}
                       parcela={p}
                       bloqueado={p.pago || fatura.situacao === "CANCELADA"}
                       aoMudar={recarregar}
@@ -612,17 +621,25 @@ function Tabela({
   aoClicarLinha?: (indice: number) => void;
 }) {
   return (
+    /*
+     * ⚠️ Sem `overflow: hidden`.
+     *
+     * Ele arredondava os cantos, mas RECORTAVA o cartao do menu de acoes: na
+     * ultima linha o cartao abre para baixo, e sumia inteiro. A aba de tickets,
+     * que costuma ter uma linha so, nunca mostrava o menu.
+     *
+     * Os cantos agora sao arredondados nas proprias celulas das pontas.
+     */
     <div
       style={{
         border: "1px solid var(--border)",
         borderRadius: "var(--radius-lg)",
-        overflow: "hidden",
       }}
     >
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "var(--text-sm)" }}>
         <thead>
           <tr style={{ background: "var(--surface-2)" }}>
-            {cabecalho.map((c) => (
+            {cabecalho.map((c, ci) => (
               <th
                 key={c}
                 className="rotulo"
@@ -634,6 +651,8 @@ function Tabela({
                   textAlign: "left",
                   borderBottom: "1px solid var(--border)",
                   whiteSpace: "nowrap",
+                  borderTopLeftRadius: ci === 0 ? "var(--radius-lg)" : undefined,
+                  borderTopRightRadius: ci === cabecalho.length - 1 ? "var(--radius-lg)" : undefined,
                 }}
               >
                 {c}
@@ -682,6 +701,12 @@ function Tabela({
                     height: 34,
                     padding: "0 12px",
                     fontVariantNumeric: "tabular-nums",
+                    borderBottomLeftRadius:
+                      li === linhas.length - 1 && ci === 0 ? "var(--radius-lg)" : undefined,
+                    borderBottomRightRadius:
+                      li === linhas.length - 1 && ci === celulas.length - 1
+                        ? "var(--radius-lg)"
+                        : undefined,
                   }}
                 >
                   {c}
@@ -952,20 +977,47 @@ function ItemDoMenu({
  * Anexar so aparece enquanto NAO ha o documento; depois de baixada, nem isso.
  */
 function AcoesDaParcela({
-  faturaId,
+  fatura,
   parcela,
   bloqueado,
   aoMudar,
   fechar,
 }: {
-  faturaId: number;
-  parcela: { id: number; nfs: string | null; boleto: string | null; pago: boolean };
+  fatura: Fatura;
+  parcela: Fatura["parcelas"][number];
   bloqueado: boolean;
   aoMudar: () => void;
   fechar: () => void;
 }) {
   const { avisar, confirmar } = useAvisos();
+  const faturaId = fatura.id;
   const temDocumento = Boolean(parcela.nfs || parcela.boleto);
+
+  /*
+   * O recibo nasce SO de parcela baixada.
+   *
+   * Recibo comprova; um "recibo" de algo em aberto seria um documento
+   * afirmando o que nao aconteceu.
+   */
+  async function recibo() {
+    const { imprimirReciboDePagamento } = await import("./pdf-recibo-pagamento");
+
+    await imprimirReciboDePagamento(
+      {
+        numeroConta: fatura.numero,
+        parcela: parcela.numero,
+        totalParcelas: fatura.parcelas.length,
+        valor: parcela.total,
+        vencimento: parcela.vencimento,
+        pagoEm: parcela.pagoEm,
+        clienteNome: fatura.clienteNome,
+        clienteDoc: fatura.clienteDoc,
+        tickets: fatura.tickets.map((t) => ({ numero: t.numero, titulo: t.titulo })),
+        emitente: fatura.emitente,
+      },
+      "",
+    );
+  }
 
   async function enviar() {
     const r = await fetch(`/api/v1/faturas/${faturaId}/parcelas/${parcela.id}/enviar`, {
@@ -1019,6 +1071,19 @@ function AcoesDaParcela({
       {/* Envelope com seta saindo: o aviaozinho de papel diz "mensagem", mas nao
           diz que vai por e-mail, e aqui o meio importa porque o que sai leva a
           cobranca. */}
+      <ItemDoMenu
+        rotulo="Recibo de pagamento"
+        desabilitado={!parcela.pago}
+        motivo={!parcela.pago ? "Só depois da baixa" : undefined}
+        onClick={() => {
+          fechar();
+          void recibo();
+        }}
+      >
+        <path d="M3.4 1.8h9.2v12.4l-2.3-1.4-2.3 1.4-2.3-1.4-2.3 1.4z" />
+        <path d="M5.8 5.4h4.4M5.8 8h3" />
+      </ItemDoMenu>
+
       <ItemDoMenu
         rotulo="Enviar por e-mail"
         desabilitado={bloqueado || !temDocumento}

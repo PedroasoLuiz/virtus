@@ -60,6 +60,8 @@ export type ParcelaFatura = {
   total: Centavos;
   pago: boolean;
   pagamentoId: number | null;
+  /** Data da baixa. E o fato que o recibo comprova — nao confundir com o vencimento. */
+  pagoEm: DataISO | null;
   nfs: string | null;
   boleto: string | null;
 };
@@ -119,6 +121,15 @@ export type Fatura = FaturaResumo & {
   parcelas: ParcelaFatura[];
   tickets: TicketDaFatura[];
   historico: Historico;
+  /** Quem emite o recibo. So no detalhe: a listagem nao imprime nada. */
+  emitente: {
+    razaoSocial: string | null;
+    endereco: string | null;
+    cnpj: string | null;
+    logo: string | null;
+  };
+  /** CNPJ/CPF de quem paga. Recibo sem documento nao identifica ninguem. */
+  clienteDoc: string | null;
 };
 
 /**

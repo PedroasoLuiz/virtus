@@ -105,6 +105,27 @@ async function proximosVencimentos(faturaIds: number[]): Promise<Map<number, Dat
   return mapa;
 }
 
+/** Emitente do documento — cabecalho do recibo. */
+async function dadosDaEmpresa(empresaId: number) {
+  const supabase = await serverClient();
+  const { data } = await supabase
+    .from("empresas")
+    .select("razaosocial, fantasia, nome, cnpj, logo, logradouro, bairro, cidade, cep")
+    .eq("id", empresaId)
+    .maybeSingle();
+
+  const e = data as Record<string, string | null> | null;
+
+  return {
+    razaoSocial: primeiroPreenchido(e?.razaosocial, e?.fantasia, e?.nome),
+    endereco: primeiroPreenchido(
+      [e?.logradouro, e?.bairro, e?.cidade, e?.cep].filter(Boolean).join(" · "),
+    ),
+    cnpj: primeiroPreenchido(e?.cnpj),
+    logo: primeiroPreenchido(e?.logo),
+  };
+}
+
 /** Quanto ja entrou em cada conta, somado das parcelas baixadas. */
 async function somarPago(faturaIds: number[]): Promise<Map<number, number>> {
   const mapa = new Map<number, number>();
@@ -152,7 +173,7 @@ export async function buscarPorId(empresaId: number, id: number): Promise<Fatura
   const { data, error } = await supabase
     .from("faturas")
     .select(
-      `${COLUNAS_FATURA}, created_at, updated_at, fkUserCriacao, fkUserModificacao, clientes(razao, nomefantasia)`,
+      `${COLUNAS_FATURA}, created_at, updated_at, fkUserCriacao, fkUserModificacao, clientes(razao, nomefantasia, cnpj)`,
     )
     .eq("fkEmpresa", empresaId)
     .eq("id", id)
@@ -161,10 +182,11 @@ export async function buscarPorId(empresaId: number, id: number): Promise<Fatura
   if (error) throw error;
   if (!data) return null;
 
-  const [parcelas, tickets, historico] = await Promise.all([
+  const [parcelas, tickets, historico, emitente] = await Promise.all([
     listarParcelas(id),
     listarTickets(id),
     montarHistorico(data.created_at, data.updated_at, data.fkUserCriacao, data.fkUserModificacao),
+    dadosDaEmpresa(empresaId),
   ]);
   const proximo = parcelas.find((p) => !p.pago)?.vencimento ?? null;
 
@@ -181,6 +203,8 @@ export async function buscarPorId(empresaId: number, id: number): Promise<Fatura
     parcelas,
     tickets,
     historico,
+    emitente,
+    clienteDoc: (data.clientes as { cnpj?: string | null } | null)?.cnpj ?? null,
   };
 }
 
@@ -301,7 +325,9 @@ export async function listarParcelas(faturaId: number): Promise<ParcelaFatura[]>
   const { data, error } = await supabase
     .from("faturasparcelas")
     .select(
-      "id, numeroparcela, vencimento, valor, acrescimo, desconto, total, pago, fkPagamento, nfs, boleto",
+      // `pagamentos(data)` e a data REAL da baixa. O recibo comprova um fato, e
+      // sem ela sobraria o vencimento no lugar — que e outra coisa.
+      "id, numeroparcela, vencimento, valor, acrescimo, desconto, total, pago, fkPagamento, nfs, boleto, pagamentos(data)",
     )
     .eq("fkFatura", faturaId)
     .order("numeroparcela", { ascending: true });
@@ -319,6 +345,7 @@ export async function listarParcelas(faturaId: number): Promise<ParcelaFatura[]>
     total: l.total == null ? doBanco(l.valor) : doBanco(l.total),
     pago: l.pago ?? false,
     pagamentoId: l.fkPagamento,
+    pagoEm: (l.pagamentos as unknown as { data: string | null } | null)?.data ?? null,
     nfs: l.nfs,
     boleto: l.boleto,
   }));

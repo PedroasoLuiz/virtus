@@ -125,6 +125,7 @@ export const faturaSchema = faturaResumoSchema.extend({
       total: z.number(),
       pago: z.boolean(),
       pagamentoId: z.number().nullable(),
+      pagoEm: z.string().nullable(),
       nfs: z.string().nullable(),
       boleto: z.string().nullable(),
     }),
@@ -148,6 +149,13 @@ export const faturaSchema = faturaResumoSchema.extend({
       encerradoEm: z.string().nullable(),
     }),
   ),
+  clienteDoc: z.string().nullable(),
+  emitente: z.object({
+    razaoSocial: z.string().nullable(),
+    endereco: z.string().nullable(),
+    cnpj: z.string().nullable(),
+    logo: z.string().nullable(),
+  }),
   historico: z.object({
     criadoEm: z.string().nullable(),
     criadoPor: z.string().nullable(),
