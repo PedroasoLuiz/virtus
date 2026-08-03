@@ -26,6 +26,7 @@ const VERDE = "#006B29";
 const TINTA = "#1D1D1F";
 const CINZA = "#86868B";
 const REGUA = "#E3E3E3";
+const VERDE_CLARO = "#EAF3EC";
 
 /** jsPDF pesa ~400 KB e so serve a quem clica em imprimir. */
 const carregarPdf = () => import("@/app/(app)/tickets/pdf-recibo");
@@ -144,7 +145,7 @@ export function CobrancaPublicaView({
         )}
         {cobranca.tickets.length === 1 && (
           <Botao secundario onClick={() => imprimir(cobranca.tickets[0])}>
-            {imprimindo != null ? "Gerando…" : "Baixar em PDF"}
+            {imprimindo != null ? "Gerando…" : "Baixar ticket em PDF"}
           </Botao>
         )}
       </div>
@@ -614,7 +615,9 @@ function Botao({
     fontFamily: "Helvetica, Arial, sans-serif",
     cursor: "pointer",
     border: secundario ? `1px solid ${VERDE}` : "1px solid transparent",
-    background: secundario ? "#ffffff" : VERDE,
+    // Verde claro no vazado, e nao branco: sobre o cinza do visualizador o
+    // branco virava um segundo "papel", competindo com a folha logo acima.
+    background: secundario ? VERDE_CLARO : VERDE,
     color: secundario ? VERDE : "#ffffff",
   };
 

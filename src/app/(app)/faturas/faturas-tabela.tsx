@@ -28,6 +28,9 @@ import {
 import { NovaFaturaDrawer } from "./nova-fatura-drawer";
 import { FaturaDrawer } from "./fatura-drawer";
 import { formatarSemSimbolo } from "@/shared/utils/money";
+import { Quadro } from "@/components/ui/quadro";
+import { useAvisos } from "@/components/ui/avisos";
+import { useRouter } from "next/navigation";
 import { hoje, paraFormatoBR, type DataISO } from "@/shared/utils/datas";
 import {
   STATUS_FATURA,
@@ -55,7 +58,31 @@ export function FaturasTabela({
   faturas: FaturaResumo[];
   clientes: { id: number; nome: string }[];
 }) {
+  const router = useRouter();
+  const { avisar } = useAvisos();
   const [criando, setCriando] = useState(false);
+
+  /*
+   * Arrastar troca a SITUACAO da conta.
+   *
+   * As transicoes validas sao do servidor (`podeTransicionar`): tentar uma que
+   * nao existe volta com o motivo, e a tela nao repete a regra. Duplicada aqui,
+   * ela divergiria da do servico no primeiro ajuste.
+   */
+  async function moverConta(id: number, situacao: SituacaoFatura) {
+    const r = await fetch(`/api/v1/faturas/${id}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: situacao }),
+    });
+
+    if (!r.ok) {
+      const dados = await r.json().catch(() => null);
+      avisar("atencao", dados?.error?.message ?? "Não foi possível mover a conta");
+      return;
+    }
+    router.refresh();
+  }
 
   const [busca, setBusca] = useState("");
   const [status, setStatus] = useState("");
@@ -199,7 +226,11 @@ export function FaturasTabela({
             />
           </TableFrame>
         ) : (
-          <Kanban faturas={filtradas} aoAbrir={setDetalhe} />
+          <QuadroDeContas
+            faturas={filtradas}
+            aoAbrir={setDetalhe}
+            aoMover={moverConta}
+          />
         )}
       </Panel>
 
@@ -254,184 +285,111 @@ const COR_COLUNA: Record<SituacaoFatura, string> = {
 };
 
 /**
- * Kanban — mesma estrutura do SIC: cabecalho da coluna FORA da area de cards,
- * area em `--surface-3` com raio, cards brancos que sobem no hover.
+ * Quadro de contas a receber.
+ *
+ * Usa o `Quadro` compartilhado, o mesmo de tickets e de projetos. Esta tela
+ * tinha um kanban proprio, escrito antes do componente existir: mesma ideia,
+ * medidas diferentes, e cada ajuste de espacamento precisava ser feito duas
+ * vezes.
+ *
+ * As colunas sao as SITUACOES, um conjunto fixo, entao dividem a largura. A
+ * cancelada fica de fora de proposito: ela nao e uma etapa do caminho, e uma
+ * coluna morta no fim rouba largura das cinco que importam.
  */
-function Kanban({ faturas, aoAbrir }: { faturas: FaturaResumo[]; aoAbrir: (id: number) => void }) {
+function QuadroDeContas({
+  faturas,
+  aoAbrir,
+  aoMover,
+}: {
+  faturas: FaturaResumo[];
+  aoAbrir: (id: number) => void;
+  aoMover: (id: number, situacao: SituacaoFatura) => void;
+}) {
   const colunas: SituacaoFatura[] = ["ORÇAMENTO", "ABERTA", "FATURADA", "PARC. PAGA", "PAGA"];
 
   return (
-    <div style={{ flex: 1, overflowX: "auto", padding: 16, minHeight: 0 }}>
-      <div
-        style={{
-          display: "flex",
-          gap: 14,
-          height: "100%",
-          alignItems: "flex-start",
-          minWidth: "max-content",
-        }}
-      >
-        {colunas.map((col) => {
-          const daColuna = faturas.filter((f) => f.situacao === col);
-
-          return (
-            <div
-              key={col}
+    <Quadro
+      colunas={colunas.map((c, i) => ({ id: i, descricao: c, cor: COR_COLUNA[c] }))}
+      cartoes={faturas
+        .filter((f) => !f.cancelada)
+        .map((f) => ({
+          ...f,
+          colunaId: colunas.indexOf(f.situacao),
+          /*
+           * Conta paga nao volta arrastando.
+           *
+           * O que a tirou de "aberta" foi uma BAIXA, com valor e data. Desfazer
+           * isso e estornar um recebimento, nao mover um cartao.
+           */
+          arrastavel: f.situacao !== "PAGA" && f.situacao !== "PARC. PAGA",
+        }))}
+      aoMover={(id, coluna) => aoMover(id, colunas[coluna])}
+      aoAbrir={(f) => aoAbrir(f.id)}
+      vazio="Nenhuma conta"
+      corpo={(f) => (
+        <>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 6,
+              fontSize: "var(--text-sm)",
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
+            <span
               style={{
-                display: "flex",
-                flexDirection: "column",
-                minWidth: 262,
-                width: 270,
-                flexShrink: 0,
-                height: "100%",
+                display: "inline-flex",
+                alignItems: "center",
+                height: 17,
+                padding: "0 6px",
+                borderRadius: "var(--radius-xs)",
+                background: "var(--primary-subtle)",
+                color: "var(--primary)",
+                fontSize: "var(--text-xs)",
+                fontWeight: "var(--fw-semi)",
               }}
             >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 7,
-                  paddingBottom: 10,
-                  paddingLeft: 2,
-                }}
-              >
-                <span
-                  aria-hidden
-                  style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: "50%",
-                    background: COR_COLUNA[col],
-                    flexShrink: 0,
-                  }}
-                />
-                <span
-                  style={{
-                    fontSize: "var(--text-md)",
-                    fontWeight: 700,
-                    color: "var(--text-primary)",
-                  }}
-                >
-                  {col}
-                </span>
-                <span style={{ fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>
-                  {daColuna.length}
-                </span>
-              </div>
+              {f.numero}
+            </span>
+            <span style={{ color: "var(--text-tertiary)", fontVariantNumeric: "normal" }}>
+              {periodo(f.apuracaoInicio, f.apuracaoFim)}
+            </span>
+          </div>
 
-              <div
-                style={{
-                  flex: 1,
-                  overflowY: "auto",
-                  // Coluna sem fundo proprio: o cinza da pagina ja e o "trilho",
-                  // e um segundo cinza por cima quase identico nao leria.
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 6,
-                }}
-              >
-                {daColuna.length === 0 ? (
-                  <div
-                    style={{
-                      textAlign: "center",
-                      padding: "16px 0",
-                      fontSize: "var(--text-base)",
-                      color: "var(--text-tertiary)",
-                    }}
-                  >
-                    Nenhuma fatura
-                  </div>
-                ) : (
-                  daColuna.map((f) => <CardKanban key={f.id} fatura={f} aoAbrir={aoAbrir} />)
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function CardKanban({
-  fatura,
-  aoAbrir,
-}: {
-  fatura: FaturaResumo;
-  aoAbrir: (id: number) => void;
-}) {
-  const atrasado =
-    fatura.proximoVencimento != null &&
-    fatura.situacao !== "PAGA" &&
-    fatura.proximoVencimento < hoje();
-
-  return (
-    <div
-      onClick={() => aoAbrir(fatura.id)}
-      style={{
-        background: "var(--surface)",
-        borderRadius: "var(--radius-sm)",
-        padding: "11px 13px",
-        cursor: "pointer",
-        userSelect: "none",
-        transition: "box-shadow 120ms var(--ease), transform 100ms var(--ease)",
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.boxShadow = "0 4px 14px rgba(0,0,0,0.1)";
-        e.currentTarget.style.transform = "translateY(-1px)";
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.boxShadow = "none";
-        e.currentTarget.style.transform = "none";
-      }}
-    >
-      <div
-        style={{
-          fontSize: "var(--text-sm)",
-          fontWeight: 500,
-          color: "var(--text-tertiary)",
-          marginBottom: 5,
-        }}
-      >
-        {fatura.numero}
-      </div>
-      <div
-        style={{
-          fontSize: "var(--text-base)",
-          fontWeight: 500,
-          marginBottom: 8,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-        }}
-      >
-        {fatura.clienteNome ?? "—"}
-      </div>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          paddingTop: 7,
-          borderTop: "1px solid var(--border)",
-        }}
-      >
-        <span
-          style={{
-            fontSize: "var(--text-sm)",
-            fontWeight: atrasado ? 600 : 400,
-            color: atrasado ? "var(--danger-text)" : "var(--text-tertiary)",
-            fontVariantNumeric: "tabular-nums",
-          }}
-        >
-          {fatura.proximoVencimento ? paraFormatoBR(fatura.proximoVencimento) : "—"}
-        </span>
-        <span
-          style={{ fontSize: "var(--text-sm)", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}
-        >
-          {formatarSemSimbolo(fatura.total)}
-        </span>
-      </div>
-    </div>
+          <div
+            style={{
+              display: "-webkit-box",
+              WebkitBoxOrient: "vertical",
+              WebkitLineClamp: 2,
+              overflow: "hidden",
+              fontSize: "var(--text-sm)",
+              fontWeight: "var(--fw-medium)",
+              lineHeight: 1.32,
+              letterSpacing: "var(--tracking-normal)",
+              marginTop: 7,
+            }}
+          >
+            {f.clienteNome ?? "—"}
+          </div>
+        </>
+      )}
+      rodape={(f) => (
+        <>
+          <Vencimento data={f.proximoVencimento} pago={f.situacao === "PAGA"} />
+          <span style={{ flex: 1 }} />
+          <span
+            style={{
+              fontSize: "var(--text-sm)",
+              fontWeight: "var(--fw-semi)",
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
+            {formatarSemSimbolo(f.total)}
+          </span>
+        </>
+      )}
+    />
   );
 }
