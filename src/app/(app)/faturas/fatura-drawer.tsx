@@ -5,7 +5,6 @@ import { BotaoHistorico, Drawer } from "@/components/ui/drawer";
 import { useAvisos } from "@/components/ui/avisos";
 import { Icon } from "@/components/layout/icones";
 import {
-  Badge,
   Button,
   CampoBloqueado,
   Field,
@@ -148,6 +147,7 @@ function Conteudo({ faturaId, onClose }: { faturaId: number; onClose: () => void
   // O recebido vem das parcelas baixadas, nao de um campo do cabecalho: e a
   // parcela que carrega a verdade sobre o pagamento.
   const pago = fatura ? fatura.parcelas.filter((p) => p.pago).reduce((s, p) => s + p.total, 0) : 0;
+  const temBaixa = fatura?.parcelas.some((p) => p.pago) ?? false;
 
   return (
     <Drawer
@@ -238,96 +238,78 @@ function Conteudo({ faturaId, onClose }: { faturaId: number; onClose: () => void
                 </span>,
                 t.encerradoEm ? paraFormatoBR(t.encerradoEm as DataISO) : "—",
                 formatarSemSimbolo(t.valor as Centavos),
-                <span key="a" style={{ display: "inline-flex", gap: 4 }}>
-                  {/* O mesmo icone do menu: e o mesmo objeto, e um desenho
-                      diferente aqui faria parecer outra coisa. */}
-                  <BotaoDeLinha
-                    rotulo={`Abrir ticket ${t.numero}`}
-                    onClick={() => setTicketAberto(t.ticketId)}
-                  >
-                    <Icon name="ticket" size={14} />
-                  </BotaoDeLinha>
+                <MenuDeLinha key="a">
+                  {(fechar) => (
+                    <>
+                      <ItemDoMenu
+                        rotulo="Abrir ticket"
+                        icone={<Icon name="ticket" size={14} />}
+                        onClick={() => {
+                          fechar();
+                          setTicketAberto(t.ticketId);
+                        }}
+                      />
 
-                  {/* Tirar o ticket devolve o saldo dele. Sendo o unico, a conta
-                      inteira vai junto: conta sem origem nao cobra nada. */}
-                  <BotaoDeLinha
-                    rotulo="Remover desta conta"
-                    perigo
-                    svg
-                    onClick={() =>
-                      confirmar(
-                        `Remover o ticket ${t.numero} desta conta?`,
-                        "Remover",
-                        () => desvincularTicket(t.ticketId),
-                        fatura.tickets.length === 1
-                          ? "É o único ticket, então a conta a receber será excluída."
-                          : "O saldo dele volta a ficar disponível para cobrar.",
-                      )
-                    }
-                  >
-                    <path d="M12 4L4 12M4 4l8 8" />
-                  </BotaoDeLinha>
-                </span>,
+                      {/* Tirar o ticket devolve o saldo dele; sendo o unico, a
+                          conta inteira vai junto. Recusado quando ha baixa: o
+                          dinheiro entrou contra ESTE ticket, e soltar o vinculo
+                          faria o saldo voltar como se nada tivesse sido cobrado. */}
+                      <ItemDoMenu
+                        rotulo="Remover desta conta"
+                        perigo
+                        desabilitado={temBaixa}
+                        motivo={temBaixa ? "Conta com parcela baixada" : undefined}
+                        onClick={() => {
+                          fechar();
+                          confirmar(
+                            `Remover o ticket ${t.numero} desta conta?`,
+                            "Remover",
+                            () => desvincularTicket(t.ticketId),
+                            fatura.tickets.length === 1
+                              ? "É o único ticket, então a conta a receber será excluída."
+                              : "O saldo dele volta a ficar disponível para cobrar.",
+                          );
+                        }}
+                      >
+                        <path d="M12 4L4 12M4 4l8 8" />
+                      </ItemDoMenu>
+                    </>
+                  )}
+                </MenuDeLinha>,
               ])}
             />
           ) : (
             <Tabela
-              cabecalho={["#", "Vencimento", "Valor", "Situação", "Documentos", "Ações"]}
+              cabecalho={["#", "Vencimento", "Valor", "Documentos", "Ações"]}
               vazio="Nenhuma parcela gerada."
+              realce={(li) => vencida(fatura.parcelas[li])}
               linhas={fatura.parcelas.map((p) => [
-                p.numero,
-                <Vencimento key="v" data={p.vencimento} pago={p.pago} />,
+                <span key="n" style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
+                  <Bolinha parcela={p} />
+                  {p.numero}
+                </span>,
+                p.vencimento ? curto(p.vencimento) : "—",
                 formatarSemSimbolo(p.total as Centavos),
-                <Badge key="s" tom={p.pago ? "success" : "info"}>
-                  {p.pago ? "PAGA" : "ABERTA"}
-                </Badge>,
                 <Documentos
                   key="d"
                   faturaId={fatura.id}
                   parcelaId={p.id}
                   boleto={p.boleto}
                   nfs={p.nfs}
+                  bloqueado={p.pago || fatura.situacao === "CANCELADA"}
                   aoMudar={recarregar}
                 />,
-                <span key="a" style={{ display: "inline-flex", gap: 4 }}>
-                  {/* Anexar so aparece enquanto NAO ha o documento: com ele
-                      anexado, trocar e remover e anexar de novo, e um segundo
-                      botao dizendo a mesma coisa da bandeira ao lado. */}
-                  {!p.nfs && (
-                    <AnexarDocumento
-                      tipo="nfs"
-                      rotulo="Anexar nota fiscal"
+                <MenuDeLinha key="a">
+                  {(fechar) => (
+                    <AcoesDaParcela
                       faturaId={fatura.id}
-                      parcelaId={p.id}
-                      bloqueado={fatura.situacao === "CANCELADA"}
+                      parcela={p}
+                      bloqueado={p.pago || fatura.situacao === "CANCELADA"}
                       aoMudar={recarregar}
-                    >
-                      <path d="M9 1.8H4.2a1 1 0 0 0-1 1v10.4a1 1 0 0 0 1 1h7.6a1 1 0 0 0 1-1V5.8z" />
-                      <path d="M9 1.8v4h4" />
-                      <path d="M5.8 9.2h4.4M5.8 11.4h3" />
-                    </AnexarDocumento>
+                      fechar={fechar}
+                    />
                   )}
-
-                  {!p.boleto && (
-                    <AnexarDocumento
-                      tipo="boleto"
-                      rotulo="Anexar boleto"
-                      faturaId={fatura.id}
-                      parcelaId={p.id}
-                      bloqueado={fatura.situacao === "CANCELADA"}
-                      aoMudar={recarregar}
-                    >
-                      <path d="M2.4 2.6v10.8M5 2.6v10.8M7.4 2.6v10.8M10.4 2.6v10.8M13.6 2.6v10.8" />
-                    </AnexarDocumento>
-                  )}
-
-                  <BotaoEnviar
-                    faturaId={fatura.id}
-                    parcelaId={p.id}
-                    temDocumento={Boolean(p.nfs || p.boleto)}
-                    bloqueado={fatura.situacao === "CANCELADA" || p.pago}
-                  />
-                </span>,
+                </MenuDeLinha>,
               ])}
             />
           )}
@@ -350,22 +332,6 @@ function periodo(de: string | null, ate: string | null): string {
 }
 
 
-function Vencimento({ data, pago }: { data: string | null; pago: boolean }) {
-  if (!data) return <span style={{ color: "var(--text-tertiary)" }}>—</span>;
-
-  const atrasado = !pago && data < hoje();
-  return (
-    <span
-      style={{
-        fontVariantNumeric: "tabular-nums",
-        color: atrasado ? "var(--danger-text)" : undefined,
-        fontWeight: atrasado ? "var(--fw-medium)" : undefined,
-      }}
-    >
-      {paraFormatoBR(data as DataISO)}
-    </span>
-  );
-}
 
 /**
  * As bandeiras dos documentos ja anexados.
@@ -383,12 +349,15 @@ function Documentos({
   parcelaId,
   boleto,
   nfs,
+  bloqueado,
   aoMudar,
 }: {
   faturaId: number;
   parcelaId: number;
   boleto: string | null;
   nfs: string | null;
+  /** Parcela baixada ou conta cancelada: da para baixar, nao para remover. */
+  bloqueado: boolean;
   aoMudar: () => void;
 }) {
   if (!nfs && !boleto) return <span style={{ color: "var(--text-disabled)" }}>—</span>;
@@ -401,6 +370,7 @@ function Documentos({
           tipo="nfs"
           faturaId={faturaId}
           parcelaId={parcelaId}
+          bloqueado={bloqueado}
           aoMudar={aoMudar}
         />
       )}
@@ -410,6 +380,7 @@ function Documentos({
           tipo="boleto"
           faturaId={faturaId}
           parcelaId={parcelaId}
+          bloqueado={bloqueado}
           aoMudar={aoMudar}
         />
       )}
@@ -422,12 +393,14 @@ function Bandeira({
   tipo,
   faturaId,
   parcelaId,
+  bloqueado,
   aoMudar,
 }: {
   rotulo: string;
   tipo: "nfs" | "boleto";
   faturaId: number;
   parcelaId: number;
+  bloqueado: boolean;
   aoMudar: () => void;
 }) {
   const { avisar, confirmar } = useAvisos();
@@ -473,6 +446,10 @@ function Bandeira({
         {rotulo}
       </a>
 
+      {/* Baixada, da para baixar mas nao para remover: nota e boleto sao o que
+          se manda para RECEBER, e trocar depois muda o que o cliente tem em maos
+          sobre uma cobranca encerrada. */}
+      {!bloqueado && (
       <button
         type="button"
         title={`Remover ${rotulo}`}
@@ -496,148 +473,11 @@ function Bandeira({
       >
         ✕
       </button>
+      )}
     </span>
   );
 }
 
-/** Anexar um documento. Ícone na coluna de ações; o arquivo entra pelo input. */
-function AnexarDocumento({
-  tipo,
-  rotulo,
-  faturaId,
-  parcelaId,
-  bloqueado,
-  aoMudar,
-  children,
-}: {
-  tipo: "nfs" | "boleto";
-  rotulo: string;
-  faturaId: number;
-  parcelaId: number;
-  bloqueado: boolean;
-  aoMudar: () => void;
-  children: React.ReactNode;
-}) {
-  const { avisar } = useAvisos();
-  const [enviando, setEnviando] = useState(false);
-
-  async function subir(arquivo: File) {
-    const corpo = new FormData();
-    corpo.append("arquivo", arquivo);
-
-    setEnviando(true);
-    const r = await fetch(
-      `/api/v1/faturas/${faturaId}/parcelas/${parcelaId}/documento?tipo=${tipo}`,
-      { method: "POST", body: corpo },
-    );
-    const dados = await r.json().catch(() => null);
-    setEnviando(false);
-
-    if (!r.ok) {
-      avisar("atencao", dados?.error?.message ?? "Não foi possível enviar o arquivo");
-      return;
-    }
-    aoMudar();
-  }
-
-  if (bloqueado) return null;
-
-  return (
-    <label
-      title={rotulo}
-      aria-label={rotulo}
-      style={{
-        ...MOLDURA_DE_ACAO,
-        color: "var(--text-secondary)",
-        cursor: enviando ? "wait" : "pointer",
-        opacity: enviando ? 0.4 : 1,
-      }}
-    >
-      <svg
-        width="14"
-        height="14"
-        viewBox="0 0 16 16"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        {children}
-      </svg>
-      <input
-        type="file"
-        accept="application/pdf,image/*"
-        disabled={enviando}
-        onChange={(e) => {
-          const arquivo = e.target.files?.[0];
-          // Zerado para que escolher o MESMO arquivo de novo, depois de um erro,
-          // ainda dispare o `change`.
-          e.target.value = "";
-          if (arquivo) void subir(arquivo);
-        }}
-        style={{ display: "none" }}
-      />
-    </label>
-  );
-}
-
-/**
- * Botao de icone da linha, com moldura.
- *
- * A moldura existe para o icone parecer clicavel: solto numa celula ele lê como
- * simbolo do dado, e nao como acao. Mesma medida nos tres, para a coluna de
- * acoes ficar uma fileira e nao um amontoado.
- *
- * `svg` diz se o conteudo ja e um `<svg>` pronto (o do menu) ou apenas os
- * tracos, que este componente embrulha.
- */
-function BotaoDeLinha({
-  rotulo,
-  perigo,
-  svg,
-  onClick,
-  children,
-}: {
-  rotulo: string;
-  perigo?: boolean;
-  svg?: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      title={rotulo}
-      aria-label={rotulo}
-      onClick={(e) => {
-        // A linha inteira pode ter clique proprio; a acao nao dispara os dois.
-        e.stopPropagation();
-        onClick();
-      }}
-      style={{ ...MOLDURA_DE_ACAO, color: perigo ? "var(--danger)" : "var(--text-secondary)" }}
-    >
-      {svg ? (
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          {children}
-        </svg>
-      ) : (
-        children
-      )}
-    </button>
-  );
-}
-
-/** A moldura dos botoes de acao. Uma so, para os tres nao divergirem. */
 const MOLDURA_DE_ACAO: React.CSSProperties = {
   display: "inline-grid",
   placeItems: "center",
@@ -751,91 +591,6 @@ function Linha({ rotulo, valor, cor }: { rotulo: string; valor: number; cor?: st
 }
 
 /**
- * Manda a parcela para o cliente.
- *
- * Desabilitado sem documento: o e-mail seria um aviso de cobrança sem cobrança —
- * o cliente abre, não tem o que pagar, e liga perguntando.
- */
-function BotaoEnviar({
-  faturaId,
-  parcelaId,
-  temDocumento,
-  bloqueado,
-}: {
-  faturaId: number;
-  parcelaId: number;
-  temDocumento: boolean;
-  bloqueado: boolean;
-}) {
-  const { avisar, confirmar } = useAvisos();
-  const [enviando, setEnviando] = useState(false);
-
-  async function enviar() {
-    setEnviando(true);
-    const r = await fetch(`/api/v1/faturas/${faturaId}/parcelas/${parcelaId}/enviar`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-    });
-    const dados = await r.json().catch(() => null);
-    setEnviando(false);
-
-    if (!r.ok) {
-      avisar("atencao", dados?.error?.message ?? "Não foi possível enviar");
-      return;
-    }
-    avisar("sucesso", "E-mail enviado", `Para ${dados.data.para}.`);
-  }
-
-  const impedido = bloqueado || !temDocumento;
-
-  return (
-    <button
-      type="button"
-      disabled={impedido || enviando}
-      title={
-        bloqueado
-          ? "Parcela paga ou conta cancelada"
-          : !temDocumento
-            ? "Anexe a nota fiscal ou o boleto antes de enviar"
-            : "Enviar por e-mail ao cliente"
-      }
-      onClick={() =>
-        confirmar(
-          "Enviar esta parcela ao cliente?",
-          "Enviar",
-          enviar,
-          "O e-mail vai com os documentos anexados.",
-        )
-      }
-      style={{
-        ...MOLDURA_DE_ACAO,
-        color: impedido ? "var(--text-disabled)" : "var(--text-secondary)",
-        cursor: impedido ? "not-allowed" : "pointer",
-      }}
-    >
-      {/* Envelope com seta saindo: o aviaozinho de papel diz "mensagem", mas
-          nao diz que ela vai por e-mail — e aqui o meio importa, porque o que
-          sai leva o boleto. */}
-      <svg
-        width="14"
-        height="14"
-        viewBox="0 0 16 16"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M8.6 12.6H2.4a1 1 0 0 1-1-1V4.4a1 1 0 0 1 1-1h11.2a1 1 0 0 1 1 1v3.2" />
-        <path d="M1.6 4.6L8 8.8l6.4-4.2" />
-        <path d="M10.4 12.2h4.2M12.8 10.4l1.8 1.8-1.8 1.8" />
-      </svg>
-    </button>
-  );
-}
-
-/**
  * Tabela do drawer. Tudo alinhado a ESQUERDA, inclusive numero.
  *
  * Alinhamento por coluna deixava cada tabela com um desenho: valor a direita
@@ -846,11 +601,14 @@ function Tabela({
   cabecalho,
   linhas,
   vazio,
+  realce,
   aoClicarLinha,
 }: {
   cabecalho: string[];
   linhas: React.ReactNode[][];
   vazio: string;
+  /** Pinta a linha inteira de vermelho. Hoje: parcela vencida. */
+  realce?: (indice: number) => boolean;
   aoClicarLinha?: (indice: number) => void;
 }) {
   return (
@@ -901,12 +659,20 @@ function Tabela({
               style={{
                 borderTop: li === 0 ? undefined : "1px solid var(--border)",
                 cursor: aoClicarLinha ? "pointer" : undefined,
+                // Vencida pinta a linha toda: a data sozinha em vermelho se
+                // perde na tabela, e atraso e o unico estado que pede acao ja.
+                background: realce?.(li) ? "var(--danger-bg)" : undefined,
+                color: realce?.(li) ? "var(--danger-text)" : undefined,
               }}
               onMouseEnter={(e) => {
-                if (aoClicarLinha) e.currentTarget.style.background = "var(--surface-hover)";
+                if (aoClicarLinha && !realce?.(li)) {
+                  e.currentTarget.style.background = "var(--surface-hover)";
+                }
               }}
               onMouseLeave={(e) => {
-                if (aoClicarLinha) e.currentTarget.style.background = "transparent";
+                if (aoClicarLinha && !realce?.(li)) {
+                  e.currentTarget.style.background = "transparent";
+                }
               }}
             >
               {celulas.map((c, ci) => (
@@ -946,5 +712,389 @@ function Esqueleto() {
       ))}
     </div>
   );
+}
+
+/**
+ * Anexar um documento, como item do menu.
+ *
+ * E um `<label>` e nao um `<button>`: o `<input type="file">` precisa de um
+ * rotulo para ser acionado, e assim o clique no item inteiro abre o seletor.
+ */
+function AnexarDocumento({
+  tipo,
+  rotulo,
+  faturaId,
+  parcelaId,
+  aoMudar,
+  children,
+}: {
+  tipo: "nfs" | "boleto";
+  rotulo: string;
+  faturaId: number;
+  parcelaId: number;
+  aoMudar: () => void;
+  children: React.ReactNode;
+}) {
+  const { avisar } = useAvisos();
+  const [enviando, setEnviando] = useState(false);
+  const [hover, setHover] = useState(false);
+
+  async function subir(arquivo: File) {
+    const corpo = new FormData();
+    corpo.append("arquivo", arquivo);
+
+    setEnviando(true);
+    const r = await fetch(
+      `/api/v1/faturas/${faturaId}/parcelas/${parcelaId}/documento?tipo=${tipo}`,
+      { method: "POST", body: corpo },
+    );
+    const dados = await r.json().catch(() => null);
+    setEnviando(false);
+
+    if (!r.ok) {
+      avisar("atencao", dados?.error?.message ?? "Não foi possível enviar o arquivo");
+      return;
+    }
+    aoMudar();
+  }
+
+  return (
+    <label
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 9,
+        padding: "7px 10px",
+        borderRadius: "var(--radius-sm)",
+        background: hover ? "var(--surface-2)" : "transparent",
+        color: "var(--text-primary)",
+        fontSize: "var(--text-sm)",
+        whiteSpace: "nowrap",
+        cursor: enviando ? "wait" : "pointer",
+        opacity: enviando ? 0.5 : 1,
+      }}
+    >
+      <span style={{ display: "inline-grid", placeItems: "center", width: 16, flexShrink: 0 }}>
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          {children}
+        </svg>
+      </span>
+      {enviando ? "Enviando…" : rotulo}
+      <input
+        type="file"
+        accept="application/pdf,image/*"
+        disabled={enviando}
+        onChange={(e) => {
+          const arquivo = e.target.files?.[0];
+          // Zerado para que escolher o MESMO arquivo de novo, depois de um erro,
+          // ainda dispare o `change`.
+          e.target.value = "";
+          if (arquivo) void subir(arquivo);
+        }}
+        style={{ display: "none" }}
+      />
+    </label>
+  );
+}
+
+/**
+ * Menu de acoes da linha: "⋯" que abre um cartao flutuante.
+ *
+ * Tres icones soltos na celula viravam tres alvos de 24px numa linha de 34, e
+ * cada acao nova estreitava as colunas de dado. Com o menu, a coluna tem a
+ * largura de um botao e cabe quantas acoes precisarem.
+ *
+ * O filho recebe `fechar` porque toda acao daqui termina o menu: deixar aberto
+ * depois do clique faz parecer que nao aconteceu nada.
+ */
+function MenuDeLinha({ children }: { children: (fechar: () => void) => React.ReactNode }) {
+  const [aberto, setAberto] = useState(false);
+
+  return (
+    <span style={{ position: "relative", display: "inline-flex" }}>
+      <button
+        type="button"
+        title="Ações"
+        aria-label="Ações"
+        aria-expanded={aberto}
+        onClick={(e) => {
+          // A linha pode ter clique proprio; a acao nao dispara os dois.
+          e.stopPropagation();
+          setAberto((v) => !v);
+        }}
+        style={{ ...MOLDURA_DE_ACAO, color: "var(--text-secondary)" }}
+      >
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+          <circle cx="3.5" cy="8" r="1.3" />
+          <circle cx="8" cy="8" r="1.3" />
+          <circle cx="12.5" cy="8" r="1.3" />
+        </svg>
+      </button>
+
+      {aberto && (
+        <>
+          {/* Camada invisivel que fecha ao clicar fora — sem ela o cartao so
+              sairia clicando de novo no proprio botao. */}
+          <span
+            onClick={(e) => {
+              e.stopPropagation();
+              setAberto(false);
+            }}
+            style={{ position: "fixed", inset: 0, zIndex: 40 }}
+          />
+          <span
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: "absolute",
+              top: "calc(100% + 4px)",
+              right: 0,
+              zIndex: 41,
+              padding: 4,
+              borderRadius: "var(--radius-md)",
+              background: "var(--surface)",
+              boxShadow: "var(--shadow-md)",
+              display: "flex",
+              flexDirection: "column",
+            }}
+          >
+            {children(() => setAberto(false))}
+          </span>
+        </>
+      )}
+    </span>
+  );
+}
+
+/** Uma linha do menu. `icone` vem pronto; sem ele, `children` sao os tracos. */
+function ItemDoMenu({
+  rotulo,
+  perigo,
+  desabilitado,
+  motivo,
+  icone,
+  onClick,
+  children,
+}: {
+  rotulo: string;
+  perigo?: boolean;
+  desabilitado?: boolean;
+  motivo?: string;
+  icone?: React.ReactNode;
+  onClick: () => void;
+  children?: React.ReactNode;
+}) {
+  const [hover, setHover] = useState(false);
+
+  return (
+    <button
+      type="button"
+      disabled={desabilitado}
+      title={motivo}
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 9,
+        width: "100%",
+        padding: "7px 10px",
+        border: "none",
+        borderRadius: "var(--radius-sm)",
+        background: hover && !desabilitado ? "var(--surface-2)" : "transparent",
+        color: desabilitado
+          ? "var(--text-disabled)"
+          : perigo
+            ? "var(--danger)"
+            : "var(--text-primary)",
+        fontSize: "var(--text-sm)",
+        fontFamily: "var(--font)",
+        textAlign: "left",
+        whiteSpace: "nowrap",
+        cursor: desabilitado ? "not-allowed" : "pointer",
+      }}
+    >
+      <span style={{ display: "inline-grid", placeItems: "center", width: 16, flexShrink: 0 }}>
+        {icone ?? (
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            {children}
+          </svg>
+        )}
+      </span>
+      {rotulo}
+    </button>
+  );
+}
+
+/**
+ * O que da para fazer com uma parcela.
+ *
+ * Anexar so aparece enquanto NAO ha o documento; depois de baixada, nem isso.
+ */
+function AcoesDaParcela({
+  faturaId,
+  parcela,
+  bloqueado,
+  aoMudar,
+  fechar,
+}: {
+  faturaId: number;
+  parcela: { id: number; nfs: string | null; boleto: string | null; pago: boolean };
+  bloqueado: boolean;
+  aoMudar: () => void;
+  fechar: () => void;
+}) {
+  const { avisar, confirmar } = useAvisos();
+  const temDocumento = Boolean(parcela.nfs || parcela.boleto);
+
+  async function enviar() {
+    const r = await fetch(`/api/v1/faturas/${faturaId}/parcelas/${parcela.id}/enviar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const dados = await r.json().catch(() => null);
+
+    if (!r.ok) {
+      avisar("atencao", dados?.error?.message ?? "Não foi possível enviar");
+      return;
+    }
+    avisar("sucesso", "E-mail enviado", `Para ${dados.data.para}.`);
+  }
+
+  return (
+    <>
+      {!bloqueado && !parcela.nfs && (
+        <AnexarDocumento
+          tipo="nfs"
+          rotulo="Anexar nota fiscal"
+          faturaId={faturaId}
+          parcelaId={parcela.id}
+          aoMudar={() => {
+            fechar();
+            aoMudar();
+          }}
+        >
+          <path d="M9 1.8H4.2a1 1 0 0 0-1 1v10.4a1 1 0 0 0 1 1h7.6a1 1 0 0 0 1-1V5.8z" />
+          <path d="M9 1.8v4h4" />
+          <path d="M5.8 9.2h4.4M5.8 11.4h3" />
+        </AnexarDocumento>
+      )}
+
+      {!bloqueado && !parcela.boleto && (
+        <AnexarDocumento
+          tipo="boleto"
+          rotulo="Anexar boleto"
+          faturaId={faturaId}
+          parcelaId={parcela.id}
+          aoMudar={() => {
+            fechar();
+            aoMudar();
+          }}
+        >
+          <path d="M2.4 2.6v10.8M5 2.6v10.8M7.4 2.6v10.8M10.4 2.6v10.8M13.6 2.6v10.8" />
+        </AnexarDocumento>
+      )}
+
+      {/* Envelope com seta saindo: o aviaozinho de papel diz "mensagem", mas nao
+          diz que vai por e-mail, e aqui o meio importa porque o que sai leva a
+          cobranca. */}
+      <ItemDoMenu
+        rotulo="Enviar por e-mail"
+        desabilitado={bloqueado || !temDocumento}
+        motivo={
+          bloqueado
+            ? "Parcela baixada ou conta cancelada"
+            : !temDocumento
+              ? "Anexe a nota fiscal ou o boleto antes de enviar"
+              : undefined
+        }
+        onClick={() => {
+          fechar();
+          confirmar(
+            "Enviar esta parcela ao cliente?",
+            "Enviar",
+            enviar,
+            "O e-mail leva o link da cobrança.",
+          );
+        }}
+      >
+        <path d="M8.6 12.6H2.4a1 1 0 0 1-1-1V4.4a1 1 0 0 1 1-1h11.2a1 1 0 0 1 1 1v3.2" />
+        <path d="M1.6 4.6L8 8.8l6.4-4.2" />
+        <path d="M10.4 12.2h4.2M12.8 10.4l1.8 1.8-1.8 1.8" />
+      </ItemDoMenu>
+
+      {/* ⚠️ Depende do token da Meta, que ainda precisa ser rotacionado: o do
+          legado esta em texto puro num zip de backup. Ver docs/02. */}
+      <ItemDoMenu
+        rotulo="Enviar por WhatsApp"
+        desabilitado
+        motivo="Depende do token da Meta, ainda não configurado"
+        onClick={fechar}
+      >
+        <path d="M2.6 13.4l.8-2.8a5.4 5.4 0 1 1 2 2z" />
+        <path d="M6 6.4c.3 1.6 1.7 3 3.3 3.3" />
+      </ItemDoMenu>
+    </>
+  );
+}
+
+/**
+ * A situacao da parcela, em cor.
+ *
+ * O rotulo gastava uma coluna inteira para dizer o que a cor diz de relance, e
+ * "ABERTA" repetido quinze vezes nao informa nada.
+ */
+function Bolinha({ parcela }: { parcela: { pago: boolean; vencimento: string | null } }) {
+  const estado = parcela.pago ? "Paga" : vencida(parcela) ? "Vencida" : "Em aberto";
+
+  return (
+    <span
+      aria-label={estado}
+      title={estado}
+      style={{
+        width: 7,
+        height: 7,
+        borderRadius: "50%",
+        flexShrink: 0,
+        display: "inline-block",
+        background: parcela.pago
+          ? "var(--success)"
+          : vencida(parcela)
+            ? "var(--danger)"
+            : "var(--text-disabled)",
+      }}
+    />
+  );
+}
+
+function vencida(parcela: { pago: boolean; vencimento: string | null }): boolean {
+  return !parcela.pago && parcela.vencimento != null && parcela.vencimento < hoje();
+}
+
+/** dd/mm/aa. O seculo nao muda nada aqui, e a coluna encolhe um terco. */
+function curto(data: string): string {
+  const [ano, mes, dia] = data.slice(0, 10).split("-");
+  return `${dia}/${mes}/${ano.slice(2)}`;
 }
 
