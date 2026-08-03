@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   CobrancaCompartilhada,
   ItemPublico,
@@ -96,72 +96,117 @@ export function CobrancaPublicaView({
   }
 
   return (
-    <>
-      {/*
-       * A folha tem largura fixa de 210mm. Em telas menores ela e REDUZIDA
-       * inteira, e nao reorganizada — documento que se reflui em duas colunas no
-       * celular deixa de ser o papel que a pessoa vai imprimir.
-       */}
+    <div style={{ width: "100%" }}>
       <style>{`
-        .folha-wrap { display: flex; justify-content: center; }
         .folha {
           width: 210mm; min-height: 297mm; background: #fff;
           box-sizing: border-box; position: relative;
-          transform-origin: top center;
+          transform-origin: top left;
           font-family: Helvetica, Arial, sans-serif;
+          box-shadow: 0 2px 10px rgba(0,0,0,0.10);
         }
-        @media (max-width: 820px) { .folha { transform: scale(0.86); } }
-        @media (max-width: 700px) { .folha { transform: scale(0.72); } }
-        @media (max-width: 560px) { .folha { transform: scale(0.55); } }
-        @media (max-width: 440px) { .folha { transform: scale(0.44); } }
         .folha table { border-collapse: collapse; width: 100%; }
       `}</style>
 
-      <div style={{ width: "100%" }}>
-        {cobranca.tickets.map((t) => (
-          <div key={t.numero} style={{ marginBottom: 24 }}>
-            <div className="folha-wrap">
-              <Folha ticket={t} empresa={cobranca.empresa} fatura={cobranca.faturaNumero} />
-            </div>
+      {cobranca.tickets.map((t) => (
+        <div key={t.numero} style={{ marginBottom: 20 }}>
+          <FolhaAjustada>
+            <Folha ticket={t} empresa={cobranca.empresa} fatura={cobranca.faturaNumero} />
+          </FolhaAjustada>
 
-            <div style={{ textAlign: "center", marginTop: 12 }}>
-              <button
-                type="button"
-                onClick={() => imprimir(t)}
-                style={{
-                  padding: "10px 18px",
-                  borderRadius: 8,
-                  border: `1px solid ${VERDE}`,
-                  background: "transparent",
-                  color: VERDE,
-                  fontSize: 13,
-                  fontWeight: 600,
-                  fontFamily: "inherit",
-                  cursor: "pointer",
-                }}
-              >
-                {imprimindo === t.numero ? "Gerando…" : "Baixar em PDF"}
-              </button>
-            </div>
-          </div>
-        ))}
-
-        {/* Os arquivos ficam depois do documento: primeiro se confere o que esta
-            sendo cobrado, depois se baixa o que serve para pagar. */}
-        {(cobranca.temBoleto || cobranca.temNfs) && (
-          <div style={{ maxWidth: 320, margin: "24px auto 0" }}>
-            {cobranca.temBoleto && (
-              <Botao href={`/p/${token}/documento?tipo=boleto`}>Baixar boleto</Botao>
-            )}
-            {cobranca.temNfs && (
-              <Botao href={`/p/${token}/documento?tipo=nfs`} secundario>
-                Baixar nota fiscal
+          {/* Imprimir por ticket so quando ha mais de um: com um so, ele desce
+              para o bloco de acoes junto com os outros. */}
+          {cobranca.tickets.length > 1 && (
+            <div style={{ maxWidth: 340, margin: "12px auto 0" }}>
+              <Botao secundario onClick={() => imprimir(t)}>
+                {imprimindo === t.numero ? "Gerando…" : `Baixar ticket ${t.numero} em PDF`}
               </Botao>
-            )}
-          </div>
+            </div>
+          )}
+        </div>
+      ))}
+
+      {/*
+       * Um bloco so de acoes, empilhado.
+       *
+       * Lado a lado, tres botoes de download viram tres alvos pequenos no
+       * celular; empilhados, cada um ocupa a largura inteira e a ordem diz o que
+       * fazer primeiro: pagar, depois guardar a nota, depois o documento.
+       */}
+      <div style={{ maxWidth: 340, margin: "0 auto", padding: "4px 0 8px" }}>
+        {cobranca.temBoleto && (
+          <Botao href={`/p/${token}/documento?tipo=boleto`}>Baixar boleto</Botao>
+        )}
+        {cobranca.temNfs && (
+          <Botao href={`/p/${token}/documento?tipo=nfs`} secundario>
+            Baixar nota fiscal
+          </Botao>
+        )}
+        {cobranca.tickets.length === 1 && (
+          <Botao secundario onClick={() => imprimir(cobranca.tickets[0])}>
+            {imprimindo != null ? "Gerando…" : "Baixar em PDF"}
+          </Botao>
         )}
       </div>
-    </>
+    </div>
+  );
+}
+
+/** A4 em pixels de CSS, a 96 dpi. */
+const LARGURA_A4 = 794;
+
+/**
+ * Encolhe a folha para caber na tela, SEM deixar buraco embaixo.
+ *
+ * `transform: scale()` muda o desenho e nao o espaco ocupado: a folha aparecia
+ * pequena e o resto da pagina continuava a 297mm de distancia, com os botoes la
+ * embaixo. Aqui a altura do invólucro e recalculada junto com a escala, entao o
+ * que vem depois encosta na folha.
+ *
+ * A conta precisa de JS porque depende da largura disponivel — `@media` sabe o
+ * tamanho da janela, nao o da coluna onde a folha caiu.
+ */
+function FolhaAjustada({ children }: { children: React.ReactNode }) {
+  const area = useRef<HTMLDivElement>(null);
+  const folha = useRef<HTMLDivElement>(null);
+  const [escala, setEscala] = useState(1);
+  const [altura, setAltura] = useState<number | undefined>(undefined);
+
+  useEffect(() => {
+    const medir = () => {
+      const disponivel = area.current?.clientWidth ?? LARGURA_A4;
+      const nova = Math.min(1, disponivel / LARGURA_A4);
+      setEscala(nova);
+      setAltura((folha.current?.offsetHeight ?? 0) * nova);
+    };
+
+    medir();
+
+    const observador = new ResizeObserver(medir);
+    if (area.current) observador.observe(area.current);
+    // A folha tambem muda de altura: fonte que carrega depois, texto que quebra.
+    if (folha.current) observador.observe(folha.current);
+
+    return () => observador.disconnect();
+  }, []);
+
+  return (
+    <div ref={area} style={{ width: "100%", height: altura, overflow: "hidden" }}>
+      <div
+        ref={folha}
+        style={{
+          width: LARGURA_A4,
+          transform: `scale(${escala})`,
+          transformOrigin: "top left",
+          // Centraliza a folha quando ela cabe inteira; colada a esquerda quando
+          // nao cabe, que e onde a leitura comeca.
+          marginLeft: escala === 1 ? "auto" : undefined,
+          marginRight: escala === 1 ? "auto" : undefined,
+        }}
+      >
+        {children}
+      </div>
+    </div>
   );
 }
 
@@ -542,34 +587,44 @@ function quantidade(q: number, unidade: ItemPublico["unidade"]): string {
   return Number.isInteger(q) ? `${q} un` : `${q.toFixed(2).replace(".", ",")} un`;
 }
 
+/** Botao de acao: largura inteira, empilhado. Serve a link e a clique. */
 function Botao({
   href,
+  onClick,
   secundario,
   children,
 }: {
-  href: string;
+  href?: string;
+  onClick?: () => void;
   secundario?: boolean;
   children: React.ReactNode;
 }) {
-  return (
-    <a
-      href={href}
-      style={{
-        display: "block",
-        padding: "14px 28px",
-        marginBottom: 10,
-        borderRadius: 8,
-        fontWeight: 600,
-        fontSize: 14,
-        textAlign: "center",
-        textDecoration: "none",
-        fontFamily: "Helvetica, Arial, sans-serif",
-        border: secundario ? `1px solid ${VERDE}` : "none",
-        background: secundario ? "transparent" : VERDE,
-        color: secundario ? VERDE : "#ffffff",
-      }}
-    >
+  const estilo: React.CSSProperties = {
+    display: "block",
+    width: "100%",
+    boxSizing: "border-box",
+    // Alto o bastante para o dedo: 48px e o minimo confortavel no celular.
+    padding: "15px 24px",
+    marginBottom: 10,
+    borderRadius: 10,
+    fontWeight: 600,
+    fontSize: 15,
+    textAlign: "center",
+    textDecoration: "none",
+    fontFamily: "Helvetica, Arial, sans-serif",
+    cursor: "pointer",
+    border: secundario ? `1px solid ${VERDE}` : "1px solid transparent",
+    background: secundario ? "#ffffff" : VERDE,
+    color: secundario ? VERDE : "#ffffff",
+  };
+
+  return href ? (
+    <a href={href} style={estilo}>
       {children}
     </a>
+  ) : (
+    <button type="button" onClick={onClick} style={estilo}>
+      {children}
+    </button>
   );
 }

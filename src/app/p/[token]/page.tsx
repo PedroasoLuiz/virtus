@@ -36,7 +36,9 @@ export default async function CobrancaPublicaPage({
         // Cinza do visualizador, nao do documento: a folha e branca, e o fundo
         // escuro em volta e o que faz ela parecer papel.
         background: "#e8eae8",
-        padding: "24px 8px 40px",
+        // Padding pequeno no celular: a folha ja e estreita, e margem de 16px
+        // de cada lado tira 32px de uma largura que faz falta.
+        padding: "20px 10px 32px",
         fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
         color: "#1a1a1a",
       }}
