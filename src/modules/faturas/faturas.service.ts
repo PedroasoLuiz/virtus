@@ -458,14 +458,16 @@ export async function enviarParcelaPorEmail(
    */
   const tickets = fatura.tickets.map((t) => t.numero);
   const referencia =
-    tickets.length === 1 ? `Ticket ${tickets[0]}` : `Tickets ${tickets.join(", ")}`;
+    tickets.length === 1 ? `ticket ${tickets[0]}` : `tickets ${tickets.join(", ")}`;
 
   await enviarEmail({
     para: [para],
+    // Sem travessao, e dizendo o que e: "Ticket 154" sozinho no assunto nao
+    // diz se e cobranca, aviso ou confirmacao.
     assunto:
       tickets.length > 0
-        ? `${destino.empresaNome} — ${referencia}`
-        : `${destino.empresaNome} — Cobrança`,
+        ? `Sua cobranca do ${referencia} | ${destino.empresaNome}`
+        : `Sua cobranca | ${destino.empresaNome}`,
     html: htmlDaFatura({
       empresaNome: destino.empresaNome,
       tickets,

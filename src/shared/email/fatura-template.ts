@@ -3,7 +3,7 @@ import "server-only";
 /**
  * O e-mail da cobranca.
  *
- * ⚠️ A referencia e o TICKET, nao a fatura. A fatura e controle interno —
+ * ⚠️ A referencia e o TICKET, nao a fatura. A fatura e controle interno:
  * numero de conta a receber, parcelamento, baixa. Mandar esse numero ao cliente
  * o obriga a decorar uma referencia que so existe do nosso lado; o ticket ele
  * conhece, porque e o servico que contratou.
@@ -12,9 +12,11 @@ import "server-only";
  * cobra: e o nome dela que o cliente reconhece, e um nome de sistema no meio so
  * levantaria a duvida de quem esta pedindo o dinheiro.
  *
+ * Sem travessao em lugar nenhum do texto, por preferencia declarada.
+ *
  * HTML de e-mail nao e HTML de pagina: `<style>` no `<head>` e descartado por
  * varios clientes, entao tudo vai em `style=` na propria tag, e a estrutura e
- * feita com `<table>` — flex e grid o Outlook ignora.
+ * feita com `<table>`, porque flex e grid o Outlook ignora.
  */
 
 const VERDE = "#006A28";
@@ -35,8 +37,8 @@ export function htmlDaFatura(dados: {
     dados.tickets.length === 0
       ? null
       : dados.tickets.length === 1
-        ? `Ticket ${dados.tickets[0]}`
-        : `Tickets ${dados.tickets.join(", ")}`;
+        ? `ticket ${dados.tickets[0]}`
+        : `tickets ${dados.tickets.join(", ")}`;
 
   const saudacao = dados.clienteNome
     ? `Olá, ${escapar(primeiroNome(dados.clienteNome))}.`
@@ -74,7 +76,7 @@ export function htmlDaFatura(dados: {
           <tr>
             <td style="padding:22px 32px 0;text-align:center;">
               <h1 style="margin:0;font-size:22px;line-height:1.3;font-weight:700;color:#1a1a1a;">
-                ${referencia ? `Sua cobrança do ${escapar(referencia.toLowerCase())}` : "Sua cobrança"}
+                ${referencia ? `Sua cobrança do ${escapar(referencia)}` : "Sua cobrança"}
               </h1>
               ${
                 dados.competencia !== "—"
@@ -89,8 +91,8 @@ export function htmlDaFatura(dados: {
             <td style="padding:20px 32px 0;">
               <p style="margin:0;font-size:15px;line-height:1.65;color:#444444;">
                 ${saudacao} Seu fechamento já está disponível. Abaixo estão os dados da
-                cobrança — na página você confere o detalhamento do serviço, baixa o boleto
-                e a nota fiscal, e pode imprimir o documento.
+                cobrança. Na página você confere o detalhamento do serviço, baixa o boleto
+                e a nota fiscal, e pode salvar o documento em PDF.
               </p>
             </td>
           </tr>
@@ -116,17 +118,13 @@ export function htmlDaFatura(dados: {
           <!-- Ação -->
           <tr>
             <td style="padding:24px 32px 0;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-                <tr>
-                  <td align="center" style="border-radius:10px;background-color:${VERDE};">
-                    <a href="${escapar(dados.urlDoPortal)}" style="display:block;padding:15px 24px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:10px;">
-                      Ver cobrança e documentos
-                    </a>
-                  </td>
-                </tr>
-              </table>
+              <!-- Fundo no proprio <a>: na celula, o padding do link nao
+                   contava para a altura da caixa e o botao saia achatado. -->
+              <a href="${escapar(dados.urlDoPortal)}" style="display:block;width:100%;box-sizing:border-box;padding:16px 24px;background-color:${VERDE};color:#ffffff;font-size:15px;font-weight:600;text-align:center;text-decoration:none;border-radius:10px;">
+                Ver cobrança e documentos
+              </a>
               <p style="margin:12px 0 0;font-size:12px;color:#8a8a8a;text-align:center;line-height:1.5;">
-                O link é pessoal — evite encaminhá-lo.
+                O link é pessoal. Evite encaminhá-lo.
               </p>
             </td>
           </tr>
@@ -164,7 +162,7 @@ function linha(rotulo: string, valor: string, destaque = false): string {
 /**
  * Primeiro nome, nao a razao social inteira.
  *
- * "Olá, COMERCIO DE MATERIAIS ELETRICOS LTDA" nao cumprimenta ninguem.
+ * "Ola, COMERCIO DE MATERIAIS ELETRICOS LTDA" nao cumprimenta ninguem.
  */
 function primeiroNome(nome: string): string {
   return nome.trim().split(/\s+/)[0] ?? nome;

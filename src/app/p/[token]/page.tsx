@@ -33,8 +33,10 @@ export default async function CobrancaPublicaPage({
     <main
       style={{
         minHeight: "100vh",
-        background: "#f6f7f6",
-        padding: "32px 16px 48px",
+        // Cinza do visualizador, nao do documento: a folha e branca, e o fundo
+        // escuro em volta e o que faz ela parecer papel.
+        background: "#e8eae8",
+        padding: "24px 8px 40px",
         fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
         color: "#1a1a1a",
       }}
