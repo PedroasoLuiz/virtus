@@ -55,9 +55,12 @@ const PAGE_SIZE = 25;
 export function FaturasTabela({
   faturas,
   clientes,
+  emitidoPor,
 }: {
   faturas: FaturaResumo[];
   clientes: { id: number; nome: string }[];
+  /** Quem assina o rodape dos documentos. */
+  emitidoPor: string;
 }) {
   const router = useRouter();
   const { avisar } = useAvisos();
@@ -237,7 +240,7 @@ export function FaturasTabela({
         )}
       </Panel>
 
-      <FaturaDrawer faturaId={detalhe} onClose={() => setDetalhe(null)} />
+      <FaturaDrawer emitidoPor={emitidoPor} faturaId={detalhe} onClose={() => setDetalhe(null)} />
       {criando && (
         <NovaFaturaDrawer clientes={clientes} onClose={() => setCriando(false)} />
       )}

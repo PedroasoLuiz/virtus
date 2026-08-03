@@ -9,7 +9,7 @@ import { FaturasTabela } from "./faturas-tabela";
  * A rota /api/v1/faturas existe para consumidores externos, nao para a tela.
  */
 export default async function FaturasPage() {
-  const { ctx } = await sessaoUI();
+  const { ctx, usuarioNome } = await sessaoUI();
   if (ctx.empresaId == null) return <SemEmpresa />;
 
   const [{ itens }, clientes] = await Promise.all([
@@ -21,6 +21,7 @@ export default async function FaturasPage() {
     <FaturasTabela
       faturas={itens}
       clientes={clientes.map((c) => ({ id: c.id, nome: c.nome }))}
+      emitidoPor={usuarioNome ?? ""}
     />
   );
 }

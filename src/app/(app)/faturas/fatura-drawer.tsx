@@ -84,15 +84,32 @@ type Fatura = {
   };
 };
 
-export function FaturaDrawer({ faturaId, onClose }: { faturaId: number | null; onClose: () => void }) {
+export function FaturaDrawer({
+  faturaId,
+  emitidoPor,
+  onClose,
+}: {
+  faturaId: number | null;
+  /** Quem assina o rodape dos documentos. Vazio quando a tela nao sabe. */
+  emitidoPor?: string;
+  onClose: () => void;
+}) {
   // `key` remonta a cada fatura: o estado nasce vazio sozinho, sem limpar a mao
   // dentro de um efeito, e sem mostrar o registro anterior enquanto carrega.
   return faturaId == null ? null : (
-    <Conteudo key={faturaId} faturaId={faturaId} onClose={onClose} />
+    <Conteudo key={faturaId} faturaId={faturaId} emitidoPor={emitidoPor ?? ""} onClose={onClose} />
   );
 }
 
-function Conteudo({ faturaId, onClose }: { faturaId: number; onClose: () => void }) {
+function Conteudo({
+  faturaId,
+  emitidoPor,
+  onClose,
+}: {
+  faturaId: number;
+  emitidoPor: string;
+  onClose: () => void;
+}) {
   const [fatura, setFatura] = useState<Fatura | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [aba, setAba] = useState<"tickets" | "produtos" | "parcelas">("tickets");
@@ -147,7 +164,7 @@ function Conteudo({ faturaId, onClose }: { faturaId: number; onClose: () => void
         })),
         emitente: fatura.emitente,
       },
-      "",
+      emitidoPor,
     );
   }
 
@@ -447,6 +464,7 @@ function Conteudo({ faturaId, onClose }: { faturaId: number; onClose: () => void
                   {(fechar) => (
                     <AcoesDaParcela
                       fatura={fatura}
+                      emitidoPor={emitidoPor}
                       parcela={p}
                       bloqueado={p.pagamentoId != null || fatura.situacao === "CANCELADA"}
                       aoMudar={recarregar}
@@ -1125,12 +1143,14 @@ function ItemDoMenu({
  */
 function AcoesDaParcela({
   fatura,
+  emitidoPor,
   parcela,
   bloqueado,
   aoMudar,
   fechar,
 }: {
   fatura: Fatura;
+  emitidoPor: string;
   parcela: Fatura["parcelas"][number];
   bloqueado: boolean;
   aoMudar: () => void;
@@ -1171,7 +1191,7 @@ function AcoesDaParcela({
           .map((x) => ({ numero: x.numero, vencimento: x.vencimento, total: x.total })),
         emitente: fatura.emitente,
       },
-      "",
+      emitidoPor,
     );
   }
 

@@ -84,26 +84,23 @@ export async function imprimirReciboDePagamento(
 
   // ── Quem pagou ────────────────────────────────────────────────────────────
   //
-  // So o pagador. Quem emite ja assina no rodape, e repetir os dados da empresa
-  // aqui gastava meia pagina para dizer duas vezes a mesma coisa.
-  doc.setFont("helvetica", "bold").setFontSize(7).setTextColor(...CINZA);
-  doc.text("RECEBEMOS DE", MARGEM, y);
-
-  doc.setFont("helvetica", "bold").setFontSize(11).setTextColor(...TINTA);
-  doc.text(r.clienteNome ?? "—", MARGEM, y + 15);
+  // Sem rotulo: nome grande logo abaixo de "RECIBO DE PAGAMENTO" so pode ser de
+  // quem pagou, e a etiqueta gastava uma linha para dizer o obvio.
+  doc.setFont("helvetica", "bold").setFontSize(12).setTextColor(...TINTA);
+  doc.text(r.clienteNome ?? "—", MARGEM, y);
 
   if (r.clienteDoc) {
     doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(...CINZA);
-    doc.text(r.clienteDoc, MARGEM, y + 27);
+    doc.text(r.clienteDoc, MARGEM, y + 13);
   }
 
-  y += 48;
+  y += 34;
 
   // ── A quantia, por extenso do jeito que se lê num recibo ─────────────────
-  doc.setDrawColor(...REGUA).setLineWidth(0.6);
-  doc.line(MARGEM, y, direita, y);
-
-  y += 24;
+  //
+  // Sem regua acima: o espaco ja separa, e a linha logo abaixo do nome do
+  // cliente parecia fechar um bloco que nao tinha comecado.
+  y += 10;
   doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(...CINZA);
   doc.text("A importância de", MARGEM, y);
 
@@ -136,7 +133,7 @@ export async function imprimirReciboDePagamento(
     { lineHeightFactor: 1.5 },
   );
 
-  y += 32;
+  y += 44;
 
   // ── Composição, no mesmo desenho do resumo ────────────────────────────────
   if (r.tickets.length > 0) {
@@ -148,8 +145,13 @@ export async function imprimirReciboDePagamento(
   // Quem assina um recibo de parcela quer saber o que sobra. Sem isso o
   // documento comprova o pedaço e cala sobre o todo.
   if (r.emAberto.length > 0) {
-    y += 18;
+    y += 34;
     y = secao(doc, "PARCELAS EM ABERTO", y, MARGEM, direita);
+    y = colunas(doc, y, direita, [
+      { texto: "PARCELA", x: MARGEM },
+      { texto: "VENCIMENTO", x: MARGEM + 62 },
+      { texto: "VALOR", x: direita, direita: true },
+    ]);
 
     for (const p of r.emAberto) {
       y += 15;
@@ -158,7 +160,7 @@ export async function imprimirReciboDePagamento(
       doc.setTextColor(...CINZA);
       doc.text(
         p.vencimento ? paraFormatoBR(p.vencimento.slice(0, 10) as DataISO) : "—",
-        MARGEM + 30,
+        MARGEM + 62,
         y,
       );
       doc.setTextColor(...TINTA);
@@ -263,20 +265,17 @@ export async function imprimirResumoDaConta(
 
   // ── Para quem ─────────────────────────────────────────────────────────────
   //
-  // So o cliente. A marca ja esta no topo e o emitente e sempre o mesmo: uma
-  // coluna "DE" repetia em toda folha o que ninguem consulta.
-  doc.setFont("helvetica", "bold").setFontSize(7).setTextColor(...CINZA);
-  doc.text("CLIENTE", MARGEM, y);
-
-  doc.setFont("helvetica", "bold").setFontSize(11).setTextColor(...TINTA);
-  doc.text(r.clienteNome ?? "—", MARGEM, y + 15);
+  // Sem rotulo, e sem a coluna do emitente: a marca ja esta no topo, o emitente
+  // e sempre o mesmo, e o unico nome nesta altura so pode ser o do cliente.
+  doc.setFont("helvetica", "bold").setFontSize(12).setTextColor(...TINTA);
+  doc.text(r.clienteNome ?? "—", MARGEM, y);
 
   if (r.clienteDoc) {
     doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(...CINZA);
-    doc.text(r.clienteDoc, MARGEM, y + 27);
+    doc.text(r.clienteDoc, MARGEM, y + 13);
   }
 
-  y += 48;
+  y += 34;
 
   // ── De onde vem ───────────────────────────────────────────────────────────
   if (r.tickets.length > 0) {
@@ -287,22 +286,21 @@ export async function imprimirResumoDaConta(
 
   // ── Como se paga ──────────────────────────────────────────────────────────
   y = secao(doc, "PARCELAS", y, MARGEM, direita);
-
-  doc.setFont("helvetica", "bold").setFontSize(7).setTextColor(...CINZA);
-  doc.text("VENCIMENTO", MARGEM + 30, y + 12);
-  doc.text("SITUAÇÃO", MARGEM + 150, y + 12);
-  doc.text("VALOR", direita, y + 12, { align: "right" });
-  y += 12;
-  doc.setDrawColor(...REGUA).line(MARGEM, y + 5, direita, y + 5);
+  y = colunas(doc, y, direita, [
+    { texto: "PARCELA", x: MARGEM },
+    { texto: "VENCIMENTO", x: MARGEM + 62 },
+    { texto: "SITUAÇÃO", x: MARGEM + 160 },
+    { texto: "VALOR", x: direita, direita: true },
+  ]);
 
   for (const p of r.parcelas) {
     y += 16;
     doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(...TINTA);
     doc.text(String(p.numero), MARGEM, y);
-    doc.text(p.vencimento ? paraFormatoBR(p.vencimento.slice(0, 10) as DataISO) : "—", MARGEM + 30, y);
+    doc.text(p.vencimento ? paraFormatoBR(p.vencimento.slice(0, 10) as DataISO) : "—", MARGEM + 62, y);
 
     doc.setTextColor(...(p.pago ? VERDE : CINZA));
-    doc.text(p.pago ? "Paga" : "Em aberto", MARGEM + 150, y);
+    doc.text(p.pago ? "Paga" : "Em aberto", MARGEM + 160, y);
 
     doc.setTextColor(...TINTA);
     doc.text(formatarSemSimbolo(p.total as Centavos), direita, y, { align: "right" });
@@ -343,30 +341,52 @@ export async function imprimirResumoDaConta(
 /**
  * A tabela de composicao: de onde vem o dinheiro.
  *
- * Sem o numero do ticket, so a DATA e o que foi feito. O numero da conta ja
- * esta no topo, e o do ticket nao ajuda o cliente a lembrar do servico — a data
- * ajuda.
+ * TICKET, DATA e VALOR, com cabecalho. Sem ele a primeira coluna virava um
+ * numero solto que se confundia com o da conta, la em cima.
  */
 function composicao(
   doc: jsPDF,
-  tickets: { titulo: string; valor: number; data: string | null }[],
+  tickets: { numero: number; titulo: string; valor: number; data: string | null }[],
   y: number,
   direita: number,
 ): number {
   let atual = secao(doc, "COMPOSIÇÃO", y, MARGEM, direita);
 
+  atual = colunas(doc, atual, direita, [
+    { texto: "TICKET", x: MARGEM },
+    { texto: "DATA", x: MARGEM + 62 },
+    { texto: "VALOR", x: direita, direita: true },
+  ]);
+
   for (const t of tickets) {
     atual += 16;
-    doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(...CINZA);
-    doc.text(t.data ? paraFormatoBR(t.data.slice(0, 10) as DataISO) : "—", MARGEM, atual);
+    doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(...TINTA);
+    doc.text(String(t.numero), MARGEM, atual);
+
+    doc.setTextColor(...CINZA);
+    doc.text(t.data ? paraFormatoBR(t.data.slice(0, 10) as DataISO) : "—", MARGEM + 62, atual);
 
     doc.setTextColor(...TINTA);
-    doc.text(doc.splitTextToSize(t.titulo || "Serviço", 300), MARGEM + 62, atual);
     doc.text(formatarSemSimbolo(t.valor as Centavos), direita, atual, { align: "right" });
 
     doc.setDrawColor(...REGUA).line(MARGEM, atual + 5, direita, atual + 5);
   }
   return atual;
+}
+
+/** A linha de cabecalho de uma tabela, com a regua embaixo. */
+function colunas(
+  doc: jsPDF,
+  y: number,
+  direita: number,
+  cols: { texto: string; x: number; direita?: boolean }[],
+): number {
+  doc.setFont("helvetica", "bold").setFontSize(7).setTextColor(...CINZA);
+  for (const c of cols) {
+    doc.text(c.texto, c.x, y + 14, c.direita ? { align: "right" } : undefined);
+  }
+  doc.setDrawColor(...REGUA).setLineWidth(0.6).line(MARGEM, y + 19, direita, y + 19);
+  return y + 19;
 }
 
 /** Titulo de secao com a regua embaixo. Repetido tres vezes; vale a funcao. */
