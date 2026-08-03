@@ -9,10 +9,8 @@ import {
   CampoBloqueado,
   Field,
   PanelTabs,
-  ProgressoValor,
 } from "@/components/ui/kit";
 import { TicketDrawer } from "../tickets/ticket-drawer";
-import { Icon } from "@/components/layout/icones";
 import { formatarSemSimbolo, type Centavos } from "@/shared/utils/money";
 import { hoje, paraFormatoBR, type DataISO } from "@/shared/utils/datas";
 
@@ -89,6 +87,27 @@ function Conteudo({ faturaId, onClose }: { faturaId: number; onClose: () => void
   const [aba, setAba] = useState<"tickets" | "parcelas">("tickets");
   // Ticket aberto por cima da conta: o drawer empilha, o de tras nao fecha.
   const [ticketAberto, setTicketAberto] = useState<number | null>(null);
+  const { avisar, confirmar } = useAvisos();
+
+  async function desvincularTicket(ticketId: number) {
+    const r = await fetch(`/api/v1/faturas/${faturaId}/tickets/${ticketId}`, {
+      method: "DELETE",
+    });
+    const dados = await r.json().catch(() => null);
+
+    if (!r.ok) {
+      avisar("atencao", dados?.error?.message ?? "Não foi possível remover o ticket");
+      return;
+    }
+
+    // Conta apagada: nao ha o que recarregar, e o drawer fecha.
+    if (dados?.data?.contaExcluida) {
+      avisar("sucesso", "Conta a receber excluída", "Era o único ticket dela.");
+      onClose();
+      return;
+    }
+    recarregar();
+  }
 
   /*
    * Recarrega o registro inteiro depois de anexar ou remover documento.
@@ -145,10 +164,13 @@ function Conteudo({ faturaId, onClose }: { faturaId: number; onClose: () => void
         ) : null
       }
       footer={
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8 }}>
-          <Button size="sm" disabled title="Ainda não implementado">
-            Enviar por e-mail
-          </Button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {/* Os totais vivem no rodape, na linha do botao: e o ultimo lugar em
+              que a pessoa olha antes de agir, e no topo eles empurravam para
+              baixo os campos que se le primeiro. */}
+          {fatura && <Totais total={fatura.total} pago={pago} />}
+
+          <span style={{ flex: 1 }} />
           <Button size="sm" variant="primary" disabled title="Ainda não implementado">
             Receber
           </Button>
@@ -175,8 +197,6 @@ function Conteudo({ faturaId, onClose }: { faturaId: number; onClose: () => void
 
       {fatura && (
         <>
-          <ProgressoValor total={fatura.total} pago={pago} />
-
           <div style={{ display: "flex", flexDirection: "column", gap: 3, marginBottom: 18 }}>
             <Field label="Cliente">
               <CampoBloqueado valor={fatura.clienteNome ?? "—"} />
@@ -209,24 +229,10 @@ function Conteudo({ faturaId, onClose }: { faturaId: number; onClose: () => void
 
           {aba === "tickets" ? (
             <Tabela
-              cabecalho={["Ticket", "Encerrado", "Situação", "Valor"]}
-              alinhamentos={["left", "left", "center", "right"]}
+              cabecalho={["Ticket", "Encerrado", "Situação", "Valor", "Ações"]}
               vazio="Nenhum ticket vinculado a esta conta."
-              aoClicarLinha={(i) => setTicketAberto(fatura.tickets[i].ticketId)}
               linhas={fatura.tickets.map((t) => [
-                // Icone de ticket na frente: aqui convivem numero de conta e
-                // numero de ticket, e o simbolo separa mais rapido que o rotulo
-                // da coluna.
-                <span
-                  key="t"
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 5,
-                    fontVariantNumeric: "tabular-nums",
-                  }}
-                >
-                  <Icon name="ticket" size={13} color="var(--text-tertiary)" />
+                <span key="t" style={{ fontVariantNumeric: "tabular-nums" }}>
                   {t.numero}
                   {t.titulo && t.titulo !== String(t.numero) && (
                     <span style={{ color: "var(--text-tertiary)" }}> · {t.titulo}</span>
@@ -236,13 +242,40 @@ function Conteudo({ faturaId, onClose }: { faturaId: number; onClose: () => void
                 <Badge key="s" tom="neutral">
                   {t.status}
                 </Badge>,
-                <strong key="v">{formatarSemSimbolo(t.valor as Centavos)}</strong>,
+                formatarSemSimbolo(t.valor as Centavos),
+                <span key="a" style={{ display: "inline-flex", gap: 2 }}>
+                  <BotaoDeLinha
+                    rotulo={`Abrir ticket ${t.numero}`}
+                    onClick={() => setTicketAberto(t.ticketId)}
+                  >
+                    <path d="M4 3h6l3 3v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
+                    <path d="M10 3v3h3" />
+                  </BotaoDeLinha>
+
+                  {/* Tirar o ticket devolve o saldo dele. Sendo o unico, a conta
+                      inteira vai junto: conta sem origem nao cobra nada. */}
+                  <BotaoDeLinha
+                    rotulo="Remover desta conta"
+                    perigo
+                    onClick={() =>
+                      confirmar(
+                        `Remover o ticket ${t.numero} desta conta?`,
+                        "Remover",
+                        () => desvincularTicket(t.ticketId),
+                        fatura.tickets.length === 1
+                          ? "É o único ticket, então a conta a receber será excluída."
+                          : "O saldo dele volta a ficar disponível para cobrar.",
+                      )
+                    }
+                  >
+                    <path d="M12 4L4 12M4 4l8 8" />
+                  </BotaoDeLinha>
+                </span>,
               ])}
             />
           ) : (
             <Tabela
-              cabecalho={["#", "Vencimento", "Valor", "Situação", "Documentos", ""]}
-              alinhamentos={["center", "left", "right", "center", "center", "center"]}
+              cabecalho={["#", "Vencimento", "Valor", "Situação", "Documentos", "Ações"]}
               vazio="Nenhuma parcela gerada."
               linhas={fatura.parcelas.map((p) => [
                 p.numero,
@@ -252,21 +285,44 @@ function Conteudo({ faturaId, onClose }: { faturaId: number; onClose: () => void
                   {p.pago ? "PAGA" : "ABERTA"}
                 </Badge>,
                 <Documentos
-                  key="a"
+                  key="d"
                   faturaId={fatura.id}
                   parcelaId={p.id}
                   boleto={p.boleto}
                   nfs={p.nfs}
-                  bloqueado={fatura.situacao === "CANCELADA"}
                   aoMudar={recarregar}
                 />,
-                <BotaoEnviar
-                  key="e"
-                  faturaId={fatura.id}
-                  parcelaId={p.id}
-                  temDocumento={Boolean(p.nfs || p.boleto)}
-                  bloqueado={fatura.situacao === "CANCELADA" || p.pago}
-                />,
+                <span key="a" style={{ display: "inline-flex", gap: 2 }}>
+                  <AnexarDocumento
+                    tipo="nfs"
+                    rotulo="Anexar nota fiscal"
+                    faturaId={fatura.id}
+                    parcelaId={p.id}
+                    bloqueado={fatura.situacao === "CANCELADA"}
+                    aoMudar={recarregar}
+                  >
+                    <path d="M4 2h5l3 3v9H4z" />
+                    <path d="M6 8h4M6 11h3" />
+                  </AnexarDocumento>
+
+                  <AnexarDocumento
+                    tipo="boleto"
+                    rotulo="Anexar boleto"
+                    faturaId={fatura.id}
+                    parcelaId={p.id}
+                    bloqueado={fatura.situacao === "CANCELADA"}
+                    aoMudar={recarregar}
+                  >
+                    <path d="M2 3v10M5 3v10M8 3v10M11 3v10M14 3v10" />
+                  </AnexarDocumento>
+
+                  <BotaoEnviar
+                    faturaId={fatura.id}
+                    parcelaId={p.id}
+                    temDocumento={Boolean(p.nfs || p.boleto)}
+                    bloqueado={fatura.situacao === "CANCELADA" || p.pago}
+                  />
+                </span>,
               ])}
             />
           )}
@@ -307,91 +363,70 @@ function Vencimento({ data, pago }: { data: string | null; pago: boolean }) {
 }
 
 /**
- * Nota fiscal e boleto da parcela.
+ * As bandeiras dos documentos ja anexados.
  *
- * Um botao por tipo, sempre os dois: com o botao aparecendo so quando o arquivo
- * ja existe, nao havia por onde ENVIAR o primeiro. Com arquivo, o botao abre; o
- * ✕ ao lado troca ou remove.
+ * Cada uma e um par: o rotulo baixa, o ✕ ao lado remove. Dois alvos dentro da
+ * mesma moldura, e nao dois controles soltos — assim o ✕ pertence visivelmente
+ * AQUELE documento, e nao a linha inteira.
  *
- * Abrir e um link normal para a rota, que redireciona para uma URL assinada de
- * uma hora. Guardar a URL na tela criaria uma copia que expira sem avisar.
+ * Anexar mora na coluna de acoes: e um gesto de escrita, e misturado as
+ * bandeiras fazia a coluna significar "o que existe" e "o que da para fazer" ao
+ * mesmo tempo.
  */
 function Documentos({
   faturaId,
   parcelaId,
   boleto,
   nfs,
-  bloqueado,
   aoMudar,
 }: {
   faturaId: number;
   parcelaId: number;
   boleto: string | null;
   nfs: string | null;
-  bloqueado: boolean;
   aoMudar: () => void;
 }) {
+  if (!nfs && !boleto) return <span style={{ color: "var(--text-disabled)" }}>—</span>;
+
   return (
-    <span style={{ display: "inline-flex", gap: 6 }}>
-      <Documento
-        rotulo="NF"
-        tipo="nfs"
-        valor={nfs}
-        faturaId={faturaId}
-        parcelaId={parcelaId}
-        bloqueado={bloqueado}
-        aoMudar={aoMudar}
-      />
-      <Documento
-        rotulo="Boleto"
-        tipo="boleto"
-        valor={boleto}
-        faturaId={faturaId}
-        parcelaId={parcelaId}
-        bloqueado={bloqueado}
-        aoMudar={aoMudar}
-      />
+    <span style={{ display: "inline-flex", gap: 4 }}>
+      {nfs && (
+        <Bandeira
+          rotulo="NF"
+          tipo="nfs"
+          faturaId={faturaId}
+          parcelaId={parcelaId}
+          aoMudar={aoMudar}
+        />
+      )}
+      {boleto && (
+        <Bandeira
+          rotulo="Boleto"
+          tipo="boleto"
+          faturaId={faturaId}
+          parcelaId={parcelaId}
+          aoMudar={aoMudar}
+        />
+      )}
     </span>
   );
 }
 
-function Documento({
+function Bandeira({
   rotulo,
   tipo,
-  valor,
   faturaId,
   parcelaId,
-  bloqueado,
   aoMudar,
 }: {
   rotulo: string;
   tipo: "nfs" | "boleto";
-  valor: string | null;
   faturaId: number;
   parcelaId: number;
-  bloqueado: boolean;
   aoMudar: () => void;
 }) {
   const { avisar, confirmar } = useAvisos();
-  const [enviando, setEnviando] = useState(false);
   const url = `/api/v1/faturas/${faturaId}/parcelas/${parcelaId}/documento?tipo=${tipo}`;
-
-  async function subir(arquivo: File) {
-    const corpo = new FormData();
-    corpo.append("arquivo", arquivo);
-
-    setEnviando(true);
-    const r = await fetch(url, { method: "POST", body: corpo });
-    const dados = await r.json().catch(() => null);
-    setEnviando(false);
-
-    if (!r.ok) {
-      avisar("atencao", dados?.error?.message ?? "Não foi possível enviar o arquivo");
-      return;
-    }
-    avisar("sucesso", `${rotulo} anexada`);
-    aoMudar();
-  }
 
   async function remover() {
     const r = await fetch(url, { method: "DELETE" });
@@ -403,83 +438,309 @@ function Documento({
     aoMudar();
   }
 
-  if (valor) {
-    return (
-      <span style={{ display: "inline-flex", alignItems: "center", gap: 2 }}>
-        <a
-          href={url}
-          target="_blank"
-          rel="noreferrer noopener"
-          style={{
-            fontSize: "var(--text-xs)",
-            fontWeight: "var(--fw-medium)",
-            color: "var(--primary)",
-            border: "1px solid var(--primary-border)",
-            background: "var(--primary-subtle)",
-            borderRadius: "var(--radius-xs)",
-            padding: "1px 6px",
-            textDecoration: "none",
-          }}
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        height: 19,
+        borderRadius: "var(--radius-xs)",
+        border: "1px solid var(--primary-border)",
+        background: "var(--primary-subtle)",
+        overflow: "hidden",
+      }}
+    >
+      <a
+        href={url}
+        target="_blank"
+        rel="noreferrer noopener"
+        title={`Baixar ${rotulo}`}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 4,
+          padding: "0 5px 0 6px",
+          fontSize: "var(--text-xs)",
+          fontWeight: "var(--fw-medium)",
+          color: "var(--primary)",
+          textDecoration: "none",
+        }}
+      >
+        <svg
+          width="10"
+          height="10"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
         >
-          {rotulo}
-        </a>
-        {!bloqueado && (
-          <button
-            type="button"
-            title={`Remover ${rotulo}`}
-            aria-label={`Remover ${rotulo}`}
-            onClick={() =>
-              confirmar(`Remover ${rotulo} desta parcela?`, "Remover", remover, "O arquivo é apagado.")
-            }
-            style={{
-              width: 14,
-              height: 14,
-              border: "none",
-              background: "none",
-              padding: 0,
-              color: "var(--text-tertiary)",
-              cursor: "pointer",
-              fontSize: 10,
-              lineHeight: 1,
-            }}
-          >
-            ✕
-          </button>
-        )}
-      </span>
+          <path d="M8 2v8M5 7l3 3 3-3M3 13h10" />
+        </svg>
+        {rotulo}
+      </a>
+
+      <button
+        type="button"
+        title={`Remover ${rotulo}`}
+        aria-label={`Remover ${rotulo}`}
+        onClick={() =>
+          confirmar(`Remover ${rotulo} desta parcela?`, "Remover", remover, "O arquivo é apagado.")
+        }
+        style={{
+          display: "inline-grid",
+          placeItems: "center",
+          width: 16,
+          height: 19,
+          border: "none",
+          borderLeft: "1px solid var(--primary-border)",
+          background: "transparent",
+          padding: 0,
+          color: "var(--primary)",
+          cursor: "pointer",
+          fontSize: 9,
+        }}
+      >
+        ✕
+      </button>
+    </span>
+  );
+}
+
+/** Anexar um documento. Ícone na coluna de ações; o arquivo entra pelo input. */
+function AnexarDocumento({
+  tipo,
+  rotulo,
+  faturaId,
+  parcelaId,
+  bloqueado,
+  aoMudar,
+  children,
+}: {
+  tipo: "nfs" | "boleto";
+  rotulo: string;
+  faturaId: number;
+  parcelaId: number;
+  bloqueado: boolean;
+  aoMudar: () => void;
+  children: React.ReactNode;
+}) {
+  const { avisar } = useAvisos();
+  const [enviando, setEnviando] = useState(false);
+
+  async function subir(arquivo: File) {
+    const corpo = new FormData();
+    corpo.append("arquivo", arquivo);
+
+    setEnviando(true);
+    const r = await fetch(
+      `/api/v1/faturas/${faturaId}/parcelas/${parcelaId}/documento?tipo=${tipo}`,
+      { method: "POST", body: corpo },
     );
+    const dados = await r.json().catch(() => null);
+    setEnviando(false);
+
+    if (!r.ok) {
+      avisar("atencao", dados?.error?.message ?? "Não foi possível enviar o arquivo");
+      return;
+    }
+    aoMudar();
   }
 
-  if (bloqueado) return <span style={{ color: "var(--text-disabled)" }}>—</span>;
+  if (bloqueado) return null;
 
   return (
     <label
+      title={rotulo}
+      aria-label={rotulo}
       style={{
-        fontSize: "var(--text-xs)",
-        fontWeight: "var(--fw-medium)",
-        color: "var(--text-tertiary)",
-        border: "1px dashed var(--border-strong)",
-        borderRadius: "var(--radius-xs)",
-        padding: "1px 6px",
+        display: "inline-grid",
+        placeItems: "center",
+        width: 22,
+        height: 22,
+        borderRadius: "var(--radius-sm)",
+        color: "var(--text-secondary)",
         cursor: enviando ? "wait" : "pointer",
-        opacity: enviando ? 0.5 : 1,
+        opacity: enviando ? 0.4 : 1,
       }}
     >
-      {enviando ? "…" : `+ ${rotulo}`}
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        {children}
+      </svg>
       <input
         type="file"
         accept="application/pdf,image/*"
         disabled={enviando}
         onChange={(e) => {
           const arquivo = e.target.files?.[0];
-          // O input é zerado para que escolher o MESMO arquivo de novo, depois
-          // de um erro, ainda dispare o `change`.
+          // Zerado para que escolher o MESMO arquivo de novo, depois de um erro,
+          // ainda dispare o `change`.
           e.target.value = "";
           if (arquivo) void subir(arquivo);
         }}
         style={{ display: "none" }}
       />
     </label>
+  );
+}
+
+/** Botão de ícone dentro da linha da tabela. */
+function BotaoDeLinha({
+  rotulo,
+  perigo,
+  onClick,
+  children,
+}: {
+  rotulo: string;
+  perigo?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      title={rotulo}
+      aria-label={rotulo}
+      onClick={(e) => {
+        // A linha inteira pode ter clique proprio; a acao nao dispara os dois.
+        e.stopPropagation();
+        onClick();
+      }}
+      style={{
+        display: "inline-grid",
+        placeItems: "center",
+        width: 22,
+        height: 22,
+        border: "none",
+        background: "none",
+        padding: 0,
+        color: perigo ? "var(--danger)" : "var(--text-secondary)",
+        cursor: "pointer",
+      }}
+    >
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        {children}
+      </svg>
+    </button>
+  );
+}
+
+/**
+ * Total no rodape, com o resto atras de um clique.
+ *
+ * Total e a pergunta de sempre; pago e saldo so importam quando ha pagamento
+ * pela metade. Os tres sempre visiveis faziam a linha do botao competir com o
+ * botao.
+ */
+function Totais({ total, pago }: { total: number; pago: number }) {
+  const [aberto, setAberto] = useState(false);
+  const saldo = total - pago;
+
+  return (
+    <div style={{ position: "relative" }}>
+      <button
+        type="button"
+        onClick={() => setAberto((v) => !v)}
+        aria-expanded={aberto}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 6,
+          border: "none",
+          background: "none",
+          padding: 0,
+          cursor: "pointer",
+          fontFamily: "var(--font)",
+        }}
+      >
+        <span className="rotulo" style={{ fontSize: "var(--text-xs)" }}>
+          Total
+        </span>
+        <span
+          style={{
+            fontSize: "var(--text-md)",
+            fontWeight: "var(--fw-semi)",
+            fontVariantNumeric: "tabular-nums",
+            color: "var(--text-primary)",
+          }}
+        >
+          {formatarSemSimbolo(total as Centavos)}
+        </span>
+        <svg
+          width="11"
+          height="11"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="var(--text-tertiary)"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{
+            transform: aberto ? "rotate(180deg)" : undefined,
+            transition: "transform var(--dur) var(--ease)",
+          }}
+        >
+          <path d="M4 6l4 4 4-4" />
+        </svg>
+      </button>
+
+      {aberto && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: "calc(100% + 8px)",
+            left: 0,
+            minWidth: 190,
+            padding: "10px 12px",
+            borderRadius: "var(--radius-md)",
+            background: "var(--surface)",
+            boxShadow: "var(--shadow-md)",
+            zIndex: 5,
+          }}
+        >
+          <Linha rotulo="Recebido" valor={pago} cor="var(--credito)" />
+          <Linha rotulo="Em aberto" valor={saldo} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Linha({ rotulo, valor, cor }: { rotulo: string; valor: number; cor?: string }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        gap: 16,
+        padding: "3px 0",
+        fontSize: "var(--text-sm)",
+      }}
+    >
+      <span style={{ color: "var(--text-tertiary)" }}>{rotulo}</span>
+      <span style={{ fontWeight: "var(--fw-medium)", fontVariantNumeric: "tabular-nums", color: cor }}>
+        {formatarSemSimbolo(valor as Centavos)}
+      </span>
+    </div>
   );
 }
 
@@ -570,15 +831,20 @@ function BotaoEnviar({
   );
 }
 
+/**
+ * Tabela do drawer. Tudo alinhado a ESQUERDA, inclusive numero.
+ *
+ * Alinhamento por coluna deixava cada tabela com um desenho: valor a direita
+ * aqui, situacao ao centro ali, e o olho refazia o percurso a cada aba. Com uma
+ * regra so, a leitura comeca sempre na mesma margem.
+ */
 function Tabela({
   cabecalho,
-  alinhamentos,
   linhas,
   vazio,
   aoClicarLinha,
 }: {
   cabecalho: string[];
-  alinhamentos: ("left" | "center" | "right")[];
   linhas: React.ReactNode[][];
   vazio: string;
   aoClicarLinha?: (indice: number) => void;
@@ -594,14 +860,13 @@ function Tabela({
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "var(--text-sm)" }}>
         <thead>
           <tr style={{ background: "var(--surface-2)" }}>
-            {cabecalho.map((c, i) => (
+            {cabecalho.map((c) => (
               <th
                 key={c}
                 className="rotulo"
                 style={{
                   height: 32,
                   padding: "0 12px",
-                  textAlign: alinhamentos[i],
                   borderBottom: "1px solid var(--border)",
                   whiteSpace: "nowrap",
                 }}
@@ -643,8 +908,7 @@ function Tabela({
                   style={{
                     height: 34,
                     padding: "0 12px",
-                    textAlign: alinhamentos[ci],
-                    fontVariantNumeric: alinhamentos[ci] === "right" ? "tabular-nums" : undefined,
+                    fontVariantNumeric: "tabular-nums",
                   }}
                 >
                   {c}

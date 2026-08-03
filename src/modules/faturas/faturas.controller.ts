@@ -165,3 +165,10 @@ export async function enviarParcela({
     ),
   );
 }
+
+export async function desvincularTicket({
+  params,
+  ctx,
+}: Entrada<undefined, undefined, { id: number; ticketId: number }>) {
+  return ok(await service.desvincularTicket(empresaObrigatoria(ctx), params.id, params.ticketId));
+}

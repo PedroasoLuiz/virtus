@@ -477,3 +477,39 @@ export async function enviarParcelaPorEmail(
 
   return { para };
 }
+
+/**
+ * Tira um ticket da conta, devolvendo o saldo dele.
+ *
+ * ⚠️ Se era o unico, a CONTA inteira e apagada. Conta a receber sem origem nao
+ * cobra nada: ela ficaria na tela com total zero, parcelas orfas e nenhum jeito
+ * de saber do que se tratava. Apagar e mais honesto que deixar a casca.
+ *
+ * Nao mexe em conta que ja recebeu: o dinheiro entrou contra AQUELE ticket, e
+ * soltar o vinculo depois faria o saldo dele voltar como se nada tivesse sido
+ * cobrado.
+ */
+export async function desvincularTicket(
+  empresaId: number,
+  faturaId: number,
+  ticketId: number,
+): Promise<{ contaExcluida: boolean }> {
+  const fatura = await obterFatura(empresaId, faturaId);
+
+  if (!fatura.tickets.some((t) => t.ticketId === ticketId)) {
+    throw new NotFoundError("Este ticket nao esta nesta conta");
+  }
+  if (fatura.parcelas.some((p) => p.pago)) {
+    throw new BusinessRuleError(
+      "Esta conta ja tem parcela baixada. Estorne o recebimento antes de mexer nos tickets.",
+    );
+  }
+
+  if (fatura.tickets.length === 1) {
+    await repo.excluir(empresaId, faturaId);
+    return { contaExcluida: true };
+  }
+
+  await repo.desvincularTicket(faturaId, ticketId);
+  return { contaExcluida: false };
+}

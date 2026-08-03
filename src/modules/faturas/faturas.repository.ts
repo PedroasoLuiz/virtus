@@ -649,3 +649,33 @@ export async function tokenDaParcela(parcelaId: number): Promise<string> {
   if (error) throw error;
   return token;
 }
+
+/** Solta o ticket da conta. O TICKET fica; o que sai e o vinculo e o saldo. */
+export async function desvincularTicket(faturaId: number, ticketId: number): Promise<void> {
+  const supabase = await serverClient();
+  const { error } = await supabase
+    .from("faturasorigens")
+    .delete()
+    .eq("fkFatura", faturaId)
+    .eq("fkOrdem", ticketId);
+
+  if (error) throw error;
+}
+
+/** Apaga a conta e tudo que pende dela. Quem confere se pode e o servico. */
+export async function excluir(empresaId: number, faturaId: number): Promise<void> {
+  const supabase = await serverClient();
+
+  for (const tabela of ["faturasorigens", "faturasparcelas"] as const) {
+    const { error } = await supabase.from(tabela).delete().eq("fkFatura", faturaId);
+    if (error) throw error;
+  }
+
+  const { error } = await supabase
+    .from("faturas")
+    .delete()
+    .eq("fkEmpresa", empresaId)
+    .eq("id", faturaId);
+
+  if (error) throw error;
+}

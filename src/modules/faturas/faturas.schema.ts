@@ -67,6 +67,8 @@ export const criarFaturaBodySchema = z
 
 export const idParamSchema = z.object({ id: idSchema });
 
+export const ticketParamSchema = z.object({ id: idSchema, ticketId: idSchema });
+
 export const parcelaParamSchema = z.object({
   id: idSchema,
   parcelaId: idSchema,
