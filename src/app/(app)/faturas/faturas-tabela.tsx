@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/kit";
 import { NovaFaturaDrawer } from "./nova-fatura-drawer";
 import { FaturaDrawer } from "./fatura-drawer";
-import { formatarSemSimbolo } from "@/shared/utils/money";
+import { formatarSemSimbolo, type Centavos } from "@/shared/utils/money";
 import { Quadro } from "@/components/ui/quadro";
 import { Icon } from "@/components/layout/icones";
 import { useAvisos } from "@/components/ui/avisos";
@@ -415,33 +415,49 @@ function QuadroDeContas({
           </span>
           <span style={{ flex: 1 }} />
 
-          {/* O que ja entrou, antes do total. Sem isso o cartao de uma conta
-              parcialmente paga mostra so o valor cheio, que e justamente o que
-              ela deixou de ser. */}
-          {f.pago > 0 && f.pago < f.total && (
-            <span
-              style={{
-                fontSize: "var(--text-sm)",
-                fontWeight: "var(--fw-semi)",
-                fontVariantNumeric: "tabular-nums",
-                color: "var(--credito)",
-              }}
-            >
-              +{formatarSemSimbolo(f.pago)}
-            </span>
-          )}
-
-          <span
-            style={{
-              fontSize: "var(--text-sm)",
-              fontWeight: "var(--fw-semi)",
-              fontVariantNumeric: "tabular-nums",
-            }}
-          >
-            {formatarSemSimbolo(f.total)}
-          </span>
+          <ValorDaConta pago={f.pago} total={f.total} />
         </>
       )}
     />
+  );
+}
+
+/**
+ * Quanto entrou e quanto era.
+ *
+ * Quitada, o total sozinho em verde ja diz tudo: repetir o mesmo numero duas
+ * vezes, um verde e um preto, so faz procurar a diferenca que nao existe.
+ *
+ * Parcial, os dois numeros sao a informacao: o que entrou e o que falta chegar.
+ */
+function ValorDaConta({ pago, total }: { pago: Centavos; total: Centavos }) {
+  const quitada = pago > 0 && pago >= total;
+
+  return (
+    <>
+      {pago > 0 && !quitada && (
+        <span
+          style={{
+            fontSize: "var(--text-sm)",
+            fontWeight: "var(--fw-semi)",
+            fontVariantNumeric: "tabular-nums",
+            color: "var(--credito)",
+          }}
+        >
+          +{formatarSemSimbolo(pago)}
+        </span>
+      )}
+
+      <span
+        style={{
+          fontSize: "var(--text-sm)",
+          fontWeight: "var(--fw-semi)",
+          fontVariantNumeric: "tabular-nums",
+          color: quitada ? "var(--credito)" : undefined,
+        }}
+      >
+        {formatarSemSimbolo(total)}
+      </span>
+    </>
   );
 }
