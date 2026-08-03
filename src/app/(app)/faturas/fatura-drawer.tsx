@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { BotaoHistorico, Drawer } from "@/components/ui/drawer";
 import { useAvisos } from "@/components/ui/avisos";
+import { Icon } from "@/components/layout/icones";
 import {
   Badge,
   Button,
@@ -229,27 +230,22 @@ function Conteudo({ faturaId, onClose }: { faturaId: number; onClose: () => void
 
           {aba === "tickets" ? (
             <Tabela
-              cabecalho={["Ticket", "Encerrado", "Situação", "Valor", "Ações"]}
+              cabecalho={["Ticket", "Encerrado", "Valor", "Ações"]}
               vazio="Nenhum ticket vinculado a esta conta."
               linhas={fatura.tickets.map((t) => [
                 <span key="t" style={{ fontVariantNumeric: "tabular-nums" }}>
                   {t.numero}
-                  {t.titulo && t.titulo !== String(t.numero) && (
-                    <span style={{ color: "var(--text-tertiary)" }}> · {t.titulo}</span>
-                  )}
                 </span>,
                 t.encerradoEm ? paraFormatoBR(t.encerradoEm as DataISO) : "—",
-                <Badge key="s" tom="neutral">
-                  {t.status}
-                </Badge>,
                 formatarSemSimbolo(t.valor as Centavos),
-                <span key="a" style={{ display: "inline-flex", gap: 2 }}>
+                <span key="a" style={{ display: "inline-flex", gap: 4 }}>
+                  {/* O mesmo icone do menu: e o mesmo objeto, e um desenho
+                      diferente aqui faria parecer outra coisa. */}
                   <BotaoDeLinha
                     rotulo={`Abrir ticket ${t.numero}`}
                     onClick={() => setTicketAberto(t.ticketId)}
                   >
-                    <path d="M4 3h6l3 3v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
-                    <path d="M10 3v3h3" />
+                    <Icon name="ticket" size={14} />
                   </BotaoDeLinha>
 
                   {/* Tirar o ticket devolve o saldo dele. Sendo o unico, a conta
@@ -257,6 +253,7 @@ function Conteudo({ faturaId, onClose }: { faturaId: number; onClose: () => void
                   <BotaoDeLinha
                     rotulo="Remover desta conta"
                     perigo
+                    svg
                     onClick={() =>
                       confirmar(
                         `Remover o ticket ${t.numero} desta conta?`,
@@ -292,29 +289,37 @@ function Conteudo({ faturaId, onClose }: { faturaId: number; onClose: () => void
                   nfs={p.nfs}
                   aoMudar={recarregar}
                 />,
-                <span key="a" style={{ display: "inline-flex", gap: 2 }}>
-                  <AnexarDocumento
-                    tipo="nfs"
-                    rotulo="Anexar nota fiscal"
-                    faturaId={fatura.id}
-                    parcelaId={p.id}
-                    bloqueado={fatura.situacao === "CANCELADA"}
-                    aoMudar={recarregar}
-                  >
-                    <path d="M4 2h5l3 3v9H4z" />
-                    <path d="M6 8h4M6 11h3" />
-                  </AnexarDocumento>
+                <span key="a" style={{ display: "inline-flex", gap: 4 }}>
+                  {/* Anexar so aparece enquanto NAO ha o documento: com ele
+                      anexado, trocar e remover e anexar de novo, e um segundo
+                      botao dizendo a mesma coisa da bandeira ao lado. */}
+                  {!p.nfs && (
+                    <AnexarDocumento
+                      tipo="nfs"
+                      rotulo="Anexar nota fiscal"
+                      faturaId={fatura.id}
+                      parcelaId={p.id}
+                      bloqueado={fatura.situacao === "CANCELADA"}
+                      aoMudar={recarregar}
+                    >
+                      <path d="M9 1.8H4.2a1 1 0 0 0-1 1v10.4a1 1 0 0 0 1 1h7.6a1 1 0 0 0 1-1V5.8z" />
+                      <path d="M9 1.8v4h4" />
+                      <path d="M5.8 9.2h4.4M5.8 11.4h3" />
+                    </AnexarDocumento>
+                  )}
 
-                  <AnexarDocumento
-                    tipo="boleto"
-                    rotulo="Anexar boleto"
-                    faturaId={fatura.id}
-                    parcelaId={p.id}
-                    bloqueado={fatura.situacao === "CANCELADA"}
-                    aoMudar={recarregar}
-                  >
-                    <path d="M2 3v10M5 3v10M8 3v10M11 3v10M14 3v10" />
-                  </AnexarDocumento>
+                  {!p.boleto && (
+                    <AnexarDocumento
+                      tipo="boleto"
+                      rotulo="Anexar boleto"
+                      faturaId={fatura.id}
+                      parcelaId={p.id}
+                      bloqueado={fatura.situacao === "CANCELADA"}
+                      aoMudar={recarregar}
+                    >
+                      <path d="M2.4 2.6v10.8M5 2.6v10.8M7.4 2.6v10.8M10.4 2.6v10.8M13.6 2.6v10.8" />
+                    </AnexarDocumento>
+                  )}
 
                   <BotaoEnviar
                     faturaId={fatura.id}
@@ -458,26 +463,13 @@ function Bandeira({
         style={{
           display: "inline-flex",
           alignItems: "center",
-          gap: 4,
-          padding: "0 5px 0 6px",
+          padding: "0 6px",
           fontSize: "var(--text-xs)",
           fontWeight: "var(--fw-medium)",
           color: "var(--primary)",
           textDecoration: "none",
         }}
       >
-        <svg
-          width="10"
-          height="10"
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M8 2v8M5 7l3 3 3-3M3 13h10" />
-        </svg>
         {rotulo}
       </a>
 
@@ -555,11 +547,7 @@ function AnexarDocumento({
       title={rotulo}
       aria-label={rotulo}
       style={{
-        display: "inline-grid",
-        placeItems: "center",
-        width: 22,
-        height: 22,
-        borderRadius: "var(--radius-sm)",
+        ...MOLDURA_DE_ACAO,
         color: "var(--text-secondary)",
         cursor: enviando ? "wait" : "pointer",
         opacity: enviando ? 0.4 : 1,
@@ -594,15 +582,26 @@ function AnexarDocumento({
   );
 }
 
-/** Botão de ícone dentro da linha da tabela. */
+/**
+ * Botao de icone da linha, com moldura.
+ *
+ * A moldura existe para o icone parecer clicavel: solto numa celula ele lê como
+ * simbolo do dado, e nao como acao. Mesma medida nos tres, para a coluna de
+ * acoes ficar uma fileira e nao um amontoado.
+ *
+ * `svg` diz se o conteudo ja e um `<svg>` pronto (o do menu) ou apenas os
+ * tracos, que este componente embrulha.
+ */
 function BotaoDeLinha({
   rotulo,
   perigo,
+  svg,
   onClick,
   children,
 }: {
   rotulo: string;
   perigo?: boolean;
+  svg?: boolean;
   onClick: () => void;
   children: React.ReactNode;
 }) {
@@ -616,33 +615,40 @@ function BotaoDeLinha({
         e.stopPropagation();
         onClick();
       }}
-      style={{
-        display: "inline-grid",
-        placeItems: "center",
-        width: 22,
-        height: 22,
-        border: "none",
-        background: "none",
-        padding: 0,
-        color: perigo ? "var(--danger)" : "var(--text-secondary)",
-        cursor: "pointer",
-      }}
+      style={{ ...MOLDURA_DE_ACAO, color: perigo ? "var(--danger)" : "var(--text-secondary)" }}
     >
-      <svg
-        width="14"
-        height="14"
-        viewBox="0 0 16 16"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        {children}
-      </svg>
+      {svg ? (
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          {children}
+        </svg>
+      ) : (
+        children
+      )}
     </button>
   );
 }
+
+/** A moldura dos botoes de acao. Uma so, para os tres nao divergirem. */
+const MOLDURA_DE_ACAO: React.CSSProperties = {
+  display: "inline-grid",
+  placeItems: "center",
+  width: 24,
+  height: 24,
+  border: "1px solid var(--border)",
+  borderRadius: "var(--radius-sm)",
+  background: "var(--surface)",
+  padding: 0,
+  cursor: "pointer",
+};
 
 /**
  * Total no rodape, com o resto atras de um clique.
@@ -803,29 +809,27 @@ function BotaoEnviar({
         )
       }
       style={{
-        display: "inline-grid",
-        placeItems: "center",
-        width: 22,
-        height: 22,
-        border: "none",
-        background: "none",
-        padding: 0,
+        ...MOLDURA_DE_ACAO,
         color: impedido ? "var(--text-disabled)" : "var(--text-secondary)",
         cursor: impedido ? "not-allowed" : "pointer",
       }}
     >
+      {/* Envelope com seta saindo: o aviaozinho de papel diz "mensagem", mas
+          nao diz que ela vai por e-mail — e aqui o meio importa, porque o que
+          sai leva o boleto. */}
       <svg
         width="14"
         height="14"
-        viewBox="0 0 24 24"
+        viewBox="0 0 16 16"
         fill="none"
         stroke="currentColor"
-        strokeWidth="1.8"
+        strokeWidth="1.5"
         strokeLinecap="round"
         strokeLinejoin="round"
       >
-        <path d="M22 2L11 13" />
-        <path d="M22 2l-7 20-4-9-9-4 20-7z" />
+        <path d="M8.6 12.6H2.4a1 1 0 0 1-1-1V4.4a1 1 0 0 1 1-1h11.2a1 1 0 0 1 1 1v3.2" />
+        <path d="M1.6 4.6L8 8.8l6.4-4.2" />
+        <path d="M10.4 12.2h4.2M12.8 10.4l1.8 1.8-1.8 1.8" />
       </svg>
     </button>
   );
@@ -867,6 +871,9 @@ function Tabela({
                 style={{
                   height: 32,
                   padding: "0 12px",
+                  // `th` centraliza por padrao no navegador e `td` nao: sem esta
+                  // linha o cabecalho fica deslocado da coluna que ele nomeia.
+                  textAlign: "left",
                   borderBottom: "1px solid var(--border)",
                   whiteSpace: "nowrap",
                 }}
