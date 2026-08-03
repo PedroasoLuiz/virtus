@@ -1,0 +1,545 @@
+@import "tailwindcss";
+
+/* ════════════════════════════════════════════════════════════════════════════
+   VPAY — Design System
+   Referencia: linguagem Apple aplicada a produto denso (ver docs/07).
+   Fonte unica: Inter. Cor de marca: verde VPay, como sotaque.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Tipografia ─────────────────────────────────────────────────────────
+     Escala maior que a do SIC (12px base) porque o registro Apple pede ar.
+     Tracking negativo nos tamanhos grandes: e o que faz Inter parecer SF. */
+  --font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+  --text-2xs: 8px;
+  --text-xs: 9px;
+  --text-sm: 11px;    /* labels, cabecalho de tabela */
+  --text-base: 12px;  /* corpo padrao, tabelas, forms */
+  --text-md: 13px;
+  --text-lg: 14px;
+  --text-xl: 16px;
+  --text-2xl: 18px;   /* titulo de pagina */
+  --text-3xl: 22px;
+  --text-4xl: 28px;
+
+  --tracking-tight: -0.022em;   /* titulos grandes */
+  --tracking-snug: -0.014em;    /* subtitulos */
+  --tracking-normal: -0.006em;  /* corpo — Inter pede um respiro negativo */
+  --tracking-wide: 0.06em;      /* labels em caixa alta */
+
+  --fw-normal: 400;
+  --fw-medium: 500;
+  --fw-semi: 590;   /* Inter var: entre 500 e 600, o peso "Apple" de titulo */
+  --fw-bold: 680;
+
+  --lh-tight: 1.08;
+  --lh-snug: 1.3;
+  --lh-normal: 1.47;
+
+  /* ── Espacamento — escala 4pt ──────────────────────────────────────────── */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* ── Alturas ───────────────────────────────────────────────────────────── */
+  --h-input: 26px;  /* mesma altura do campo bloqueado — ver kit */
+  --h-btn: 32px;
+  --h-btn-sm: 30px;
+  --h-btn-lg: 40px;
+  --h-row: 46px;
+  --h-th: 36px;
+  --h-header: 54px;
+  --h-topbar: 48px;
+
+  /* Toolbar da pagina */
+  --toolbar-gap: 8px;
+  --toolbar-input-h: var(--h-btn-sm);
+  --toolbar-search-w: 240px;
+
+  /* Teclas (badge "Enter" na busca) */
+  --kbd-bg: rgba(0, 0, 0, 0.06);
+  --kbd-color: rgba(0, 0, 0, 0.4);
+  --kbd-border: rgba(0, 0, 0, 0.12);
+
+  /* ── Raio — escala padrao Apple ────────────────────────────────────────
+     Os valores que a Apple usa nas HIG: 6 em controles miudos, 8 em campos,
+     10 em botoes, 12 em cards, 16 em folhas/paineis, 20 em modais grandes.
+     Nada de 4px — raio pequeno demais le como canto vivo mal resolvido. */
+  --radius-xs: 7px;    /* badge, tag, kbd */
+  --radius-sm: 10px;   /* item de menu, card de kanban */
+  --radius-md: 12px;   /* botao, input, select */
+  --radius-lg: 16px;   /* card, container de tabela */
+  --radius-xl: 20px;   /* painel de pagina, drawer */
+  --radius-2xl: 26px;  /* modal grande */
+  --radius-full: 9999px;
+
+  /* ── Cor — chrome neutro ───────────────────────────────────────────────
+     Cinzas da familia Apple: canvas #F5F5F7, tinta #1D1D1F. */
+  --bg: #f1f1f0;
+  --surface: #ffffff;
+  --surface-2: #fafafc;
+  --surface-3: #f0f0f3;
+  --surface-hover: rgba(0, 0, 0, 0.035);
+  --surface-active: rgba(0, 106, 40, 0.06);
+
+  /* Hairline: a elevacao vem daqui, nao de sombra. */
+  --border: rgba(0, 0, 0, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.14);
+
+  --text-primary: #1d1d1f;
+  --text-secondary: #52525b;
+  --text-tertiary: #86868b;
+  --text-disabled: #c7c7cc;
+  --text-inverse: #ffffff;
+
+  /* ── Cor de marca — verde VPay ─────────────────────────────────────────
+     Regra de ouro herdada do site da Virtus: sotaque em no maximo ~10% da
+     tela. Na duvida se um elemento leva verde, nao leva. */
+  --primary: #006a28;
+  --primary-hover: #005520;
+  --primary-fg: #ffffff;
+  --primary-subtle: rgba(0, 106, 40, 0.07);
+  --primary-border: rgba(0, 106, 40, 0.2);
+
+  /* ── Status ────────────────────────────────────────────────────────────
+     Verde de status e SEMPRE tingido (fundo claro + texto escuro). Verde
+     preenchido e exclusivo de acao. Ver docs/07. */
+  --success: #16a34a;
+  --success-bg: #f0fdf4;
+  --success-border: #a7e8bf;
+  --success-text: #15803d;
+
+  --warning: #b45309;
+  /* Amarelo cheio, para quando o tom precisa PREENCHER um elemento.
+     `--warning` e ambar escuro: calibrado para ler como texto sobre fundo
+     claro, ele vira laranja quando pinta uma area inteira. */
+  --warning-solido: #eab308;
+  --warning-bg: #fffbeb;
+  --warning-border: #fde68a;
+  --warning-text: #92400e;
+
+  --danger: #dc2626;
+  --danger-bg: #fef2f2;
+  --danger-border: #fca5a5;
+  --danger-text: #b91c1c;
+
+  --info: #0369a1;
+  --info-bg: #f0f9ff;
+  --info-border: #bae6fd;
+  --info-text: #0369a1;
+
+  --neutral: #6b7280;
+  --neutral-bg: #f4f4f5;
+  --neutral-border: #e4e4e7;
+  --neutral-text: #6b7280;
+
+  /* Natureza do lancamento — nunca invertidos, mesmo com total negativo. */
+  --credito: #15803d;
+  --debito: #b91c1c;
+
+  /* ── Campos ────────────────────────────────────────────────────────────── */
+  --input-bg: #ffffff;
+  --input-color: var(--text-primary);
+  --input-border: rgba(0, 0, 0, 0.14);
+  --input-border-focus: var(--primary);
+  --input-placeholder: #a1a1aa;
+  --input-disabled-bg: var(--surface-3);
+
+  /* ── Navegacao lateral — trilho de hierarquia ──────────────────────────
+     "Tree navigation guide line": linha vertical de 1px que liga os itens de
+     um mesmo grupo, com um marcador circular no centro de cada um.
+     Tokens, e nao valores soltos, porque todo item de menu novo precisa cair
+     exatamente sobre a mesma linha. */
+  --nav-trilho-cor: rgba(0, 0, 0, 0.11);
+  --nav-trilho-largura: 1px;
+  --nav-marcador: 5px;
+  --nav-marcador-cor: #c6c6c2;
+
+  /* Eixo X do trilho em cada nivel. O do nivel 1 cai no centro do icone do
+     grupo (8px de padding + metade de 15px de icone), entao a linha parece
+     descer de dentro do proprio icone. */
+  --nav-trilho-x1: 16px;
+  --nav-trilho-x2: 38px;
+
+  /* Recuo do texto. Alinhado com o rotulo do grupo (padding + icone + gap),
+     para nivel 1 e nivel 2 comecarem na mesma coluna. */
+  --nav-texto-x1: 31px;
+  --nav-texto-x2: 53px;
+
+  /* Distancia da bolinha ate onde o card do item selecionado comeca. O card
+     nunca engloba o trilho nem o marcador. */
+  --nav-card-gap: 9px;
+
+  --nav-item-h: 30px;
+
+  /* Respiro entre opcoes, em qualquer nivel. Coladas, duas linhas de menu
+     parecem um bloco unico e o realce do hover vaza de uma para a outra. */
+  --nav-item-gap: 3px;
+
+  /* ── Layout ────────────────────────────────────────────────────────────── */
+  --sidebar-w: 220px;
+  --sidebar-w-collapsed: 56px;
+  --sidebar-bg: #f5f5f3;
+  --sidebar-item-color: #3d3d3b;
+  --sidebar-item-hover: #111111;
+  --sidebar-item-sub: #5c5c58;
+  --sidebar-item-bg-hover: rgba(0, 0, 0, 0.03);
+  --drawer-w: 620px;
+  --drawer-w-lg: 900px;
+  --content-max: 1440px;
+
+  /* ── Kanban ────────────────────────────────────────────────────────────
+     A coluna e um verde levemente mais escuro que a casca, a 35% de opacidade:
+     cheio, o verde virava bloco de cor e competia com o card branco. Diluido,
+     ele so marca o trilho.
+
+     A coluna encosta na base da tela — raio so em cima, para ler como trilho
+     que continua abaixo da dobra, e nao como caixa boiando. */
+  --kanban-coluna-bg: rgba(228, 233, 228, 0.35);
+
+  /* Moldura do card: cinza claro puxado ao branco, sem o verde da coluna.
+     Ela envolve o cartao branco por 2px e da lugar a faixa de rodape, que fica
+     FORA do branco. Tingida de verde ela virava um segundo bloco de cor em
+     cima do fundo que ja e verde — dois tons proximos brigando. */
+  --kanban-card-moldura: rgba(248, 248, 247, 0.75);
+  --kanban-coluna-w: 274px;
+  --kanban-gap: 12px;
+
+  /* ── Sombra ────────────────────────────────────────────────────────────
+     Quase inexistente por principio. Quando aparece, e larga e fraca — luz
+     ambiente, nao caixa flutuando. */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 8px 28px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.12);
+
+  /* ── Movimento ─────────────────────────────────────────────────────────
+     Curva padrao da Apple. Rapido o bastante para nao atrasar o trabalho. */
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: 120ms;
+  --dur: 200ms;
+  --dur-slow: 320ms;
+
+  /* ── Graficos ──────────────────────────────────────────────────────────── */
+  --chart-1: #006a28;
+  --chart-2: #0369a1;
+  --chart-3: #e41e4c;
+  --chart-4: #b45309;
+  --chart-5: #7c3aed;
+  --chart-6: #0d9488;
+}
+
+.dark {
+  --bg: #000000;
+  --surface: #1c1c1e;
+  --surface-2: #141416;
+  --surface-3: #2c2c2e;
+  --surface-hover: rgba(255, 255, 255, 0.055);
+  --surface-active: rgba(0, 187, 71, 0.1);
+
+  --border: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.16);
+
+  --text-primary: #f5f5f7;
+  --text-secondary: #aeaeb2;
+  --text-tertiary: #8e8e93;
+  --text-disabled: #48484a;
+
+  --primary: #00bb47;
+  --primary-hover: #2ed167;
+  /* Verde claro nao carrega texto branco: da ~2:1 de contraste. */
+  --primary-fg: #06210f;
+  --primary-subtle: rgba(0, 187, 71, 0.12);
+  --primary-border: rgba(0, 187, 71, 0.3);
+
+  --success: #4ade80;
+  --success-bg: rgba(74, 222, 128, 0.1);
+  --success-border: rgba(74, 222, 128, 0.26);
+  --success-text: #4ade80;
+
+  --warning: #fbbf24;
+  --warning-solido: #facc15;
+  --warning-bg: rgba(251, 191, 36, 0.1);
+  --warning-border: rgba(251, 191, 36, 0.26);
+  --warning-text: #fbbf24;
+
+  --danger: #ff453a;
+  --danger-bg: rgba(255, 69, 58, 0.1);
+  --danger-border: rgba(255, 69, 58, 0.26);
+  --danger-text: #ff6961;
+
+  --info: #38bdf8;
+  --info-bg: rgba(56, 189, 248, 0.1);
+  --info-border: rgba(56, 189, 248, 0.26);
+  --info-text: #38bdf8;
+
+  --neutral: #8e8e93;
+  --neutral-bg: rgba(255, 255, 255, 0.06);
+  --neutral-border: rgba(255, 255, 255, 0.12);
+  --neutral-text: #aeaeb2;
+
+  --credito: #4ade80;
+  --debito: #ff6961;
+
+  --sidebar-bg: #141416;
+  --sidebar-item-color: #d6d6da;
+  --sidebar-item-hover: #ffffff;
+  --sidebar-item-sub: #8e8e93;
+  --sidebar-item-bg-hover: rgba(255, 255, 255, 0.05);
+
+  --nav-trilho-cor: rgba(255, 255, 255, 0.13);
+  --nav-marcador-cor: #4d4d51;
+
+  /* No escuro o verde da coluna precisa vir do lado claro do fundo, nao do
+     escuro: mais escuro que a casca ali significaria buraco, nao trilho. */
+  --kanban-coluna-bg: rgba(38, 48, 41, 0.35);
+  --kanban-card-moldura: rgba(255, 255, 255, 0.07);
+
+  --kbd-bg: rgba(255, 255, 255, 0.08);
+  --kbd-color: rgba(255, 255, 255, 0.45);
+  --kbd-border: rgba(255, 255, 255, 0.14);
+
+  --input-bg: #1c1c1e;
+  --input-border: rgba(255, 255, 255, 0.16);
+  --input-placeholder: #6c6c70;
+  --input-disabled-bg: #2c2c2e;
+
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 8px 28px rgba(0, 0, 0, 0.6);
+  --shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.7);
+
+  --chart-1: #00bb47;
+  --chart-2: #38bdf8;
+  --chart-3: #f472a0;
+  --chart-4: #fbbf24;
+  --chart-5: #a78bfa;
+  --chart-6: #2dd4bf;
+}
+
+/* Expoe os tokens ao Tailwind v4 (bg-surface, text-secondary, rounded-lg...) */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-primary: var(--primary);
+  --color-primary-fg: var(--primary-fg);
+  --color-primary-subtle: var(--primary-subtle);
+  --color-txt: var(--text-primary);
+  --color-txt-secondary: var(--text-secondary);
+  --color-txt-tertiary: var(--text-tertiary);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
+
+  --font-sans: var(--font);
+
+  --radius-xs: var(--radius-xs);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+  --radius-2xl: var(--radius-2xl);
+}
+
+/* ── Base ─────────────────────────────────────────────────────────────────── */
+
+* {
+  border-color: var(--border);
+}
+
+/*
+  Canto "estilo Apple": a Apple nao usa arco de circulo no border-radius, e sim
+  uma curva continua (a "squircle") que funde o lado reto ao arredondamento sem
+  o cotovelo que o raio circular deixa no ponto onde a curva comeca.
+
+  `corner-shape` so age em quem JA tem border-radius, entao aplicar no seletor
+  universal nao muda nada de layout — apenas refina todo canto arredondado de
+  uma vez. Progressive enhancement: navegador sem suporte cai no raio normal.
+
+  Expoente em 2. Subir demais deixa o canto mais QUADRADO, nao mais curvo —
+  o site da Virtus chegou a mesma conclusao depois de superellipse(5) achatar
+  tudo. Quem controla o quanto o canto "abre" e o valor do raio, acima; o
+  expoente controla o CARATER da curva.
+*/
+*,
+*::before,
+*::after {
+  corner-shape: superellipse(2);
+}
+
+/*
+  Circulo de verdade — marcador do menu, avatar, pill.
+  Squircle aplicado a um raio circular achata as laterais e o circulo vira um
+  quadrado arredondado. Estes voltam ao arco puro.
+*/
+.redondo,
+.redondo::before,
+.redondo::after {
+  corner-shape: round;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font);
+  font-size: var(--text-base);
+  line-height: var(--lh-normal);
+  letter-spacing: var(--tracking-normal);
+  font-variant-numeric: tabular-nums; /* coluna de valor nao "dança" */
+}
+
+h1, h2, h3, h4 {
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--lh-tight);
+  font-weight: var(--fw-semi);
+}
+
+::selection {
+  background: var(--primary-subtle);
+  color: var(--text-primary);
+}
+
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+/* Scrollbar discreta, no registro macOS. */
+::-webkit-scrollbar { width: 11px; height: 11px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: var(--radius-full);
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background-color: rgba(0, 0, 0, 0.3); background-clip: content-box; }
+.dark ::-webkit-scrollbar-thumb { background-color: rgba(255, 255, 255, 0.2); background-clip: content-box; }
+
+/* ── Utilitarios de composicao ────────────────────────────────────────────── */
+
+/* Label tecnico: caixa alta, pequeno, tracking aberto. */
+.label-tec {
+  font-size: var(--text-2xs);
+  font-weight: var(--fw-semi);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.hairline { border-bottom: 1px solid var(--border); }
+
+/* Rotulo tecnico: mesma pauta do cabecalho de tabela. */
+.rotulo {
+  font-size: var(--text-sm);
+  font-weight: var(--fw-semi);
+  color: var(--input-placeholder);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Vidro da topbar — o unico blur do sistema. */
+.glass {
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+}
+
+.num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+
+/* Entrada escalonada das linhas da tabela. */
+.tr-in {
+  animation: tr-in 220ms var(--ease-out) both;
+}
+@keyframes tr-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Entrada do drawer lateral. */
+@keyframes drawer-in {
+  from { opacity: 0; transform: translateX(16px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Skeleton de carregamento. */
+.sk {
+  position: relative;
+  overflow: hidden;
+}
+.sk::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--surface) 60%, transparent),
+    transparent
+  );
+  animation: sk 1.2s infinite;
+}
+@keyframes sk {
+  to { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Entrada do aviso: sobe e aparece. Vem da direita seria movimento contra a
+   leitura — o olho volta ao canto depois de ler, não antes. */
+@keyframes aviso-entra {
+  0% {
+    opacity: 0;
+    transform: translateY(20px) scale(0.94);
+  }
+  /* Passa do lugar e volta: o movimento e o que leva o olho ao canto sem que o
+     aviso precise piscar ou gritar de cor. */
+  60% {
+    opacity: 1;
+    transform: translateY(-4px) scale(1.015);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes veu-entra {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

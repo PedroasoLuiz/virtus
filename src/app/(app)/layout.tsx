@@ -1,0 +1,55 @@
+import { cookies } from "next/headers";
+import { Sidebar } from "@/components/layout/sidebar";
+import { COOKIE_SIDEBAR } from "@/components/layout/cookies";
+import { listar as listarFavoritos } from "@/modules/favoritos/favoritos.repository";
+import { HidrataFavoritos } from "@/components/layout/hidrata-favoritos";
+import { Topbar } from "@/components/layout/topbar";
+import { sessaoUI } from "@/shared/auth/sessao-ui";
+import { Avisos } from "@/components/ui/avisos";
+
+/**
+ * Casca do app.
+ *
+ * Barra lateral com fundo proprio e divisoria a direita; topo e area de
+ * trabalho no cinza de fundo. Branco so na tabela e nos cards. A pagina nunca rola: o scroll vive dentro
+ * da area de tabela.
+ */
+export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  const sessao = await sessaoUI();
+  const recolhida = (await cookies()).get(COOKIE_SIDEBAR)?.value === "1";
+
+  // Favorito e dado, nao preferencia de navegador: vive na tabela
+  // `menufavoritos`, isolada por RLS. Falha aqui nao pode derrubar o menu.
+  const favoritos = sessao.ctx.empresaId
+    ? await listarFavoritos(sessao.ctx.empresaId).catch(() => [])
+    : [];
+
+  return (
+    // `Avisos` envolve a casca inteira: aviso disparado de qualquer tela cai no
+    // mesmo canto, e nao ha um provider por pagina para manter em sincronia.
+    <Avisos>
+      <div
+        style={{
+          display: "flex",
+          height: "100dvh",
+          overflow: "hidden",
+          background: "var(--sidebar-bg)",
+        }}
+      >
+      <HidrataFavoritos rotas={favoritos} />
+      <Sidebar
+        modulos={sessao.entitlements.modulos}
+        empresa={sessao.empresaNome}
+        recolhidaInicial={recolhida}
+        email={sessao.ctx.email}
+        usuarioNome={sessao.usuarioNome}
+        podeTrocarEmpresa={sessao.podeTrocarEmpresa}
+      />
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+        <Topbar aviso={sessao.demo ? "demo" : null} />
+        <main style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>{children}</main>
+        </div>
+      </div>
+    </Avisos>
+  );
+}
