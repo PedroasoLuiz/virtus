@@ -9,6 +9,7 @@ import {
   faturaResumoSchema,
   faturaSchema,
   type AlterarStatusBody,
+  type BaixaBody,
   type CriarFaturaBody,
   type EnviarParcelaBody,
   type IdParam,
@@ -211,4 +212,22 @@ export async function abrirAnexo({
 export async function excluirConta({ params, ctx }: Entrada<undefined, undefined, IdParam>) {
   await service.excluirConta(empresaObrigatoria(ctx), params.id);
   return noContent();
+}
+
+export async function contasBancarias({ ctx }: Entrada<undefined, undefined, unknown>) {
+  return ok(await service.contasBancarias(empresaObrigatoria(ctx)));
+}
+
+export async function registrarBaixa({ body, params, ctx }: Entrada<BaixaBody, undefined, IdParam>) {
+  const empresaId = empresaObrigatoria(ctx);
+
+  const fatura = await service.registrarBaixa(empresaId, ctx.usuarioId, params.id, {
+    data: body.data,
+    contaBancariaId: body.contaBancariaId ?? null,
+    descricao: body.descricao,
+    observacoes: body.observacoes,
+    destinos: body.destinos.map((d) => ({ parcelaId: d.parcelaId, valor: centavos(d.valor) })),
+  });
+
+  return created(faturaSchema.parse(fatura));
 }

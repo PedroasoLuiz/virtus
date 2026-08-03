@@ -219,6 +219,44 @@ export type FaturaRow = Timestamps & {
 
 
 /** Anexo da conta inteira. Nota e boleto ficam na PARCELA, nao aqui. */
+/** Quanto de um pagamento foi para uma parcela. Um PIX se reparte; uma parcela junta varios. */
+export type PagamentoParcelaRow = {
+  id: number;
+  created_at: string;
+  fkPagamento: number;
+  fkParcela: number;
+  valor: number;
+  fkUserCriacao: string | null;
+};
+
+export type PagamentoRow = {
+  id: number;
+  created_at: string;
+  fkEmpresa: number | null;
+  fkContaBancaria: number | null;
+  fkUserCriacao: string | null;
+  conciliado: boolean | null;
+  data: string | null;
+  tipo: string | null;
+  natureza: string | null;
+  descricao: string | null;
+  valor: number | null;
+  comprovante: string | null;
+  origem: string | null;
+  observacoes: string | null;
+  fkCentroCusto: number | null;
+  titulo: string | null;
+  nome: string | null;
+};
+
+export type ContaBancariaRow = {
+  id: number;
+  descricao: string | null;
+  banco: string | null;
+  ativo: boolean | null;
+  fkEmpresa: number | null;
+};
+
 export type FaturaAnexoRow = {
   id: number;
   created_at: string;
@@ -521,6 +559,9 @@ export type Database = {
       clientesenderecos: { Row: ClienteEnderecoRow; Insert: Partial<ClienteEnderecoRow>; Update: Partial<ClienteEnderecoRow>; Relationships: [] };
       clientes: { Row: ClienteRow; Insert: Partial<ClienteRow>; Update: Partial<ClienteRow>; Relationships: [] };
       faturas: { Row: FaturaRow; Insert: Partial<FaturaRow>; Update: Partial<FaturaRow>; Relationships: [] };
+      pagamentos: { Row: PagamentoRow; Insert: Partial<PagamentoRow>; Update: Partial<PagamentoRow>; Relationships: [] };
+      pagamentosxparcelas: { Row: PagamentoParcelaRow; Insert: Partial<PagamentoParcelaRow>; Update: Partial<PagamentoParcelaRow>; Relationships: [] };
+      contasbancarias: { Row: ContaBancariaRow; Insert: Partial<ContaBancariaRow>; Update: Partial<ContaBancariaRow>; Relationships: [] };
       faturasanexos: { Row: FaturaAnexoRow; Insert: Partial<FaturaAnexoRow>; Update: Partial<FaturaAnexoRow>; Relationships: [] };
       faturasparcelas: { Row: FaturaParcelaRow; Insert: Partial<FaturaParcelaRow>; Update: Partial<FaturaParcelaRow>; Relationships: [] };
       contaspagar: { Row: ContaPagarRow; Insert: Partial<ContaPagarRow>; Update: Partial<ContaPagarRow>; Relationships: [] };

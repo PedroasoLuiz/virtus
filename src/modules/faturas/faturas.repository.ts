@@ -6,6 +6,8 @@ import { intervalo, type Paginacao, type Pagina } from "@/shared/utils/paginacao
 import {
   STATUS_FATURA,
   type AnexoDaFatura,
+  type BaixaNova,
+  type ContaBancaria,
   type Fatura,
   type FaturaResumo,
   type FiltroFaturas,
@@ -380,7 +382,7 @@ export async function listarParcelas(faturaId: number): Promise<ParcelaFatura[]>
     .select(
       // `pagamentos(data)` e a data REAL da baixa. O recibo comprova um fato, e
       // sem ela sobraria o vencimento no lugar — que e outra coisa.
-      "id, numeroparcela, vencimento, valor, acrescimo, desconto, total, pago, fkPagamento, nfs, boleto, comprovante, pagamentos(data)",
+      "id, numeroparcela, vencimento, valor, acrescimo, desconto, total, pago, fkPagamento, nfs, boleto, comprovante, pagamentos(data), pagamentosxparcelas(valor)",
     )
     .eq("fkFatura", faturaId)
     .order("numeroparcela", { ascending: true });
@@ -399,6 +401,13 @@ export async function listarParcelas(faturaId: number): Promise<ParcelaFatura[]>
     pago: l.pago ?? false,
     pagamentoId: l.fkPagamento,
     comprovante: l.comprovante,
+    // Soma dos vinculos: e o que a parcela ja recebeu, de um ou de varios.
+    recebido: doBanco(
+      ((l.pagamentosxparcelas ?? []) as unknown as { valor: number }[]).reduce(
+        (soma, v) => soma + (v.valor ?? 0),
+        0,
+      ),
+    ),
     pagoEm: (l.pagamentos as unknown as { data: string | null } | null)?.data ?? null,
     nfs: l.nfs,
     boleto: l.boleto,
@@ -763,4 +772,83 @@ export async function excluir(empresaId: number, faturaId: number): Promise<void
     .eq("id", faturaId);
 
   if (error) throw error;
+}
+
+// ── Baixas ──────────────────────────────────────────────────────────────────
+
+export async function listarContasBancarias(empresaId: number): Promise<ContaBancaria[]> {
+  const supabase = await serverClient();
+  const { data, error } = await supabase
+    .from("contasbancarias")
+    .select("id, descricao, banco")
+    .eq("fkEmpresa", empresaId)
+    .eq("ativo", true)
+    .order("id", { ascending: true });
+
+  if (error) throw error;
+
+  return (data ?? []).map((c) => ({
+    id: c.id,
+    nome: primeiroPreenchido(c.descricao, c.banco) ?? `Conta ${c.id}`,
+  }));
+}
+
+/**
+ * Grava a baixa: o movimento em `pagamentos` e o rateio em `pagamentosxparcelas`.
+ *
+ * `pagamentos` e o EXTRATO — o que entrou no banco, quando e em qual conta. O
+ * rateio e outra pergunta: quanto deste dinheiro foi para cada parcela. Sem os
+ * dois, um PIX de 3.000 nao consegue quitar tres parcelas de 1.000.
+ *
+ * ⚠️ Sem transacao entre as duas chamadas — limitacao do PostgREST. Se o rateio
+ * falhar, o pagamento e apagado no `catch`: melhor nao existir do que existir
+ * sem destino, virando dinheiro no extrato que nenhuma conta reconhece.
+ */
+export async function registrarBaixa(
+  empresaId: number,
+  usuarioId: string,
+  entrada: BaixaNova,
+  total: Centavos,
+  descricao: string,
+): Promise<number> {
+  const supabase = await serverClient();
+
+  const { data, error } = await supabase
+    .from("pagamentos")
+    .insert({
+      fkEmpresa: empresaId,
+      fkUserCriacao: usuarioId,
+      fkContaBancaria: entrada.contaBancariaId ?? null,
+      data: entrada.data,
+      valor: paraBanco(total),
+      // ENTRADA: e conta a RECEBER. A mesma tabela serve os dois lados, e a
+      // natureza e o que separa o extrato em dinheiro que entra e que sai.
+      natureza: "ENTRADA",
+      origem: "FATURA",
+      descricao: entrada.descricao?.trim() || descricao,
+      observacoes: entrada.observacoes?.trim() || null,
+      conciliado: false,
+    })
+    .select("id")
+    .single();
+
+  if (error) throw error;
+  const pagamentoId = data.id;
+
+  try {
+    const { error: erroRateio } = await supabase.from("pagamentosxparcelas").insert(
+      entrada.destinos.map((d) => ({
+        fkPagamento: pagamentoId,
+        fkParcela: d.parcelaId,
+        valor: paraBanco(d.valor),
+        fkUserCriacao: usuarioId,
+      })),
+    );
+    if (erroRateio) throw erroRateio;
+  } catch (erro) {
+    await supabase.from("pagamentos").delete().eq("id", pagamentoId);
+    throw erro;
+  }
+
+  return pagamentoId;
 }

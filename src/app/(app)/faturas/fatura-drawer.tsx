@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { BotaoDeCabecalho, BotaoHistorico, Drawer } from "@/components/ui/drawer";
 import { useAvisos } from "@/components/ui/avisos";
+import { BaixaDrawer } from "./baixa-drawer";
 import { Icon } from "@/components/layout/icones";
 import {
+  Button,
   CampoBloqueado,
   Field,
   PanelTabs,
@@ -42,6 +44,8 @@ type Parcela = {
   pagamentoId: number | null;
   /** Data da baixa. E o fato que o recibo comprova — nao e o vencimento. */
   pagoEm: string | null;
+  /** Quanto ja entrou nesta parcela, de um pagamento ou de varios. */
+  recebido: number;
   nfs: string | null;
   boleto: string | null;
   comprovante: string | null;
@@ -115,6 +119,7 @@ function Conteudo({
   const [aba, setAba] = useState<"tickets" | "produtos" | "parcelas">("tickets");
   // Ticket aberto por cima da conta: o drawer empilha, o de tras nao fecha.
   const [ticketAberto, setTicketAberto] = useState<number | null>(null);
+  const [baixando, setBaixando] = useState(false);
   const { avisar, confirmar } = useAvisos();
 
   async function excluirConta() {
@@ -290,6 +295,19 @@ function Conteudo({
           {fatura && <Totais total={fatura.total} pago={pago} />}
 
           <span style={{ flex: 1 }} />
+          {fatura && fatura.situacao !== "CANCELADA" && (
+            <Button
+              size="sm"
+              variant="primary"
+              disabled={fatura.parcelas.every((p) => p.pago)}
+              title={
+                fatura.parcelas.every((p) => p.pago) ? "Todas as parcelas recebidas" : undefined
+              }
+              onClick={() => setBaixando(true)}
+            >
+              Dar baixa
+            </Button>
+          )}
         </div>
       }
     >
@@ -477,6 +495,16 @@ function Conteudo({
             />
           )}
         </>
+      )}
+
+      {baixando && fatura && (
+        <BaixaDrawer
+          faturaId={fatura.id}
+          numero={fatura.numero}
+          parcelas={fatura.parcelas}
+          aoBaixar={(nova) => setFatura(nova as Fatura)}
+          onClose={() => setBaixando(false)}
+        />
       )}
 
       <TicketDrawer ticketId={ticketAberto} somenteLeitura onClose={() => setTicketAberto(null)} />

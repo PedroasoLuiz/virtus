@@ -86,6 +86,16 @@ export const enviarParcelaBodySchema = z.object({
   para: z.string().trim().email("E-mail invalido").nullish(),
 });
 
+export const baixaBodySchema = z.object({
+  data: dataISOSchema,
+  contaBancariaId: idSchema.nullish(),
+  descricao: textoLongoSchema.nullish(),
+  observacoes: textoLongoSchema.nullish(),
+  destinos: z
+    .array(z.object({ parcelaId: idSchema, valor: centavosPositivoSchema }))
+    .min(1, "Escolha ao menos uma parcela"),
+});
+
 export const alterarStatusBodySchema = z.object({
   status: statusFaturaSchema,
 });
@@ -128,6 +138,7 @@ export const faturaSchema = faturaResumoSchema.extend({
       pago: z.boolean(),
       pagamentoId: z.number().nullable(),
       pagoEm: z.string().nullable(),
+      recebido: z.number(),
       nfs: z.string().nullable(),
       boleto: z.string().nullable(),
       comprovante: z.string().nullable(),
@@ -183,3 +194,5 @@ export type ParcelaParam = z.infer<typeof parcelaParamSchema>;
 
 export type TipoDocumentoQuery = z.infer<typeof tipoDocumentoQuerySchema>;
 export type EnviarParcelaBody = z.infer<typeof enviarParcelaBodySchema>;
+
+export type BaixaBody = z.infer<typeof baixaBodySchema>;

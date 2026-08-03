@@ -62,6 +62,8 @@ export type ParcelaFatura = {
   pagamentoId: number | null;
   /** Data da baixa. E o fato que o recibo comprova — nao confundir com o vencimento. */
   pagoEm: DataISO | null;
+  /** Quanto ja entrou nesta parcela, somado dos vinculos. */
+  recebido: Centavos;
   nfs: string | null;
   boleto: string | null;
   /** O que o cliente manda ao pagar. Nota e boleto vao; este volta. */
@@ -154,6 +156,23 @@ export type AnexoDaFatura = {
   /** Caminho no bucket. A URL e assinada na hora de abrir. */
   caminho: string;
   criadoEm: string;
+};
+
+/** Uma conta do banco, para escolher onde o dinheiro entrou. */
+export type ContaBancaria = { id: number; nome: string };
+
+/**
+ * Uma baixa: o dinheiro que entrou, e para quais parcelas ele foi.
+ *
+ * O valor vai por PARCELA, e nao um total dividido pelo sistema: um PIX de 3.000
+ * pode cobrir 1.000 de uma e 2.000 de outra, e so quem recebeu sabe.
+ */
+export type BaixaNova = {
+  data: DataISO;
+  contaBancariaId: number | null;
+  descricao?: string | null;
+  observacoes?: string | null;
+  destinos: { parcelaId: number; valor: Centavos }[];
 };
 
 export type OrigemNova = {
