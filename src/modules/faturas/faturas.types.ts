@@ -82,6 +82,13 @@ export type FaturaResumo = {
   qtdParcelas: number;
   /** Quantos tickets a conta juntou. Uma de oito se le diferente de uma de um. */
   qtdTickets: number;
+  /**
+   * Quanto ja entrou, somado das parcelas baixadas.
+   *
+   * Calculado, nunca guardado: e a PARCELA que carrega a verdade sobre o
+   * pagamento, e um campo no cabecalho da conta seria uma segunda versao dela.
+   */
+  pago: Centavos;
 };
 
 /** Quem criou e quem mexeu por ultimo. Alimenta o historico do drawer. */

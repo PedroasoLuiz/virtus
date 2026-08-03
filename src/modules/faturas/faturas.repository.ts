@@ -56,14 +56,20 @@ export async function listar(
 
   const linhas = data ?? [];
   const ids = linhas.map((l) => l.id);
-  const [vencimentos, tickets] = await Promise.all([
+  const [vencimentos, tickets, pagos] = await Promise.all([
     proximosVencimentos(ids),
     contarTickets(ids),
+    somarPago(ids),
   ]);
 
   return {
     itens: linhas.map((l) =>
-      paraDominioResumo(l, vencimentos.get(l.id) ?? null, tickets.get(l.id) ?? 0),
+      paraDominioResumo(
+        l,
+        vencimentos.get(l.id) ?? null,
+        tickets.get(l.id) ?? 0,
+        pagos.get(l.id) ?? 0,
+      ),
     ),
     total: count ?? 0,
   };
@@ -95,6 +101,27 @@ async function proximosVencimentos(faturaIds: number[]): Promise<Map<number, Dat
     if (!mapa.has(linha.fkFatura)) {
       mapa.set(linha.fkFatura, linha.vencimento.slice(0, 10) as DataISO);
     }
+  }
+  return mapa;
+}
+
+/** Quanto ja entrou em cada conta, somado das parcelas baixadas. */
+async function somarPago(faturaIds: number[]): Promise<Map<number, number>> {
+  const mapa = new Map<number, number>();
+  if (faturaIds.length === 0) return mapa;
+
+  const supabase = await serverClient();
+  const { data, error } = await supabase
+    .from("faturasparcelas")
+    .select("fkFatura, total")
+    .eq("pago", true)
+    .in("fkFatura", faturaIds);
+
+  if (error) throw error;
+
+  for (const l of data ?? []) {
+    if (l.fkFatura == null) continue;
+    mapa.set(l.fkFatura, (mapa.get(l.fkFatura) ?? 0) + (l.total ?? 0));
   }
   return mapa;
 }
@@ -142,7 +169,13 @@ export async function buscarPorId(empresaId: number, id: number): Promise<Fatura
   const proximo = parcelas.find((p) => !p.pago)?.vencimento ?? null;
 
   return {
-    ...paraDominioResumo(data, proximo),
+    // A contagem vem da lista que ja foi buscada, e nao de outra consulta.
+    ...paraDominioResumo(
+      data,
+      proximo,
+      tickets.length,
+      parcelas.filter((p) => p.pago).reduce((s, p) => s + p.total, 0),
+    ),
     observacoes: data.observacoes,
     rodape: data.rodape,
     parcelas,
@@ -488,6 +521,7 @@ function paraDominioResumo(
   linha: LinhaFatura,
   proximoVencimento: DataISO | null,
   qtdTickets = 0,
+  pago = 0,
 ): FaturaResumo {
   const cliente = linha.clientes as { razao: string | null; nomefantasia: string | null } | null;
   const status = normalizarStatus(linha.status);
@@ -509,6 +543,7 @@ function paraDominioResumo(
     total: doBanco(linha.total),
     qtdParcelas: linha.parcelas ?? 0,
     qtdTickets,
+    pago: doBanco(pago),
   };
 }
 

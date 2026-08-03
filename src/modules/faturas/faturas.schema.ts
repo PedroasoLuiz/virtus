@@ -106,24 +106,12 @@ export const faturaResumoSchema = z.object({
   total: z.number(),
   qtdParcelas: z.number(),
   qtdTickets: z.number(),
+  pago: z.number(),
 });
 
 export const faturaSchema = faturaResumoSchema.extend({
   observacoes: z.string().nullable(),
   rodape: z.string().nullable(),
-  itens: z.array(
-    z.object({
-      id: z.number(),
-      servicoId: z.number().nullable(),
-      descricao: z.string(),
-      quantidade: z.number(),
-      valorUnitario: z.number(),
-      acrescimo: z.number(),
-      desconto: z.number(),
-      total: z.number(),
-      incluir: z.boolean(),
-    }),
-  ),
   parcelas: z.array(
     z.object({
       id: z.number(),

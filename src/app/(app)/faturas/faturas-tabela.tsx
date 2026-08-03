@@ -71,8 +71,10 @@ export function FaturasTabela({
    * ela divergiria da do servico no primeiro ajuste.
    */
   async function moverConta(id: number, situacao: SituacaoFatura) {
+    // PUT, nao PATCH: a rota de status expoe PUT. Com o verbo errado o Next
+    // devolve 405 sem corpo, e a tela mostrava um erro generico sem motivo.
     const r = await fetch(`/api/v1/faturas/${id}/status`, {
-      method: "PATCH",
+      method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: situacao }),
     });
@@ -412,6 +414,23 @@ function QuadroDeContas({
             {f.qtdTickets}
           </span>
           <span style={{ flex: 1 }} />
+
+          {/* O que ja entrou, antes do total. Sem isso o cartao de uma conta
+              parcialmente paga mostra so o valor cheio, que e justamente o que
+              ela deixou de ser. */}
+          {f.pago > 0 && f.pago < f.total && (
+            <span
+              style={{
+                fontSize: "var(--text-sm)",
+                fontWeight: "var(--fw-semi)",
+                fontVariantNumeric: "tabular-nums",
+                color: "var(--credito)",
+              }}
+            >
+              +{formatarSemSimbolo(f.pago)}
+            </span>
+          )}
+
           <span
             style={{
               fontSize: "var(--text-sm)",
