@@ -45,12 +45,6 @@ export async function criar({ body, ctx }: Entrada<CriarFaturaBody, undefined, u
 
   const resultado = await service.criarFatura(empresaId, ctx.usuarioId, {
     ...body,
-    itens: body.itens.map((i) => ({
-      ...i,
-      valorUnitario: centavos(i.valorUnitario),
-      acrescimo: centavos(i.acrescimo),
-      desconto: centavos(i.desconto),
-    })),
     origens: body.origens.map((o) => ({ ...o, valor: centavos(o.valor) })),
   });
 

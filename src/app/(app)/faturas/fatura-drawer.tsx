@@ -31,16 +31,6 @@ import { hoje, paraFormatoBR, type DataISO } from "@/shared/utils/datas";
  * texto solto: a tela ainda nao edita nada, e o cadeado explica por que.
  */
 
-type Item = {
-  id: number;
-  descricao: string;
-  quantidade: number;
-  valorUnitario: number;
-  acrescimo: number;
-  desconto: number;
-  total: number;
-  incluir: boolean;
-};
 
 type Parcela = {
   id: number;
@@ -75,7 +65,6 @@ type Fatura = {
   total: number;
   observacoes: string | null;
   rodape: string | null;
-  itens: Item[];
   parcelas: Parcela[];
   tickets: TicketDaFatura[];
   historico: {

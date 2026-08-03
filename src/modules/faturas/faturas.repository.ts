@@ -8,8 +8,6 @@ import {
   type Fatura,
   type FaturaResumo,
   type FiltroFaturas,
-  type ItemFatura,
-  type ItemNovo,
   type OrigemNova,
   type ParcelaFatura,
   type Historico,
@@ -57,10 +55,16 @@ export async function listar(
   if (error) throw error;
 
   const linhas = data ?? [];
-  const vencimentos = await proximosVencimentos(linhas.map((l) => l.id));
+  const ids = linhas.map((l) => l.id);
+  const [vencimentos, tickets] = await Promise.all([
+    proximosVencimentos(ids),
+    contarTickets(ids),
+  ]);
 
   return {
-    itens: linhas.map((l) => paraDominioResumo(l, vencimentos.get(l.id) ?? null)),
+    itens: linhas.map((l) =>
+      paraDominioResumo(l, vencimentos.get(l.id) ?? null, tickets.get(l.id) ?? 0),
+    ),
     total: count ?? 0,
   };
 }
@@ -95,6 +99,26 @@ async function proximosVencimentos(faturaIds: number[]): Promise<Map<number, Dat
   return mapa;
 }
 
+/** Quantos tickets cada conta juntou. Uma consulta para a pagina inteira. */
+async function contarTickets(faturaIds: number[]): Promise<Map<number, number>> {
+  const mapa = new Map<number, number>();
+  if (faturaIds.length === 0) return mapa;
+
+  const supabase = await serverClient();
+  const { data, error } = await supabase
+    .from("faturasorigens")
+    .select('"fkFatura"')
+    .eq("origem", "TICKET")
+    .in("fkFatura", faturaIds);
+
+  if (error) throw error;
+
+  for (const l of data ?? []) {
+    mapa.set(l.fkFatura, (mapa.get(l.fkFatura) ?? 0) + 1);
+  }
+  return mapa;
+}
+
 export async function buscarPorId(empresaId: number, id: number): Promise<Fatura | null> {
   const supabase = await serverClient();
 
@@ -110,8 +134,7 @@ export async function buscarPorId(empresaId: number, id: number): Promise<Fatura
   if (error) throw error;
   if (!data) return null;
 
-  const [itens, parcelas, tickets, historico] = await Promise.all([
-    listarItens(id),
+  const [parcelas, tickets, historico] = await Promise.all([
     listarParcelas(id),
     listarTickets(id),
     montarHistorico(data.created_at, data.updated_at, data.fkUserCriacao, data.fkUserModificacao),
@@ -122,7 +145,6 @@ export async function buscarPorId(empresaId: number, id: number): Promise<Fatura
     ...paraDominioResumo(data, proximo),
     observacoes: data.observacoes,
     rodape: data.rodape,
-    itens,
     parcelas,
     tickets,
     historico,
@@ -239,29 +261,6 @@ async function montarHistorico(
   };
 }
 
-export async function listarItens(faturaId: number): Promise<ItemFatura[]> {
-  const supabase = await serverClient();
-
-  const { data, error } = await supabase
-    .from("faturasxservicos")
-    .select("id, fkServico, descricao, quantidade, valor, acrescimo, desconto, total, incluir")
-    .eq("fkFatura", faturaId)
-    .order("id", { ascending: true });
-
-  if (error) throw error;
-
-  return (data ?? []).map((l) => ({
-    id: l.id,
-    servicoId: l.fkServico,
-    descricao: l.descricao ?? "",
-    quantidade: l.quantidade,
-    valorUnitario: doBanco(l.valor),
-    acrescimo: doBanco(l.acrescimo),
-    desconto: doBanco(l.desconto),
-    total: doBanco(l.total),
-    incluir: l.incluir ?? true,
-  }));
-}
 
 export async function listarParcelas(faturaId: number): Promise<ParcelaFatura[]> {
   const supabase = await serverClient();
@@ -324,7 +323,6 @@ export type EntradaCriar = {
   total: Centavos;
   observacoes: string | null;
   rodape: string | null;
-  itens: (ItemNovo & { total: Centavos })[];
   origens: OrigemNova[];
   parcelas: Parcela[];
 };
@@ -362,24 +360,6 @@ export async function criar(entrada: EntradaCriar): Promise<number> {
   const faturaId = data.id;
 
   try {
-    if (entrada.itens.length > 0) {
-      const { error: erroItens } = await supabase.from("faturasxservicos").insert(
-        entrada.itens.map((item) => ({
-          fkFatura: faturaId,
-          fkUserCriacao: entrada.usuarioId,
-          fkServico: item.servicoId,
-          descricao: item.descricao,
-          quantidade: item.quantidade,
-          valor: paraBanco(item.valorUnitario),
-          acrescimo: paraBanco(item.acrescimo),
-          desconto: paraBanco(item.desconto),
-          total: paraBanco(item.total),
-          incluir: true,
-        })),
-      );
-      if (erroItens) throw erroItens;
-    }
-
     /*
      * `faturasorigens` e o que baixa o saldo do ticket.
      *
@@ -504,7 +484,11 @@ type LinhaFatura = {
   clientes?: unknown;
 };
 
-function paraDominioResumo(linha: LinhaFatura, proximoVencimento: DataISO | null): FaturaResumo {
+function paraDominioResumo(
+  linha: LinhaFatura,
+  proximoVencimento: DataISO | null,
+  qtdTickets = 0,
+): FaturaResumo {
   const cliente = linha.clientes as { razao: string | null; nomefantasia: string | null } | null;
   const status = normalizarStatus(linha.status);
   const cancelada = linha.cancelada ?? false;
@@ -524,6 +508,7 @@ function paraDominioResumo(linha: LinhaFatura, proximoVencimento: DataISO | null
     situacao: (cancelada ? "CANCELADA" : status) as SituacaoFatura,
     total: doBanco(linha.total),
     qtdParcelas: linha.parcelas ?? 0,
+    qtdTickets,
   };
 }
 

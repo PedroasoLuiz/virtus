@@ -13,13 +13,18 @@ import type { DataISO } from "@/shared/utils/datas";
  *
  * ORCAMENTO e o estado pre-fatura (proposta ainda nao emitida).
  */
-export const STATUS_FATURA = [
-  "ORÇAMENTO",
-  "ABERTA",
-  "FATURADA",
-  "PARC. PAGA",
-  "PAGA",
-] as const;
+/*
+ * ORÇAMENTO saiu: quem orça e o TICKET, que tem coluna propria para isso no
+ * quadro dele. Conta a receber nasce de ticket ja combinado — orcar duas vezes
+ * fazia o mesmo trabalho aparecer em dois lugares, e nenhum dos dois sabia do
+ * outro.
+ *
+ * BAIXADA entrou depois de PAGA, e nao no lugar dela: sao duas perguntas
+ * diferentes. PAGA e "o cliente pagou"; BAIXADA e "conferi no extrato e bate".
+ * Entre uma e outra existe o dia em que o dinheiro ainda nao apareceu na conta,
+ * e e justamente esse intervalo que o financeiro precisa enxergar.
+ */
+export const STATUS_FATURA = ["ABERTA", "FATURADA", "PARC. PAGA", "PAGA", "BAIXADA"] as const;
 
 export type StatusFatura = (typeof STATUS_FATURA)[number];
 
@@ -31,28 +36,19 @@ export type StatusFatura = (typeof STATUS_FATURA)[number];
 export type SituacaoFatura = StatusFatura | "CANCELADA";
 
 export const TRANSICOES_FATURA: Record<StatusFatura, StatusFatura[]> = {
-  "ORÇAMENTO": ["ABERTA"],
   ABERTA: ["FATURADA", "PARC. PAGA", "PAGA"],
   FATURADA: ["PARC. PAGA", "PAGA"],
   "PARC. PAGA": ["PAGA"],
-  PAGA: [],
+  PAGA: ["BAIXADA"],
+  // Fim da linha: conta conciliada nao volta. Erro de conciliacao se conserta
+  // no extrato, nao arrastando o cartao de volta.
+  BAIXADA: [],
 };
 
 export function podeTransicionar(de: StatusFatura, para: StatusFatura): boolean {
   return TRANSICOES_FATURA[de].includes(para);
 }
 
-export type ItemFatura = {
-  id: number;
-  servicoId: number | null;
-  descricao: string;
-  quantidade: number;
-  valorUnitario: Centavos;
-  acrescimo: Centavos;
-  desconto: Centavos;
-  total: Centavos;
-  incluir: boolean;
-};
 
 export type ParcelaFatura = {
   id: number;
@@ -84,6 +80,8 @@ export type FaturaResumo = {
   situacao: SituacaoFatura;
   total: Centavos;
   qtdParcelas: number;
+  /** Quantos tickets a conta juntou. Uma de oito se le diferente de uma de um. */
+  qtdTickets: number;
 };
 
 /** Quem criou e quem mexeu por ultimo. Alimenta o historico do drawer. */
@@ -111,7 +109,6 @@ export type TicketDaFatura = {
 export type Fatura = FaturaResumo & {
   observacoes: string | null;
   rodape: string | null;
-  itens: ItemFatura[];
   parcelas: ParcelaFatura[];
   tickets: TicketDaFatura[];
   historico: Historico;
@@ -129,14 +126,6 @@ export type OrigemNova = {
   valor: Centavos;
 };
 
-export type ItemNovo = {
-  servicoId: number | null;
-  descricao: string;
-  quantidade: number;
-  valorUnitario: Centavos;
-  acrescimo: Centavos;
-  desconto: Centavos;
-};
 
 export type FiltroFaturas = {
   status?: StatusFatura;

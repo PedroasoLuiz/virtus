@@ -2,9 +2,7 @@ import { BusinessRuleError, NotFoundError } from "@/shared/errors/app-error";
 import {
   centavos,
   formatarSemSimbolo,
-  multiplicar,
   somar,
-  subtrair,
   type Centavos,
   ZERO,
 } from "@/shared/utils/money";
@@ -31,7 +29,6 @@ import {
   type Fatura,
   type FaturaResumo,
   type FiltroFaturas,
-  type ItemNovo,
   type OrigemNova,
   type StatusFatura,
 } from "@/modules/faturas/faturas.types";
@@ -65,7 +62,6 @@ export type EntradaCriarFatura = {
   clienteId: number;
   apuracaoInicio: DataISO;
   apuracaoFim: DataISO;
-  itens: ItemNovo[];
   origens?: OrigemNova[];
   parcelamento: {
     quantidade: number;
@@ -82,24 +78,27 @@ export async function criarFatura(
   usuarioId: string,
   entrada: EntradaCriarFatura,
 ): Promise<{ id: number; total: Centavos; parcelas: number }> {
-  if (entrada.itens.length === 0) {
-    throw new BusinessRuleError("Fatura precisa de ao menos um item");
+  const origens = entrada.origens ?? [];
+  if (origens.length === 0) {
+    throw new BusinessRuleError("Escolha ao menos um ticket");
   }
   if (entrada.apuracaoFim < entrada.apuracaoInicio) {
     throw new BusinessRuleError("Fim da competencia anterior ao inicio");
   }
 
-  const itensComTotal = entrada.itens.map((item) => ({
-    ...item,
-    total: totalDoItem(item),
-  }));
-
-  const total = itensComTotal.reduce<Centavos>((acc, i) => somar(acc, i.total), ZERO);
+  /*
+   * O total e a soma do que se tirou de cada ticket.
+   *
+   * A conta a receber nao tem itens proprios: o servico vive no ticket, e
+   * copia-lo para ca criava um segundo detalhamento que divergia no primeiro
+   * ajuste — e quebrava o faturamento parcial, onde o valor cobrado nao e o do
+   * servico.
+   */
+  const total = origens.reduce<Centavos>((acc, o) => somar(acc, o.valor), ZERO);
   if (total <= 0) {
-    throw new BusinessRuleError("Total da fatura deve ser maior que zero");
+    throw new BusinessRuleError("Total da conta deve ser maior que zero");
   }
 
-  const origens = entrada.origens ?? [];
   await conferirOrigens(empresaId, origens, total);
 
   const parcelas = gerarParcelas({
@@ -119,11 +118,17 @@ export async function criarFatura(
     clienteId: entrada.clienteId,
     apuracaoInicio: entrada.apuracaoInicio,
     apuracaoFim: entrada.apuracaoFim,
-    status: entrada.emitir ? "ABERTA" : "ORÇAMENTO",
+    /*
+     * Nasce sempre ABERTA.
+     *
+     * Rascunho de conta a receber era o ORÇAMENTO, e quem orça agora e o
+     * TICKET, que tem coluna propria para isso. Conta criada aqui ja vem de
+     * ticket combinado: nao ha o que rascunhar.
+     */
+    status: "ABERTA",
     total,
     observacoes: entrada.observacoes ?? null,
     rodape: entrada.rodape ?? null,
-    itens: itensComTotal,
     origens,
     parcelas,
   });
@@ -177,20 +182,6 @@ async function conferirOrigens(
   }
 }
 
-/** (unitario x quantidade) + acrescimo - desconto, em centavos. */
-function totalDoItem(item: ItemNovo): Centavos {
-  if (item.quantidade <= 0) {
-    throw new BusinessRuleError(`Quantidade invalida no item "${item.descricao}"`);
-  }
-
-  const bruto = multiplicar(item.valorUnitario, item.quantidade);
-  const total = subtrair(somar(bruto, item.acrescimo), item.desconto);
-
-  if (total < 0) {
-    throw new BusinessRuleError(`Desconto maior que o valor do item "${item.descricao}"`);
-  }
-  return total;
-}
 
 // ── Ciclo de vida ───────────────────────────────────────────────────────────
 

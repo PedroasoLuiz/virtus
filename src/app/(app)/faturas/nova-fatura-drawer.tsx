@@ -134,21 +134,13 @@ export function NovaFaturaDrawer({
         apuracaoInicio,
         apuracaoFim,
         /*
-         * Um item por ticket, e não os serviços dele copiados.
+         * Só as origens: quanto sai de cada ticket.
          *
-         * No modelo novo o serviço vive no ticket; a conta a receber é composta
-         * por VALOR de um ou mais deles. Copiar os serviços criaria uma segunda
-         * cópia do mesmo detalhe, que divergiria no primeiro ajuste — e quebraria
-         * o faturamento parcial, onde o valor cobrado não é o do serviço.
+         * A conta a receber não tem itens próprios. O serviço vive no ticket, e
+         * copiá-lo para cá criaria um segundo detalhamento que divergiria no
+         * primeiro ajuste — e quebraria o faturamento parcial, onde o valor
+         * cobrado não é o do serviço.
          */
-        itens: escolhidos.map((t) => ({
-          servicoId: null,
-          descricao: `Ticket ${t.numero}${t.titulo ? ` — ${t.titulo}` : ""}`,
-          quantidade: 1,
-          valorUnitario: valores[t.id],
-          acrescimo: 0,
-          desconto: 0,
-        })),
         origens: escolhidos.map((t) => ({ ticketId: t.id, valor: valores[t.id] })),
         parcelamento: {
           quantidade: parcelas,

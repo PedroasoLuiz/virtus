@@ -1,10 +1,8 @@
 import { z } from "zod";
 import {
-  centavosSchema,
   centavosPositivoSchema,
   dataISOSchema,
   idSchema,
-  textoCurtoSchema,
   textoLongoSchema,
 } from "@/shared/validators/comuns";
 import { paginacaoSchema } from "@/shared/utils/paginacao";
@@ -33,14 +31,6 @@ export const listarQuerySchema = paginacaoSchema.extend({
   busca: z.string().trim().max(120).optional(),
 });
 
-const itemSchema = z.object({
-  servicoId: idSchema.nullable().default(null),
-  descricao: textoCurtoSchema,
-  quantidade: z.number().positive().max(999_999),
-  valorUnitario: centavosPositivoSchema,
-  acrescimo: centavosSchema.default(0),
-  desconto: centavosSchema.default(0),
-});
 
 const origemSchema = z.object({
   ticketId: idSchema,
@@ -52,12 +42,14 @@ export const criarFaturaBodySchema = z
     clienteId: idSchema,
     apuracaoInicio: dataISOSchema,
     apuracaoFim: dataISOSchema,
-    itens: z.array(itemSchema).min(1, "Fatura precisa de ao menos um item").max(200),
     /**
-     * De quais tickets vem o dinheiro. Vazio e legitimo — fatura avulsa existe —,
-     * mas ai nenhum ticket baixa.
+     * De quais tickets vem o dinheiro, e quanto de cada um.
+     *
+     * E a composicao da conta: o total sai da soma daqui. A fatura nao tem mais
+     * itens proprios — o servico vive no ticket, e copia-lo para ca criava um
+     * segundo detalhamento que divergia no primeiro ajuste.
      */
-    origens: z.array(origemSchema).max(200).default([]),
+    origens: z.array(origemSchema).min(1, "Escolha ao menos um ticket").max(200),
     parcelamento: z.object({
       quantidade: z.number().int().min(1).max(360),
       primeiroVencimento: dataISOSchema,
@@ -113,6 +105,7 @@ export const faturaResumoSchema = z.object({
   situacao: z.string(),
   total: z.number(),
   qtdParcelas: z.number(),
+  qtdTickets: z.number(),
 });
 
 export const faturaSchema = faturaResumoSchema.extend({

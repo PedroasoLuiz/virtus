@@ -29,6 +29,7 @@ import { NovaFaturaDrawer } from "./nova-fatura-drawer";
 import { FaturaDrawer } from "./fatura-drawer";
 import { formatarSemSimbolo } from "@/shared/utils/money";
 import { Quadro } from "@/components/ui/quadro";
+import { Icon } from "@/components/layout/icones";
 import { useAvisos } from "@/components/ui/avisos";
 import { useRouter } from "next/navigation";
 import { hoje, paraFormatoBR, type DataISO } from "@/shared/utils/datas";
@@ -202,7 +203,7 @@ export function FaturasTabela({
                       {periodo(f.apuracaoInicio, f.apuracaoFim)}
                     </Td>
                     <Td style={{ whiteSpace: "nowrap" }}>
-                      <Vencimento data={f.proximoVencimento} pago={f.situacao === "PAGA"} />
+                      <Vencimento data={f.proximoVencimento} situacao={f.situacao} />
                     </Td>
                     <Td style={{ textAlign: "center", fontVariantNumeric: "tabular-nums" }}>
                       {f.qtdParcelas}
@@ -243,10 +244,18 @@ export function FaturasTabela({
 }
 
 /** Vencimento atrasado ganha cor — e a informacao que dispara acao. */
-function Vencimento({ data, pago }: { data: DataISO | null; pago: boolean }) {
+/**
+ * O vencimento, vermelho so quando ainda nao entrou nada.
+ *
+ * Assim que ha baixa — parcial ou total — o atraso deixa de ser o assunto: o
+ * dinheiro comecou a entrar, e a data virou historico. Vermelho ali continuaria
+ * pedindo uma acao que ja foi tomada.
+ */
+function Vencimento({ data, situacao }: { data: DataISO | null; situacao: SituacaoFatura }) {
   if (!data) return <span style={{ color: "var(--text-tertiary)" }}>—</span>;
 
-  const atrasado = !pago && data < hoje();
+  const semPagamento = situacao === "ABERTA" || situacao === "FATURADA";
+  const atrasado = semPagamento && data < hoje();
   return (
     <span
       style={{
@@ -266,21 +275,21 @@ function periodo(de: DataISO | null, ate: DataISO | null): string {
 }
 
 const TOM: Record<SituacaoFatura, Tom> = {
-  "ORÇAMENTO": "neutral",
   ABERTA: "info",
   FATURADA: "info",
   "PARC. PAGA": "warning",
   PAGA: "success",
+  BAIXADA: "success",
   CANCELADA: "danger",
 };
 
 /** Cor do ponto no cabecalho de cada coluna do kanban. */
 const COR_COLUNA: Record<SituacaoFatura, string> = {
-  "ORÇAMENTO": "var(--neutral)",
   ABERTA: "var(--info)",
   FATURADA: "var(--info)",
   "PARC. PAGA": "var(--warning)",
   PAGA: "var(--success)",
+  BAIXADA: "var(--primary)",
   CANCELADA: "var(--danger)",
 };
 
@@ -305,7 +314,7 @@ function QuadroDeContas({
   aoAbrir: (id: number) => void;
   aoMover: (id: number, situacao: SituacaoFatura) => void;
 }) {
-  const colunas: SituacaoFatura[] = ["ORÇAMENTO", "ABERTA", "FATURADA", "PARC. PAGA", "PAGA"];
+  const colunas: SituacaoFatura[] = ["ABERTA", "FATURADA", "PARC. PAGA", "PAGA", "BAIXADA"];
 
   return (
     <Quadro
@@ -321,7 +330,15 @@ function QuadroDeContas({
            * O que a tirou de "aberta" foi uma BAIXA, com valor e data. Desfazer
            * isso e estornar um recebimento, nao mover um cartao.
            */
-          arrastavel: f.situacao !== "PAGA" && f.situacao !== "PARC. PAGA",
+          /*
+           * PARC. PAGA nao arrasta: o que a tirou de aberta foi uma BAIXA
+           * parcial, com valor e data, e desfazer isso e estornar.
+           *
+           * PAGA arrasta, mas so para BAIXADA — quem impede o resto e o
+           * servidor, com `podeTransicionar`. Conciliar E um gesto de arrastar:
+           * o dinheiro apareceu no extrato e alguem conferiu.
+           */
+          arrastavel: f.situacao !== "PARC. PAGA" && f.situacao !== "BAIXADA",
         }))}
       aoMover={(id, coluna) => aoMover(id, colunas[coluna])}
       aoAbrir={(f) => aoAbrir(f.id)}
@@ -353,9 +370,10 @@ function QuadroDeContas({
             >
               {f.numero}
             </span>
-            <span style={{ color: "var(--text-tertiary)", fontVariantNumeric: "normal" }}>
-              {periodo(f.apuracaoInicio, f.apuracaoFim)}
-            </span>
+            {/* Vencimento no topo, onde antes ficava o periodo: o que decide o
+                que fazer com a conta hoje e a data em que ela vence, nao a
+                competencia que ela apura. */}
+            <Vencimento data={f.proximoVencimento} situacao={f.situacao} />
           </div>
 
           <div
@@ -377,7 +395,22 @@ function QuadroDeContas({
       )}
       rodape={(f) => (
         <>
-          <Vencimento data={f.proximoVencimento} pago={f.situacao === "PAGA"} />
+          {/* Quantos tickets a conta juntou. Uma conta de oito tickets se le
+              diferente de uma de um so, e o numero e o unico jeito de saber sem
+              abrir. */}
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
+              fontSize: "var(--text-sm)",
+              color: "var(--text-tertiary)",
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
+            <Icon name="ticket" size={13} />
+            {f.qtdTickets}
+          </span>
           <span style={{ flex: 1 }} />
           <span
             style={{

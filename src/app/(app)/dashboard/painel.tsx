@@ -11,8 +11,10 @@ export function Painel({ linhas }: { linhas: Linha[] }) {
 
   const aReceber = soma(vivas.filter((l) => l.status === "ABERTA" || l.status === "FATURADA"));
   const parcial = soma(vivas.filter((l) => l.status === "PARC. PAGA"));
-  const recebido = soma(vivas.filter((l) => l.status === "PAGA"));
-  const orcado = soma(vivas.filter((l) => l.status === "ORÇAMENTO"));
+  // Recebido junta PAGA e BAIXADA: as duas ja entraram. A diferenca entre elas
+  // e se a conciliacao foi feita, e isso nao muda quanto entrou.
+  const recebido = soma(vivas.filter((l) => l.status === "PAGA" || l.status === "BAIXADA"));
+  const baixado = soma(vivas.filter((l) => l.status === "BAIXADA"));
 
   return (
     <PageLayout>
@@ -33,8 +35,8 @@ export function Painel({ linhas }: { linhas: Linha[] }) {
         >
           <Stat label="A receber" valor={aReceber} detalhe="Aberta + Faturada" tom="credito" />
           <Stat label="Parcialmente paga" valor={parcial} detalhe="Com baixa parcial" />
-          <Stat label="Recebido" valor={recebido} detalhe="Quitadas" />
-          <Stat label="Em orçamento" valor={orcado} detalhe="Ainda não emitidas" />
+          <Stat label="Recebido" valor={recebido} detalhe="Pagas e baixadas" />
+          <Stat label="Conciliado" valor={baixado} detalhe="Conferidas no extrato" tom="credito" />
         </div>
 
         <div
@@ -134,9 +136,9 @@ function soma(linhas: Linha[]): Centavos {
 }
 
 const TOM: Record<StatusFatura, Tom> = {
-  "ORÇAMENTO": "neutral",
   ABERTA: "info",
   FATURADA: "info",
   "PARC. PAGA": "warning",
   PAGA: "success",
+  BAIXADA: "success",
 };

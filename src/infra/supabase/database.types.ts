@@ -217,20 +217,6 @@ export type FaturaRow = Timestamps & {
   parcelas: number | null;
 };
 
-export type FaturaServicoRow = Timestamps & {
-  id: number;
-  fkFatura: number | null;
-  fkServico: number | null;
-  descricao: string | null;
-  valor: number;
-  quantidade: number;
-  acrescimo: number | null;
-  desconto: number | null;
-  total: number;
-  incluir: boolean | null;
-  observacoes: string | null;
-  anexo: string | null;
-};
 
 export type FaturaParcelaRow = Timestamps & {
   id: number;
@@ -522,7 +508,6 @@ export type Database = {
       clientesenderecos: { Row: ClienteEnderecoRow; Insert: Partial<ClienteEnderecoRow>; Update: Partial<ClienteEnderecoRow>; Relationships: [] };
       clientes: { Row: ClienteRow; Insert: Partial<ClienteRow>; Update: Partial<ClienteRow>; Relationships: [] };
       faturas: { Row: FaturaRow; Insert: Partial<FaturaRow>; Update: Partial<FaturaRow>; Relationships: [] };
-      faturasxservicos: { Row: FaturaServicoRow; Insert: Partial<FaturaServicoRow>; Update: Partial<FaturaServicoRow>; Relationships: [] };
       faturasparcelas: { Row: FaturaParcelaRow; Insert: Partial<FaturaParcelaRow>; Update: Partial<FaturaParcelaRow>; Relationships: [] };
       contaspagar: { Row: ContaPagarRow; Insert: Partial<ContaPagarRow>; Update: Partial<ContaPagarRow>; Relationships: [] };
       contaspagarparcelas: { Row: ContaPagarParcelaRow; Insert: Partial<ContaPagarParcelaRow>; Update: Partial<ContaPagarParcelaRow>; Relationships: [] };
