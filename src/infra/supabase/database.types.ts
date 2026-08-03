@@ -243,6 +243,8 @@ export type FaturaParcelaRow = Timestamps & {
   observacoes: string | null;
   nfs: string | null;
   boleto: string | null;
+  /** O que o cliente manda ao pagar. Nota e boleto vao; este volta. */
+  comprovante: string | null;
   /** Credencial do link publico da parcela. Nulo = nao compartilhada. */
   token: string | null;
 };

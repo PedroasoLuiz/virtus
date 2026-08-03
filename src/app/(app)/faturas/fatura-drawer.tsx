@@ -5,7 +5,6 @@ import { BotaoDeCabecalho, BotaoHistorico, Drawer } from "@/components/ui/drawer
 import { useAvisos } from "@/components/ui/avisos";
 import { Icon } from "@/components/layout/icones";
 import {
-  Button,
   CampoBloqueado,
   Field,
   PanelTabs,
@@ -39,10 +38,13 @@ type Parcela = {
   desconto: number;
   total: number;
   pago: boolean;
+  /** Preenchido quando a baixa foi conciliada. E o que trava a edicao. */
+  pagamentoId: number | null;
   /** Data da baixa. E o fato que o recibo comprova — nao e o vencimento. */
   pagoEm: string | null;
   nfs: string | null;
   boleto: string | null;
+  comprovante: string | null;
 };
 
 type TicketDaFatura = {
@@ -67,7 +69,6 @@ type Fatura = {
   rodape: string | null;
   parcelas: Parcela[];
   tickets: TicketDaFatura[];
-  anexos: { id: number; nome: string; caminho: string; criadoEm: string }[];
   clienteDoc: string | null;
   emitente: {
     razaoSocial: string | null;
@@ -94,7 +95,7 @@ export function FaturaDrawer({ faturaId, onClose }: { faturaId: number | null; o
 function Conteudo({ faturaId, onClose }: { faturaId: number; onClose: () => void }) {
   const [fatura, setFatura] = useState<Fatura | null>(null);
   const [erro, setErro] = useState<string | null>(null);
-  const [aba, setAba] = useState<"tickets" | "parcelas" | "anexos">("tickets");
+  const [aba, setAba] = useState<"tickets" | "produtos" | "parcelas">("tickets");
   // Ticket aberto por cima da conta: o drawer empilha, o de tras nao fecha.
   const [ticketAberto, setTicketAberto] = useState<number | null>(null);
   const { avisar, confirmar } = useAvisos();
@@ -210,12 +211,12 @@ function Conteudo({ faturaId, onClose }: { faturaId: number; onClose: () => void
               rotulo="Imprimir conta"
               onClick={() => void imprimirConta()}
             >
-              <path d="M4.4 6V2.6h7.2V6" />
-              <path d="M4.4 11.6H2.8a1 1 0 0 1-1-1V7.4a1 1 0 0 1 1-1h10.4a1 1 0 0 1 1 1v3.2a1 1 0 0 1-1 1h-1.6" />
-              <rect x="4.4" y="9.4" width="7.2" height="4" rx="0.6" />
+              {/* Tracado na grade de 24, que e o `viewBox` do botao de
+                  cabecalho. Desenhado em 16, o icone saia a dois tercos. */}
+              <path d="M6 9V3h12v6" />
+              <path d="M6 18H4a1 1 0 0 1-1-1v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5a1 1 0 0 1-1 1h-2" />
+              <rect x="6" y="14" width="12" height="7" rx="1" />
             </BotaoDeCabecalho>
-
-            <AnexarNaConta faturaId={fatura.id} aoMudar={recarregar} />
 
             <BotaoDeCabecalho
               rotulo={
@@ -234,10 +235,10 @@ function Conteudo({ faturaId, onClose }: { faturaId: number; onClose: () => void
                 )
               }
             >
-              <path d="M2.6 4.4h10.8" />
-              <path d="M5.4 4.4V3a.8.8 0 0 1 .8-.8h3.6a.8.8 0 0 1 .8.8v1.4" />
-              <path d="M12.2 4.4l-.7 9a.8.8 0 0 1-.8.8H5.3a.8.8 0 0 1-.8-.8l-.7-9" />
-              <path d="M6.6 7v4.4M9.4 7v4.4" />
+              <path d="M3 6h18" />
+              <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
+              <path d="M19 6l-1 14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1L5 6" />
+              <path d="M10 11v6M14 11v6" />
             </BotaoDeCabecalho>
 
             <BotaoHistorico
@@ -257,9 +258,6 @@ function Conteudo({ faturaId, onClose }: { faturaId: number; onClose: () => void
           {fatura && <Totais total={fatura.total} pago={pago} />}
 
           <span style={{ flex: 1 }} />
-          <Button size="sm" variant="primary" disabled title="Ainda não implementado">
-            Receber
-          </Button>
         </div>
       }
     >
@@ -306,18 +304,18 @@ function Conteudo({ faturaId, onClose }: { faturaId: number; onClose: () => void
           <PanelTabs
             tabs={[
               `Tickets (${fatura.tickets.length})`,
+              "Produtos",
               `Parcelas (${fatura.parcelas.length})`,
-              `Anexos (${fatura.anexos.length})`,
             ]}
             active={
               aba === "tickets"
                 ? `Tickets (${fatura.tickets.length})`
-                : aba === "parcelas"
-                  ? `Parcelas (${fatura.parcelas.length})`
-                  : `Anexos (${fatura.anexos.length})`
+                : aba === "produtos"
+                  ? "Produtos"
+                  : `Parcelas (${fatura.parcelas.length})`
             }
             onChange={(t) =>
-              setAba(t.startsWith("Tickets") ? "tickets" : t.startsWith("Parcelas") ? "parcelas" : "anexos")
+              setAba(t.startsWith("Tickets") ? "tickets" : t === "Produtos" ? "produtos" : "parcelas")
             }
           />
 
@@ -371,7 +369,33 @@ function Conteudo({ faturaId, onClose }: { faturaId: number; onClose: () => void
                 </MenuDeLinha>,
               ])}
             />
-          ) : aba === "parcelas" ? (
+          ) : aba === "produtos" ? (
+            /*
+             * Ainda sem implementacao — a aba existe para nao esquecer.
+             *
+             * Produto mexe no dinheiro: hoje o total da conta e exatamente a
+             * soma do que se tirou dos tickets, e e isso que faz o faturamento
+             * parcial fechar. Com produto, o total passa a ser tickets +
+             * produtos, e a conferencia de origem precisa de outra regra.
+             */
+            <div
+              style={{
+                padding: "28px 16px",
+                textAlign: "center",
+                border: "1px dashed var(--border-strong)",
+                borderRadius: "var(--radius-lg)",
+                color: "var(--text-tertiary)",
+                fontSize: "var(--text-base)",
+                lineHeight: 1.6,
+              }}
+            >
+              Produtos da conta entram aqui.
+              <br />
+              <span style={{ fontSize: "var(--text-sm)" }}>
+                Ainda não implementado: mexe no total, e o total hoje vem dos tickets.
+              </span>
+            </div>
+          ) : (
             <Tabela
               cabecalho={["#", "Vencimento", "Valor", "Documentos", "Ações"]}
               vazio="Nenhuma parcela gerada."
@@ -382,14 +406,27 @@ function Conteudo({ faturaId, onClose }: { faturaId: number; onClose: () => void
                   {p.numero}
                 </span>,
                 p.vencimento ? curto(p.vencimento) : "—",
-                formatarSemSimbolo(p.total as Centavos),
+                <span key="v" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  {formatarSemSimbolo(p.total as Centavos)}
+                  {/* Desconto dado na baixa: sem mostrar aqui, a soma das
+                      parcelas nao fecha com o total e parece erro de conta. */}
+                  {p.desconto > 0 && (
+                    <span
+                      title={`Desconto de ${formatarSemSimbolo(p.desconto as Centavos)}`}
+                      style={{ fontSize: "var(--text-xs)", color: "var(--credito)" }}
+                    >
+                      −{formatarSemSimbolo(p.desconto as Centavos)}
+                    </span>
+                  )}
+                </span>,
                 <Documentos
                   key="d"
                   faturaId={fatura.id}
                   parcelaId={p.id}
                   boleto={p.boleto}
                   nfs={p.nfs}
-                  bloqueado={p.pago || fatura.situacao === "CANCELADA"}
+                  comprovante={p.comprovante}
+                  bloqueado={p.pagamentoId != null || fatura.situacao === "CANCELADA"}
                   aoMudar={recarregar}
                 />,
                 <MenuDeLinha key="a">
@@ -397,49 +434,10 @@ function Conteudo({ faturaId, onClose }: { faturaId: number; onClose: () => void
                     <AcoesDaParcela
                       fatura={fatura}
                       parcela={p}
-                      bloqueado={p.pago || fatura.situacao === "CANCELADA"}
+                      bloqueado={p.pagamentoId != null || fatura.situacao === "CANCELADA"}
                       aoMudar={recarregar}
                       fechar={fechar}
                     />
-                  )}
-                </MenuDeLinha>,
-              ])}
-            />
-          ) : (
-            <Tabela
-              cabecalho={["Arquivo", "Enviado em", "Ações"]}
-              vazio="Nenhum anexo. Contrato, ordem de compra, comprovante — o que sustenta esta conta."
-              linhas={fatura.anexos.map((a) => [
-                a.nome,
-                curto(a.criadoEm),
-                <MenuDeLinha key="a">
-                  {(fechar) => (
-                    <>
-                      <ItemDoMenu
-                        rotulo="Baixar"
-                        onClick={() => {
-                          fechar();
-                          window.open(`/api/v1/faturas/${fatura.id}/anexos/${a.id}`, "_blank");
-                        }}
-                      >
-                        <path d="M8 2v8M5 7l3 3 3-3M3 13h10" />
-                      </ItemDoMenu>
-                      <ItemDoMenu
-                        rotulo="Remover"
-                        perigo
-                        onClick={() => {
-                          fechar();
-                          confirmar(`Remover "${a.nome}"?`, "Remover", async () => {
-                            await fetch(`/api/v1/faturas/${fatura.id}/anexos/${a.id}`, {
-                              method: "DELETE",
-                            });
-                            recarregar();
-                          }, "O arquivo é apagado.");
-                        }}
-                      >
-                        <path d="M12 4L4 12M4 4l8 8" />
-                      </ItemDoMenu>
-                    </>
                   )}
                 </MenuDeLinha>,
               ])}
@@ -481,6 +479,7 @@ function Documentos({
   parcelaId,
   boleto,
   nfs,
+  comprovante,
   bloqueado,
   aoMudar,
 }: {
@@ -488,11 +487,12 @@ function Documentos({
   parcelaId: number;
   boleto: string | null;
   nfs: string | null;
+  comprovante: string | null;
   /** Parcela baixada ou conta cancelada: da para baixar, nao para remover. */
   bloqueado: boolean;
   aoMudar: () => void;
 }) {
-  if (!nfs && !boleto) return <span style={{ color: "var(--text-disabled)" }}>—</span>;
+  if (!nfs && !boleto && !comprovante) return <span style={{ color: "var(--text-disabled)" }}>—</span>;
 
   return (
     <span style={{ display: "inline-flex", gap: 4 }}>
@@ -500,6 +500,16 @@ function Documentos({
         <Bandeira
           rotulo="NF"
           tipo="nfs"
+          faturaId={faturaId}
+          parcelaId={parcelaId}
+          bloqueado={bloqueado}
+          aoMudar={aoMudar}
+        />
+      )}
+      {comprovante && (
+        <Bandeira
+          rotulo="Comprovante"
+          tipo="comprovante"
           faturaId={faturaId}
           parcelaId={parcelaId}
           bloqueado={bloqueado}
@@ -529,7 +539,7 @@ function Bandeira({
   aoMudar,
 }: {
   rotulo: string;
-  tipo: "nfs" | "boleto";
+  tipo: "nfs" | "boleto" | "comprovante";
   faturaId: number;
   parcelaId: number;
   bloqueado: boolean;
@@ -876,7 +886,7 @@ function AnexarDocumento({
   aoMudar,
   children,
 }: {
-  tipo: "nfs" | "boleto";
+  tipo: "nfs" | "boleto" | "comprovante";
   rotulo: string;
   faturaId: number;
   parcelaId: number;
@@ -1194,6 +1204,22 @@ function AcoesDaParcela({
       {/* Envelope com seta saindo: o aviaozinho de papel diz "mensagem", mas nao
           diz que vai por e-mail, e aqui o meio importa porque o que sai leva a
           cobranca. */}
+      {!parcela.comprovante && fatura.situacao !== "CANCELADA" && (
+        <AnexarDocumento
+          tipo="comprovante"
+          rotulo="Anexar comprovante"
+          faturaId={faturaId}
+          parcelaId={parcela.id}
+          aoMudar={() => {
+            fechar();
+            aoMudar();
+          }}
+        >
+          <path d="M3.4 2.4h9.2v11.2l-2.3-1.3-2.3 1.3-2.3-1.3-2.3 1.3z" />
+          <path d="M5.8 6h4.4M5.8 8.6h3" />
+        </AnexarDocumento>
+      )}
+
       <ItemDoMenu
         rotulo="Recibo de pagamento"
         desabilitado={!parcela.pago}
@@ -1212,7 +1238,7 @@ function AcoesDaParcela({
         desabilitado={bloqueado || !temDocumento}
         motivo={
           bloqueado
-            ? "Parcela baixada ou conta cancelada"
+            ? "Parcela conciliada ou conta cancelada"
             : !temDocumento
               ? "Anexe a nota fiscal ou o boleto antes de enviar"
               : undefined
@@ -1253,8 +1279,23 @@ function AcoesDaParcela({
  * O rotulo gastava uma coluna inteira para dizer o que a cor diz de relance, e
  * "ABERTA" repetido quinze vezes nao informa nada.
  */
-function Bolinha({ parcela }: { parcela: { pago: boolean; vencimento: string | null } }) {
-  const estado = parcela.pago ? "Paga" : vencida(parcela) ? "Vencida" : "Em aberto";
+function Bolinha({
+  parcela,
+}: {
+  parcela: { pago: boolean; vencimento: string | null; pagamentoId: number | null };
+}) {
+  /*
+   * Conciliada e diferente de paga: paga e "o cliente pagou", conciliada e
+   * "bateu com o extrato" — `fkPagamento` preenchido. So a conciliada trava a
+   * edicao, porque ela ja entrou na contabilidade.
+   */
+  const estado = parcela.pagamentoId
+    ? "Conciliada"
+    : parcela.pago
+      ? "Paga"
+      : vencida(parcela)
+        ? "Vencida"
+        : "Em aberto";
 
   return (
     <span
@@ -1266,11 +1307,16 @@ function Bolinha({ parcela }: { parcela: { pago: boolean; vencimento: string | n
         borderRadius: "50%",
         flexShrink: 0,
         display: "inline-block",
-        background: parcela.pago
-          ? "var(--success)"
-          : vencida(parcela)
-            ? "var(--danger)"
-            : "var(--text-disabled)",
+        background: parcela.pagamentoId
+          ? "var(--primary)"
+          : parcela.pago
+            ? "var(--success)"
+            : vencida(parcela)
+              ? "var(--danger)"
+              : "var(--text-disabled)",
+        // Conciliada ganha anel: a cor sozinha ja distingue de "paga", mas o
+        // anel diz que aquela linha esta FECHADA, e nao so quitada.
+        boxShadow: parcela.pagamentoId ? "0 0 0 2px var(--primary-subtle)" : undefined,
       }}
     />
   );
@@ -1284,76 +1330,4 @@ function vencida(parcela: { pago: boolean; vencimento: string | null }): boolean
 function curto(data: string): string {
   const [ano, mes, dia] = data.slice(0, 10).split("-");
   return `${dia}/${mes}/${ano.slice(2)}`;
-}
-
-/**
- * Anexar na conta, direto do cabecalho.
- *
- * Um `<label>` com a moldura do botao de cabecalho: o `<input type="file">`
- * precisa de rotulo para abrir o seletor, e assim o clique no botao inteiro
- * funciona.
- */
-function AnexarNaConta({ faturaId, aoMudar }: { faturaId: number; aoMudar: () => void }) {
-  const { avisar } = useAvisos();
-  const [enviando, setEnviando] = useState(false);
-
-  async function subir(arquivo: File) {
-    const corpo = new FormData();
-    corpo.append("arquivo", arquivo);
-
-    setEnviando(true);
-    const r = await fetch(`/api/v1/faturas/${faturaId}/anexos`, { method: "POST", body: corpo });
-    const dados = await r.json().catch(() => null);
-    setEnviando(false);
-
-    if (!r.ok) {
-      avisar("atencao", dados?.error?.message ?? "Não foi possível enviar o arquivo");
-      return;
-    }
-    avisar("sucesso", "Anexo enviado");
-    aoMudar();
-  }
-
-  return (
-    <label
-      title="Anexar documento"
-      aria-label="Anexar documento"
-      style={{
-        width: 28,
-        height: 28,
-        display: "grid",
-        placeItems: "center",
-        border: "1px solid var(--border)",
-        borderRadius: "var(--radius-sm)",
-        background: "var(--surface)",
-        color: "var(--text-secondary)",
-        cursor: enviando ? "wait" : "pointer",
-        opacity: enviando ? 0.4 : 1,
-      }}
-    >
-      <svg
-        width="14"
-        height="14"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.9"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
-      </svg>
-      <input
-        type="file"
-        accept="application/pdf,image/*"
-        disabled={enviando}
-        onChange={(e) => {
-          const arquivo = e.target.files?.[0];
-          e.target.value = "";
-          if (arquivo) void subir(arquivo);
-        }}
-        style={{ display: "none" }}
-      />
-    </label>
-  );
 }

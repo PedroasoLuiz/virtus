@@ -78,7 +78,7 @@ export const parcelaParamSchema = z.object({
 
 /** Qual documento da parcela — os dois campos que o legado ja tinha. */
 export const tipoDocumentoQuerySchema = z.object({
-  tipo: z.enum(["nfs", "boleto"]),
+  tipo: z.enum(["nfs", "boleto", "comprovante"]),
 });
 
 /** Permite mandar para outro endereco sem mexer no cadastro do cliente. */
@@ -130,6 +130,7 @@ export const faturaSchema = faturaResumoSchema.extend({
       pagoEm: z.string().nullable(),
       nfs: z.string().nullable(),
       boleto: z.string().nullable(),
+      comprovante: z.string().nullable(),
     }),
   ),
   tickets: z.array(

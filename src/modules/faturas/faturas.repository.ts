@@ -380,7 +380,7 @@ export async function listarParcelas(faturaId: number): Promise<ParcelaFatura[]>
     .select(
       // `pagamentos(data)` e a data REAL da baixa. O recibo comprova um fato, e
       // sem ela sobraria o vencimento no lugar — que e outra coisa.
-      "id, numeroparcela, vencimento, valor, acrescimo, desconto, total, pago, fkPagamento, nfs, boleto, pagamentos(data)",
+      "id, numeroparcela, vencimento, valor, acrescimo, desconto, total, pago, fkPagamento, nfs, boleto, comprovante, pagamentos(data)",
     )
     .eq("fkFatura", faturaId)
     .order("numeroparcela", { ascending: true });
@@ -398,6 +398,7 @@ export async function listarParcelas(faturaId: number): Promise<ParcelaFatura[]>
     total: l.total == null ? doBanco(l.valor) : doBanco(l.total),
     pago: l.pago ?? false,
     pagamentoId: l.fkPagamento,
+    comprovante: l.comprovante,
     pagoEm: (l.pagamentos as unknown as { data: string | null } | null)?.data ?? null,
     nfs: l.nfs,
     boleto: l.boleto,
@@ -636,7 +637,7 @@ function normalizarStatus(bruto: string | null): StatusFatura {
 export async function gravarDocumentoDaParcela(
   parcelaId: number,
   usuarioId: string,
-  tipo: "nfs" | "boleto",
+  tipo: "nfs" | "boleto" | "comprovante",
   referencia: string | null,
 ): Promise<void> {
   const supabase = await serverClient();
@@ -648,7 +649,11 @@ export async function gravarDocumentoDaParcela(
      * objeto inteiro.
      */
     .update({
-      ...(tipo === "nfs" ? { nfs: referencia } : { boleto: referencia }),
+      ...(tipo === "nfs"
+        ? { nfs: referencia }
+        : tipo === "boleto"
+          ? { boleto: referencia }
+          : { comprovante: referencia }),
       updated_at: new Date().toISOString(),
       fkUserModificacao: usuarioId,
     })

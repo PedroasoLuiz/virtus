@@ -64,6 +64,8 @@ export type ParcelaFatura = {
   pagoEm: DataISO | null;
   nfs: string | null;
   boleto: string | null;
+  /** O que o cliente manda ao pagar. Nota e boleto vao; este volta. */
+  comprovante: string | null;
 };
 
 /** Fatura como aparece na listagem. */

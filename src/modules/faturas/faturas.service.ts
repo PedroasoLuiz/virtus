@@ -323,7 +323,7 @@ export async function anexarDocumento(
   usuarioId: string,
   faturaId: number,
   parcelaId: number,
-  tipo: "nfs" | "boleto",
+  tipo: "nfs" | "boleto" | "comprovante",
   arquivo: File,
 ): Promise<void> {
   const fatura = await obterFatura(empresaId, faturaId);
@@ -352,7 +352,7 @@ export async function removerDocumento(
   usuarioId: string,
   faturaId: number,
   parcelaId: number,
-  tipo: "nfs" | "boleto",
+  tipo: "nfs" | "boleto" | "comprovante",
 ): Promise<void> {
   const fatura = await obterFatura(empresaId, faturaId);
   const parcela = fatura.parcelas.find((p) => p.id === parcelaId);
@@ -371,7 +371,7 @@ export async function linkDoDocumento(
   empresaId: number,
   faturaId: number,
   parcelaId: number,
-  tipo: "nfs" | "boleto",
+  tipo: "nfs" | "boleto" | "comprovante",
 ): Promise<string> {
   const fatura = await obterFatura(empresaId, faturaId);
   const parcela = fatura.parcelas.find((p) => p.id === parcelaId);

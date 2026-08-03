@@ -36,7 +36,7 @@ const TAMANHO_MAXIMO = 20 * 1024 * 1024;
 export function caminhoDoDocumento(
   empresaId: number,
   faturaId: number,
-  tipo: "nfs" | "boleto" | "anexo",
+  tipo: "nfs" | "boleto" | "comprovante" | "anexo",
   nomeOriginal: string,
 ): string {
   const extensao = (nomeOriginal.split(".").pop() ?? "pdf").toLowerCase().slice(0, 5);
