@@ -550,7 +550,7 @@ export type Database = {
        * Pelo PostgREST eram tres chamadas sem transacao entre elas, e uma falha
        * no meio deixava o ticket sem servico nenhum.
        */
-      fatura_compartilhada: {
+      tickets_compartilhados: {
         Args: { p_token: string };
         Returns: unknown;
       };

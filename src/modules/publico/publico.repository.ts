@@ -4,6 +4,7 @@ import { publicEnv } from "@/infra/config/env";
 import type { Database } from "@/infra/supabase/database.types";
 import { doBanco, type Centavos } from "@/shared/utils/money";
 import type { DataISO } from "@/shared/utils/datas";
+import type { CobrancaCompartilhada } from "@/modules/publico/publico.types";
 
 /**
  * A parte do sistema que o CLIENTE ve, sem login.
@@ -30,54 +31,12 @@ function clienteAnonimo() {
   );
 }
 
-/**
- * A fatura como o cliente a ve — o mesmo conteudo do documento impresso.
- *
- * ⚠️ Mais amplo que o resumo anterior: itens, valores, parcelas e os dados de
- * quem cobra e de quem paga. E deliberado — e exatamente a informacao do
- * documento que seria anexado no e-mail, e a pagina existe para substituir esse
- * anexo. O que continua de fora e tudo o que nao for ESTA fatura.
- */
-export type FaturaPublica = {
-  numero: number;
-  parcelaAtual: number;
-  competenciaDe: DataISO | null;
-  competenciaAte: DataISO | null;
-  observacoes: string | null;
-  rodape: string | null;
-  total: number;
-  temNfs: boolean;
-  temBoleto: boolean;
-  empresa: {
-    razaoSocial: string | null;
-    cnpj: string | null;
-    logo: string | null;
-    endereco: string | null;
-  };
-  cliente: { nome: string | null; doc: string | null };
-  itens: {
-    descricao: string;
-    quantidade: number;
-    valor: number;
-    desconto: number;
-    acrescimo: number;
-    total: number;
-  }[];
-  parcelas: {
-    numero: number;
-    vencimento: string | null;
-    total: number;
-    pago: boolean;
-    atual: boolean;
-  }[];
-};
-
-export async function faturaPorToken(token: string): Promise<FaturaPublica | null> {
+export async function cobrancaPorToken(token: string): Promise<CobrancaCompartilhada | null> {
   const supabase = clienteAnonimo();
-  const { data, error } = await supabase.rpc("fatura_compartilhada", { p_token: token });
+  const { data, error } = await supabase.rpc("tickets_compartilhados", { p_token: token });
 
   if (error) throw error;
-  return (data as FaturaPublica | null) ?? null;
+  return (data as CobrancaCompartilhada | null) ?? null;
 }
 
 export type ParcelaPublica = {

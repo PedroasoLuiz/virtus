@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
-import { faturaPorToken } from "@/modules/publico/publico.repository";
-import { FaturaPublicaView } from "./fatura-publica";
+import { cobrancaPorToken } from "@/modules/publico/publico.repository";
+import { CobrancaPublicaView } from "./cobranca-publica";
 
 /**
  * A página que o cliente abre pelo link da cobrança.
@@ -12,22 +12,22 @@ import { FaturaPublicaView } from "./fatura-publica";
  * e um nome provisório num documento que vai ao cliente é pior que nenhum.
  */
 
-export const metadata = { title: "Sua fatura" };
+export const metadata = { title: "Sua cobrança" };
 
 /** Nunca em cache: o link é revogável, e cache serviria a página depois disso. */
 export const dynamic = "force-dynamic";
 
-export default async function FaturaPublicaPage({
+export default async function CobrancaPublicaPage({
   params,
 }: {
   params: Promise<{ token: string }>;
 }) {
   const { token } = await params;
-  const fatura = await faturaPorToken(token).catch(() => null);
+  const cobranca = await cobrancaPorToken(token).catch(() => null);
 
   // 404 e não uma tela de erro: quem tem link inválido não precisa saber se o
   // token existiu um dia.
-  if (!fatura) notFound();
+  if (!cobranca) notFound();
 
   return (
     <main
@@ -39,7 +39,7 @@ export default async function FaturaPublicaPage({
         color: "#1a1a1a",
       }}
     >
-      <FaturaPublicaView fatura={fatura} token={token} />
+      <CobrancaPublicaView cobranca={cobranca} token={token} />
     </main>
   );
 }

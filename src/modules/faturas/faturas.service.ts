@@ -393,7 +393,7 @@ export async function linkDoDocumento(
 // ── Envio ao cliente ────────────────────────────────────────────────────────
 
 /**
- * Manda a parcela para o cliente, com os documentos anexados.
+ * Manda a parcela para o cliente, com o link da cobranca.
  *
  * ⚠️ Os arquivos vao ANEXADOS, nao como link.
  *
@@ -448,21 +448,36 @@ export async function enviarParcelaPorEmail(
   const portal = (process.env.APP_URL ?? "").replace(/\/$/, "");
   const link = `${portal}/p/${token}`;
 
-  const documentos = [
-    parcela.nfs ? { rotulo: "Baixar nota fiscal", url: link } : null,
-    parcela.boleto ? { rotulo: "Baixar boleto", url: link } : null,
-  ].filter((d): d is { rotulo: string; url: string } => d !== null);
+  /*
+   * O assunto e o corpo falam em TICKET, nao em fatura.
+   *
+   * A fatura e controle interno — numero de conta a receber, parcelamento,
+   * baixa. Mandar esse numero ao cliente o obriga a decorar uma referencia que
+   * so existe do nosso lado; o ticket ele conhece, porque e o servico que
+   * contratou.
+   */
+  const tickets = fatura.tickets.map((t) => t.numero);
+  const referencia =
+    tickets.length === 1 ? `Ticket ${tickets[0]}` : `Tickets ${tickets.join(", ")}`;
 
   await enviarEmail({
     para: [para],
-    assunto: `${destino.empresaNome} — Fatura ${fatura.numero}, parcela ${parcela.numero}`,
+    assunto:
+      tickets.length > 0
+        ? `${destino.empresaNome} — ${referencia}`
+        : `${destino.empresaNome} — Cobrança`,
     html: htmlDaFatura({
       empresaNome: destino.empresaNome,
-      numeroFatura: fatura.numero,
+      tickets,
+      clienteNome: destino.clienteNome,
       competencia: periodoEmMeses(fatura.apuracaoInicio, fatura.apuracaoFim) ?? "—",
       vencimento: parcela.vencimento ? paraFormatoBR(parcela.vencimento) : "—",
       valor: formatarSemSimbolo(parcela.total),
-      documentos,
+      // So aparece quando ha mais de uma: "Parcela 1 de 1" e ruido.
+      parcela:
+        fatura.parcelas.length > 1
+          ? `${parcela.numero} de ${fatura.parcelas.length}`
+          : null,
       urlDoPortal: link,
     }),
   });
