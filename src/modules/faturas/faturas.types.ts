@@ -167,8 +167,31 @@ export type ContaBancaria = { id: number; nome: string };
  * O valor vai por PARCELA, e nao um total dividido pelo sistema: um PIX de 3.000
  * pode cobrir 1.000 de uma e 2.000 de outra, e so quem recebeu sabe.
  */
+/**
+ * Como o dinheiro entrou.
+ *
+ * Lista curta e fechada, e nao texto livre: no legado a mesma coisa aparece como
+ * "Pix", "Transf. Pix Recebida", "Pgto QR Code Pix" e "Transf Pix recebida" —
+ * quatro grafias que nenhum relatorio consegue agrupar.
+ */
+export const TIPOS_DE_RECEBIMENTO = [
+  "PIX",
+  "Boleto",
+  "TED",
+  "DOC",
+  "Cartão de crédito",
+  "Cartão de débito",
+  "Dinheiro",
+  "Cheque",
+  "Transferência",
+  "Outro",
+] as const;
+
+export type TipoDeRecebimento = (typeof TIPOS_DE_RECEBIMENTO)[number];
+
 export type BaixaNova = {
   data: DataISO;
+  tipo: TipoDeRecebimento;
   contaBancariaId: number | null;
   descricao?: string | null;
   observacoes?: string | null;

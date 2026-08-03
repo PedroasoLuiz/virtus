@@ -251,8 +251,11 @@ export type PagamentoRow = {
 
 export type ContaBancariaRow = {
   id: number;
-  descricao: string | null;
+  apelido: string | null;
   banco: string | null;
+  agencia: string | null;
+  conta: string | null;
+  tipo: string | null;
   ativo: boolean | null;
   fkEmpresa: number | null;
 };

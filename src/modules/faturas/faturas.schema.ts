@@ -14,7 +14,7 @@ import { paginacaoSchema } from "@/shared/utils/paginacao";
  * de revalidar "por garantia" camada adentro.
  */
 
-import { STATUS_FATURA } from "@/modules/faturas/faturas.types";
+import { STATUS_FATURA, TIPOS_DE_RECEBIMENTO } from "@/modules/faturas/faturas.types";
 
 /** Espelha os valores realmente gravados no banco. */
 export const statusFaturaSchema = z.enum(STATUS_FATURA);
@@ -88,6 +88,7 @@ export const enviarParcelaBodySchema = z.object({
 
 export const baixaBodySchema = z.object({
   data: dataISOSchema,
+  tipo: z.enum(TIPOS_DE_RECEBIMENTO),
   contaBancariaId: idSchema.nullish(),
   descricao: textoLongoSchema.nullish(),
   observacoes: textoLongoSchema.nullish(),

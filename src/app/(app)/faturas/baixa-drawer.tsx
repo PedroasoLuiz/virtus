@@ -6,6 +6,7 @@ import { Button, CampoNumerico, Field, inputStyle, selectStyle } from "@/compone
 import { useAvisos } from "@/components/ui/avisos";
 import { formatarSemSimbolo, type Centavos } from "@/shared/utils/money";
 import { hoje, paraFormatoBR, type DataISO } from "@/shared/utils/datas";
+import { TIPOS_DE_RECEBIMENTO } from "@/modules/faturas/faturas.types";
 
 /**
  * Dar baixa: registrar o que entrou e dizer para onde foi.
@@ -52,6 +53,7 @@ export function BaixaDrawer({
 
   const [valores, setValores] = useState<Record<number, number>>({});
   const [data, setData] = useState<string>(hoje());
+  const [tipo, setTipo] = useState<string>("PIX");
   const [contaId, setContaId] = useState("");
   const [contas, setContas] = useState<{ id: number; nome: string }[]>([]);
   const [observacoes, setObservacoes] = useState("");
@@ -87,6 +89,7 @@ export function BaixaDrawer({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         data,
+        tipo,
         contaBancariaId: contaId ? Number(contaId) : null,
         observacoes: observacoes.trim() || null,
         destinos,
@@ -171,6 +174,20 @@ export function BaixaDrawer({
             </Field>
 
             <Field
+              label="Forma"
+              required
+              hint="Lista fechada de propósito: no legado o mesmo PIX aparece com quatro grafias diferentes, e nenhum relatório consegue agrupar."
+            >
+              <select value={tipo} onChange={(e) => setTipo(e.target.value)} style={selectStyle}>
+                {TIPOS_DE_RECEBIMENTO.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </Field>
+
+            <Field
               label="Conta"
               hint={
                 contas.length === 0
@@ -203,8 +220,16 @@ export function BaixaDrawer({
             </Field>
           </div>
 
-          <div className="rotulo" style={{ fontSize: "var(--text-xs)", marginBottom: 8 }}>
-            Para onde vai
+          <div style={{ marginBottom: 8 }}>
+            <div className="rotulo" style={{ fontSize: "var(--text-xs)" }}>
+              Quanto abater de cada parcela
+            </div>
+            {/* Um recebimento pode cobrir mais de uma parcela, e uma parcela
+                pode juntar vários. Por isso o valor é informado aqui, linha a
+                linha, e não como um total que o sistema divide sozinho. */}
+            <div style={{ fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>
+              O que sobrar continua em aberto.
+            </div>
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>

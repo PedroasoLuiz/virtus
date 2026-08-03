@@ -780,7 +780,9 @@ export async function listarContasBancarias(empresaId: number): Promise<ContaBan
   const supabase = await serverClient();
   const { data, error } = await supabase
     .from("contasbancarias")
-    .select("id, descricao, banco")
+    // `apelido`, nao `descricao`: a coluna nunca existiu com esse nome, e o
+    // PostgREST devolvia erro que a tela engolia como "nenhuma conta".
+    .select("id, apelido, banco, conta")
     .eq("fkEmpresa", empresaId)
     .eq("ativo", true)
     .order("id", { ascending: true });
@@ -789,7 +791,9 @@ export async function listarContasBancarias(empresaId: number): Promise<ContaBan
 
   return (data ?? []).map((c) => ({
     id: c.id,
-    nome: primeiroPreenchido(c.descricao, c.banco) ?? `Conta ${c.id}`,
+    nome:
+      primeiroPreenchido(c.apelido, c.banco ? `${c.banco}${c.conta ? ` · ${c.conta}` : ""}` : null) ??
+      `Conta ${c.id}`,
   }));
 }
 
@@ -821,6 +825,7 @@ export async function registrarBaixa(
       fkContaBancaria: entrada.contaBancariaId ?? null,
       data: entrada.data,
       valor: paraBanco(total),
+      tipo: entrada.tipo,
       // ENTRADA: e conta a RECEBER. A mesma tabela serve os dois lados, e a
       // natureza e o que separa o extrato em dinheiro que entra e que sai.
       natureza: "ENTRADA",

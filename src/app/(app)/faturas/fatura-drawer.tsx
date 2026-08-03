@@ -6,7 +6,6 @@ import { useAvisos } from "@/components/ui/avisos";
 import { BaixaDrawer } from "./baixa-drawer";
 import { Icon } from "@/components/layout/icones";
 import {
-  Button,
   CampoBloqueado,
   Field,
   PanelTabs,
@@ -295,19 +294,6 @@ function Conteudo({
           {fatura && <Totais total={fatura.total} pago={pago} />}
 
           <span style={{ flex: 1 }} />
-          {fatura && fatura.situacao !== "CANCELADA" && (
-            <Button
-              size="sm"
-              variant="primary"
-              disabled={fatura.parcelas.every((p) => p.pago)}
-              title={
-                fatura.parcelas.every((p) => p.pago) ? "Todas as parcelas recebidas" : undefined
-              }
-              onClick={() => setBaixando(true)}
-            >
-              Dar baixa
-            </Button>
-          )}
         </div>
       }
     >
@@ -482,6 +468,7 @@ function Conteudo({
                 <MenuDeLinha key="a">
                   {(fechar) => (
                     <AcoesDaParcela
+                      aoBaixar={() => setBaixando(true)}
                       fatura={fatura}
                       emitidoPor={emitidoPor}
                       parcela={p}
@@ -1171,6 +1158,7 @@ function ItemDoMenu({
  * Anexar so aparece enquanto NAO ha o documento; depois de baixada, nem isso.
  */
 function AcoesDaParcela({
+  aoBaixar,
   fatura,
   emitidoPor,
   parcela,
@@ -1178,6 +1166,7 @@ function AcoesDaParcela({
   aoMudar,
   fechar,
 }: {
+  aoBaixar: () => void;
   fatura: Fatura;
   emitidoPor: string;
   parcela: Fatura["parcelas"][number];
@@ -1296,6 +1285,22 @@ function AcoesDaParcela({
           <circle cx="8" cy="8" r="1.8" />
           <path d="M11.4 12.6l1.6 1.6 2.6-2.8" />
         </AnexarDocumento>
+      )}
+
+      {/* Dar baixa mora aqui, e nao no rodape: quem recebe olha a LINHA da
+          parcela que venceu, e o botao no rodape obrigava a achar de novo, na
+          tela seguinte, qual delas era. */}
+      {!parcela.pago && fatura.situacao !== "CANCELADA" && (
+        <ItemDoMenu
+          rotulo="Dar baixa"
+          onClick={() => {
+            fechar();
+            aoBaixar();
+          }}
+        >
+          <path d="M8 2.4v8.2M4.8 7.4L8 10.6l3.2-3.2" />
+          <path d="M2.6 13.4h10.8" />
+        </ItemDoMenu>
       )}
 
       <ItemDoMenu

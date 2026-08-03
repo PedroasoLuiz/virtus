@@ -223,6 +223,7 @@ export async function registrarBaixa({ body, params, ctx }: Entrada<BaixaBody, u
 
   const fatura = await service.registrarBaixa(empresaId, ctx.usuarioId, params.id, {
     data: body.data,
+    tipo: body.tipo,
     contaBancariaId: body.contaBancariaId ?? null,
     descricao: body.descricao,
     observacoes: body.observacoes,
