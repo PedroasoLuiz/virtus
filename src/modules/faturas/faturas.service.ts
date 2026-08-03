@@ -513,3 +513,80 @@ export async function desvincularTicket(
   await repo.desvincularTicket(faturaId, ticketId);
   return { contaExcluida: false };
 }
+
+// ── Anexos da conta ─────────────────────────────────────────────────────────
+
+export async function anexarNaConta(
+  empresaId: number,
+  usuarioId: string,
+  faturaId: number,
+  arquivo: File,
+): Promise<void> {
+  const fatura = await obterFatura(empresaId, faturaId);
+  if (fatura.cancelada) throw new BusinessRuleError("Conta cancelada nao recebe anexo");
+
+  const caminho = caminhoDoDocumento(empresaId, faturaId, "anexo", arquivo.name);
+  await enviarDocumento(caminho, arquivo);
+  await repo.criarAnexo(faturaId, usuarioId, {
+    nome: arquivo.name,
+    caminho,
+    tipo: arquivo.type,
+  });
+}
+
+export async function removerAnexoDaConta(
+  empresaId: number,
+  faturaId: number,
+  anexoId: number,
+): Promise<void> {
+  const fatura = await obterFatura(empresaId, faturaId);
+  if (!fatura.anexos.some((a) => a.id === anexoId)) {
+    throw new NotFoundError("Anexo nao encontrado nesta conta");
+  }
+
+  /*
+   * O registro sai primeiro, o arquivo depois. Na ordem inversa, uma falha no
+   * meio deixaria a linha apontando para um arquivo que nao existe mais — e a
+   * tela mostraria um anexo que nao abre.
+   */
+  const anexo = await repo.apagarAnexo(anexoId);
+  if (anexo) await apagarDocumento(anexo.caminho);
+}
+
+export async function linkDoAnexo(
+  empresaId: number,
+  faturaId: number,
+  anexoId: number,
+): Promise<string> {
+  const fatura = await obterFatura(empresaId, faturaId);
+  const anexo = fatura.anexos.find((a) => a.id === anexoId);
+
+  if (!anexo) throw new NotFoundError("Anexo nao encontrado");
+  return urlDoDocumento(anexo.caminho);
+}
+
+/**
+ * Apaga a conta a pedido do usuario.
+ *
+ * ⚠️ Recusa depois de qualquer baixa: apagar uma conta que ja recebeu apaga o
+ * registro de um dinheiro que entrou, e o saldo dos tickets volta como se nunca
+ * tivesse sido cobrado. Conta errada que ja recebeu se CANCELA.
+ */
+export async function excluirConta(empresaId: number, faturaId: number): Promise<void> {
+  const fatura = await obterFatura(empresaId, faturaId);
+
+  if (fatura.parcelas.some((p) => p.pago)) {
+    throw new BusinessRuleError(
+      "Esta conta ja tem parcela baixada. Cancele em vez de excluir.",
+    );
+  }
+
+  for (const anexo of fatura.anexos) await apagarDocumento(anexo.caminho);
+  for (const parcela of fatura.parcelas) {
+    for (const tipo of ["nfs", "boleto"] as const) {
+      if (parcela[tipo]) await apagarDocumento(parcela[tipo]);
+    }
+  }
+
+  await repo.excluir(empresaId, faturaId);
+}

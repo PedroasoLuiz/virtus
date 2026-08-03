@@ -69,6 +69,8 @@ export const idParamSchema = z.object({ id: idSchema });
 
 export const ticketParamSchema = z.object({ id: idSchema, ticketId: idSchema });
 
+export const anexoParamSchema = z.object({ id: idSchema, anexoId: idSchema });
+
 export const parcelaParamSchema = z.object({
   id: idSchema,
   parcelaId: idSchema,
@@ -147,6 +149,14 @@ export const faturaSchema = faturaResumoSchema.extend({
       status: z.string(),
       clienteNome: z.string().nullable(),
       encerradoEm: z.string().nullable(),
+    }),
+  ),
+  anexos: z.array(
+    z.object({
+      id: z.number(),
+      nome: z.string(),
+      caminho: z.string(),
+      criadoEm: z.string(),
     }),
   ),
   clienteDoc: z.string().nullable(),

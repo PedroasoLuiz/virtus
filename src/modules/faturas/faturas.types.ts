@@ -121,6 +121,7 @@ export type Fatura = FaturaResumo & {
   parcelas: ParcelaFatura[];
   tickets: TicketDaFatura[];
   historico: Historico;
+  anexos: AnexoDaFatura[];
   /** Quem emite o recibo. So no detalhe: a listagem nao imprime nada. */
   emitente: {
     razaoSocial: string | null;
@@ -139,6 +140,20 @@ export type Fatura = FaturaResumo & {
  * fatura existe, cobra e recebe — e o ticket segue "Concluido", com o valor
  * inteiro em aberto, pronto para ser cobrado de novo.
  */
+/**
+ * Anexo da conta inteira: contrato, ordem de compra, comprovante.
+ *
+ * Nota e boleto NAO entram aqui — cada parcela tem os seus, e pendura-los na
+ * conta faria escolher arbitrariamente a qual parcela pertencem.
+ */
+export type AnexoDaFatura = {
+  id: number;
+  nome: string;
+  /** Caminho no bucket. A URL e assinada na hora de abrir. */
+  caminho: string;
+  criadoEm: string;
+};
+
 export type OrigemNova = {
   ticketId: number;
   valor: Centavos;

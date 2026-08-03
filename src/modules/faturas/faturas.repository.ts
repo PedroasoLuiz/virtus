@@ -5,6 +5,7 @@ import { primeiroPreenchido } from "@/shared/utils/texto";
 import { intervalo, type Paginacao, type Pagina } from "@/shared/utils/paginacao";
 import {
   STATUS_FATURA,
+  type AnexoDaFatura,
   type Fatura,
   type FaturaResumo,
   type FiltroFaturas,
@@ -105,6 +106,56 @@ async function proximosVencimentos(faturaIds: number[]): Promise<Map<number, Dat
   return mapa;
 }
 
+export async function listarAnexos(faturaId: number): Promise<AnexoDaFatura[]> {
+  const supabase = await serverClient();
+  const { data, error } = await supabase
+    .from("faturasanexos")
+    .select("id, nome, caminho, created_at")
+    .eq("fkFatura", faturaId)
+    .order("id", { ascending: true });
+
+  if (error) throw error;
+
+  return (data ?? []).map((l) => ({
+    id: l.id,
+    nome: l.nome,
+    caminho: l.caminho,
+    criadoEm: l.created_at,
+  }));
+}
+
+export async function criarAnexo(
+  faturaId: number,
+  usuarioId: string,
+  entrada: { nome: string; caminho: string; tipo: string | null },
+): Promise<void> {
+  const supabase = await serverClient();
+  const { error } = await supabase.from("faturasanexos").insert({
+    fkFatura: faturaId,
+    fkUserCriacao: usuarioId,
+    nome: entrada.nome,
+    caminho: entrada.caminho,
+    tipo: entrada.tipo,
+  });
+
+  if (error) throw error;
+}
+
+export async function apagarAnexo(anexoId: number): Promise<AnexoDaFatura | null> {
+  const supabase = await serverClient();
+  const { data, error } = await supabase
+    .from("faturasanexos")
+    .delete()
+    .eq("id", anexoId)
+    .select("id, nome, caminho, created_at")
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return null;
+
+  return { id: data.id, nome: data.nome, caminho: data.caminho, criadoEm: data.created_at };
+}
+
 /** Emitente do documento — cabecalho do recibo. */
 async function dadosDaEmpresa(empresaId: number) {
   const supabase = await serverClient();
@@ -182,11 +233,12 @@ export async function buscarPorId(empresaId: number, id: number): Promise<Fatura
   if (error) throw error;
   if (!data) return null;
 
-  const [parcelas, tickets, historico, emitente] = await Promise.all([
+  const [parcelas, tickets, historico, emitente, anexos] = await Promise.all([
     listarParcelas(id),
     listarTickets(id),
     montarHistorico(data.created_at, data.updated_at, data.fkUserCriacao, data.fkUserModificacao),
     dadosDaEmpresa(empresaId),
+    listarAnexos(id),
   ]);
   const proximo = parcelas.find((p) => !p.pago)?.vencimento ?? null;
 
@@ -204,6 +256,7 @@ export async function buscarPorId(empresaId: number, id: number): Promise<Fatura
     tickets,
     historico,
     emitente,
+    anexos,
     clienteDoc: (data.clientes as { cnpj?: string | null } | null)?.cnpj ?? null,
   };
 }
@@ -693,7 +746,7 @@ export async function desvincularTicket(faturaId: number, ticketId: number): Pro
 export async function excluir(empresaId: number, faturaId: number): Promise<void> {
   const supabase = await serverClient();
 
-  for (const tabela of ["faturasorigens", "faturasparcelas"] as const) {
+  for (const tabela of ["faturasorigens", "faturasparcelas", "faturasanexos"] as const) {
     const { error } = await supabase.from(tabela).delete().eq("fkFatura", faturaId);
     if (error) throw error;
   }

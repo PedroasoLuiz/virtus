@@ -8,3 +8,9 @@ export const GET = handler(
   { params: idParamSchema, requerModulo: "financeiro" },
   controller.obter,
 );
+
+/** Apagar so antes de qualquer baixa; depois disso, cancela-se. */
+export const DELETE = handler(
+  { params: idParamSchema, requerModulo: "financeiro" },
+  controller.excluirConta,
+);

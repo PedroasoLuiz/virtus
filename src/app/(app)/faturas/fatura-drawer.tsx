@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { BotaoHistorico, Drawer } from "@/components/ui/drawer";
+import { BotaoDeCabecalho, BotaoHistorico, Drawer } from "@/components/ui/drawer";
 import { useAvisos } from "@/components/ui/avisos";
 import { Icon } from "@/components/layout/icones";
 import {
@@ -67,6 +67,7 @@ type Fatura = {
   rodape: string | null;
   parcelas: Parcela[];
   tickets: TicketDaFatura[];
+  anexos: { id: number; nome: string; caminho: string; criadoEm: string }[];
   clienteDoc: string | null;
   emitente: {
     razaoSocial: string | null;
@@ -93,10 +94,47 @@ export function FaturaDrawer({ faturaId, onClose }: { faturaId: number | null; o
 function Conteudo({ faturaId, onClose }: { faturaId: number; onClose: () => void }) {
   const [fatura, setFatura] = useState<Fatura | null>(null);
   const [erro, setErro] = useState<string | null>(null);
-  const [aba, setAba] = useState<"tickets" | "parcelas">("tickets");
+  const [aba, setAba] = useState<"tickets" | "parcelas" | "anexos">("tickets");
   // Ticket aberto por cima da conta: o drawer empilha, o de tras nao fecha.
   const [ticketAberto, setTicketAberto] = useState<number | null>(null);
   const { avisar, confirmar } = useAvisos();
+
+  async function excluirConta() {
+    const r = await fetch(`/api/v1/faturas/${faturaId}`, { method: "DELETE" });
+
+    if (!r.ok) {
+      const dados = await r.json().catch(() => null);
+      avisar("atencao", dados?.error?.message ?? "Não foi possível excluir a conta");
+      return;
+    }
+    avisar("sucesso", "Conta a receber excluída");
+    onClose();
+  }
+
+  async function imprimirConta() {
+    if (!fatura) return;
+    const { imprimirReciboDePagamento } = await import("./pdf-recibo-pagamento");
+
+    /*
+     * A conta inteira sai como um recibo do total, e nao uma folha por parcela:
+     * quem imprime daqui quer o comprovante do acordo, nao doze vias.
+     */
+    await imprimirReciboDePagamento(
+      {
+        numeroConta: fatura.numero,
+        parcela: 0,
+        totalParcelas: fatura.parcelas.length,
+        valor: fatura.total,
+        vencimento: fatura.parcelas.find((p) => !p.pago)?.vencimento ?? null,
+        pagoEm: fatura.parcelas.find((p) => p.pagoEm)?.pagoEm ?? null,
+        clienteNome: fatura.clienteNome,
+        clienteDoc: fatura.clienteDoc,
+        tickets: fatura.tickets.map((t) => ({ numero: t.numero, titulo: t.titulo })),
+        emitente: fatura.emitente,
+      },
+      "",
+    );
+  }
 
   async function desvincularTicket(ticketId: number) {
     const r = await fetch(`/api/v1/faturas/${faturaId}/tickets/${ticketId}`, {
@@ -165,12 +203,50 @@ function Conteudo({ faturaId, onClose }: { faturaId: number; onClose: () => void
       title={fatura ? `Conta a receber ${fatura.numero}` : "Conta a receber"}
       headerExtra={
         fatura ? (
-          <BotaoHistorico
+          <>
+            {/* Imprimir a conta inteira, e nao a parcela: o recibo de UMA
+                parcela vive no menu dela, onde se sabe qual. */}
+            <BotaoDeCabecalho
+              rotulo="Imprimir conta"
+              onClick={() => void imprimirConta()}
+            >
+              <path d="M4.4 6V2.6h7.2V6" />
+              <path d="M4.4 11.6H2.8a1 1 0 0 1-1-1V7.4a1 1 0 0 1 1-1h10.4a1 1 0 0 1 1 1v3.2a1 1 0 0 1-1 1h-1.6" />
+              <rect x="4.4" y="9.4" width="7.2" height="4" rx="0.6" />
+            </BotaoDeCabecalho>
+
+            <AnexarNaConta faturaId={fatura.id} aoMudar={recarregar} />
+
+            <BotaoDeCabecalho
+              rotulo={
+                temBaixa
+                  ? "Conta com baixa não é excluída, é cancelada"
+                  : "Excluir conta a receber"
+              }
+              perigo
+              desabilitado={temBaixa}
+              onClick={() =>
+                confirmar(
+                  `Excluir a conta ${fatura.numero}?`,
+                  "Excluir",
+                  excluirConta,
+                  "Parcelas, anexos e o vínculo com os tickets vão junto. O saldo deles volta.",
+                )
+              }
+            >
+              <path d="M2.6 4.4h10.8" />
+              <path d="M5.4 4.4V3a.8.8 0 0 1 .8-.8h3.6a.8.8 0 0 1 .8.8v1.4" />
+              <path d="M12.2 4.4l-.7 9a.8.8 0 0 1-.8.8H5.3a.8.8 0 0 1-.8-.8l-.7-9" />
+              <path d="M6.6 7v4.4M9.4 7v4.4" />
+            </BotaoDeCabecalho>
+
+            <BotaoHistorico
             criadoEm={fatura.historico.criadoEm}
             criadoPor={fatura.historico.criadoPor}
             editadoEm={fatura.historico.editadoEm}
             editadoPor={fatura.historico.editadoPor}
-          />
+            />
+          </>
         ) : null
       }
       footer={
@@ -228,13 +304,21 @@ function Conteudo({ faturaId, onClose }: { faturaId: number; onClose: () => void
           </div>
 
           <PanelTabs
-            tabs={[`Tickets (${fatura.tickets.length})`, `Parcelas (${fatura.parcelas.length})`]}
+            tabs={[
+              `Tickets (${fatura.tickets.length})`,
+              `Parcelas (${fatura.parcelas.length})`,
+              `Anexos (${fatura.anexos.length})`,
+            ]}
             active={
               aba === "tickets"
                 ? `Tickets (${fatura.tickets.length})`
-                : `Parcelas (${fatura.parcelas.length})`
+                : aba === "parcelas"
+                  ? `Parcelas (${fatura.parcelas.length})`
+                  : `Anexos (${fatura.anexos.length})`
             }
-            onChange={(t) => setAba(t.startsWith("Tickets") ? "tickets" : "parcelas")}
+            onChange={(t) =>
+              setAba(t.startsWith("Tickets") ? "tickets" : t.startsWith("Parcelas") ? "parcelas" : "anexos")
+            }
           />
 
           {aba === "tickets" ? (
@@ -287,7 +371,7 @@ function Conteudo({ faturaId, onClose }: { faturaId: number; onClose: () => void
                 </MenuDeLinha>,
               ])}
             />
-          ) : (
+          ) : aba === "parcelas" ? (
             <Tabela
               cabecalho={["#", "Vencimento", "Valor", "Documentos", "Ações"]}
               vazio="Nenhuma parcela gerada."
@@ -317,6 +401,45 @@ function Conteudo({ faturaId, onClose }: { faturaId: number; onClose: () => void
                       aoMudar={recarregar}
                       fechar={fechar}
                     />
+                  )}
+                </MenuDeLinha>,
+              ])}
+            />
+          ) : (
+            <Tabela
+              cabecalho={["Arquivo", "Enviado em", "Ações"]}
+              vazio="Nenhum anexo. Contrato, ordem de compra, comprovante — o que sustenta esta conta."
+              linhas={fatura.anexos.map((a) => [
+                a.nome,
+                curto(a.criadoEm),
+                <MenuDeLinha key="a">
+                  {(fechar) => (
+                    <>
+                      <ItemDoMenu
+                        rotulo="Baixar"
+                        onClick={() => {
+                          fechar();
+                          window.open(`/api/v1/faturas/${fatura.id}/anexos/${a.id}`, "_blank");
+                        }}
+                      >
+                        <path d="M8 2v8M5 7l3 3 3-3M3 13h10" />
+                      </ItemDoMenu>
+                      <ItemDoMenu
+                        rotulo="Remover"
+                        perigo
+                        onClick={() => {
+                          fechar();
+                          confirmar(`Remover "${a.nome}"?`, "Remover", async () => {
+                            await fetch(`/api/v1/faturas/${fatura.id}/anexos/${a.id}`, {
+                              method: "DELETE",
+                            });
+                            recarregar();
+                          }, "O arquivo é apagado.");
+                        }}
+                      >
+                        <path d="M12 4L4 12M4 4l8 8" />
+                      </ItemDoMenu>
+                    </>
                   )}
                 </MenuDeLinha>,
               ])}
@@ -1163,3 +1286,74 @@ function curto(data: string): string {
   return `${dia}/${mes}/${ano.slice(2)}`;
 }
 
+/**
+ * Anexar na conta, direto do cabecalho.
+ *
+ * Um `<label>` com a moldura do botao de cabecalho: o `<input type="file">`
+ * precisa de rotulo para abrir o seletor, e assim o clique no botao inteiro
+ * funciona.
+ */
+function AnexarNaConta({ faturaId, aoMudar }: { faturaId: number; aoMudar: () => void }) {
+  const { avisar } = useAvisos();
+  const [enviando, setEnviando] = useState(false);
+
+  async function subir(arquivo: File) {
+    const corpo = new FormData();
+    corpo.append("arquivo", arquivo);
+
+    setEnviando(true);
+    const r = await fetch(`/api/v1/faturas/${faturaId}/anexos`, { method: "POST", body: corpo });
+    const dados = await r.json().catch(() => null);
+    setEnviando(false);
+
+    if (!r.ok) {
+      avisar("atencao", dados?.error?.message ?? "Não foi possível enviar o arquivo");
+      return;
+    }
+    avisar("sucesso", "Anexo enviado");
+    aoMudar();
+  }
+
+  return (
+    <label
+      title="Anexar documento"
+      aria-label="Anexar documento"
+      style={{
+        width: 28,
+        height: 28,
+        display: "grid",
+        placeItems: "center",
+        border: "1px solid var(--border)",
+        borderRadius: "var(--radius-sm)",
+        background: "var(--surface)",
+        color: "var(--text-secondary)",
+        cursor: enviando ? "wait" : "pointer",
+        opacity: enviando ? 0.4 : 1,
+      }}
+    >
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.9"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
+      </svg>
+      <input
+        type="file"
+        accept="application/pdf,image/*"
+        disabled={enviando}
+        onChange={(e) => {
+          const arquivo = e.target.files?.[0];
+          e.target.value = "";
+          if (arquivo) void subir(arquivo);
+        }}
+        style={{ display: "none" }}
+      />
+    </label>
+  );
+}

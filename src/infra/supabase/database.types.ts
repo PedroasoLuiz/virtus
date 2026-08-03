@@ -218,6 +218,17 @@ export type FaturaRow = Timestamps & {
 };
 
 
+/** Anexo da conta inteira. Nota e boleto ficam na PARCELA, nao aqui. */
+export type FaturaAnexoRow = {
+  id: number;
+  created_at: string;
+  fkFatura: number;
+  fkUserCriacao: string | null;
+  nome: string;
+  caminho: string;
+  tipo: string | null;
+};
+
 export type FaturaParcelaRow = Timestamps & {
   id: number;
   fkFatura: number | null;
@@ -508,6 +519,7 @@ export type Database = {
       clientesenderecos: { Row: ClienteEnderecoRow; Insert: Partial<ClienteEnderecoRow>; Update: Partial<ClienteEnderecoRow>; Relationships: [] };
       clientes: { Row: ClienteRow; Insert: Partial<ClienteRow>; Update: Partial<ClienteRow>; Relationships: [] };
       faturas: { Row: FaturaRow; Insert: Partial<FaturaRow>; Update: Partial<FaturaRow>; Relationships: [] };
+      faturasanexos: { Row: FaturaAnexoRow; Insert: Partial<FaturaAnexoRow>; Update: Partial<FaturaAnexoRow>; Relationships: [] };
       faturasparcelas: { Row: FaturaParcelaRow; Insert: Partial<FaturaParcelaRow>; Update: Partial<FaturaParcelaRow>; Relationships: [] };
       contaspagar: { Row: ContaPagarRow; Insert: Partial<ContaPagarRow>; Update: Partial<ContaPagarRow>; Relationships: [] };
       contaspagarparcelas: { Row: ContaPagarParcelaRow; Insert: Partial<ContaPagarParcelaRow>; Update: Partial<ContaPagarParcelaRow>; Relationships: [] };

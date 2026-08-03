@@ -172,3 +172,43 @@ export async function desvincularTicket({
 }: Entrada<undefined, undefined, { id: number; ticketId: number }>) {
   return ok(await service.desvincularTicket(empresaObrigatoria(ctx), params.id, params.ticketId));
 }
+
+// ── Anexos da conta ─────────────────────────────────────────────────────────
+
+export async function anexarNaConta({ params, ctx, req }: Entrada<undefined, undefined, IdParam>) {
+  const empresaId = empresaObrigatoria(ctx);
+  const form = await req.formData();
+  const arquivo = form.get("arquivo");
+
+  if (!(arquivo instanceof File)) {
+    throw new AppError("VALIDATION_ERROR", 422, "Envie o arquivo no campo `arquivo`");
+  }
+
+  await service.anexarNaConta(empresaId, ctx.usuarioId, params.id, arquivo);
+  return created(faturaSchema.parse(await service.obterFatura(empresaId, params.id)));
+}
+
+export async function removerAnexoDaConta({
+  params,
+  ctx,
+}: Entrada<undefined, undefined, { id: number; anexoId: number }>) {
+  const empresaId = empresaObrigatoria(ctx);
+  await service.removerAnexoDaConta(empresaId, params.id, params.anexoId);
+  return ok(faturaSchema.parse(await service.obterFatura(empresaId, params.id)));
+}
+
+/** Redireciona para a URL assinada, valida por uma hora. */
+export async function abrirAnexo({
+  params,
+  ctx,
+}: Entrada<undefined, undefined, { id: number; anexoId: number }>) {
+  return Response.redirect(
+    await service.linkDoAnexo(empresaObrigatoria(ctx), params.id, params.anexoId),
+    302,
+  );
+}
+
+export async function excluirConta({ params, ctx }: Entrada<undefined, undefined, IdParam>) {
+  await service.excluirConta(empresaObrigatoria(ctx), params.id);
+  return noContent();
+}
