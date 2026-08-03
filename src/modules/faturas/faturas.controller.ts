@@ -224,10 +224,14 @@ export async function registrarBaixa({ body, params, ctx }: Entrada<BaixaBody, u
   const fatura = await service.registrarBaixa(empresaId, ctx.usuarioId, params.id, {
     data: body.data,
     tipo: body.tipo,
-    contaBancariaId: body.contaBancariaId ?? null,
+    contaBancariaId: body.contaBancariaId,
     descricao: body.descricao,
     observacoes: body.observacoes,
-    destinos: body.destinos.map((d) => ({ parcelaId: d.parcelaId, valor: centavos(d.valor) })),
+    destinos: body.destinos.map((d) => ({
+      parcelaId: d.parcelaId,
+      valor: centavos(d.valor),
+      quitar: d.quitar,
+    })),
   });
 
   return created(faturaSchema.parse(fatura));

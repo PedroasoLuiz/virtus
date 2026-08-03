@@ -52,6 +52,7 @@ export function BaixaDrawer({
   );
 
   const [valores, setValores] = useState<Record<number, number>>({});
+  const [quitar, setQuitar] = useState<Record<number, boolean>>({});
   const [data, setData] = useState<string>(hoje());
   const [tipo, setTipo] = useState<string>("PIX");
   const [contaId, setContaId] = useState("");
@@ -77,7 +78,7 @@ export function BaixaDrawer({
 
   const destinos = abertas
     .filter((p) => (valores[p.id] ?? 0) > 0)
-    .map((p) => ({ parcelaId: p.id, valor: valores[p.id] }));
+    .map((p) => ({ parcelaId: p.id, valor: valores[p.id], quitar: quitar[p.id] ?? false }));
 
   const total = destinos.reduce((soma, d) => soma + d.valor, 0) as Centavos;
 
@@ -90,7 +91,7 @@ export function BaixaDrawer({
       body: JSON.stringify({
         data,
         tipo,
-        contaBancariaId: contaId ? Number(contaId) : null,
+        contaBancariaId: Number(contaId),
         observacoes: observacoes.trim() || null,
         destinos,
       }),
@@ -141,7 +142,8 @@ export function BaixaDrawer({
           <Button
             size="sm"
             variant="primary"
-            disabled={salvando || destinos.length === 0}
+            disabled={salvando || destinos.length === 0 || !contaId}
+            title={!contaId ? "Escolha a conta em que o dinheiro entrou" : undefined}
             onClick={baixar}
           >
             {salvando ? "Registrando…" : "Registrar baixa"}
@@ -187,20 +189,16 @@ export function BaixaDrawer({
               </select>
             </Field>
 
-            <Field
-              label="Conta"
-              hint={
-                contas.length === 0
-                  ? "Nenhuma conta bancária cadastrada. A baixa vale mesmo assim."
-                  : "Onde o dinheiro caiu. É o que liga a baixa ao extrato."
-              }
-            >
+            {/* Obrigatória: o dinheiro entrou em ALGUM lugar, e baixa sem conta
+                não concilia com extrato nenhum — vira um número que não se
+                confere depois. */}
+            <Field label="Conta" required hint="Onde o dinheiro caiu. É o que liga a baixa ao extrato.">
               <select
                 value={contaId}
                 onChange={(e) => setContaId(e.target.value)}
                 style={selectStyle}
               >
-                <option value="">Não informar</option>
+                <option value="">Escolher…</option>
                 {contas.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.nome}
@@ -210,12 +208,13 @@ export function BaixaDrawer({
             </Field>
 
             <Field label="Observações">
-              <input
+              <textarea
                 value={observacoes}
                 onChange={(e) => setObservacoes(e.target.value)}
+                rows={3}
                 placeholder="Ex.: PIX recebido em conjunto com a conta 214"
-                maxLength={200}
-                style={inputStyle}
+                maxLength={400}
+                style={{ ...inputStyle, height: "auto", padding: 8, resize: "vertical" }}
               />
             </Field>
           </div>
@@ -238,7 +237,9 @@ export function BaixaDrawer({
                 key={p.id}
                 parcela={p}
                 valor={valores[p.id] ?? 0}
+                quitar={quitar[p.id] ?? false}
                 aoMudar={(v) => setValores((atual) => ({ ...atual, [p.id]: v }))}
+                aoQuitar={(v) => setQuitar((atual) => ({ ...atual, [p.id]: v }))}
               />
             ))}
           </div>
@@ -248,80 +249,127 @@ export function BaixaDrawer({
   );
 }
 
+/**
+ * Uma parcela na baixa.
+ *
+ * Em duas alturas: em cima o que identifica (numero, vencimento, o que ja
+ * entrou); embaixo o que se decide. Tudo numa linha so, a mira ficava apertada
+ * entre quatro elementos de tamanhos diferentes.
+ */
 function Linha({
   parcela,
   valor,
+  quitar,
   aoMudar,
+  aoQuitar,
 }: {
   parcela: ParcelaAberta;
   valor: number;
+  quitar: boolean;
   aoMudar: (v: number) => void;
+  aoQuitar: (v: boolean) => void;
 }) {
   const emAberto = parcela.total - parcela.recebido;
   const escolhida = valor > 0;
-  const parcial = parcela.recebido > 0;
+  const diferenca = escolhida ? emAberto - valor : 0;
 
   return (
     <div
       style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        padding: "8px 10px",
+        padding: "10px 12px",
         borderRadius: "var(--radius-md)",
-        background: escolhida ? "var(--primary-subtle)" : "var(--surface-2)",
+        border: `1px solid ${escolhida ? "var(--primary-border)" : "var(--border)"}`,
+        background: escolhida ? "var(--primary-subtle)" : "var(--surface)",
       }}
     >
-      <span
-        style={{
-          fontSize: "var(--text-xs)",
-          fontWeight: "var(--fw-semi)",
-          color: "var(--primary)",
-          minWidth: 18,
-        }}
-      >
-        {parcela.numero}
-      </span>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <span
+          style={{
+            fontSize: "var(--text-xs)",
+            fontWeight: "var(--fw-semi)",
+            letterSpacing: "var(--tracking-wide)",
+            color: "var(--primary)",
+          }}
+        >
+          PARCELA {parcela.numero}
+        </span>
 
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: "var(--text-sm)" }}>
-          {parcela.vencimento ? paraFormatoBR(parcela.vencimento as DataISO) : "—"}
-        </div>
-        {/* Já recebeu parte: sem isso, quem vê "em aberto 2.000" numa parcela de
-            5.000 acha que o valor está errado. */}
-        {parcial && (
-          <div style={{ fontSize: "var(--text-xs)", color: "var(--text-tertiary)" }}>
+        <span style={{ fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>
+          vence {parcela.vencimento ? paraFormatoBR(parcela.vencimento as DataISO) : "\u2014"}
+        </span>
+
+        <span style={{ flex: 1 }} />
+
+        {/* Ja recebeu parte: sem isso, quem ve "em aberto 2.000" numa parcela de
+            5.000 acha que o valor esta errado. */}
+        {parcela.recebido > 0 && (
+          <span style={{ fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>
             {formatarSemSimbolo(parcela.recebido as Centavos)} de{" "}
             {formatarSemSimbolo(parcela.total as Centavos)}
-          </div>
+          </span>
         )}
       </div>
 
-      <button
-        type="button"
-        title="Receber tudo o que falta"
-        onClick={() => aoMudar(escolhida ? 0 : emAberto)}
-        style={{
-          border: "none",
-          background: "none",
-          padding: 0,
-          fontSize: "var(--text-sm)",
-          color: "var(--text-tertiary)",
-          fontVariantNumeric: "tabular-nums",
-          cursor: "pointer",
-        }}
-      >
-        {formatarSemSimbolo(emAberto as Centavos)}
-      </button>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
+        <button
+          type="button"
+          title="Preencher com tudo o que falta"
+          onClick={() => aoMudar(escolhida ? 0 : emAberto)}
+          style={{
+            border: "none",
+            background: "none",
+            padding: 0,
+            fontSize: "var(--text-sm)",
+            color: "var(--text-secondary)",
+            fontFamily: "var(--font)",
+            cursor: "pointer",
+          }}
+        >
+          Em aberto{" "}
+          <strong style={{ fontVariantNumeric: "tabular-nums" }}>
+            {formatarSemSimbolo(emAberto as Centavos)}
+          </strong>
+        </button>
 
-      {/* Editável: pagamento a menor é comum, e o que sobra continua em aberto. */}
-      <div style={{ width: 118 }}>
-        <CampoNumerico
-          valor={valor}
-          escala={100}
-          aoMudar={(v) => aoMudar(Math.min(v, emAberto))}
-        />
+        <span style={{ flex: 1 }} />
+
+        <span style={{ fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>Recebi</span>
+        <div style={{ width: 130 }}>
+          <CampoNumerico valor={valor} escala={100} aoMudar={(v) => aoMudar(Math.min(v, emAberto))} />
+        </div>
       </div>
+
+      {/*
+       * A pergunta que o sistema nao pode responder sozinho.
+       *
+       * Recebi 500 de 510: os 10 continuam devidos, ou eu abri mao? As duas
+       * respostas sao legitimas, e so quem recebeu sabe. Aparece apenas quando
+       * ha diferenca, e o padrao e deixar em aberto — perdoar divida por
+       * omissao seria a escolha errada de fazer sozinho.
+       */}
+      {diferenca > 0 && (
+        <label
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            marginTop: 8,
+            paddingTop: 8,
+            borderTop: "1px solid var(--border)",
+            fontSize: "var(--text-sm)",
+            color: "var(--text-secondary)",
+            cursor: "pointer",
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={quitar}
+            onChange={(e) => aoQuitar(e.target.checked)}
+            style={{ accentColor: "var(--primary)", cursor: "pointer" }}
+          />
+          Quitar e dar {formatarSemSimbolo(diferenca as Centavos)} de desconto
+        </label>
+      )}
     </div>
   );
 }

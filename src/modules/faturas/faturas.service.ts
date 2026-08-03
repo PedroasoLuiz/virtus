@@ -641,6 +641,23 @@ export async function registrarBaixa(
     }
   }
 
+  /*
+   * Quem escolheu quitar tem a diferenca abatida ANTES do rateio: o gatilho
+   * compara recebido com o total, e o total precisa ja estar reduzido quando ele
+   * rodar. Na ordem inversa a parcela ficaria um instante "nao paga".
+   */
+  for (const d of entrada.destinos) {
+    if (!d.quitar) continue;
+
+    const parcela = fatura.parcelas.find((p) => p.id === d.parcelaId)!;
+    const novoTotal = somar(parcela.recebido, d.valor);
+    const diferenca = subtrair(parcela.total, novoTotal);
+
+    if (diferenca > 0) {
+      await repo.encerrarDiferenca(d.parcelaId, usuarioId, novoTotal, diferenca);
+    }
+  }
+
   const descricao = `Recebimento da conta ${fatura.numero}${fatura.clienteNome ? ` - ${fatura.clienteNome}` : ""}`;
   await repo.registrarBaixa(empresaId, usuarioId, entrada, total, descricao);
 

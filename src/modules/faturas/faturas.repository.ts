@@ -857,3 +857,39 @@ export async function registrarBaixa(
 
   return pagamentoId;
 }
+
+/**
+ * Fecha a diferenca como desconto.
+ *
+ * Some do saldo sem passar pelo caixa: nao e dinheiro que entrou, e cobranca que
+ * deixou de existir. O `total` da parcela cai junto, para que "recebido >=
+ * total" feche sozinho no gatilho — e para que a soma das parcelas continue
+ * batendo com o que a conta realmente vale.
+ */
+export async function encerrarDiferenca(
+  parcelaId: number,
+  usuarioId: string,
+  novoTotal: Centavos,
+  descontoAdicional: Centavos,
+): Promise<void> {
+  const supabase = await serverClient();
+  const { data, error } = await supabase
+    .from("faturasparcelas")
+    .select("desconto")
+    .eq("id", parcelaId)
+    .single();
+
+  if (error) throw error;
+
+  const { error: erroUpdate } = await supabase
+    .from("faturasparcelas")
+    .update({
+      total: paraBanco(novoTotal),
+      desconto: (data.desconto ?? 0) + paraBanco(descontoAdicional),
+      updated_at: new Date().toISOString(),
+      fkUserModificacao: usuarioId,
+    })
+    .eq("id", parcelaId);
+
+  if (erroUpdate) throw erroUpdate;
+}

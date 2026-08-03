@@ -89,11 +89,11 @@ export const enviarParcelaBodySchema = z.object({
 export const baixaBodySchema = z.object({
   data: dataISOSchema,
   tipo: z.enum(TIPOS_DE_RECEBIMENTO),
-  contaBancariaId: idSchema.nullish(),
+  contaBancariaId: idSchema,
   descricao: textoLongoSchema.nullish(),
   observacoes: textoLongoSchema.nullish(),
   destinos: z
-    .array(z.object({ parcelaId: idSchema, valor: centavosPositivoSchema }))
+    .array(z.object({ parcelaId: idSchema, valor: centavosPositivoSchema, quitar: z.boolean().default(false) }))
     .min(1, "Escolha ao menos uma parcela"),
 });
 
