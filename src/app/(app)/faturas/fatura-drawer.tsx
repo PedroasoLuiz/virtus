@@ -149,6 +149,7 @@ function Conteudo({
         clienteDoc: fatura.clienteDoc,
         total: fatura.total,
         pago,
+        desconto: fatura.parcelas.reduce((soma, p) => soma + p.desconto, 0),
         tickets: fatura.tickets.map((t) => ({
           numero: t.numero,
           titulo: t.titulo,
@@ -1189,6 +1190,9 @@ function AcoesDaParcela({
         emAberto: fatura.parcelas
           .filter((x) => !x.pago && x.id !== parcela.id)
           .map((x) => ({ numero: x.numero, vencimento: x.vencimento, total: x.total })),
+        totalConta: fatura.total,
+        pagoConta: fatura.parcelas.filter((x) => x.pago).reduce((soma, x) => soma + x.total, 0),
+        descontoConta: fatura.parcelas.reduce((soma, x) => soma + x.desconto, 0),
         emitente: fatura.emitente,
       },
       emitidoPor,

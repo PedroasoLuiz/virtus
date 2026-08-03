@@ -37,6 +37,10 @@ export type ReciboParaPDF = {
   tickets: { numero: number; titulo: string; valor: number; data: string | null }[];
   /** As que ainda faltam. Quem assina o recibo quer saber o que sobra. */
   emAberto: { numero: number; vencimento: string | null; total: number }[];
+  /** O fechamento da CONTA, nao desta parcela: e o que sobra depois dela. */
+  totalConta: number;
+  pagoConta: number;
+  descontoConta: number;
   emitente: {
     razaoSocial: string | null;
     endereco: string | null;
@@ -169,26 +173,51 @@ export async function imprimirReciboDePagamento(
     }
   }
 
+  // ── O fechamento da conta ─────────────────────────────────────────────────
+  //
+  // Do TODO, nao desta parcela: o valor dela ja esta em destaque la em cima. O
+  // que falta saber, depois de pagar uma, e quanto sobra.
+  y += 30;
+  fechamento(doc, y, direita, {
+    total: r.totalConta,
+    pago: r.pagoConta,
+    desconto: r.descontoConta,
+  });
+
   // ── Assinatura, colada no pé ──────────────────────────────────────────────
   //
   // Fixa embaixo e não depois do texto: recibo é documento, e o mesmo desenho
   // em toda emissão é o que faz um documento parecer confiável.
-  const linhaAssinatura = altura - MARGEM - 52;
+  const linhaAssinatura = altura - MARGEM - 44;
 
-  // Data em branco: recibo se assina na hora da entrega, e a data do papel e a
-  // do gesto, nao a do arquivo.
-  doc.setFont("helvetica", "normal").setFontSize(9.5).setTextColor(...TINTA);
-  doc.text("____ / ____ / ________", largura / 2, linhaAssinatura - 26, { align: "center" });
+  /*
+   * Data e assinatura na MESMA linha, como num recibo de talao.
+   *
+   * A data em branco porque o recibo se assina na hora da entrega: a data do
+   * papel e a do gesto, nao a do arquivo. Empilhada acima da assinatura ela
+   * parecia um campo separado, e nao parte do mesmo ato.
+   */
+  const larguraData = 118;
+  const inicioData = MARGEM + 24;
+  const inicioAssinatura = inicioData + larguraData + 26;
+
+  doc.setFont("helvetica", "normal").setFontSize(10).setTextColor(...TINTA);
+  doc.text("____ / ____ / ________", inicioData, linhaAssinatura - 3);
 
   doc.setDrawColor(...TINTA).setLineWidth(0.8);
-  doc.line(largura / 2 - 120, linhaAssinatura, largura / 2 + 120, linhaAssinatura);
+  doc.line(inicioAssinatura, linhaAssinatura, direita - 24, linhaAssinatura);
 
-  doc.setFont("helvetica", "bold").setFontSize(9.5).setTextColor(...TINTA);
-  doc.text(r.emitente.razaoSocial ?? "—", largura / 2, linhaAssinatura + 14, { align: "center" });
+  doc.setFont("helvetica", "bold").setFontSize(9).setTextColor(...TINTA);
+  const centroAssinatura = (inicioAssinatura + direita - 24) / 2;
+  doc.text(r.emitente.razaoSocial ?? "—", centroAssinatura, linhaAssinatura + 13, {
+    align: "center",
+  });
 
   if (r.emitente.cnpj) {
     doc.setFont("helvetica", "normal").setFontSize(8).setTextColor(...CINZA);
-    doc.text(`CNPJ ${r.emitente.cnpj}`, largura / 2, linhaAssinatura + 25, { align: "center" });
+    doc.text(`CNPJ ${r.emitente.cnpj}`, centroAssinatura, linhaAssinatura + 23, {
+      align: "center",
+    });
   }
 
   doc.setFontSize(7.5).setTextColor(...CINZA);
@@ -217,6 +246,8 @@ export type ResumoParaPDF = {
   clienteDoc: string | null;
   total: number;
   pago: number;
+  /** Somado das parcelas. Sem ele os numeros nao fecham e parece erro de conta. */
+  desconto: number;
   tickets: { numero: number; titulo: string; valor: number; data: string | null }[];
   parcelas: {
     numero: number;
@@ -308,23 +339,11 @@ export async function imprimirResumoDaConta(
   }
 
   // ── Fechamento ────────────────────────────────────────────────────────────
-  y += 26;
-  const rotulo = direita - 150;
-  doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(...CINZA);
-  doc.text("Total", rotulo, y);
-  doc.text("Recebido", rotulo, y + 15);
-  doc.text("Em aberto", rotulo, y + 30);
-
-  doc.setTextColor(...TINTA);
-  doc.text(formatarSemSimbolo(r.total as Centavos), direita, y, { align: "right" });
-  doc.setTextColor(...VERDE);
-  doc.text(formatarSemSimbolo(r.pago as Centavos), direita, y + 15, { align: "right" });
-
-  // Sem regua e no mesmo corpo das outras: a linha separava tres numeros que se
-  // leem juntos, e o negrito ja diz qual e a resposta.
-  doc.setFont("helvetica", "bold").setTextColor(...TINTA);
-  doc.text(formatarSemSimbolo((r.total - r.pago) as Centavos), direita, y + 30, {
-    align: "right",
+  y += 30;
+  fechamento(doc, y, direita, {
+    total: r.total,
+    pago: r.pago,
+    desconto: r.desconto,
   });
 
   doc.setFont("helvetica", "normal").setFontSize(7.5).setTextColor(...CINZA);
@@ -371,6 +390,47 @@ function composicao(
 
     doc.setDrawColor(...REGUA).line(MARGEM, atual + 5, direita, atual + 5);
   }
+  return atual;
+}
+
+/**
+ * O fechamento: total, recebido, desconto e o que sobra.
+ *
+ * O desconto entra porque sem ele os numeros nao fecham — quem soma total menos
+ * recebido acha uma diferenca e pensa que ha parcela esquecida. Ele so aparece
+ * quando existe: uma linha "Desconto 0,00" e ruido em toda conta normal.
+ *
+ * "Em aberto" desconta os dois: o abatido nao volta a ser cobravel. Ver docs/10.
+ */
+function fechamento(
+  doc: jsPDF,
+  y: number,
+  direita: number,
+  v: { total: number; pago: number; desconto: number },
+): number {
+  const rotulo = direita - 160;
+  const linhas: { texto: string; valor: number; cor: [number, number, number] }[] = [
+    { texto: "Total", valor: v.total, cor: TINTA },
+    { texto: "Recebido", valor: v.pago, cor: VERDE },
+  ];
+  if (v.desconto > 0) linhas.push({ texto: "Desconto", valor: v.desconto, cor: CINZA });
+
+  let atual = y;
+  doc.setFont("helvetica", "normal").setFontSize(9);
+  for (const l of linhas) {
+    doc.setTextColor(...CINZA);
+    doc.text(l.texto, rotulo, atual);
+    doc.setTextColor(...l.cor);
+    doc.text(formatarSemSimbolo(l.valor as Centavos), direita, atual, { align: "right" });
+    atual += 15;
+  }
+
+  doc.setFont("helvetica", "bold").setTextColor(...TINTA);
+  doc.text("Em aberto", rotulo, atual);
+  doc.text(formatarSemSimbolo((v.total - v.pago - v.desconto) as Centavos), direita, atual, {
+    align: "right",
+  });
+
   return atual;
 }
 
