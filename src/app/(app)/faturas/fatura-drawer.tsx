@@ -112,25 +112,38 @@ function Conteudo({ faturaId, onClose }: { faturaId: number; onClose: () => void
     onClose();
   }
 
+  /**
+   * A impressora do cabecalho gera o RESUMO da conta inteira.
+   *
+   * Nao e o recibo: o recibo comprova UMA parcela paga e vive no menu dela,
+   * onde se sabe qual. Este mostra o acordo — de onde vem, quanto e, em quantas
+   * vezes, e o que ja entrou.
+   */
   async function imprimirConta() {
     if (!fatura) return;
-    const { imprimirReciboDePagamento } = await import("./pdf-recibo-pagamento");
+    const { imprimirResumoDaConta } = await import("./pdf-recibo-pagamento");
 
-    /*
-     * A conta inteira sai como um recibo do total, e nao uma folha por parcela:
-     * quem imprime daqui quer o comprovante do acordo, nao doze vias.
-     */
-    await imprimirReciboDePagamento(
+    await imprimirResumoDaConta(
       {
         numeroConta: fatura.numero,
-        parcela: 0,
-        totalParcelas: fatura.parcelas.length,
-        valor: fatura.total,
-        vencimento: fatura.parcelas.find((p) => !p.pago)?.vencimento ?? null,
-        pagoEm: fatura.parcelas.find((p) => p.pagoEm)?.pagoEm ?? null,
+        situacao: fatura.situacao,
+        competencia: periodo(fatura.apuracaoInicio, fatura.apuracaoFim),
         clienteNome: fatura.clienteNome,
         clienteDoc: fatura.clienteDoc,
-        tickets: fatura.tickets.map((t) => ({ numero: t.numero, titulo: t.titulo })),
+        total: fatura.total,
+        pago,
+        tickets: fatura.tickets.map((t) => ({
+          numero: t.numero,
+          titulo: t.titulo,
+          valor: t.valor,
+        })),
+        parcelas: fatura.parcelas.map((p) => ({
+          numero: p.numero,
+          vencimento: p.vencimento,
+          total: p.total,
+          desconto: p.desconto,
+          pago: p.pago,
+        })),
         emitente: fatura.emitente,
       },
       "",
@@ -1215,8 +1228,11 @@ function AcoesDaParcela({
             aoMudar();
           }}
         >
-          <path d="M3.4 2.4h9.2v11.2l-2.3-1.3-2.3 1.3-2.3-1.3-2.3 1.3z" />
-          <path d="M5.8 6h4.4M5.8 8.6h3" />
+          {/* Cedula com o visto: o papel recortado ja e o recibo, e a folha com
+              dobra ja e a nota. Comprovante e dinheiro que ENTROU. */}
+          <rect x="1.6" y="4" width="12.8" height="8" rx="1" />
+          <circle cx="8" cy="8" r="1.8" />
+          <path d="M11.4 12.6l1.6 1.6 2.6-2.8" />
         </AnexarDocumento>
       )}
 

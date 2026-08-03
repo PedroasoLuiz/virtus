@@ -170,3 +170,164 @@ export async function imprimirReciboDePagamento(
 
   doc.save(`recibo-${r.numeroConta}-${r.parcela}.pdf`);
 }
+
+/**
+ * Resumo da conta a receber inteira.
+ *
+ * Nao e o recibo: o recibo comprova UMA parcela paga; este mostra o acordo
+ * completo — de onde vem, quanto e, em quantas vezes, e o que ja entrou. E o
+ * papel que se manda quando o cliente pergunta "como ficou?".
+ */
+export type ResumoParaPDF = {
+  numeroConta: number;
+  situacao: string;
+  competencia: string | null;
+  clienteNome: string | null;
+  clienteDoc: string | null;
+  total: number;
+  pago: number;
+  tickets: { numero: number; titulo: string; valor: number }[];
+  parcelas: {
+    numero: number;
+    vencimento: string | null;
+    total: number;
+    desconto: number;
+    pago: boolean;
+  }[];
+  emitente: ReciboParaPDF["emitente"];
+};
+
+export async function imprimirResumoDaConta(
+  r: ResumoParaPDF,
+  emitidoPor: string,
+): Promise<void> {
+  const doc = new jsPDF({ unit: "pt", format: "a4" });
+  const largura = doc.internal.pageSize.getWidth();
+  const altura = doc.internal.pageSize.getHeight();
+  const direita = largura - MARGEM;
+
+  doc.setFillColor(...VERDE).rect(0, 0, largura, 8, "F");
+
+  let y = MARGEM + 18;
+
+  const logo = await carregarLogo(r.emitente.logo);
+  if (logo) {
+    const p = logo.largura / logo.altura;
+    doc.addImage(logo.dados, "PNG", direita - 26 * p, MARGEM, 26 * p, 26);
+  }
+
+  doc.setFont("helvetica", "bold").setFontSize(20).setTextColor(...VERDE);
+  doc.text("CONTA A RECEBER", MARGEM, y);
+
+  y += 20;
+  doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(...CINZA);
+  doc.text("Número", MARGEM, y);
+  doc.text("Situação", MARGEM, y + 13);
+  if (r.competencia) doc.text("Apuração", MARGEM, y + 26);
+
+  doc.setFont("helvetica", "bold").setTextColor(...TINTA);
+  doc.text(String(r.numeroConta), MARGEM + 56, y);
+  doc.text(r.situacao, MARGEM + 56, y + 13);
+  if (r.competencia) doc.text(r.competencia, MARGEM + 56, y + 26);
+
+  y += r.competencia ? 50 : 37;
+
+  // ── Partes ────────────────────────────────────────────────────────────────
+  const meio = MARGEM + (largura - MARGEM * 2) / 2;
+
+  doc.setFont("helvetica", "bold").setFontSize(7).setTextColor(...CINZA);
+  doc.text("DE", MARGEM, y);
+  doc.text("PARA", meio, y);
+
+  doc.setFont("helvetica", "bold").setFontSize(10).setTextColor(...TINTA);
+  doc.text(r.emitente.razaoSocial ?? "—", MARGEM, y + 14);
+  doc.text(r.clienteNome ?? "—", meio, y + 14);
+
+  doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(...CINZA);
+  if (r.emitente.cnpj) doc.text(`CNPJ ${r.emitente.cnpj}`, MARGEM, y + 26);
+  if (r.clienteDoc) doc.text(r.clienteDoc, meio, y + 26);
+  if (r.emitente.endereco) {
+    doc.text(doc.splitTextToSize(r.emitente.endereco, meio - MARGEM - 20), MARGEM, y + 37);
+  }
+
+  y += 62;
+
+  // ── De onde vem ───────────────────────────────────────────────────────────
+  if (r.tickets.length > 0) {
+    y = secao(doc, "COMPOSIÇÃO", y, MARGEM, direita);
+
+    for (const t of r.tickets) {
+      y += 16;
+      doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(...TINTA);
+      doc.text(`Ticket ${t.numero}`, MARGEM, y);
+      if (t.titulo && t.titulo !== String(t.numero)) {
+        doc.setTextColor(...CINZA);
+        doc.text(doc.splitTextToSize(t.titulo, 280), MARGEM + 70, y);
+      }
+      doc.setFont("helvetica", "normal").setTextColor(...TINTA);
+      doc.text(formatarSemSimbolo(t.valor as Centavos), direita, y, { align: "right" });
+      doc.setDrawColor(...REGUA).line(MARGEM, y + 5, direita, y + 5);
+    }
+    y += 22;
+  }
+
+  // ── Como se paga ──────────────────────────────────────────────────────────
+  y = secao(doc, "PARCELAS", y, MARGEM, direita);
+
+  doc.setFont("helvetica", "bold").setFontSize(7).setTextColor(...CINZA);
+  doc.text("VENCIMENTO", MARGEM + 30, y + 12);
+  doc.text("SITUAÇÃO", MARGEM + 150, y + 12);
+  doc.text("VALOR", direita, y + 12, { align: "right" });
+  y += 12;
+  doc.setDrawColor(...REGUA).line(MARGEM, y + 5, direita, y + 5);
+
+  for (const p of r.parcelas) {
+    y += 16;
+    doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(...TINTA);
+    doc.text(String(p.numero), MARGEM, y);
+    doc.text(p.vencimento ? paraFormatoBR(p.vencimento.slice(0, 10) as DataISO) : "—", MARGEM + 30, y);
+
+    doc.setTextColor(...(p.pago ? VERDE : CINZA));
+    doc.text(p.pago ? "Paga" : "Em aberto", MARGEM + 150, y);
+
+    doc.setTextColor(...TINTA);
+    doc.text(formatarSemSimbolo(p.total as Centavos), direita, y, { align: "right" });
+    doc.setDrawColor(...REGUA).line(MARGEM, y + 5, direita, y + 5);
+  }
+
+  // ── Fechamento ────────────────────────────────────────────────────────────
+  y += 26;
+  const rotulo = direita - 150;
+  doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(...CINZA);
+  doc.text("Total", rotulo, y);
+  doc.text("Recebido", rotulo, y + 15);
+
+  doc.setTextColor(...TINTA);
+  doc.text(formatarSemSimbolo(r.total as Centavos), direita, y, { align: "right" });
+  doc.setTextColor(...VERDE);
+  doc.text(formatarSemSimbolo(r.pago as Centavos), direita, y + 15, { align: "right" });
+
+  doc.setDrawColor(...REGUA).line(rotulo, y + 22, direita, y + 22);
+
+  doc.setFont("helvetica", "bold").setFontSize(11).setTextColor(...TINTA);
+  doc.text("Em aberto", rotulo, y + 38);
+  doc.text(formatarSemSimbolo((r.total - r.pago) as Centavos), direita, y + 38, { align: "right" });
+
+  doc.setFont("helvetica", "normal").setFontSize(7.5).setTextColor(...CINZA);
+  doc.text(
+    `Emitido em ${paraFormatoBR(new Date().toISOString().slice(0, 10) as DataISO)}${emitidoPor ? ` por ${emitidoPor}` : ""}`,
+    MARGEM,
+    altura - MARGEM,
+  );
+  doc.text("1 / 1", direita, altura - MARGEM, { align: "right" });
+
+  doc.save(`conta-${r.numeroConta}.pdf`);
+}
+
+/** Titulo de secao com a regua embaixo. Repetido tres vezes; vale a funcao. */
+function secao(doc: jsPDF, titulo: string, y: number, esquerda: number, direita: number): number {
+  doc.setFont("helvetica", "bold").setFontSize(7).setTextColor(...CINZA);
+  doc.text(titulo, esquerda, y);
+  doc.setDrawColor(...REGUA).setLineWidth(0.6).line(esquerda, y + 6, direita, y + 6);
+  return y + 6;
+}
