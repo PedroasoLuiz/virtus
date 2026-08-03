@@ -16,3 +16,6 @@ next-env.d.ts
 # Contem segredos em claro (token Meta/WhatsApp). Ver docs/06.
 _legado/
 .vercel
+
+# Documentacao interna: fica no disco, fora do repositorio.
+docs/
