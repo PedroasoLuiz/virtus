@@ -132,6 +132,15 @@ export const faturaSchema = faturaResumoSchema.extend({
   tickets: z.array(
     z.object({
       ticketId: z.number(),
+      /*
+       * O numero por tenant, que e o que aparece na tela — o `ticketId` e
+       * chave interna e nunca e mostrado.
+       *
+       * Faltava aqui, e o Zod DESCARTA o que nao declara: o campo saia do
+       * servico preenchido e chegava na tela como undefined. So apareceu quando
+       * o icone ao lado saiu e a celula ficou visivelmente vazia.
+       */
+      numero: z.number(),
       valor: z.number(),
       titulo: z.string(),
       status: z.string(),
