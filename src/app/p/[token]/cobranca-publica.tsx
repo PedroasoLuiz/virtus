@@ -279,7 +279,7 @@ function Folha({
             {ticket.itens.map((i, n) => (
               <tr key={n}>
                 <Td>
-                  <div style={{ fontWeight: 600 }}>{i.servico ?? "Serviço"}</div>
+                  <div>{i.servico ?? "Serviço"}</div>
                   {i.descricao && <div style={{ color: CINZA }}>{i.descricao}</div>}
                   {i.despesas.map((d, k) => (
                     <div key={k} style={{ color: CINZA }}>
@@ -328,17 +328,11 @@ function Folha({
             <tbody>
               {ticket.cobranca.map((c) => (
                 <tr key={c.parcela}>
-                  <Td forte={c.atual}>{c.fatura}</Td>
-                  <Td forte={c.atual}>{c.parcela}</Td>
-                  <Td forte={c.atual}>
-                    {c.vencimento ? paraFormatoBR(c.vencimento as DataISO) : "—"}
-                  </Td>
-                  <Td direita forte={c.atual}>
-                    {formatarSemSimbolo(c.valor as Centavos)}
-                  </Td>
-                  <Td direita forte={c.atual}>
-                    {c.pago ? "Paga" : "Em aberto"}
-                  </Td>
+                  <Td>{c.fatura}</Td>
+                  <Td>{c.parcela}</Td>
+                  <Td>{c.vencimento ? paraFormatoBR(c.vencimento as DataISO) : "—"}</Td>
+                  <Td direita>{formatarSemSimbolo(c.valor as Centavos)}</Td>
+                  <Td direita>{c.pago ? "Paga" : "Em aberto"}</Td>
                 </tr>
               ))}
             </tbody>
@@ -401,8 +395,12 @@ function Folha({
 
 function Campo({ rotulo, valor }: { rotulo: string; valor: string }) {
   return (
-    <div style={{ display: "flex", lineHeight: 1.65 }}>
-      <span style={{ width: "18mm", fontSize: "8.5pt", color: CINZA }}>{rotulo}</span>
+    <div style={{ display: "flex", lineHeight: 1.65, whiteSpace: "nowrap" }}>
+      {/* Largura fixa alinha os tres valores na mesma coluna. `nowrap` porque
+          sem ele "Apuração" quebrava e o valor caía para a linha de baixo. */}
+      <span style={{ width: "18mm", flexShrink: 0, fontSize: "8.5pt", color: CINZA }}>
+        {rotulo}
+      </span>
       <span style={{ fontSize: "8.5pt", fontWeight: 700, color: TINTA }}>{valor}</span>
     </div>
   );
@@ -465,14 +463,18 @@ function Th({
   );
 }
 
+/**
+ * Celula de tabela: preta e sem negrito, sempre.
+ *
+ * O peso e do cabecalho, que e cinza. Negrito no corpo tira do cabecalho a unica
+ * marca que ele tem, e a tabela perde a hierarquia.
+ */
 function Td({
   children,
   direita,
-  forte,
 }: {
   children: React.ReactNode;
   direita?: boolean;
-  forte?: boolean;
 }) {
   return (
     <td
@@ -481,7 +483,7 @@ function Td({
         textAlign: direita ? "right" : "left",
         verticalAlign: "top",
         fontSize: "8.5pt",
-        fontWeight: forte ? 700 : 400,
+        fontWeight: 400,
         color: TINTA,
         lineHeight: 1.45,
         borderBottom: `0.3mm solid ${REGUA}`,
