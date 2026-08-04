@@ -49,7 +49,17 @@ export const GRUPOS_POR_MODULO: Partial<Record<Modulo, Grupo[]>> = {
       label: "Financeiro",
       icon: "faturas",
       items: [
-        { label: "Contas a receber", href: "/faturas" },
+        {
+          // O titulo e o recebimento sao o mesmo assunto visto dos dois lados:
+          // o que o cliente deve, e o que ele pagou. Separados no primeiro
+          // nivel, a pessoa precisava saber de antemao em qual dos dois procurar.
+          key: "financeiro-receber",
+          label: "Contas a receber",
+          items: [
+            { label: "Títulos", href: "/faturas" },
+            { label: "Recebimentos", href: "/recebimentos" },
+          ],
+        },
         { label: "Contas a pagar", href: "/contas-pagar" },
         {
           key: "financeiro-caixas",
@@ -57,9 +67,14 @@ export const GRUPOS_POR_MODULO: Partial<Record<Modulo, Grupo[]>> = {
           // No legado esses tres viviam juntos em `cadastro/caixase_bancos`.
           // Manter o agrupamento poupa o usuario de reaprender onde as coisas
           // estao.
+          //
+          // O extrato saiu daqui: ele e a segunda tela de "Contas e saldo", nao
+          // um destino proprio. Extrato sem conta escolhida e uma pergunta pela
+          // metade, e o item de menu obrigava a escolher a conta duas vezes.
           items: [
             { label: "Contas e saldo", href: "/contas" },
-            { label: "Extrato bancário", href: "/extrato" },
+            { label: "Inicialização de saldo", href: "/contas/inicializacao" },
+            { label: "Movimentações", href: "/movimentacoes" },
             { label: "Cartões", href: "/cartoes" },
           ],
         },

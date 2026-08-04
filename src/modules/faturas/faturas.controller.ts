@@ -9,7 +9,6 @@ import {
   faturaResumoSchema,
   faturaSchema,
   type AlterarStatusBody,
-  type BaixaBody,
   type CriarFaturaBody,
   type EnviarParcelaBody,
   type IdParam,
@@ -209,6 +208,12 @@ export async function abrirAnexo({
   );
 }
 
+export async function cancelar({ params, ctx }: Entrada<undefined, undefined, IdParam>) {
+  const empresaId = empresaObrigatoria(ctx);
+  await service.cancelarFatura(empresaId, ctx.usuarioId, params.id);
+  return ok(faturaSchema.parse(await service.obterFatura(empresaId, params.id)));
+}
+
 export async function excluirConta({ params, ctx }: Entrada<undefined, undefined, IdParam>) {
   await service.excluirConta(empresaObrigatoria(ctx), params.id);
   return noContent();
@@ -216,23 +221,4 @@ export async function excluirConta({ params, ctx }: Entrada<undefined, undefined
 
 export async function contasBancarias({ ctx }: Entrada<undefined, undefined, unknown>) {
   return ok(await service.contasBancarias(empresaObrigatoria(ctx)));
-}
-
-export async function registrarBaixa({ body, params, ctx }: Entrada<BaixaBody, undefined, IdParam>) {
-  const empresaId = empresaObrigatoria(ctx);
-
-  const fatura = await service.registrarBaixa(empresaId, ctx.usuarioId, params.id, {
-    data: body.data,
-    tipo: body.tipo,
-    contaBancariaId: body.contaBancariaId,
-    descricao: body.descricao,
-    observacoes: body.observacoes,
-    destinos: body.destinos.map((d) => ({
-      parcelaId: d.parcelaId,
-      valor: centavos(d.valor),
-      quitar: d.quitar,
-    })),
-  });
-
-  return created(faturaSchema.parse(fatura));
 }

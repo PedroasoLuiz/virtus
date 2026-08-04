@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { BotaoDeCabecalho, BotaoHistorico, Drawer } from "@/components/ui/drawer";
 import { useAvisos } from "@/components/ui/avisos";
-import { BaixaDrawer } from "./baixa-drawer";
+import { NovoRecebimentoDrawer } from "../recebimentos/novo-recebimento-drawer";
 import { Icon } from "@/components/layout/icones";
 import {
   CampoBloqueado,
@@ -11,6 +11,7 @@ import {
   PanelTabs,
 } from "@/components/ui/kit";
 import { TicketDrawer } from "../tickets/ticket-drawer";
+import { proximaAReceber } from "@/shared/domain/parcelas";
 import { formatarSemSimbolo, type Centavos } from "@/shared/utils/money";
 import { hoje, paraFormatoBR, type DataISO } from "@/shared/utils/datas";
 
@@ -63,7 +64,10 @@ type TicketDaFatura = {
 type Fatura = {
   id: number;
   numero: number;
+  clienteId: number | null;
   clienteNome: string | null;
+  /** Coluna própria no banco, não um status: a conta guarda em que estado foi cancelada. */
+  cancelada: boolean;
   apuracaoInicio: string | null;
   apuracaoFim: string | null;
   situacao: string;
@@ -118,8 +122,23 @@ function Conteudo({
   const [aba, setAba] = useState<"tickets" | "produtos" | "parcelas">("tickets");
   // Ticket aberto por cima da conta: o drawer empilha, o de tras nao fecha.
   const [ticketAberto, setTicketAberto] = useState<number | null>(null);
-  const [baixando, setBaixando] = useState(false);
+  // Guarda QUAL parcela, e nao um booleano: a baixa acontece sobre uma parcela
+  // escolhida na linha, e o drawer que abre mostra so ela.
+  const [baixando, setBaixando] = useState<number | null>(null);
   const { avisar, confirmar } = useAvisos();
+
+  async function cancelarConta() {
+    const r = await fetch(`/api/v1/faturas/${faturaId}/cancelamento`, { method: "PUT" });
+    const dados = await r.json().catch(() => null);
+
+    if (!r.ok) {
+      avisar("atencao", dados?.error?.message ?? "Não foi possível cancelar a cobrança");
+      return;
+    }
+
+    avisar("sucesso", "Cobrança cancelada", "A conta não é mais cobrável.");
+    setFatura(dados.data);
+  }
 
   async function excluirConta() {
     const r = await fetch(`/api/v1/faturas/${faturaId}`, { method: "DELETE" });
@@ -233,6 +252,11 @@ function Conteudo({
   const pago = fatura ? fatura.parcelas.filter((p) => p.pago).reduce((s, p) => s + p.total, 0) : 0;
   const temBaixa = fatura?.parcelas.some((p) => p.pago) ?? false;
 
+  // A unica que pode receber agora. As de tras dela ficam com o "Dar baixa"
+  // desabilitado, dizendo por que.
+  const proxima = fatura ? proximaAReceber(fatura.parcelas) : null;
+  const parcelaEmBaixa = fatura?.parcelas.find((p) => p.id === baixando) ?? null;
+
   return (
     <Drawer
       open
@@ -253,6 +277,34 @@ function Conteudo({
               <path d="M6 18H4a1 1 0 0 1-1-1v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5a1 1 0 0 1-1 1h-2" />
               <rect x="6" y="14" width="12" height="7" rx="1" />
             </BotaoDeCabecalho>
+
+            {/* Cancelar existe porque a falta dele custava caro: sem ele, a
+                saída para uma conta que não seria recebida era dar baixa com
+                valor zero, o que deixa no extrato um lançamento de R$ 0,00 e
+                marca como recebido um dinheiro que nunca entrou. */}
+            {!fatura.cancelada && (
+              <BotaoDeCabecalho
+                rotulo={
+                  temBaixa
+                    ? "Conta com parcela recebida não é cancelada; estorne o recebimento antes"
+                    : "Cancelar cobrança"
+                }
+                desabilitado={temBaixa}
+                onClick={() =>
+                  confirmar(
+                    `Cancelar a cobrança da conta ${fatura.numero}?`,
+                    "Cancelar cobrança",
+                    cancelarConta,
+                    "A conta para de ser cobrável e sai das listagens do dia a dia. O histórico e os documentos ficam.",
+                  )
+                }
+              >
+                {/* Círculo cortado: proibido, e não um X, que aqui significaria
+                    fechar o drawer. */}
+                <circle cx="12" cy="12" r="9" />
+                <path d="M5.6 5.6l12.8 12.8" />
+              </BotaoDeCabecalho>
+            )}
 
             <BotaoDeCabecalho
               rotulo={
@@ -468,10 +520,11 @@ function Conteudo({
                 <MenuDeLinha key="a">
                   {(fechar) => (
                     <AcoesDaParcela
-                      aoBaixar={() => setBaixando(true)}
+                      aoBaixar={() => setBaixando(p.id)}
                       fatura={fatura}
                       emitidoPor={emitidoPor}
                       parcela={p}
+                      proxima={proxima}
                       bloqueado={p.pagamentoId != null || fatura.situacao === "CANCELADA"}
                       aoMudar={recarregar}
                       fechar={fechar}
@@ -484,13 +537,28 @@ function Conteudo({
         </>
       )}
 
-      {baixando && fatura && (
-        <BaixaDrawer
-          faturaId={fatura.id}
-          numero={fatura.numero}
-          parcelas={fatura.parcelas}
-          aoBaixar={(nova) => setFatura(nova as Fatura)}
-          onClose={() => setBaixando(false)}
+      {/*
+       * Receber abre o MESMO drawer da tela de recebimentos, so que ja com o
+       * cliente escolhido e esta parcela preenchida.
+       *
+       * Antes havia uma tela de baixa propria aqui. Duas telas para o mesmo fato
+       * sao dois lugares para manter corretos, e elas divergem: a de recebimento
+       * ja sabia repartir um pagamento entre contas, e a daqui nunca saberia,
+       * porque so enxerga uma conta.
+       *
+       * A lista de clientes tem um item so de proposito: o pagador esta decidido
+       * pela conta que se esta olhando.
+       */}
+      {fatura && parcelaEmBaixa && fatura.clienteId != null && (
+        <NovoRecebimentoDrawer
+          clientes={[{ id: fatura.clienteId, nome: fatura.clienteNome ?? "Cliente" }]}
+          clienteInicial={fatura.clienteId}
+          parcelaInicial={parcelaEmBaixa.id}
+          onClose={() => setBaixando(null)}
+          aoCriar={() => {
+            setBaixando(null);
+            recarregar();
+          }}
         />
       )}
 
@@ -1162,6 +1230,7 @@ function AcoesDaParcela({
   fatura,
   emitidoPor,
   parcela,
+  proxima,
   bloqueado,
   aoMudar,
   fechar,
@@ -1170,6 +1239,8 @@ function AcoesDaParcela({
   fatura: Fatura;
   emitidoPor: string;
   parcela: Fatura["parcelas"][number];
+  /** A parcela da vez. Nula quando a conta nao tem mais nada em aberto. */
+  proxima: Fatura["parcelas"][number] | null;
   bloqueado: boolean;
   aoMudar: () => void;
   fechar: () => void;
@@ -1265,10 +1336,11 @@ function AcoesDaParcela({
         </AnexarDocumento>
       )}
 
-      {/* Envelope com seta saindo: o aviaozinho de papel diz "mensagem", mas nao
-          diz que vai por e-mail, e aqui o meio importa porque o que sai leva a
-          cobranca. */}
-      {!parcela.comprovante && fatura.situacao !== "CANCELADA" && (
+      {/* So depois da baixa: comprovante e a prova de que o dinheiro entrou, e
+          anexar um antes de existir recebimento cria uma parcela em aberto com
+          prova de pagamento — a contradicao que o conferente do extrato leva
+          meia hora para desfazer. */}
+      {parcela.pago && !parcela.comprovante && fatura.situacao !== "CANCELADA" && (
         <AnexarDocumento
           tipo="comprovante"
           rotulo="Anexar comprovante"
@@ -1289,10 +1361,20 @@ function AcoesDaParcela({
 
       {/* Dar baixa mora aqui, e nao no rodape: quem recebe olha a LINHA da
           parcela que venceu, e o botao no rodape obrigava a achar de novo, na
-          tela seguinte, qual delas era. */}
+          tela seguinte, qual delas era.
+
+          Aparece em todas as parcelas abertas, mas so a da vez responde. O item
+          desabilitado com motivo ensina a regra; escondido, a acao simplesmente
+          sumiria de uma linha e estaria em outra, sem dizer por que. */}
       {!parcela.pago && fatura.situacao !== "CANCELADA" && (
         <ItemDoMenu
-          rotulo="Dar baixa"
+          rotulo="Receber"
+          desabilitado={proxima?.id !== parcela.id}
+          motivo={
+            proxima && proxima.id !== parcela.id
+              ? `A parcela ${proxima.numero} vence antes e ainda está em aberto`
+              : undefined
+          }
           onClick={() => {
             fechar();
             aoBaixar();

@@ -330,6 +330,90 @@ export const tdNum: React.CSSProperties = {
   fontVariantNumeric: "tabular-nums",
 };
 
+/**
+ * A coluna de acoes, padronizada.
+ *
+ * Cada acao e um icone dentro da sua propria moldura, e nao um icone solto:
+ * solto, o alvo de clique fica sendo o desenho, que tem buracos, e a mira falha
+ * na borda. A moldura tambem separa visualmente as acoes do dado da linha, que
+ * e texto sem contorno.
+ *
+ * Alinhada a DIREITA e sempre a ultima coluna: e o unico lugar da tabela onde se
+ * clica para agir, e o olho aprende o endereco uma vez so.
+ */
+export function AcoesDaLinha({ children }: { children: React.ReactNode }) {
+  return (
+    <span style={{ display: "inline-flex", gap: 4, justifyContent: "flex-end", width: "100%" }}>
+      {children}
+    </span>
+  );
+}
+
+export function BotaoDeAcao({
+  rotulo,
+  onClick,
+  desabilitado,
+  perigo,
+  children,
+}: {
+  /** Vai no `title` e no `aria-label`: icone sozinho nao se le. */
+  rotulo: string;
+  onClick: () => void;
+  desabilitado?: boolean;
+  perigo?: boolean;
+  /** Os tracos do icone, na grade de 16. */
+  children: React.ReactNode;
+}) {
+  const [hover, setHover] = useState(false);
+
+  return (
+    <button
+      type="button"
+      title={rotulo}
+      aria-label={rotulo}
+      disabled={desabilitado}
+      onClick={(e) => {
+        // A linha costuma ter clique proprio; a acao nao dispara os dois.
+        e.stopPropagation();
+        onClick();
+      }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: "inline-grid",
+        placeItems: "center",
+        width: 26,
+        height: 26,
+        flexShrink: 0,
+        border: "1px solid var(--border)",
+        borderRadius: "var(--radius-sm)",
+        background: hover && !desabilitado ? "var(--surface-2)" : "var(--surface)",
+        padding: 0,
+        color: desabilitado
+          ? "var(--text-disabled)"
+          : perigo
+            ? "var(--danger)"
+            : "var(--text-secondary)",
+        cursor: desabilitado ? "not-allowed" : "pointer",
+        transition: "background var(--dur) var(--ease)",
+      }}
+    >
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        {children}
+      </svg>
+    </button>
+  );
+}
+
 export function SkeletonRows({ cols, rows = 8 }: { cols: number; rows?: number }) {
   return (
     <>

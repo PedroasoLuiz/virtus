@@ -14,7 +14,7 @@ import { paginacaoSchema } from "@/shared/utils/paginacao";
  * de revalidar "por garantia" camada adentro.
  */
 
-import { STATUS_FATURA, TIPOS_DE_RECEBIMENTO } from "@/modules/faturas/faturas.types";
+import { STATUS_FATURA } from "@/modules/faturas/faturas.types";
 
 /** Espelha os valores realmente gravados no banco. */
 export const statusFaturaSchema = z.enum(STATUS_FATURA);
@@ -84,17 +84,6 @@ export const tipoDocumentoQuerySchema = z.object({
 /** Permite mandar para outro endereco sem mexer no cadastro do cliente. */
 export const enviarParcelaBodySchema = z.object({
   para: z.string().trim().email("E-mail invalido").nullish(),
-});
-
-export const baixaBodySchema = z.object({
-  data: dataISOSchema,
-  tipo: z.enum(TIPOS_DE_RECEBIMENTO),
-  contaBancariaId: idSchema,
-  descricao: textoLongoSchema.nullish(),
-  observacoes: textoLongoSchema.nullish(),
-  destinos: z
-    .array(z.object({ parcelaId: idSchema, valor: centavosPositivoSchema, quitar: z.boolean().default(false) }))
-    .min(1, "Escolha ao menos uma parcela"),
 });
 
 export const alterarStatusBodySchema = z.object({
@@ -196,4 +185,3 @@ export type ParcelaParam = z.infer<typeof parcelaParamSchema>;
 export type TipoDocumentoQuery = z.infer<typeof tipoDocumentoQuerySchema>;
 export type EnviarParcelaBody = z.infer<typeof enviarParcelaBodySchema>;
 
-export type BaixaBody = z.infer<typeof baixaBodySchema>;

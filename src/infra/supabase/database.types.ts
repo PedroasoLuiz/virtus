@@ -226,15 +226,42 @@ export type PagamentoParcelaRow = {
   fkPagamento: number;
   fkParcela: number;
   valor: number;
+  /**
+   * Acrescimo recebido junto. Fica FORA de `valor` de proposito: o gatilho
+   * `recalcula_baixa_da_parcela` soma so `valor` para decidir se a parcela
+   * quitou, entao juros e multa entram no caixa sem abater divida nenhuma.
+   */
+  juros: number;
+  multa: number;
+  /** Quanto esta baixa perdoou. Existe para o estorno saber o que devolver. */
+  desconto: number;
   fkUserCriacao: string | null;
+};
+
+/** Multa e juros por atraso. Sem cliente = padrao da empresa. */
+export type ParametroCobrancaRow = {
+  id: number;
+  created_at: string;
+  updated_at: string | null;
+  fkUserCriacao: string | null;
+  fkUserModificacao: string | null;
+  fkEmpresa: number;
+  fkCliente: number | null;
+  multa_percentual: number;
+  juros_percentual: number;
+  juros_periodo: "MES" | "DIA";
+  carencia_dias: number;
 };
 
 export type PagamentoRow = {
   id: number;
   created_at: string;
+  updated_at: string | null;
   fkEmpresa: number | null;
   fkContaBancaria: number | null;
   fkUserCriacao: string | null;
+  fkUserModificacao: string | null;
+  /** Conferido no extrato do banco. Gesto humano: nada marca sozinho. */
   conciliado: boolean | null;
   data: string | null;
   tipo: string | null;
@@ -251,6 +278,10 @@ export type PagamentoRow = {
 
 export type ContaBancariaRow = {
   id: number;
+  created_at: string;
+  updated_at: string | null;
+  fkUserCriacao: string | null;
+  fkUserModificacao: string | null;
   apelido: string | null;
   banco: string | null;
   agencia: string | null;
@@ -258,6 +289,20 @@ export type ContaBancariaRow = {
   tipo: string | null;
   ativo: boolean | null;
   fkEmpresa: number | null;
+  logo: string | null;
+  limite: number | null;
+  /** Saldo de partida. O saldo de hoje e ele mais tudo que passou. */
+  saldoinicial: number | null;
+};
+
+/** Saldo calculado por conta. View: saldo inicial + entradas - saidas. */
+export type SaldoRow = {
+  conta_id: number;
+  apelido: string | null;
+  banco: string | null;
+  conta: string | null;
+  limite: number | null;
+  saldo: number | null;
 };
 
 export type FaturaAnexoRow = {
@@ -565,6 +610,8 @@ export type Database = {
       pagamentos: { Row: PagamentoRow; Insert: Partial<PagamentoRow>; Update: Partial<PagamentoRow>; Relationships: [] };
       pagamentosxparcelas: { Row: PagamentoParcelaRow; Insert: Partial<PagamentoParcelaRow>; Update: Partial<PagamentoParcelaRow>; Relationships: [] };
       contasbancarias: { Row: ContaBancariaRow; Insert: Partial<ContaBancariaRow>; Update: Partial<ContaBancariaRow>; Relationships: [] };
+      parametroscobranca: { Row: ParametroCobrancaRow; Insert: Partial<ParametroCobrancaRow>; Update: Partial<ParametroCobrancaRow>; Relationships: [] };
+      vwsaldo: { Row: SaldoRow; Insert: never; Update: never; Relationships: [] };
       faturasanexos: { Row: FaturaAnexoRow; Insert: Partial<FaturaAnexoRow>; Update: Partial<FaturaAnexoRow>; Relationships: [] };
       faturasparcelas: { Row: FaturaParcelaRow; Insert: Partial<FaturaParcelaRow>; Update: Partial<FaturaParcelaRow>; Relationships: [] };
       contaspagar: { Row: ContaPagarRow; Insert: Partial<ContaPagarRow>; Update: Partial<ContaPagarRow>; Relationships: [] };
@@ -636,6 +683,25 @@ export type Database = {
       salvar_itens_do_ticket: {
         Args: { p_ordem: number; p_usuario: string | null; p_itens: unknown };
         Returns: undefined;
+      };
+      /**
+       * Extrato de uma conta num periodo. Devolve `{ conta, saldo_inicial,
+       * movimentos }` — o saldo de abertura soma tudo que veio ANTES do periodo,
+       * que e a parte que erraria se fosse refeita no aplicativo.
+       */
+      /** Saldo de uma conta imediatamente antes de uma data. Alimenta a abertura do extrato. */
+      saldo_da_conta_antes: {
+        Args: { p_conta: number; p_data: string };
+        Returns: number;
+      };
+      get_extratobancario: {
+        Args: {
+          pdatainicio: string;
+          pdatafim: string;
+          pfkempresa: number;
+          pfkcontabancaria: number;
+        };
+        Returns: unknown;
       };
     };
     Enums: { [_ in never]: never };

@@ -1,7 +1,6 @@
 import { BusinessRuleError, NotFoundError } from "@/shared/errors/app-error";
 import {
   centavos,
-  subtrair,
   formatarSemSimbolo,
   somar,
   type Centavos,
@@ -30,7 +29,6 @@ import {
   type Fatura,
   type FaturaResumo,
   type FiltroFaturas,
-  type BaixaNova,
   type OrigemNova,
   type StatusFatura,
 } from "@/modules/faturas/faturas.types";
@@ -597,69 +595,4 @@ export async function excluirConta(empresaId: number, faturaId: number): Promise
 
 export function contasBancarias(empresaId: number) {
   return repo.listarContasBancarias(empresaId);
-}
-
-/**
- * Registra o recebimento e reparte entre as parcelas.
- *
- * O gatilho do banco cuida do resto: recalcula `pago` de cada parcela e move o
- * status da conta. Nada disso e escrito daqui — duas fontes para o mesmo fato
- * divergem no primeiro caminho que esquecer de atualizar uma delas.
- */
-export async function registrarBaixa(
-  empresaId: number,
-  usuarioId: string,
-  faturaId: number,
-  entrada: BaixaNova,
-): Promise<Fatura> {
-  const fatura = await obterFatura(empresaId, faturaId);
-
-  if (fatura.cancelada) throw new BusinessRuleError("Conta cancelada nao recebe baixa");
-
-  const total = entrada.destinos.reduce<Centavos>((soma, d) => somar(soma, d.valor), ZERO);
-  if (total <= 0) throw new BusinessRuleError("Informe o valor recebido");
-
-  /*
-   * Cada destino e conferido contra o que AQUELA parcela ainda deve.
-   *
-   * Sem isso, uma distribuicao torta deixaria uma parcela recebendo mais do que
-   * vale e outra ficando aberta — e o total da baixa bateria, escondendo o erro.
-   */
-  for (const d of entrada.destinos) {
-    const parcela = fatura.parcelas.find((p) => p.id === d.parcelaId);
-
-    if (!parcela) throw new NotFoundError("Parcela nao encontrada nesta conta");
-
-    const emAberto = subtrair(parcela.total, parcela.recebido);
-    if (emAberto <= 0) {
-      throw new BusinessRuleError(`A parcela ${parcela.numero} ja esta quitada.`);
-    }
-    if (d.valor > emAberto) {
-      throw new BusinessRuleError(
-        `A parcela ${parcela.numero} tem apenas ${formatarSemSimbolo(emAberto)} em aberto.`,
-      );
-    }
-  }
-
-  /*
-   * Quem escolheu quitar tem a diferenca abatida ANTES do rateio: o gatilho
-   * compara recebido com o total, e o total precisa ja estar reduzido quando ele
-   * rodar. Na ordem inversa a parcela ficaria um instante "nao paga".
-   */
-  for (const d of entrada.destinos) {
-    if (!d.quitar) continue;
-
-    const parcela = fatura.parcelas.find((p) => p.id === d.parcelaId)!;
-    const novoTotal = somar(parcela.recebido, d.valor);
-    const diferenca = subtrair(parcela.total, novoTotal);
-
-    if (diferenca > 0) {
-      await repo.encerrarDiferenca(d.parcelaId, usuarioId, novoTotal, diferenca);
-    }
-  }
-
-  const descricao = `Recebimento da conta ${fatura.numero}${fatura.clienteNome ? ` - ${fatura.clienteNome}` : ""}`;
-  await repo.registrarBaixa(empresaId, usuarioId, entrada, total, descricao);
-
-  return obterFatura(empresaId, faturaId);
 }

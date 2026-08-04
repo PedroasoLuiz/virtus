@@ -173,6 +173,87 @@ export function excluirParcela(
   return { excluir: idExcluir, atualizar };
 }
 
+// ── Ordem de recebimento ────────────────────────────────────────────────────
+
+/**
+ * O minimo para saber se uma parcela ainda espera dinheiro.
+ *
+ * Numeros crus, e nao `Centavos`/`DataISO`: a mesma regra roda no servico e na
+ * tela, e o componente de tela nao carrega os tipos de dominio. Os branded types
+ * entram aqui sem conversao, porque sao numero e string por baixo.
+ */
+export type ParcelaNaFila = {
+  id: number;
+  numero: number;
+  vencimento: string | null;
+  total: number;
+  recebido: number;
+  pago: boolean;
+};
+
+export function esperaDinheiro(p: ParcelaNaFila): boolean {
+  return !p.pago && p.total - p.recebido > 0;
+}
+
+/**
+ * A ordem em que as parcelas sao recebidas: vencimento manda, o numero so
+ * desempata.
+ *
+ * Parcela sem vencimento vai para o FIM e nao para o comeco: nao se sabe quando
+ * ela vence, e travar o titulo inteiro atras de uma data que ninguem preencheu
+ * seria pior do que deixa-la por ultimo.
+ */
+export function filaDeRecebimento<T extends ParcelaNaFila>(parcelas: T[]): T[] {
+  const chave = (p: T) => p.vencimento ?? "9999-12-31";
+
+  return [...parcelas].sort((a, b) =>
+    chave(a) === chave(b) ? a.numero - b.numero : chave(a) < chave(b) ? -1 : 1,
+  );
+}
+
+/**
+ * A unica parcela que pode receber agora. Nula quando nao ha nada em aberto.
+ *
+ * Receber fora de ordem quebra a leitura do saldo: com a 3 baixada e a 1 em
+ * aberto, "em atraso" e "a vencer" deixam de dizer o que dizem, e quem deve a
+ * parcela mais velha aparece em dia na listagem. Quem quer encerrar a primeira
+ * sem receber usa o desconto da baixa, que registra a decisao; pular nao
+ * registra nada.
+ */
+export function proximaAReceber<T extends ParcelaNaFila>(parcelas: T[]): T | null {
+  return filaDeRecebimento(parcelas).find(esperaDinheiro) ?? null;
+}
+
+/**
+ * Qual parcela impede este recebimento. Nula quando a ordem esta respeitada.
+ *
+ * Nao proibe quitar varias de uma vez: proibe DEIXAR uma para tras. Um dinheiro
+ * que cobre as parcelas 1, 2 e 3 passa; um que cobre a 2 sem fechar a 1, nao.
+ *
+ * Vale por titulo, e nao entre titulos: duas contas do mesmo cliente sao acordos
+ * independentes, e travar a segunda porque a primeira atrasou impediria de
+ * receber um dinheiro que o cliente esta pagando de verdade.
+ */
+export function paradaNaFila<T extends ParcelaNaFila>(
+  parcelas: T[],
+  destinos: { parcelaId: number; valor: number; quitar?: boolean }[],
+): T | null {
+  const porDestino = new Map(destinos.map((d) => [d.parcelaId, d]));
+  let pendente: T | null = null;
+
+  for (const p of filaDeRecebimento(parcelas).filter(esperaDinheiro)) {
+    const destino = porDestino.get(p.id);
+    if (destino && pendente) return pendente;
+
+    // Sobra depois desta baixa. Quem escolheu quitar fecha a parcela mesmo
+    // recebendo menos, entao nao segura a fila.
+    const sobra = p.total - p.recebido - (destino?.valor ?? 0);
+    if (!pendente && sobra > 0 && !destino?.quitar) pendente = p;
+  }
+
+  return null;
+}
+
 // ── Verificacao ─────────────────────────────────────────────────────────────
 
 /**

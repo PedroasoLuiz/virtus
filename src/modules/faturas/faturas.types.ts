@@ -189,21 +189,6 @@ export const TIPOS_DE_RECEBIMENTO = [
 
 export type TipoDeRecebimento = (typeof TIPOS_DE_RECEBIMENTO)[number];
 
-export type BaixaNova = {
-  data: DataISO;
-  tipo: TipoDeRecebimento;
-  contaBancariaId: number | null;
-  descricao?: string | null;
-  observacoes?: string | null;
-  /**
-   * `quitar` fecha a parcela mesmo recebendo menos: a diferenca vira DESCONTO.
-   *
-   * Sem essa escolha o sistema decidiria sozinho o que fazer com os 10 reais que
-   * faltaram — e as duas respostas sao legitimas: o cliente ainda deve, ou voce
-   * abriu mao. So quem recebeu sabe qual foi.
-   */
-  destinos: { parcelaId: number; valor: Centavos; quitar?: boolean }[];
-};
 
 export type OrigemNova = {
   ticketId: number;

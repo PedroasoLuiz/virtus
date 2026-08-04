@@ -6,7 +6,6 @@ import { intervalo, type Paginacao, type Pagina } from "@/shared/utils/paginacao
 import {
   STATUS_FATURA,
   type AnexoDaFatura,
-  type BaixaNova,
   type ContaBancaria,
   type Fatura,
   type FaturaResumo,
@@ -795,101 +794,4 @@ export async function listarContasBancarias(empresaId: number): Promise<ContaBan
       primeiroPreenchido(c.apelido, c.banco ? `${c.banco}${c.conta ? ` · ${c.conta}` : ""}` : null) ??
       `Conta ${c.id}`,
   }));
-}
-
-/**
- * Grava a baixa: o movimento em `pagamentos` e o rateio em `pagamentosxparcelas`.
- *
- * `pagamentos` e o EXTRATO — o que entrou no banco, quando e em qual conta. O
- * rateio e outra pergunta: quanto deste dinheiro foi para cada parcela. Sem os
- * dois, um PIX de 3.000 nao consegue quitar tres parcelas de 1.000.
- *
- * ⚠️ Sem transacao entre as duas chamadas — limitacao do PostgREST. Se o rateio
- * falhar, o pagamento e apagado no `catch`: melhor nao existir do que existir
- * sem destino, virando dinheiro no extrato que nenhuma conta reconhece.
- */
-export async function registrarBaixa(
-  empresaId: number,
-  usuarioId: string,
-  entrada: BaixaNova,
-  total: Centavos,
-  descricao: string,
-): Promise<number> {
-  const supabase = await serverClient();
-
-  const { data, error } = await supabase
-    .from("pagamentos")
-    .insert({
-      fkEmpresa: empresaId,
-      fkUserCriacao: usuarioId,
-      fkContaBancaria: entrada.contaBancariaId ?? null,
-      data: entrada.data,
-      valor: paraBanco(total),
-      tipo: entrada.tipo,
-      // ENTRADA: e conta a RECEBER. A mesma tabela serve os dois lados, e a
-      // natureza e o que separa o extrato em dinheiro que entra e que sai.
-      natureza: "ENTRADA",
-      origem: "FATURA",
-      descricao: entrada.descricao?.trim() || descricao,
-      observacoes: entrada.observacoes?.trim() || null,
-      conciliado: false,
-    })
-    .select("id")
-    .single();
-
-  if (error) throw error;
-  const pagamentoId = data.id;
-
-  try {
-    const { error: erroRateio } = await supabase.from("pagamentosxparcelas").insert(
-      entrada.destinos.map((d) => ({
-        fkPagamento: pagamentoId,
-        fkParcela: d.parcelaId,
-        valor: paraBanco(d.valor),
-        fkUserCriacao: usuarioId,
-      })),
-    );
-    if (erroRateio) throw erroRateio;
-  } catch (erro) {
-    await supabase.from("pagamentos").delete().eq("id", pagamentoId);
-    throw erro;
-  }
-
-  return pagamentoId;
-}
-
-/**
- * Fecha a diferenca como desconto.
- *
- * Some do saldo sem passar pelo caixa: nao e dinheiro que entrou, e cobranca que
- * deixou de existir. O `total` da parcela cai junto, para que "recebido >=
- * total" feche sozinho no gatilho — e para que a soma das parcelas continue
- * batendo com o que a conta realmente vale.
- */
-export async function encerrarDiferenca(
-  parcelaId: number,
-  usuarioId: string,
-  novoTotal: Centavos,
-  descontoAdicional: Centavos,
-): Promise<void> {
-  const supabase = await serverClient();
-  const { data, error } = await supabase
-    .from("faturasparcelas")
-    .select("desconto")
-    .eq("id", parcelaId)
-    .single();
-
-  if (error) throw error;
-
-  const { error: erroUpdate } = await supabase
-    .from("faturasparcelas")
-    .update({
-      total: paraBanco(novoTotal),
-      desconto: (data.desconto ?? 0) + paraBanco(descontoAdicional),
-      updated_at: new Date().toISOString(),
-      fkUserModificacao: usuarioId,
-    })
-    .eq("id", parcelaId);
-
-  if (erroUpdate) throw erroUpdate;
 }
