@@ -79,13 +79,9 @@ const SEM_DATA = "9999-12-31";
 export function CobrancasQuadro({
   parcelas,
   orcamentos,
-  emAberto,
-  vencido,
 }: {
   parcelas: ParcelaDoCliente[];
   orcamentos: OrcamentoDoCliente[];
-  emAberto: Centavos;
-  vencido: Centavos;
 }) {
   const [busca, setBusca] = useState("");
 
@@ -155,16 +151,6 @@ export function CobrancasQuadro({
         <PageHeader title="Minhas cobranças">
           <SearchInput value={busca} onSearch={setBusca} />
         </PageHeader>
-
-        {/* Vencido só aparece quando existe: um "R$ 0,00 vencido" permanente
-            ensina a ignorar o número justamente quando ele passa a importar.
-
-            `0 16px` é o mesmo recuo lateral do quadro logo abaixo: com 4px, os
-            totais começavam antes da primeira coluna e nada alinhava. */}
-        <div style={{ display: "flex", gap: 24, padding: "0 16px 14px" }}>
-          <Total rotulo="Em aberto" valor={emAberto} />
-          {vencido > 0 && <Total rotulo="Vencido" valor={vencido} alerta />}
-        </div>
 
         <Quadro
           colunas={COLUNAS}
@@ -306,8 +292,16 @@ function RodapeDoCartao({ cartao }: { cartao: Cartao }) {
   const recebido = cartao.recebido > 0 ? cartao.recebido : null;
   const encerrada = !emAberto && !recebido ? cartao.total : null;
 
+  /*
+   * Fragmento com DOIS filhos, e não um `div`.
+   *
+   * A faixa do `Quadro` já é `flex` com `space-between`: envolvendo tudo num
+   * elemento só, ele virava o único filho e ficava à esquerda, com o valor
+   * colado nos ícones. Dois filhos diretos é o que a faixa espera para jogar um
+   * em cada ponta.
+   */
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+    <>
       <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
         {cartao.token && cartao.temBoleto && (
           <BaixarDocumento tipo="boleto" token={cartao.token} />
@@ -320,8 +314,6 @@ function RodapeDoCartao({ cartao }: { cartao: Cartao }) {
         )}
       </span>
 
-      <span style={{ flex: 1 }} />
-
       <span
         style={{
           display: "inline-flex",
@@ -330,6 +322,7 @@ function RodapeDoCartao({ cartao }: { cartao: Cartao }) {
           fontSize: "var(--text-sm)",
           fontWeight: "var(--fw-semi)",
           fontVariantNumeric: "tabular-nums",
+          whiteSpace: "nowrap",
         }}
       >
         {emAberto !== null && (
@@ -348,7 +341,7 @@ function RodapeDoCartao({ cartao }: { cartao: Cartao }) {
           </span>
         )}
       </span>
-    </div>
+    </>
   );
 }
 
@@ -408,25 +401,5 @@ function BaixarDocumento({ tipo, token }: { tipo: "boleto" | "nfs"; token: strin
         )}
       </svg>
     </a>
-  );
-}
-
-function Total({ rotulo, valor, alerta }: { rotulo: string; valor: Centavos; alerta?: boolean }) {
-  return (
-    <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-      <span className="rotulo" style={{ fontSize: "var(--text-xs)" }}>
-        {rotulo}
-      </span>
-      <span
-        style={{
-          fontSize: "var(--text-xl)",
-          fontWeight: "var(--fw-semi)",
-          fontVariantNumeric: "tabular-nums",
-          color: alerta ? "var(--danger-text)" : "var(--text-primary)",
-        }}
-      >
-        {formatarSemSimbolo(valor)}
-      </span>
-    </div>
   );
 }

@@ -11,18 +11,11 @@ import { emitenteEscolhido } from "./emitente";
  * mais para conferir.
  */
 export default async function PortalPage() {
-  const { clientes, parcelas, orcamentos, emAberto, vencido } = await carteira(
-    await emitenteEscolhido(),
-  );
+  const { clientes, parcelas, orcamentos } = await carteira(await emitenteEscolhido());
 
   if (clientes.length === 0) return <SemAcesso />;
 
   return (
-    <CobrancasQuadro
-      parcelas={parcelas}
-      orcamentos={orcamentos}
-      emAberto={emAberto}
-      vencido={vencido}
-    />
+    <CobrancasQuadro parcelas={parcelas} orcamentos={orcamentos} />
   );
 }
