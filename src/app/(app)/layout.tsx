@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { Sidebar } from "@/components/layout/sidebar";
 import { COOKIE_SIDEBAR } from "@/components/layout/cookies";
 import { listar as listarFavoritos } from "@/modules/favoritos/favoritos.repository";
@@ -16,6 +17,20 @@ import { Avisos } from "@/components/ui/avisos";
  */
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const sessao = await sessaoUI();
+
+  /*
+   * Usuario externo nao entra no sistema, vai para o portal.
+   *
+   * A RLS ja o deixaria de maos vazias — `empresas_do_usuario()` nao devolve
+   * nada para ele —, mas o resultado seria um sistema inteiro em branco, com
+   * menu, telas e nenhum dado. Redirecionar e dizer a verdade: este nao e o
+   * lugar dele.
+   *
+   * ⚠️ Isto NAO e a protecao. A protecao e a RLS; se este redirect sumisse, ele
+   * continuaria sem ver dado nenhum.
+   */
+  if (sessao.externo) redirect("/portal");
+
   const recolhida = (await cookies()).get(COOKIE_SIDEBAR)?.value === "1";
 
   // Favorito e dado, nao preferencia de navegador: vive na tabela

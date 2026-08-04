@@ -11,6 +11,14 @@ export type UsuarioAutenticado = {
   id: string;
   email: string;
   nome: string | null;
+  /**
+   * Pessoa do CLIENTE, nao da casa. Vai para o portal, nao para o sistema.
+   *
+   * Opcional porque nem todo caminho que monta este tipo consulta o perfil; na
+   * duvida vale `false`, que e o mais restritivo — manda para o app, onde a RLS
+   * nao devolve nada a um externo.
+   */
+  externo?: boolean;
 };
 
 /**
@@ -19,4 +27,6 @@ export type UsuarioAutenticado = {
  */
 export type ResultadoLogin =
   | { proximo: "app"; usuario: UsuarioAutenticado; empresaId: number }
-  | { proximo: "escolher-empresa"; usuario: UsuarioAutenticado; empresas: EmpresaDoUsuario[] };
+  | { proximo: "escolher-empresa"; usuario: UsuarioAutenticado; empresas: EmpresaDoUsuario[] }
+  /** Pessoa do cliente: vai para o portal, sem escolher empresa nenhuma. */
+  | { proximo: "portal"; usuario: UsuarioAutenticado };

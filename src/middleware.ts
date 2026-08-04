@@ -81,8 +81,16 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(destino);
   }
 
-  // Logado sem empresa escolhida: a casca do app nao tem tenant para consultar.
-  if (user && !ehPublica && pathname !== "/selecionar-empresa") {
+  /*
+   * Logado sem empresa escolhida: a casca do app nao tem tenant para consultar.
+   *
+   * `/portal` fica de fora porque ele NAO tem tenant por definicao: quem entra
+   * ali e pessoa do cliente, e o escopo dela e por cliente, nao por empresa.
+   * Sem esta excecao o externo cairia em `/selecionar-empresa`, que para ele
+   * lista zero empresas — um beco sem saida logo depois de um login bem
+   * sucedido.
+   */
+  if (user && !ehPublica && pathname !== "/selecionar-empresa" && !pathname.startsWith("/portal")) {
     if (!request.cookies.get(COOKIE_EMPRESA)) {
       const destino = request.nextUrl.clone();
       destino.pathname = "/selecionar-empresa";

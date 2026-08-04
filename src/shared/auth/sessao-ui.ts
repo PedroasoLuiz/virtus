@@ -19,6 +19,13 @@ export type SessaoUI = {
   usuarioNome: string | null;
   /** Mais de uma empresa disponivel: habilita "trocar de empresa" no menu. */
   podeTrocarEmpresa: boolean;
+  /**
+   * Pessoa do cliente, nao da casa. Vai para o portal.
+   *
+   * Fica aqui e nao no `Contexto` porque e decisao de TELA: a API nao precisa
+   * saber quem e externo, ja que a RLS responde por cliente sozinha.
+   */
+  externo: boolean;
   demo: boolean;
 };
 
@@ -37,6 +44,7 @@ export async function sessaoUI(): Promise<SessaoUI> {
       empresaNome: "Empresa de demonstração",
       usuarioNome: "Demonstração",
       podeTrocarEmpresa: false,
+      externo: false,
       demo: true,
     };
   }
@@ -57,6 +65,7 @@ export async function sessaoUI(): Promise<SessaoUI> {
     empresaNome: atual?.nome ?? null,
     usuarioNome: usuario?.nome ?? null,
     podeTrocarEmpresa: empresas.length > 1,
+    externo: usuario?.externo ?? false,
     demo: false,
   };
 }

@@ -43,6 +43,11 @@ export async function loginAction(
     if (resultado.proximo === "app") {
       await gravarEmpresa(resultado.empresaId);
       destino = "/";
+    } else if (resultado.proximo === "portal") {
+      // Sem gravar empresa: o portal nao tem tenant ativo, ele responde por
+      // cliente. Gravar uma empresa aqui daria ao externo um cookie de tenant
+      // que ele nao deveria carregar.
+      destino = "/portal";
     } else {
       destino = "/selecionar-empresa";
     }

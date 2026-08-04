@@ -21,8 +21,25 @@ export async function entrar(email: string, senha: string): Promise<ResultadoLog
     throw new UnauthorizedError("E-mail ou senha incorretos.");
   }
 
-  const nome = await repo.nomeDoUsuario(auth.usuario.id);
-  const usuario: UsuarioAutenticado = { ...auth.usuario, nome };
+  const perfil = await repo.perfilDoUsuario(auth.usuario.id);
+  const usuario: UsuarioAutenticado = {
+    ...auth.usuario,
+    nome: perfil?.nome ?? null,
+    externo: perfil?.externo ?? false,
+  };
+
+  /*
+   * Externo vai para o portal, e a pergunta sobre empresa nem se faz.
+   *
+   * Ele nao administra empresa nenhuma: `empresas_do_usuario()` o ignora, entao
+   * a checagem logo abaixo o barraria com "nao esta vinculado a nenhuma
+   * empresa" — verdade tecnica e mentira pratica, porque o acesso dele existe,
+   * so nao e por empresa. O escopo dele e por CLIENTE, e quem responde por isso
+   * sao as policies do portal.
+   */
+  if (usuario.externo) {
+    return { proximo: "portal", usuario };
+  }
 
   const empresas = await repo.empresasDoUsuario(usuario.id);
 
@@ -69,7 +86,9 @@ export async function escolherEmpresa(usuarioId: string, empresaId: number): Pro
 export async function usuarioLogado(): Promise<UsuarioAutenticado | null> {
   const usuario = await repo.usuarioAtual();
   if (!usuario) return null;
-  return { ...usuario, nome: await repo.nomeDoUsuario(usuario.id) };
+
+  const perfil = await repo.perfilDoUsuario(usuario.id);
+  return { ...usuario, nome: perfil?.nome ?? null, externo: perfil?.externo ?? false };
 }
 
 export async function recuperarSenha(email: string, redirectTo: string): Promise<void> {

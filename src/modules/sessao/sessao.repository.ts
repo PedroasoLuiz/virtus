@@ -56,16 +56,37 @@ export async function usuarioAtual(): Promise<UsuarioAutenticado | null> {
 
 /** Nome de exibicao, da tabela de perfil. Ausencia nao e erro. */
 export async function nomeDoUsuario(usuarioId: string): Promise<string | null> {
+  return (await perfilDoUsuario(usuarioId))?.nome ?? null;
+}
+
+export type PerfilDoUsuario = {
+  nome: string | null;
+  ativo: boolean;
+  /**
+   * Pessoa do CLIENTE, nao da casa.
+   *
+   * Externo nao administra empresa nenhuma: `empresas_do_usuario()` o ignora de
+   * proposito, e o que ele enxerga sao as proprias cobrancas, pelo portal.
+   */
+  externo: boolean;
+};
+
+export async function perfilDoUsuario(usuarioId: string): Promise<PerfilDoUsuario | null> {
   const supabase = await serverClient();
 
   const { data, error } = await supabase
     .from("usuarios")
-    .select("nome, ativo")
+    .select("nome, ativo, externo")
     .eq("fkUser", usuarioId)
     .maybeSingle();
 
   if (error || !data) return null;
-  return data.nome;
+
+  return {
+    nome: data.nome,
+    ativo: data.ativo ?? true,
+    externo: data.externo ?? false,
+  };
 }
 
 /** Empresas as quais o usuario tem acesso. Base do seletor de tenant. */
