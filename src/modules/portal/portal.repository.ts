@@ -129,8 +129,16 @@ export async function minhasParcelas(clientes: ClienteDoPortal[]): Promise<Parce
 /**
  * As propostas esperando resposta.
  *
- * A policy `ordensservico_portal` ja limita a status ORCAMENTO: os demais
- * estados do ticket sao vida interna da casa.
+ * ⚠️ O filtro de status esta AQUI, e nao so na policy.
+ *
+ * A policy `ordensservico_portal` tambem libera o ticket que ja virou cobranca
+ * — o cartao precisa do numero dele. Confiar nela para separar as listas fazia o
+ * mesmo ticket faturado aparecer duas vezes no quadro: uma como cobranca e outra
+ * como orcamento.
+ *
+ * A licao: policy responde "pode ver?"; consulta responde "e disto que eu
+ * preciso?". Quando a primeira responde as duas, ampliar a permissao muda a
+ * lista sem ninguem perceber.
  */
 export async function meusOrcamentos(clientes: ClienteDoPortal[]): Promise<OrcamentoDoCliente[]> {
   const supabase = await serverClient();
@@ -138,6 +146,7 @@ export async function meusOrcamentos(clientes: ClienteDoPortal[]): Promise<Orcam
   const { data, error } = await supabase
     .from("ordensservico")
     .select("id, idtenant, titulo, datainicio, fkCliente, fkEmpresa, empresas(id, fantasia, razaosocial), ordensservicoxservicos(total)")
+    .ilike("status", "ORCAMENTO")
     .order("datainicio", { ascending: true });
 
   if (error) throw error;

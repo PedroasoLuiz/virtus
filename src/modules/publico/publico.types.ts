@@ -1,4 +1,5 @@
 import type { DataISO } from "@/shared/utils/datas";
+import type { Centavos } from "@/shared/utils/money";
 
 /**
  * O que o cliente ve pelo link da cobranca.
@@ -12,24 +13,31 @@ import type { DataISO } from "@/shared/utils/datas";
  * papel, e reconhecer o documento e o que faz confiar no link.
  */
 
+/**
+ * ⚠️ Todo dinheiro daqui e CENTAVOS, convertido no repositorio.
+ *
+ * O RPC devolve reais (double, como o banco herdado guarda). A conversao
+ * acontece na fronteira, e nao na tela — foi o que faltou uma vez, e a pagina
+ * mostrou uma parcela de 350,00 como "3,50" para o cliente.
+ */
 export type ItemPublico = {
   servico: string | null;
   descricao: string | null;
   data: DataISO | null;
   quantidade: number;
   unidade: "UN" | "H";
-  valor: number;
-  desconto: number;
-  acrescimo: number;
-  total: number;
-  despesas: { descricao: string | null; valor: number }[];
+  valor: Centavos;
+  desconto: Centavos;
+  acrescimo: Centavos;
+  total: Centavos;
+  despesas: { descricao: string | null; valor: Centavos }[];
 };
 
 export type CobrancaPublica = {
   fatura: number;
   parcela: number;
   vencimento: DataISO | null;
-  valor: number;
+  valor: Centavos;
   pago: boolean;
   /** A parcela deste link. Numa lista de doze, todas parecem iguais. */
   atual: boolean;

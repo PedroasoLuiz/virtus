@@ -6,7 +6,14 @@ import type {
   ItemPublico,
   TicketPublico,
 } from "@/modules/publico/publico.types";
-import { formatarSemSimbolo, type Centavos } from "@/shared/utils/money";
+import {
+  formatarSemSimbolo,
+  multiplicar,
+  somar,
+  subtrair,
+  ZERO,
+  type Centavos,
+} from "@/shared/utils/money";
 import { paraFormatoBR, periodoEmMeses, type DataISO } from "@/shared/utils/datas";
 
 /**
@@ -223,16 +230,26 @@ function Folha({
 }) {
   const apuracao = periodoEmMeses(ticket.inicio, ticket.fim);
 
-  const subtotal = ticket.itens.reduce(
-    (s, i) => s + i.valor * i.quantidade + i.despesas.reduce((d, x) => d + x.valor, 0),
-    0,
-  );
-  const desconto = ticket.itens.reduce((s, i) => s + i.desconto, 0);
-  const acrescimo = ticket.itens.reduce((s, i) => s + i.acrescimo, 0);
-  const total = ticket.itens.reduce((s, i) => s + i.total, 0);
+  /*
+   * Somas em CENTAVOS, pelos helpers de dinheiro.
+   *
+   * `somar` passa por `centavos()`, que recusa valor nao inteiro — e e essa
+   * recusa que teria denunciado, na primeira execucao, o dia em que reais
+   * entraram aqui achando que eram centavos.
+   */
+  const soma = (valores: Centavos[]) => valores.reduce<Centavos>((a, b) => somar(a, b), ZERO);
 
-  const faturado = ticket.cobranca.reduce((s, c) => s + c.valor, 0);
-  const pago = ticket.cobranca.filter((c) => c.pago).reduce((s, c) => s + c.valor, 0);
+  const subtotal = soma(
+    ticket.itens.map((i) =>
+      somar(multiplicar(i.valor, i.quantidade), soma(i.despesas.map((d) => d.valor))),
+    ),
+  );
+  const desconto = soma(ticket.itens.map((i) => i.desconto));
+  const acrescimo = soma(ticket.itens.map((i) => i.acrescimo));
+  const total = soma(ticket.itens.map((i) => i.total));
+
+  const faturado = soma(ticket.cobranca.map((c) => c.valor));
+  const pago = soma(ticket.cobranca.filter((c) => c.pago).map((c) => c.valor));
 
   return (
     <div className="folha">
@@ -329,20 +346,20 @@ function Folha({
                   {i.descricao && <div style={{ color: CINZA }}>{i.descricao}</div>}
                   {i.despesas.map((d, k) => (
                     <div key={k} style={{ color: CINZA }}>
-                      + {d.descricao || "Despesa"} {formatarSemSimbolo(d.valor as Centavos)}
+                      + {d.descricao || "Despesa"} {formatarSemSimbolo(d.valor)}
                     </div>
                   ))}
                 </Td>
                 <Td direita>{i.data ? paraFormatoBR(i.data as DataISO) : "—"}</Td>
                 <Td direita>{quantidade(i.quantidade, i.unidade)}</Td>
-                <Td direita>{formatarSemSimbolo(i.valor as Centavos)}</Td>
+                <Td direita>{formatarSemSimbolo(i.valor)}</Td>
                 {desconto > 0 && (
-                  <Td direita>{i.desconto ? formatarSemSimbolo(i.desconto as Centavos) : "—"}</Td>
+                  <Td direita>{i.desconto ? formatarSemSimbolo(i.desconto) : "—"}</Td>
                 )}
                 {acrescimo > 0 && (
-                  <Td direita>{i.acrescimo ? formatarSemSimbolo(i.acrescimo as Centavos) : "—"}</Td>
+                  <Td direita>{i.acrescimo ? formatarSemSimbolo(i.acrescimo) : "—"}</Td>
                 )}
-                <Td direita>{formatarSemSimbolo(i.total as Centavos)}</Td>
+                <Td direita>{formatarSemSimbolo(i.total)}</Td>
               </tr>
             ))}
           </tbody>
@@ -377,7 +394,7 @@ function Folha({
                   <Td>{c.fatura}</Td>
                   <Td>{c.parcela}</Td>
                   <Td>{c.vencimento ? paraFormatoBR(c.vencimento as DataISO) : "—"}</Td>
-                  <Td direita>{formatarSemSimbolo(c.valor as Centavos)}</Td>
+                  <Td direita>{formatarSemSimbolo(c.valor)}</Td>
                   <Td direita>{c.pago ? "Paga" : "Em aberto"}</Td>
                 </tr>
               ))}
@@ -388,7 +405,7 @@ function Folha({
             linhas={[
               { rotulo: "Faturado", valor: faturado, forte: true },
               { rotulo: "Valor pago", valor: pago, forte: true },
-              { rotulo: "Saldo devedor", valor: faturado - pago, forte: true },
+              { rotulo: "Saldo devedor", valor: subtrair(faturado, pago), forte: true },
             ]}
           />
         </div>
@@ -548,7 +565,7 @@ function Td({
 function Resumo({
   linhas,
 }: {
-  linhas: { rotulo: string; valor: number; forte?: boolean }[];
+  linhas: { rotulo: string; valor: Centavos; forte?: boolean }[];
 }) {
   return (
     <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "2.5mm" }}>
@@ -567,7 +584,7 @@ function Resumo({
               {l.rotulo}
             </span>
             <span style={{ color: TINTA, fontWeight: l.forte ? 700 : 400 }}>
-              {formatarSemSimbolo(l.valor as Centavos)}
+              {formatarSemSimbolo(l.valor)}
             </span>
           </div>
         ))}

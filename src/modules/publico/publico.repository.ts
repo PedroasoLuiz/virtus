@@ -36,7 +36,38 @@ export async function cobrancaPorToken(token: string): Promise<CobrancaCompartil
   const { data, error } = await supabase.rpc("tickets_compartilhados", { p_token: token });
 
   if (error) throw error;
-  return (data as CobrancaCompartilhada | null) ?? null;
+
+  const bruto = (data as CobrancaCompartilhada | null) ?? null;
+  return bruto ? emCentavos(bruto) : null;
+}
+
+/**
+ * ⚠️ O RPC devolve REAIS, e a tela formata CENTAVOS.
+ *
+ * Sem esta conversao a pagina mostrava uma parcela de 350,00 como "3,50" — cem
+ * vezes menos, no documento que o cliente le para pagar.
+ *
+ * O bug passou porque a tela fazia `valor as Centavos`: o `as` desliga
+ * justamente a checagem que o tipo marcado existe para fazer. A regra do
+ * projeto vale aqui como em todo lugar — a conversao acontece na FRONTEIRA do
+ * repositorio, e dali para dentro tudo e centavo.
+ */
+function emCentavos(c: CobrancaCompartilhada): CobrancaCompartilhada {
+  return {
+    ...c,
+    tickets: c.tickets.map((t) => ({
+      ...t,
+      itens: t.itens.map((i) => ({
+        ...i,
+        valor: doBanco(i.valor),
+        desconto: doBanco(i.desconto),
+        acrescimo: doBanco(i.acrescimo),
+        total: doBanco(i.total),
+        despesas: i.despesas.map((d) => ({ ...d, valor: doBanco(d.valor) })),
+      })),
+      cobranca: t.cobranca.map((p) => ({ ...p, valor: doBanco(p.valor) })),
+    })),
+  };
 }
 
 export type ParcelaPublica = {
