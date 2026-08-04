@@ -331,8 +331,15 @@ export type FaturaParcelaRow = Timestamps & {
   boleto: string | null;
   /** O que o cliente manda ao pagar. Nota e boleto vao; este volta. */
   comprovante: string | null;
-  /** Credencial do link publico da parcela. Nulo = nao compartilhada. */
-  token: string | null;
+  /**
+   * Credencial do link publico da parcela.
+   *
+   * NOT NULL com default `gen_random_uuid()`: toda parcela nasce com um. Antes
+   * ele so era criado no envio por e-mail, e o portal do cliente nao tinha como
+   * abrir a cobranca de quem nunca recebeu e-mail. Ter um token gerado nao
+   * publica nada — publica quem manda o link; zerar a coluna revoga.
+   */
+  token: string;
 };
 
 export type ContaPagarRow = Timestamps & {

@@ -1,6 +1,7 @@
 import { carteira } from "@/modules/portal/portal.service";
 import { CobrancasQuadro } from "./cobrancas-quadro";
 import { SemAcesso } from "./sem-acesso";
+import { emitenteEscolhido } from "./emitente";
 
 /**
  * O que o cliente deve, e onde ele pega o documento.
@@ -10,14 +11,16 @@ import { SemAcesso } from "./sem-acesso";
  * mais para conferir.
  */
 export default async function PortalPage() {
-  const { clientes, emitentes, parcelas, emAberto, vencido } = await carteira();
+  const { clientes, parcelas, orcamentos, emAberto, vencido } = await carteira(
+    await emitenteEscolhido(),
+  );
 
   if (clientes.length === 0) return <SemAcesso />;
 
   return (
     <CobrancasQuadro
       parcelas={parcelas}
-      emitentes={emitentes}
+      orcamentos={orcamentos}
       emAberto={emAberto}
       vencido={vencido}
     />

@@ -14,12 +14,20 @@ export function MenuUsuario({
   email,
   nome,
   trocarEmpresa,
+  hrefTrocarEmpresa = "/selecionar-empresa",
   compacto = false,
   acimaDoBotao = false,
 }: {
   email: string;
   nome: string | null;
   trocarEmpresa: boolean;
+  /**
+   * Para onde leva o "Trocar de empresa".
+   *
+   * O portal tem a propria: la a empresa e o EMISSOR da cobranca, escolhido
+   * entre os que atendem aquele cliente, e nao o tenant que se administra.
+   */
+  hrefTrocarEmpresa?: string;
   /** So o avatar — usado com a barra lateral recolhida. */
   compacto?: boolean;
   /** Abre para cima. No rodape da lateral nao ha espaco abaixo. */
@@ -137,7 +145,7 @@ export function MenuUsuario({
             </ItemMenu>
 
             {trocarEmpresa && (
-              <ItemMenu href="/selecionar-empresa">Trocar de empresa</ItemMenu>
+              <ItemMenu href={hrefTrocarEmpresa}>Trocar de empresa</ItemMenu>
             )}
           </div>
 

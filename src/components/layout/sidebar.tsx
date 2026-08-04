@@ -36,6 +36,7 @@ export function Sidebar({
   podeTrocarEmpresa,
   grupos: gruposFixos,
   inicio = "/dashboard",
+  hrefTrocarEmpresa,
 }: {
   modulos: Modulo[];
   empresa: string | null;
@@ -54,6 +55,8 @@ export function Sidebar({
   grupos?: Grupo[];
   /** Para onde a marca leva. O portal nao tem dashboard. */
   inicio?: string;
+  /** Destino do "Trocar de empresa". O portal escolhe entre EMISSORES. */
+  hrefTrocarEmpresa?: string;
 }) {
   const pathname = usePathname();
   const [recolhida, setRecolhida] = useState(recolhidaInicial);
@@ -215,6 +218,7 @@ export function Sidebar({
           email={email}
           nome={usuarioNome}
           trocarEmpresa={podeTrocarEmpresa}
+          hrefTrocarEmpresa={hrefTrocarEmpresa}
           compacto={recolhida}
           acimaDoBotao
         />

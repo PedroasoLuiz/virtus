@@ -1,8 +1,12 @@
 import { serverClient } from "@/infra/supabase/client";
 import { doBanco, type Centavos } from "@/shared/utils/money";
 import { primeiroPreenchido } from "@/shared/utils/texto";
-import type { DataISO } from "@/shared/utils/datas";
-import type { ClienteDoPortal, ParcelaDoCliente } from "@/modules/portal/portal.types";
+import { hoje, type DataISO } from "@/shared/utils/datas";
+import type {
+  ClienteDoPortal,
+  OrcamentoDoCliente,
+  ParcelaDoCliente,
+} from "@/modules/portal/portal.types";
 
 /**
  * Leitura do portal.
@@ -16,13 +20,21 @@ import type { ClienteDoPortal, ParcelaDoCliente } from "@/modules/portal/portal.
  * que e o padrao seguro.
  */
 
-/** Os clientes que este usuario representa. Vazio = sem acesso a nada. */
+/** Empresa da casa que emite a cobranca, como o cliente a le. */
+function emitenteDe(e: { id: number; fantasia: string | null; razaosocial: string | null } | null) {
+  return {
+    id: e?.id ?? 0,
+    nome: primeiroPreenchido(e?.fantasia, e?.razaosocial) ?? "Emitente",
+  };
+}
+
+/** As empresas do CLIENTE que este usuario representa. Vazio = sem acesso. */
 export async function meusClientes(): Promise<ClienteDoPortal[]> {
   const supabase = await serverClient();
 
   const { data, error } = await supabase
     .from("clientes")
-    .select("id, razao, nomefantasia")
+    .select("id, razao, nomefantasia, fkEmpresa")
     .order("id", { ascending: true });
 
   if (error) throw error;
@@ -30,6 +42,7 @@ export async function meusClientes(): Promise<ClienteDoPortal[]> {
   return (data ?? []).map((c) => ({
     id: c.id,
     nome: primeiroPreenchido(c.nomefantasia, c.razao) ?? `Cliente ${c.id}`,
+    emitenteId: c.fkEmpresa ?? 0,
   }));
 }
 
@@ -37,25 +50,27 @@ export async function meusClientes(): Promise<ClienteDoPortal[]> {
  * As parcelas das cobrancas deste cliente.
  *
  * Traz pagas e em aberto: o cliente quer o historico tanto quanto o que deve, e
- * e no recibo do que ja pagou que ele confere se a baixa entrou.
+ * e no que ja pagou que ele confere se a baixa entrou.
  */
-export async function minhasParcelas(): Promise<ParcelaDoCliente[]> {
+export async function minhasParcelas(clientes: ClienteDoPortal[]): Promise<ParcelaDoCliente[]> {
   const supabase = await serverClient();
 
   const { data, error } = await supabase
     .from("faturasparcelas")
     .select(
-      "id, token, numeroparcela, vencimento, valor, total, pago, nfs, boleto, pagamentosxparcelas(valor), faturas!inner(id, parcelas, fkEmpresa, empresas(id, fantasia, razaosocial), faturasorigens(ordensservico(idtenant, id)))",
+      "id, token, numeroparcela, vencimento, valor, total, pago, nfs, boleto, pagamentosxparcelas(valor), faturas!inner(id, parcelas, fkCliente, fkEmpresa, empresas(id, fantasia, razaosocial), faturasorigens(ordensservico(idtenant, id)))",
     )
     .order("vencimento", { ascending: true });
 
   if (error) throw error;
 
-  const hoje = new Date().toISOString().slice(0, 10);
+  const porCliente = new Map(clientes.map((c) => [c.id, c]));
+  const hojeISO = hoje();
 
   return (data ?? []).map((l) => {
     const f = l.faturas as unknown as {
       parcelas: number | null;
+      fkCliente: number | null;
       fkEmpresa: number | null;
       empresas: { id: number; fantasia: string | null; razaosocial: string | null } | null;
       faturasorigens: { ordensservico: { idtenant: number | null; id: number } | null }[] | null;
@@ -70,33 +85,77 @@ export async function minhasParcelas(): Promise<ParcelaDoCliente[]> {
       ),
     );
 
-    const emAberto = Math.max(total - recebido, 0) as Centavos;
     const vencimento = l.vencimento ? ((l.vencimento.slice(0, 10)) as DataISO) : null;
     const pago = l.pago ?? false;
+    const emitente = emitenteDe(f.empresas);
 
     return {
       parcelaId: l.id,
       token: l.token,
-      emitente: {
-        id: f.empresas?.id ?? f.fkEmpresa ?? 0,
-        nome:
-          primeiroPreenchido(f.empresas?.fantasia, f.empresas?.razaosocial) ?? "Emitente",
+      emitente,
+      cliente: porCliente.get(f.fkCliente ?? 0) ?? {
+        id: f.fkCliente ?? 0,
+        nome: "Cliente",
+        emitenteId: f.fkEmpresa ?? 0,
       },
       numero: l.numeroparcela ?? 0,
       totalParcelas: f.parcelas ?? 0,
       vencimento,
       total,
       recebido,
-      emAberto,
+      emAberto: Math.max(total - recebido, 0) as Centavos,
       pago,
-      atrasada: !pago && vencimento != null && vencimento < hoje,
+      atrasada: !pago && vencimento != null && vencimento < hojeISO,
       temBoleto: Boolean(l.boleto),
       temNota: Boolean(l.nfs),
       // O numero por tenant e o que o cliente ve no documento; o id interno so
-      // aparece se o ticket for antigo e nao tiver numeracao propria.
+      // aparece em ticket antigo, sem numeracao propria.
       tickets: (f.faturasorigens ?? [])
         .map((o) => o.ordensservico?.idtenant ?? o.ordensservico?.id)
         .filter((n): n is number => n != null),
+    };
+  });
+}
+
+/**
+ * As propostas esperando resposta.
+ *
+ * A policy `ordensservico_portal` ja limita a status ORCAMENTO: os demais
+ * estados do ticket sao vida interna da casa.
+ */
+export async function meusOrcamentos(clientes: ClienteDoPortal[]): Promise<OrcamentoDoCliente[]> {
+  const supabase = await serverClient();
+
+  const { data, error } = await supabase
+    .from("ordensservico")
+    .select("id, idtenant, titulo, datainicio, fkCliente, fkEmpresa, empresas(id, fantasia, razaosocial), ordensservicoxservicos(total)")
+    .order("datainicio", { ascending: true });
+
+  if (error) throw error;
+
+  const porCliente = new Map(clientes.map((c) => [c.id, c]));
+
+  return (data ?? []).map((t) => {
+    const itens = (t.ordensservicoxservicos ?? []) as unknown as { total: number | null }[];
+
+    return {
+      ticketId: t.id,
+      numero: t.idtenant ?? t.id,
+      titulo: (t.titulo ?? "").trim() || "Proposta",
+      cliente: porCliente.get(t.fkCliente ?? 0) ?? {
+        id: t.fkCliente ?? 0,
+        nome: "Cliente",
+        emitenteId: t.fkEmpresa ?? 0,
+      },
+      emitente: emitenteDe(
+        t.empresas as unknown as {
+          id: number;
+          fantasia: string | null;
+          razaosocial: string | null;
+        } | null,
+      ),
+      emitidoEm: t.datainicio ? ((t.datainicio.slice(0, 10)) as DataISO) : null,
+      total: doBanco(itens.reduce((soma, i) => soma + (i.total ?? 0), 0)),
     };
   });
 }
