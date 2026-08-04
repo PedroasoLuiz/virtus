@@ -200,19 +200,18 @@ export function Sidebar({
       {/* Rodape: empresa ativa e identidade do usuario. */}
       <div style={{ flexShrink: 0, padding: recolhida ? "10px 6px" : "10px 12px" }}>
         {!recolhida && empresa && (
-          <div
-            title={empresa}
-            style={{
-              fontSize: "var(--text-xs)",
-              color: "var(--sidebar-item-sub)",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-              padding: "0 4px 6px",
-            }}
-          >
-            {empresa}
-          </div>
+          /*
+           * A empresa ativa e o alvo da troca, quando ha mais de uma.
+           *
+           * Antes era texto morto e a troca so existia dentro do menu do
+           * usuario — dois cliques e um lugar que ninguem abre para trocar de
+           * empresa. Clicando no proprio nome, o gesto fica onde a informacao
+           * esta.
+           */
+          <EmpresaAtiva
+            empresa={empresa}
+            href={podeTrocarEmpresa ? hrefTrocarEmpresa : undefined}
+          />
         )}
         <MenuUsuario
           email={email}
@@ -310,5 +309,72 @@ function MenuRecolhido({
         />
       ))}
     </>
+  );
+}
+
+/**
+ * A empresa ativa no rodape da barra.
+ *
+ * Vira link so quando ha para onde ir: com uma empresa so, um alvo de clique que
+ * leva a uma tela sem decisao e pior que texto.
+ */
+function EmpresaAtiva({ empresa, href }: { empresa: string; href?: string }) {
+  /*
+   * Flex, e nao texto com icone dentro.
+   *
+   * Com o SVG inline, o nome longo consumia a largura toda e a seta caia para a
+   * linha de baixo. Aqui o nome encolhe com reticencias (`minWidth: 0` e o que
+   * permite isso dentro de um flex) e a seta fica fixa ao lado.
+   */
+  const estilo: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: 4,
+    fontSize: "var(--text-xs)",
+    color: "var(--sidebar-item-sub)",
+    padding: "0 4px 6px",
+    textDecoration: "none",
+  };
+
+  const nome = (
+    <span
+      style={{
+        minWidth: 0,
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {empresa}
+    </span>
+  );
+
+  if (!href) {
+    return (
+      <div title={empresa} style={estilo}>
+        {nome}
+      </div>
+    );
+  }
+
+  return (
+    <Link href={href} title={`${empresa} — trocar de empresa`} style={estilo}>
+      {nome}
+      {/* Chevron: o texto sozinho nao se anuncia como clicavel, e sublinhado
+          brigaria com o resto do rodape, que nao tem nenhum. */}
+      <svg
+        width="9"
+        height="9"
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        style={{ flexShrink: 0 }}
+      >
+        <path d="M6 4l4 4-4 4" />
+      </svg>
+    </Link>
   );
 }

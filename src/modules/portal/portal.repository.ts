@@ -39,9 +39,18 @@ export async function meusClientes(): Promise<ClienteDoPortal[]> {
 
   if (error) throw error;
 
+  /*
+   * Razao social inteira, e nao o nome fantasia.
+   *
+   * Aqui o nome identifica QUAL CNPJ do grupo deve — "RION LED INDUSTRIA
+   * COMERCIO E SERVICOS ELETRICOS LTDA" e "RION PRESTACAO DE SERVICOS LTDA" sao
+   * duas dividas separadas, e o fantasia das duas e "RION". No sistema o
+   * fantasia serve porque a lista e da casa; aqui ele apagaria a distincao que
+   * o cliente precisa fazer.
+   */
   return (data ?? []).map((c) => ({
     id: c.id,
-    nome: primeiroPreenchido(c.nomefantasia, c.razao) ?? `Cliente ${c.id}`,
+    nome: primeiroPreenchido(c.razao, c.nomefantasia) ?? `Cliente ${c.id}`,
     emitenteId: c.fkEmpresa ?? 0,
   }));
 }

@@ -10,8 +10,24 @@ import type { EmpresaDoUsuario } from "@/modules/sessao/sessao.types";
 
 const INICIAL: EstadoFormulario = { erro: null };
 
-export function SeletorEmpresa({ empresas }: { empresas: EmpresaDoUsuario[] }) {
-  const [estado, acao, enviando] = useActionState(selecionarEmpresaAction, INICIAL);
+export function SeletorEmpresa({
+  empresas,
+  acao: acaoExterna,
+  campo = "empresaId",
+}: {
+  empresas: EmpresaDoUsuario[];
+  /**
+   * Onde a escolha e gravada. Padrao: o tenant do sistema.
+   *
+   * O portal passa a dele — la a "empresa" e o EMISSOR da cobranca, e nao o
+   * tenant que se administra. O desenho da escolha e o mesmo, e por isso a tela
+   * e a mesma: duas telas de escolher empresa divergiriam na primeira mexida.
+   */
+  acao?: (formData: FormData) => void | Promise<void>;
+  campo?: string;
+}) {
+  const [estado, acaoPadrao, enviando] = useActionState(selecionarEmpresaAction, INICIAL);
+  const acao = acaoExterna ?? acaoPadrao;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -27,10 +43,10 @@ export function SeletorEmpresa({ empresas }: { empresas: EmpresaDoUsuario[] }) {
       */}
       {empresas.map((e) => (
         <form key={e.id} action={acao}>
-          <input type="hidden" name="empresaId" value={e.id} />
+          <input type="hidden" name={campo} value={e.id} />
           <button
             type="submit"
-            disabled={enviando}
+            disabled={acaoExterna ? false : enviando}
             style={{
               width: "100%",
               display: "flex",
@@ -40,7 +56,7 @@ export function SeletorEmpresa({ empresas }: { empresas: EmpresaDoUsuario[] }) {
               borderRadius: "var(--radius-lg)",
               border: "1px solid var(--border-strong)",
               background: "var(--surface)",
-              cursor: enviando ? "wait" : "pointer",
+              cursor: !acaoExterna && enviando ? "wait" : "pointer",
               textAlign: "left",
               fontFamily: "var(--font)",
               transition: "border-color var(--dur-fast) var(--ease)",

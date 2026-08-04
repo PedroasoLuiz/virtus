@@ -56,7 +56,7 @@ export default async function PortalLayout({ children }: { children: React.React
           // Mesma mecânica do sistema, outro significado: aqui a empresa é
           // quem ESTÁ COBRANDO, e não o tenant que se administra.
           podeTrocarEmpresa={emitentes.length > 1}
-          hrefTrocarEmpresa="/portal/empresa"
+          hrefTrocarEmpresa="/portal-empresa"
         />
 
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>

@@ -48,9 +48,23 @@ type Cartao = {
   arrastavel: false;
   /** Qual empresa DELE deve. Um grupo tem mais de um CNPJ. */
   cliente: string;
-  titulo: string;
+  /**
+   * A pílula do topo, no formato do quadro de contas a receber.
+   *
+   * Leva a palavra "Ticket" junto do número — no sistema o número sozinho basta,
+   * porque quem olha sabe o que ele é; para o cliente, um número solto não diz
+   * a que se refere.
+   */
+  etiqueta: string;
+  /** "parcela 2 de 3". Ausente quando a cobrança é única. */
+  detalhe: string;
   data: DataISO | null;
+  /** O que ainda falta. Zero quando a parcela fechou. */
   valor: Centavos;
+  /** Quanto já entrou. Aparece em verde, com "+", como no extrato. */
+  recebido: Centavos;
+  /** O que a parcela vale. Usado quando ela fechou sem dinheiro entrar. */
+  total: Centavos;
   /** Nulo no orçamento: proposta ainda não é cobrança, e não tem documento. */
   token: string | null;
   atrasada: boolean;
@@ -83,9 +97,14 @@ export function CobrancasQuadro({
       colunaId: ORCAMENTOS,
       arrastavel: false as const,
       cliente: o.cliente.nome,
-      titulo: `Orçamento ${o.numero}`,
+      // Orçamento É um ticket: a pílula fala a mesma língua das outras colunas,
+      // e o que diz que ainda é proposta é a coluna em que ele está.
+      etiqueta: `Ticket ${o.numero}`,
+      detalhe: o.titulo,
       data: o.emitidoEm,
       valor: o.total,
+      recebido: 0 as Centavos,
+      total: o.total,
       token: null,
       atrasada: false,
       pago: false,
@@ -99,13 +118,17 @@ export function CobrancasQuadro({
       colunaId: p.pago ? PAGAS : p.atrasada ? VENCIDAS : A_VENCER,
       arrastavel: false as const,
       cliente: p.cliente.nome,
-      titulo:
-        (p.tickets.length > 0
+      // Conta antiga pode não ter ticket de origem; aí a pílula some em vez de
+      // dizer "Cobrança", que repete o que o quadro já é.
+      etiqueta:
+        p.tickets.length > 0
           ? `${p.tickets.length > 1 ? "Tickets" : "Ticket"} ${p.tickets.join(", ")}`
-          : "Cobrança") +
-        (p.totalParcelas > 1 ? ` · parcela ${p.numero} de ${p.totalParcelas}` : ""),
+          : "",
+      detalhe: p.totalParcelas > 1 ? `parcela ${p.numero} de ${p.totalParcelas}` : "",
       data: p.vencimento,
-      valor: (p.pago ? p.total : p.emAberto) as Centavos,
+      valor: p.emAberto,
+      recebido: p.recebido,
+      total: p.total,
       token: p.token,
       atrasada: p.atrasada,
       pago: p.pago,
@@ -118,7 +141,7 @@ export function CobrancasQuadro({
       .filter(
         (c) =>
           !termo ||
-          c.titulo.toLowerCase().includes(termo) ||
+          c.etiqueta.toLowerCase().includes(termo) ||
           c.cliente.toLowerCase().includes(termo),
       )
       // Sem data vai para o fim: não se sabe quando vence, e no topo empurraria
@@ -134,8 +157,11 @@ export function CobrancasQuadro({
         </PageHeader>
 
         {/* Vencido só aparece quando existe: um "R$ 0,00 vencido" permanente
-            ensina a ignorar o número justamente quando ele passa a importar. */}
-        <div style={{ display: "flex", gap: 24, padding: "0 4px 14px" }}>
+            ensina a ignorar o número justamente quando ele passa a importar.
+
+            `0 16px` é o mesmo recuo lateral do quadro logo abaixo: com 4px, os
+            totais começavam antes da primeira coluna e nada alinhava. */}
+        <div style={{ display: "flex", gap: 24, padding: "0 16px 14px" }}>
           <Total rotulo="Em aberto" valor={emAberto} />
           {vencido > 0 && <Total rotulo="Vencido" valor={vencido} alerta />}
         </div>
@@ -175,26 +201,44 @@ export function CobrancasQuadro({
  */
 function CorpoDoCartao({ cartao }: { cartao: Cartao }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-        <span
-          style={{
-            flex: 1,
-            minWidth: 0,
-            fontWeight: "var(--fw-medium)",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-          title={cartao.cliente}
-        >
-          {cartao.cliente}
-        </span>
+    <>
+      {/* Mesma anatomia do cartão de contas a receber: pílula do número à
+          esquerda, data à direita, nome em duas linhas embaixo. O cliente e a
+          casa olham quadros diferentes do mesmo assunto, e o desenho igual é o
+          que faz um explicar o outro numa conversa por telefone. */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 6,
+          fontSize: "var(--text-sm)",
+          fontVariantNumeric: "tabular-nums",
+        }}
+      >
+        {cartao.etiqueta ? (
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              height: 17,
+              padding: "0 6px",
+              borderRadius: "var(--radius-xs)",
+              background: "var(--primary-subtle)",
+              color: "var(--primary)",
+              fontSize: "var(--text-xs)",
+              fontWeight: "var(--fw-semi)",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {cartao.etiqueta}
+          </span>
+        ) : (
+          <span />
+        )}
 
         <span
           style={{
-            fontSize: "var(--text-sm)",
-            fontVariantNumeric: "tabular-nums",
             whiteSpace: "nowrap",
             color: cartao.atrasada ? "var(--danger-text)" : "var(--text-tertiary)",
             fontWeight: cartao.atrasada ? "var(--fw-medium)" : 400,
@@ -204,52 +248,166 @@ function CorpoDoCartao({ cartao }: { cartao: Cartao }) {
         </span>
       </div>
 
+      {/* Até duas linhas: a razão social inteira não cabe numa só, e cortada em
+          "RION LED INDUSTRIA COMERCIO E SERVI..." some justamente a parte que
+          distingue um CNPJ do grupo do outro. */}
       <div
         style={{
-          fontSize: "var(--text-sm)",
-          color: "var(--text-tertiary)",
+          display: "-webkit-box",
+          WebkitBoxOrient: "vertical",
+          WebkitLineClamp: 2,
           overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
+          fontSize: "var(--text-sm)",
+          fontWeight: "var(--fw-medium)",
+          lineHeight: 1.32,
+          letterSpacing: "var(--tracking-normal)",
+          marginTop: 7,
         }}
-        title={cartao.titulo}
+        title={cartao.cliente}
       >
-        {cartao.titulo}
+        {cartao.cliente}
       </div>
-    </div>
+
+      {cartao.detalhe && (
+        <div
+          style={{
+            fontSize: "var(--text-xs)",
+            color: "var(--text-tertiary)",
+            marginTop: 3,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+          title={cartao.detalhe}
+        >
+          {cartao.detalhe}
+        </div>
+      )}
+    </>
   );
 }
 
-/** A faixa da moldura: o valor, fora do branco. */
+/**
+ * A faixa da moldura: os documentos à esquerda, o dinheiro à direita.
+ *
+ * O que já entrou aparece em verde com "+", a mesma convenção do extrato. Quando
+ * a parcela fechou, sobra só o verde: repetir um "0,00" em aberto ao lado diria
+ * que ainda falta algo.
+ */
 function RodapeDoCartao({ cartao }: { cartao: Cartao }) {
+  /*
+   * O cartão nunca fica sem valor.
+   *
+   * Três casos, e o terceiro só apareceu com dado real: parcela quitada em que
+   * nada entrou — a que foi PERDOADA. Sem esta linha ela mostrava a faixa vazia,
+   * porque o em aberto é zero e o recebido também.
+   */
+  const emAberto = cartao.valor > 0 ? cartao.valor : null;
+  const recebido = cartao.recebido > 0 ? cartao.recebido : null;
+  const encerrada = !emAberto && !recebido ? cartao.total : null;
+
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-      <span
-        style={{
-          fontSize: "var(--text-xs)",
-          color: "var(--text-tertiary)",
-        }}
-      >
-        {cartao.orcamento
-          ? "proposta"
-          : [cartao.temBoleto && "boleto", cartao.temNota && "nota"]
-              .filter(Boolean)
-              .join(" · ") || (cartao.pago ? "pago" : "em aberto")}
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+        {cartao.token && cartao.temBoleto && (
+          <BaixarDocumento tipo="boleto" token={cartao.token} />
+        )}
+        {cartao.token && cartao.temNota && <BaixarDocumento tipo="nfs" token={cartao.token} />}
+        {cartao.orcamento && (
+          <span style={{ fontSize: "var(--text-xs)", color: "var(--text-tertiary)" }}>
+            proposta
+          </span>
+        )}
       </span>
 
       <span style={{ flex: 1 }} />
 
       <span
         style={{
-          fontSize: "var(--text-md)",
+          display: "inline-flex",
+          alignItems: "baseline",
+          gap: 6,
+          fontSize: "var(--text-sm)",
           fontWeight: "var(--fw-semi)",
           fontVariantNumeric: "tabular-nums",
-          color: cartao.pago ? "var(--text-tertiary)" : "var(--text-primary)",
         }}
       >
-        {formatarSemSimbolo(cartao.valor)}
+        {emAberto !== null && (
+          <span style={{ color: "var(--text-primary)" }}>{formatarSemSimbolo(emAberto)}</span>
+        )}
+
+        {recebido !== null && (
+          <span style={{ color: "var(--credito)" }} title="Já recebido">
+            +{formatarSemSimbolo(recebido)}
+          </span>
+        )}
+
+        {encerrada !== null && (
+          <span style={{ color: "var(--text-tertiary)" }} title="Encerrada sem recebimento">
+            {formatarSemSimbolo(encerrada)}
+          </span>
+        )}
       </span>
     </div>
+  );
+}
+
+/**
+ * O documento, dentro da própria moldura. Clicar baixa.
+ *
+ * Moldura e não ícone solto: solto, o alvo de clique vira o desenho, que tem
+ * buracos, e a mira falha na borda. É a mesma decisão do `BotaoDeAcao` do
+ * sistema.
+ *
+ * `/p/{token}/documento` transmite o arquivo em vez de redirecionar para o
+ * Storage, então o caminho interno nunca chega ao navegador.
+ *
+ * ⚠️ `stopPropagation`: o cartão inteiro abre a cobrança, e sem isto baixar o
+ * boleto abriria a página junto.
+ */
+function BaixarDocumento({ tipo, token }: { tipo: "boleto" | "nfs"; token: string }) {
+  const boleto = tipo === "boleto";
+
+  return (
+    <a
+      href={`/p/${token}/documento?tipo=${tipo}`}
+      download
+      onClick={(e) => e.stopPropagation()}
+      title={boleto ? "Baixar boleto" : "Baixar nota fiscal"}
+      aria-label={boleto ? "Baixar boleto" : "Baixar nota fiscal"}
+      style={{
+        display: "inline-grid",
+        placeItems: "center",
+        width: 22,
+        height: 22,
+        borderRadius: "var(--radius-sm)",
+        border: "1px solid var(--primary-border)",
+        background: "var(--primary-subtle)",
+        color: "var(--primary)",
+      }}
+    >
+      <svg
+        width="12"
+        height="12"
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        {boleto ? (
+          // Código de barras: é o que se olha num boleto.
+          <path d="M2.6 3.4v9.2M5 3.4v9.2M7.4 3.4v9.2M10.4 3.4v9.2M13.4 3.4v9.2" />
+        ) : (
+          <>
+            <path d="M9 1.8H4.2a1 1 0 0 0-1 1v10.4a1 1 0 0 0 1 1h7.6a1 1 0 0 0 1-1V5.8z" />
+            <path d="M9 1.8v4h4" />
+            <path d="M5.8 9.2h4.4M5.8 11.4h3" />
+          </>
+        )}
+      </svg>
+    </a>
   );
 }
 
