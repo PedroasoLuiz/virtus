@@ -34,6 +34,8 @@ export function Sidebar({
   email,
   usuarioNome,
   podeTrocarEmpresa,
+  grupos: gruposFixos,
+  inicio = "/dashboard",
 }: {
   modulos: Modulo[];
   empresa: string | null;
@@ -41,6 +43,17 @@ export function Sidebar({
   email: string;
   usuarioNome: string | null;
   podeTrocarEmpresa: boolean;
+  /**
+   * Menu pronto, no lugar do derivado dos modulos do plano.
+   *
+   * Existe para o portal do cliente: o menu dele nao vem do plano da empresa —
+   * ele nao administra empresa nenhuma — e sim do que um cliente pode fazer.
+   * Duplicar a barra inteira faria as duas divergirem no primeiro ajuste de
+   * espacamento.
+   */
+  grupos?: Grupo[];
+  /** Para onde a marca leva. O portal nao tem dashboard. */
+  inicio?: string;
 }) {
   const pathname = usePathname();
   const [recolhida, setRecolhida] = useState(recolhidaInicial);
@@ -53,7 +66,7 @@ export function Sidebar({
     document.cookie = `${COOKIE_SIDEBAR}=${valor ? "1" : "0"}; path=/; max-age=31536000; samesite=lax`;
   }
 
-  const grupos = gruposDosModulos(modulos);
+  const grupos = gruposFixos ?? gruposDosModulos(modulos);
 
   // So telas que o plano libera entram nos favoritos: perder o modulo nao pode
   // deixar um atalho morto no topo do menu.
@@ -97,7 +110,7 @@ export function Sidebar({
       >
         {!recolhida && (
           <Link
-            href="/dashboard"
+            href={inicio}
             style={{
               fontSize: "var(--text-xl)",
               fontWeight: "var(--fw-bold)",
@@ -159,7 +172,7 @@ export function Sidebar({
           <>
             {telasFavoritas.length > 0 && <Favoritos telas={telasFavoritas} pathname={pathname} />}
 
-            {grupos.length === 1 && (
+            {!gruposFixos && grupos.length === 1 && (
               <p
                 style={{
                   padding: 12,

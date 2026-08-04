@@ -1,5 +1,5 @@
 import { carteira } from "@/modules/portal/portal.service";
-import { CobrancasTabela } from "./cobrancas-tabela";
+import { CobrancasQuadro } from "./cobrancas-quadro";
 import { SemAcesso } from "./sem-acesso";
 
 /**
@@ -15,7 +15,7 @@ export default async function PortalPage() {
   if (clientes.length === 0) return <SemAcesso />;
 
   return (
-    <CobrancasTabela
+    <CobrancasQuadro
       parcelas={parcelas}
       emitentes={emitentes}
       emAberto={emAberto}

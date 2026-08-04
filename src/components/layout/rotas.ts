@@ -113,6 +113,25 @@ export const GRUPOS_POR_MODULO: Partial<Record<Modulo, Grupo[]>> = {
   ],
 };
 
+/**
+ * Menu do PORTAL — quem entra e pessoa do cliente, nao da casa.
+ *
+ * Lista propria e nao um recorte de `GRUPOS_POR_MODULO`: o menu do sistema e
+ * organizado pelo que a EMPRESA administra, e o cliente nao administra nada. Ele
+ * consulta o que deve e, em breve, abre chamado.
+ *
+ * Fica aqui junto com os outros para continuar valendo a regra do arquivo: mapa
+ * de navegacao tem uma fonte so.
+ */
+export const GRUPOS_DO_PORTAL: Grupo[] = [
+  {
+    key: "portal",
+    label: "Financeiro",
+    icon: "faturas",
+    items: [{ label: "Minhas cobranças", href: "/portal" }],
+  },
+];
+
 export const GRUPO_PLATAFORMA: Grupo = {
   key: "plataforma",
   label: "Plataforma",
