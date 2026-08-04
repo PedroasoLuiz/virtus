@@ -45,7 +45,7 @@ export async function minhasParcelas(): Promise<ParcelaDoCliente[]> {
   const { data, error } = await supabase
     .from("faturasparcelas")
     .select(
-      "id, token, numeroparcela, vencimento, valor, total, pago, nfs, boleto, pagamentosxparcelas(valor), faturas!inner(id, parcelas, faturasorigens(ordensservico(idtenant, id)))",
+      "id, token, numeroparcela, vencimento, valor, total, pago, nfs, boleto, pagamentosxparcelas(valor), faturas!inner(id, parcelas, fkEmpresa, empresas(id, fantasia, razaosocial), faturasorigens(ordensservico(idtenant, id)))",
     )
     .order("vencimento", { ascending: true });
 
@@ -56,6 +56,8 @@ export async function minhasParcelas(): Promise<ParcelaDoCliente[]> {
   return (data ?? []).map((l) => {
     const f = l.faturas as unknown as {
       parcelas: number | null;
+      fkEmpresa: number | null;
+      empresas: { id: number; fantasia: string | null; razaosocial: string | null } | null;
       faturasorigens: { ordensservico: { idtenant: number | null; id: number } | null }[] | null;
     };
 
@@ -75,6 +77,11 @@ export async function minhasParcelas(): Promise<ParcelaDoCliente[]> {
     return {
       parcelaId: l.id,
       token: l.token,
+      emitente: {
+        id: f.empresas?.id ?? f.fkEmpresa ?? 0,
+        nome:
+          primeiroPreenchido(f.empresas?.fantasia, f.empresas?.razaosocial) ?? "Emitente",
+      },
       numero: l.numeroparcela ?? 0,
       totalParcelas: f.parcelas ?? 0,
       vencimento,

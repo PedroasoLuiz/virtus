@@ -21,8 +21,16 @@ export async function carteira(): Promise<CarteiraDoCliente> {
    */
   const abertas = parcelas.filter((p) => !p.pago && p.emAberto > 0);
 
+  // Deduz das parcelas em vez de consultar `empresas`: a lista precisa ser a de
+  // quem REALMENTE cobrou este cliente, e nao a de todas as empresas que ele
+  // enxerga — um filtro que oferece opcao sem resultado ensina a nao usar filtro.
+  const emitentes = [...new Map(parcelas.map((p) => [p.emitente.id, p.emitente])).values()].sort(
+    (a, b) => a.nome.localeCompare(b.nome, "pt-BR"),
+  );
+
   return {
     clientes,
+    emitentes,
     parcelas,
     emAberto: abertas.reduce<Centavos>((s, p) => somar(s, p.emAberto), ZERO),
     vencido: abertas

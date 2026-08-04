@@ -21,9 +21,15 @@ export default async function PortalLayout({ children }: { children: React.React
 
   return (
     <Avisos>
+      {/*
+       * Mesma mecânica de altura da casca do sistema: a página nunca rola, o
+       * scroll vive dentro da área de tabela. `PageLayout` conta com `height:
+       * 100%` no pai, e sem isso a tabela crescia para fora da tela.
+       */}
       <div
         style={{
-          minHeight: "100dvh",
+          height: "100dvh",
+          overflow: "hidden",
           background: "var(--bg)",
           display: "flex",
           flexDirection: "column",
@@ -60,7 +66,7 @@ export default async function PortalLayout({ children }: { children: React.React
           <SairDoPortal />
         </header>
 
-        <main style={{ flex: 1, padding: 20 }}>{children}</main>
+        <main style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>{children}</main>
       </div>
     </Avisos>
   );

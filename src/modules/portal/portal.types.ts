@@ -17,10 +17,23 @@ import type { DataISO } from "@/shared/utils/datas";
  * interno; o que o cliente conhece e o TICKET e o vencimento (ver docs/10).
  */
 
+/**
+ * Quem esta cobrando.
+ *
+ * O mesmo cliente pode ser atendido por mais de uma empresa da casa — RION LED e
+ * cliente da Virtus E da PMX PMO —, e para ele sao duas cobrancas de origens
+ * diferentes. Sem o emitente na linha, as duas se misturariam numa lista so.
+ */
+export type Emitente = {
+  id: number;
+  nome: string;
+};
+
 export type ParcelaDoCliente = {
   parcelaId: number;
   /** Credencial da pagina publica `/p/{token}`, onde ficam os documentos. */
   token: string | null;
+  emitente: Emitente;
   numero: number;
   totalParcelas: number;
   vencimento: DataISO | null;
@@ -43,6 +56,8 @@ export type ClienteDoPortal = {
 
 export type CarteiraDoCliente = {
   clientes: ClienteDoPortal[];
+  /** Empresas que cobram este cliente. Mais de uma habilita o filtro na tela. */
+  emitentes: Emitente[];
   parcelas: ParcelaDoCliente[];
   /** Somas do que esta em aberto. O que ja foi pago nao entra. */
   emAberto: Centavos;
