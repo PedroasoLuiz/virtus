@@ -248,7 +248,16 @@ async function passoDaIdentificacao(
       return "Acho que veio faltando algum dígito aí. Dá uma conferida e manda de novo pra mim?";
     }
 
-    return await enviarCodigo(segredo, ctx, conversaId, triagem.documento);
+    return await acharCadastro(segredo, conversaId, triagem.documento);
+  }
+
+  if (triagem.acao === "CONFIRMA_EMAIL") {
+    return await mandarCodigo(segredo, ctx, conversaId);
+  }
+
+  if (triagem.acao === "NEGA_EMAIL") {
+    await repo.cancelarVerificacao(segredo, conversaId);
+    return "Entendi. Nesse caso eu não consigo confirmar por aqui, então vou passar pro financeiro te atender direto.";
   }
 
   if (triagem.acao === "CODIGO") {
@@ -268,6 +277,96 @@ async function passoDaIdentificacao(
   }
 
   return null;
+}
+
+/** O que fazer em cada passo que o texto da conversa ja define sozinho. */
+async function passoDeterministico(
+  segredo: string,
+  ctx: ContextoDoBot,
+  conversaId: number,
+  atalho: { acao: "DOCUMENTO" | "CODIGO" | "CONFIRMA" | "NEGA"; valor: string },
+): Promise<string> {
+  if (atalho.acao === "CODIGO") {
+    return await conferirEResponder(segredo, conversaId, atalho.valor);
+  }
+
+  if (atalho.acao === "DOCUMENTO") {
+    return await acharCadastro(segredo, conversaId, atalho.valor);
+  }
+
+  if (atalho.acao === "CONFIRMA") {
+    return await mandarCodigo(segredo, ctx, conversaId);
+  }
+
+  /*
+   * Ela nao abre aquela caixa, e nao ha segundo caminho automatico.
+   *
+   * ⚠️ Trocar o e-mail de destino aqui destruiria a unica prova que existe: o
+   * codigo so vale porque vai para um endereco que estava no cadastro ANTES da
+   * conversa. Aceitar outro seria deixar quem pediu escolher onde receber a
+   * propria autorizacao.
+   */
+  await repo.cancelarVerificacao(segredo, conversaId);
+  return "Entendi. Nesse caso eu não consigo confirmar por aqui, então vou passar pro financeiro te atender direto.";
+}
+
+/**
+ * Acha o cadastro pelo documento e pergunta antes de mandar o codigo.
+ *
+ * ⚠️ O cadastro de empresa costuma apontar para uma caixa que quem esta no
+ * WhatsApp nao abre: financeiro@, contato@, o e-mail do socio. Mandar direto
+ * deixava a pessoa esperando um codigo que chegou para outra.
+ */
+async function acharCadastro(
+  segredo: string,
+  conversaId: number,
+  documento: string,
+): Promise<string> {
+  const aberta = await repo.abrirVerificacao(segredo, conversaId, digitosDoDocumento(documento));
+
+  if (!aberta) {
+    logger.info("identificacao sem cadastro utilizavel", { conversaId });
+    return "Não localizei um cadastro com esse documento aqui, ou ele está sem e-mail. Vou chamar o financeiro pra te ajudar por outro caminho.";
+  }
+
+  return `Achei aqui. Você tem acesso ao e-mail ${aberta.emailMascarado}? Se tiver, eu mando um código pra lá agora.`;
+}
+
+/** Gera o codigo, manda no e-mail do cadastro e avisa que saiu. */
+async function mandarCodigo(
+  segredo: string,
+  ctx: ContextoDoBot,
+  conversaId: number,
+): Promise<string> {
+  const codigo = gerarCodigo();
+  const clienteId = await repo.confirmarEmail(segredo, conversaId, hashDoCodigo(conversaId, codigo));
+
+  if (!clienteId) {
+    return "A tentativa anterior expirou. Me manda o CPF ou CNPJ de novo que a gente recomeça.";
+  }
+
+  try {
+    const email = await repo.emailDoCliente(segredo, clienteId);
+
+    if (email) {
+      await enviarEmail({
+        para: [email],
+        assunto: `Seu código de acesso: ${codigo}`,
+        html: corpoDoEmail(codigo, ctx.clienteNome ?? "a empresa"),
+      });
+    }
+  } catch (err) {
+    logger.error("falha ao enviar o codigo de identificacao", {
+      conversaId,
+      erro: err instanceof Error ? err.message : err,
+    });
+
+    // Aqui a falha PODE ser dita: a pessoa ja sabe que o cadastro existe, entao
+    // esconder o erro so a deixaria esperando um codigo que nunca vai chegar.
+    return "Tive um problema pra enviar o código agora. Vou passar pro financeiro te atender direto.";
+  }
+
+  return "Pronto, o código de 6 dígitos acabou de sair. Me passa ele aqui quando chegar.";
 }
 
 /** Confere o codigo e, dando certo, ja emenda a situacao da conta. */
@@ -293,63 +392,6 @@ async function conferirEResponder(
   // saber isso, e mandar "pronto, identificado" e depois esperar ela perguntar
   // de novo seria cobrar um passo a toa.
   return `Confirmado, obrigado! ${await textoDaConta(segredo, conversaId)}`;
-}
-
-/**
- * Gera o codigo, manda no e-mail do cadastro e diz para onde foi.
- *
- * ⚠️ O codigo NUNCA vai para o log, nem para a resposta do WhatsApp. Ele existe
- * para provar acesso aquela caixa de e-mail; visivel em qualquer outro lugar,
- * nao prova nada.
- */
-async function enviarCodigo(
-  segredo: string,
-  ctx: ContextoDoBot,
-  conversaId: number,
-  documento: string,
-): Promise<string> {
-  const codigo = gerarCodigo();
-
-  const aberta = await repo.abrirVerificacao(
-    segredo,
-    conversaId,
-    digitosDoDocumento(documento),
-    hashDoCodigo(conversaId, codigo),
-  );
-
-  /*
-   * Sem cadastro, cadastro duplicado ou cadastro sem e-mail caem todos aqui, e
-   * todos recebem a MESMA frase de quem teve sucesso. A diferenca aparece so
-   * para quem tem acesso ao e-mail: o código chega, ou não chega.
-   */
-  const resposta =
-    "Certo. Se esse documento estiver no cadastro, o código de 6 dígitos já saiu pro e-mail que temos aqui. É só me passar ele.";
-
-  if (!aberta) {
-    logger.info("identificacao sem cadastro utilizavel", { conversaId });
-    return resposta;
-  }
-
-  try {
-    const email = await repo.emailDoCliente(segredo, aberta.clienteId);
-
-    if (email) {
-      await enviarEmail({
-        para: [email],
-        assunto: `Seu código de acesso: ${codigo}`,
-        html: corpoDoEmail(codigo, ctx.clienteNome ?? "a empresa"),
-      });
-    }
-  } catch (err) {
-    // Falha de e-mail nao muda a resposta: mudar entregaria, pelo texto, que
-    // aquele documento tem cadastro.
-    logger.error("falha ao enviar o codigo de identificacao", {
-      conversaId,
-      erro: err instanceof Error ? err.message : err,
-    });
-  }
-
-  return resposta;
 }
 
 /** A situacao da conta em uma frase, ou o encaminhamento quando nao da. */
@@ -548,13 +590,11 @@ async function executar(conversaId: number): Promise<void> {
    * que interpretar. Deixar isso a cargo do modelo custou uma falha muda, com a
    * pessoa esperando resposta que nunca veio.
    */
-  const atalho = atalhoDeIdentificacao(historico);
+  const etapa = await repo.etapaDaVerificacao(segredo, conversaId);
+  const atalho = atalhoDeIdentificacao(historico, etapa?.etapa === "AGUARDANDO_CONFIRMACAO");
 
   if (atalho) {
-    const texto =
-      atalho.acao === "CODIGO"
-        ? await conferirEResponder(segredo, conversaId, atalho.valor)
-        : await enviarCodigo(segredo, ctx, conversaId, atalho.valor);
+    const texto = await passoDeterministico(segredo, ctx, conversaId, atalho);
 
     await responderComo(segredo, ctx, conversaId, texto);
     logger.info("passo de identificacao resolvido sem o modelo", {
@@ -578,7 +618,7 @@ async function executar(conversaId: number): Promise<void> {
   try {
     const triagem = await ia.responderEmJson<Triagem>(
       credencialIA,
-      instrucao(ctx, setores, jaVerificado),
+      instrucao(ctx, setores, jaVerificado, etapa),
       conversaEmTexto(historico),
       ESQUEMA_DA_TRIAGEM,
       await imagensRecentes(segredo, conversaId, historico),

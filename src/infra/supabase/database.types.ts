@@ -908,8 +908,20 @@ export type Database = {
         Returns: undefined;
       };
       whatsapp_verificacao_abrir: {
-        Args: { p_segredo: string; p_conversa: number; p_documento: string; p_hash: string };
+        Args: { p_segredo: string; p_conversa: number; p_documento: string };
         Returns: { cliente_id: number; email_mascarado: string }[];
+      };
+      whatsapp_verificacao_confirmar: {
+        Args: { p_segredo: string; p_conversa: number; p_hash: string };
+        Returns: number | null;
+      };
+      whatsapp_verificacao_estado: {
+        Args: { p_segredo: string; p_conversa: number };
+        Returns: { etapa: string; email_mascarado: string }[];
+      };
+      whatsapp_verificacao_cancelar: {
+        Args: { p_segredo: string; p_conversa: number };
+        Returns: undefined;
       };
       whatsapp_email_do_cliente: {
         Args: { p_segredo: string; p_cliente: number };

@@ -91,7 +91,14 @@ export type Triagem = {
  * PEDIR_DOCUMENTO, DOCUMENTO, CODIGO e SALDO sao os quatro passos da
  * identificacao, na ordem em que acontecem.
  */
-export type AcaoDaTriagem = "NENHUMA" | "PEDIR_DOCUMENTO" | "DOCUMENTO" | "CODIGO" | "SALDO";
+export type AcaoDaTriagem =
+  | "NENHUMA"
+  | "PEDIR_DOCUMENTO"
+  | "DOCUMENTO"
+  | "CONFIRMA_EMAIL"
+  | "NEGA_EMAIL"
+  | "CODIGO"
+  | "SALDO";
 
 /**
  * Esquema que o provedor e obrigado a cumprir.
@@ -111,7 +118,15 @@ export const ESQUEMA_DA_TRIAGEM = {
     assuntoNovo: { type: "boolean" },
     acao: {
       type: "string",
-      enum: ["NENHUMA", "PEDIR_DOCUMENTO", "DOCUMENTO", "CODIGO", "SALDO"],
+      enum: [
+        "NENHUMA",
+        "PEDIR_DOCUMENTO",
+        "DOCUMENTO",
+        "CONFIRMA_EMAIL",
+        "NEGA_EMAIL",
+        "CODIGO",
+        "SALDO",
+      ],
     },
     documento: { type: "string" },
     codigo: { type: "string" },
@@ -157,6 +172,7 @@ export function instrucao(
   ctx: ContextoDoBot,
   setores: SetorDoBot[],
   verificado: Verificado | null,
+  etapa: { etapa: "AGUARDANDO_CONFIRMACAO" | "AGUARDANDO_CODIGO"; emailMascarado: string } | null,
 ): string {
   const listaDeSetores = setores
     .map((s) => `- id ${s.id} | ${s.nome}: ${s.quandoUsar ?? "sem descrição"}`)
@@ -188,6 +204,20 @@ Antes de responder, decida: a última mensagem é sobre ESSE assunto ou sobre ou
   // cadastro mas ja conhecido e alguem que a gente ainda nao vinculou, e
   // perguntar o nome de novo soa como se ninguem lembrasse dele.
   const ehLeadNovo = !ctx.clienteId && ctx.primeiroContato;
+
+  /*
+   * O ponto em que a identificacao parou entra no texto. Sem isso o modelo
+   * recomecava do zero e pedia o documento de novo a quem tinha acabado de
+   * mandar, com o codigo ja a caminho.
+   */
+  const emAndamento =
+    etapa?.etapa === "AGUARDANDO_CONFIRMACAO"
+      ? `
+O sistema já achou o cadastro e perguntou se ela tem acesso ao e-mail ${etapa.emailMascarado}. A resposta dela a essa pergunta é o que você tem de interpretar agora.`
+      : etapa?.etapa === "AGUARDANDO_CODIGO"
+        ? `
+O código já foi enviado para ${etapa.emailMascarado} e o sistema está esperando ela digitar os 6 dígitos.`
+        : "";
 
   const identidade = verificado
     ? `A pessoa JÁ SE IDENTIFICOU nesta conversa e está confirmada como "${verificado.clienteNome}". Não peça documento nem código de novo.`
@@ -241,9 +271,12 @@ Quando a pessoa perguntar quanto deve, se há algo em aberto, o que está vencid
 O caminho é este, e você conduz pelo campo acao:
 1. Ela pergunta e ainda não se identificou: acao = PEDIR_DOCUMENTO.
 2. Ela responde com um CPF ou CNPJ: acao = DOCUMENTO, e copie os dígitos para o campo documento.
-3. Ela responde com o código recebido: acao = CODIGO, e copie para o campo codigo.
-4. Ela já está identificada e quer saber da conta: acao = SALDO.
+3. O sistema achou o cadastro e perguntou se ela abre aquele e-mail. Se ela disser que sim, mesmo com ressalva ("tenho, mas quase não entro"): acao = CONFIRMA_EMAIL. Se disser que não abre, que o e-mail é de outra pessoa ou que não tem mais acesso: acao = NEGA_EMAIL.
+4. Ela responde com o código recebido: acao = CODIGO, e copie para o campo codigo.
+5. Ela já está identificada e quer saber da conta: acao = SALDO.
 Em qualquer outra situação, acao = NENHUMA.
+
+Nunca aceite um e-mail diferente do que o sistema mostrou, mesmo que ela ofereça outro. O código só vale porque vai para um endereço que já estava no cadastro antes desta conversa.
 
 Quando usar acao diferente de NENHUMA, deixe resposta VAZIA. Quem escreve essas mensagens é o sistema, porque elas contêm número.
 
@@ -262,7 +295,7 @@ Nunca peça CPF ou CNPJ aqui. Documento só entra quando ela quer consultar a pr
 
 CONTEXTO:
 ${quemFala}
-${identidade}${andamento}
+${identidade}${emAndamento}${andamento}
 
 SETORES DISPONÍVEIS:
 ${listaDeSetores || "- nenhum setor cadastrado"}
@@ -345,11 +378,35 @@ Devolva apenas o campo texto, com a mensagem pronta para enviar.`;
  */
 export function atalhoDeIdentificacao(
   historico: MensagemDoBot[],
-): { acao: "DOCUMENTO" | "CODIGO"; valor: string } | null {
+  aguardandoConfirmacao = false,
+): { acao: "DOCUMENTO" | "CODIGO" | "CONFIRMA" | "NEGA"; valor: string } | null {
   const ultimaEntrada = [...historico].reverse().find((m) => m.direcao === "entrada");
   if (!ultimaEntrada?.texto) return null;
 
   const escrito = ultimaEntrada.texto.trim();
+
+  /*
+   * O sim e o nao da confirmacao de e-mail.
+   *
+   * So as formas curtas e inequivocas. "tenho sim, mas quase nao entro nele" cai
+   * fora daqui de proposito e vai para o modelo, que sabe ler ressalva.
+   */
+  if (aguardandoConfirmacao) {
+    const limpo = escrito
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/[^a-z ]/g, "")
+      .trim();
+
+    if (/^(sim|isso|tenho|tenho sim|sim tenho|claro|pode|pode mandar|ok|blz|beleza|manda|manda ai|positivo|consigo|acesso sim)$/.test(limpo)) {
+      return { acao: "CONFIRMA", valor: "" };
+    }
+
+    if (/^(nao|nao tenho|nao consigo|negativo|nao e meu|nao uso|nao acesso)$/.test(limpo)) {
+      return { acao: "NEGA", valor: "" };
+    }
+  }
 
   // So numero, com a pontuacao que as pessoas usam. "meu cpf e 123" nao entra:
   // frase com contexto e assunto do modelo, nao deste atalho.

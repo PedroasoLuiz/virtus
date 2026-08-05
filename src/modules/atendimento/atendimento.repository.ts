@@ -197,7 +197,6 @@ export async function abrirVerificacao(
   segredo: string,
   conversaId: number,
   documento: string,
-  hash: string,
 ): Promise<{ clienteId: number; emailMascarado: string } | null> {
   const supabase = anonClient();
 
@@ -205,13 +204,69 @@ export async function abrirVerificacao(
     p_segredo: segredo,
     p_conversa: conversaId,
     p_documento: documento,
-    p_hash: hash,
   });
 
   if (error) throw error;
 
   const l = data?.[0];
   return l ? { clienteId: l.cliente_id, emailMascarado: l.email_mascarado } : null;
+}
+
+/** A pessoa confirmou que abre a caixa: o codigo passa a valer. */
+export async function confirmarEmail(
+  segredo: string,
+  conversaId: number,
+  hash: string,
+): Promise<number | null> {
+  const supabase = anonClient();
+
+  const { data, error } = await supabase.rpc("whatsapp_verificacao_confirmar", {
+    p_segredo: segredo,
+    p_conversa: conversaId,
+    p_hash: hash,
+  });
+
+  if (error) throw error;
+  return data ?? null;
+}
+
+export type EtapaDaVerificacao = {
+  etapa: "AGUARDANDO_CONFIRMACAO" | "AGUARDANDO_CODIGO";
+  emailMascarado: string;
+};
+
+/** Em que ponto da identificacao a conversa esta, se estiver em algum. */
+export async function etapaDaVerificacao(
+  segredo: string,
+  conversaId: number,
+): Promise<EtapaDaVerificacao | null> {
+  const supabase = anonClient();
+
+  const { data, error } = await supabase.rpc("whatsapp_verificacao_estado", {
+    p_segredo: segredo,
+    p_conversa: conversaId,
+  });
+
+  if (error) throw error;
+
+  const l = data?.[0];
+  return l
+    ? { etapa: l.etapa as EtapaDaVerificacao["etapa"], emailMascarado: l.email_mascarado }
+    : null;
+}
+
+export async function cancelarVerificacao(
+  segredo: string,
+  conversaId: number,
+): Promise<void> {
+  const supabase = anonClient();
+
+  const { error } = await supabase.rpc("whatsapp_verificacao_cancelar", {
+    p_segredo: segredo,
+    p_conversa: conversaId,
+  });
+
+  if (error) throw error;
 }
 
 export async function conferirCodigo(
