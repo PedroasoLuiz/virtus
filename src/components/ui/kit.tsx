@@ -496,7 +496,18 @@ export function Pagination({
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
-        padding: "0 16px",
+        /*
+         * ⚠️ Respiro extra a direita por causa do botao flutuante do WhatsApp.
+         *
+         * Ele mora no canto inferior direito da tela, fixo, e a paginacao e o
+         * unico controle do sistema que divide esse canto — sem a folga, o botao
+         * cobre "proxima pagina" e a tabela fica presa na primeira.
+         *
+         * A folga vale em toda tela, inclusive onde o botao nao aparece: o custo
+         * e um vao de 60px, e a alternativa seria a paginacao ter de saber quem
+         * mais esta na tela.
+         */
+        padding: "0 76px 0 16px",
         borderTop: "1px solid var(--border)",
         backgroundColor: "var(--surface-2)",
         fontSize: "var(--text-sm)",

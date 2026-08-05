@@ -597,6 +597,70 @@ export type MenuFavoritoRow = {
   ordem: number;
 };
 
+/**
+ * Conversa do WhatsApp — uma por telefone dentro de um numero.
+ *
+ * ⚠️ `whatsappcontas` NAO tem tipo aqui de proposito: a tabela guarda o segredo
+ * do webhook, esta com RLS sem policy e nao e legivel pelo PostgREST. Quem a le
+ * e a funcao `whatsapp_registrar_evento`, dentro do banco.
+ */
+export type WhatsappConversaRow = {
+  id: number;
+  created_at: string;
+  fkEmpresa: number;
+  fkConta: number;
+  fkCliente: number | null;
+  telefone: string;
+  nome: string | null;
+  ultima_em: string | null;
+  ultimo_texto: string | null;
+  /** Tipo da ultima mensagem. Alimenta o icone da previa, como no WhatsApp. */
+  ultimo_tipo: string | null;
+  ultima_direcao: "entrada" | "saida" | null;
+  nao_lidas: number;
+  /** Marcado durante a triagem. O painel trava o campo de escrita enquanto isso. */
+  bot_respondendo_em: string | null;
+  /** Fim da janela de 24h da Meta. Fora dela so template passa. */
+  janela_expira_em: string | null;
+};
+
+export type WhatsappMensagemRow = {
+  id: number;
+  created_at: string;
+  fkEmpresa: number;
+  fkConversa: number;
+  fkUser: string | null;
+  /** Id da Meta. UNIQUE — e o que torna a ingestao do webhook idempotente. */
+  wamid: string | null;
+  direcao: "entrada" | "saida";
+  tipo: string;
+  texto: string | null;
+  midia_id: string | null;
+  midia_mime: string | null;
+  midia_nome: string | null;
+  status: string | null;
+  erro: string | null;
+  enviada_em: string;
+};
+
+/**
+ * Contatos alem do principal de uma pessoa.
+ *
+ * `clientes.contato` continua sendo o principal e continua valendo: a resolucao
+ * de telefone do WhatsApp olha as duas fontes.
+ */
+export type ClienteContatoRow = {
+  id: number;
+  created_at: string;
+  fkCliente: number;
+  fkUserCriacao: string | null;
+  tipo: "telefone" | "whatsapp" | "email";
+  valor: string;
+  /** De quem e este contato dentro da empresa: financeiro, comercial, a pessoa. */
+  rotulo: string | null;
+  ativo: boolean;
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -613,6 +677,7 @@ export type Database = {
       clientesxcentrocusto: { Row: ClienteCentroCustoRow; Insert: Partial<ClienteCentroCustoRow>; Update: Partial<ClienteCentroCustoRow>; Relationships: [] };
       clientesenderecos: { Row: ClienteEnderecoRow; Insert: Partial<ClienteEnderecoRow>; Update: Partial<ClienteEnderecoRow>; Relationships: [] };
       clientes: { Row: ClienteRow; Insert: Partial<ClienteRow>; Update: Partial<ClienteRow>; Relationships: [] };
+      clientescontatos: { Row: ClienteContatoRow; Insert: Partial<ClienteContatoRow>; Update: Partial<ClienteContatoRow>; Relationships: [] };
       faturas: { Row: FaturaRow; Insert: Partial<FaturaRow>; Update: Partial<FaturaRow>; Relationships: [] };
       pagamentos: { Row: PagamentoRow; Insert: Partial<PagamentoRow>; Update: Partial<PagamentoRow>; Relationships: [] };
       pagamentosxparcelas: { Row: PagamentoParcelaRow; Insert: Partial<PagamentoParcelaRow>; Update: Partial<PagamentoParcelaRow>; Relationships: [] };
@@ -636,6 +701,8 @@ export type Database = {
       ordensservicostatus: { Row: TicketStatusRow; Insert: Partial<TicketStatusRow>; Update: Partial<TicketStatusRow>; Relationships: [] };
       menufavoritos: { Row: MenuFavoritoRow; Insert: Partial<MenuFavoritoRow>; Update: Partial<MenuFavoritoRow>; Relationships: [] };
       assinaturas: { Row: AssinaturaRow; Insert: Partial<AssinaturaRow>; Update: Partial<AssinaturaRow>; Relationships: [] };
+      whatsappconversas: { Row: WhatsappConversaRow; Insert: Partial<WhatsappConversaRow>; Update: Partial<WhatsappConversaRow>; Relationships: [] };
+      whatsappmensagens: { Row: WhatsappMensagemRow; Insert: Partial<WhatsappMensagemRow>; Update: Partial<WhatsappMensagemRow>; Relationships: [] };
     };
     Views: {
       vw_origens_faturamento: { Row: OrigemFaturamentoRow; Relationships: [] };
@@ -709,6 +776,219 @@ export type Database = {
           pfkcontabancaria: number;
         };
         Returns: unknown;
+      };
+      /**
+       * Ingestao do webhook do WhatsApp. SECURITY DEFINER porque roda sem
+       * sessao; `p_segredo` e o que substitui a sessao.
+       *
+       * A empresa NAO vem por parametro — sai do `phone_number_id` cadastrado.
+       * Foi por receber empresa por parametro que `get_contasreceber` vazava.
+       */
+      /**
+       * SECURITY INVOKER: a RLS de `clientes` responde pelo tenant, entao
+       * `p_empresa` aqui e filtro e nao autorizacao.
+       */
+      whatsapp_clientes_do_telefone: {
+        Args: { p_empresa: number; p_telefone: string };
+        Returns: {
+          id: number;
+          razao: string | null;
+          nomefantasia: string | null;
+          contato: string | null;
+          cnpj: string | null;
+          ativo: boolean | null;
+        }[];
+      };
+      /**
+       * Contas de WhatsApp da empresa, SEM segredo.
+       *
+       * SECURITY DEFINER porque `whatsappcontas` nao tem policy (guarda
+       * referencia a segredo, entao fica fechada). A checagem de tenant mora
+       * DENTRO da funcao, nao no parametro.
+       */
+      /** Configuracao de IA da empresa. NUNCA devolve a chave. */
+      ia_config_da_empresa: {
+        Args: { p_empresa: number };
+        Returns: {
+          provedor: string;
+          modelo: string;
+          ativo: boolean;
+          tem_chave: boolean;
+          numero_teste: string | null;
+        }[];
+      };
+      ia_salvar_config: {
+        Args: {
+          p_empresa: number;
+          p_modelo: string;
+          p_ativo: boolean;
+          p_chave: string | null;
+          p_numero_teste: string | null;
+        };
+        Returns: undefined;
+      };
+      /** ⚠️ Devolve a chave em CLARO, do vault. Nunca sai do servidor. */
+      ia_credencial: {
+        Args: { p_segredo: string; p_empresa: number };
+        Returns: {
+          provedor: string;
+          modelo: string;
+          chave: string;
+          numero_teste: string | null;
+        }[];
+      };
+      /** Contexto do bot. A empresa sai da conversa, nunca do parametro. */
+      /** Liga e desliga o aviso de "a IA esta respondendo" no painel. */
+      whatsapp_bot_respondendo: {
+        Args: { p_segredo: string; p_conversa: number; p_ativo: boolean };
+        Returns: undefined;
+      };
+      whatsapp_contexto_do_bot: {
+        Args: { p_segredo: string; p_conversa: number };
+        Returns: {
+          empresa: number;
+          telefone: string;
+          nome: string | null;
+          cliente_id: number | null;
+          cliente_nome: string | null;
+          atendimento_id: number | null;
+          atendimento_situacao: string | null;
+          atendimento_setor: string | null;
+          atendimento_aceito: boolean;
+          tentativas: number;
+          humano_respondeu: boolean;
+        }[];
+      };
+      bot_conversas_pendentes: {
+        Args: { p_segredo: string; p_minutos: number };
+        Returns: { conversa_id: number; acao: string }[];
+      };
+      atendimento_marcar_lembrete: {
+        Args: { p_segredo: string; p_conversa: number };
+        Returns: undefined;
+      };
+      atendimento_abandonar: {
+        Args: { p_segredo: string; p_conversa: number };
+        Returns: undefined;
+      };
+      setores_do_bot: {
+        Args: { p_segredo: string; p_empresa: number };
+        Returns: { id: number; nome: string; quando_usar: string | null }[];
+      };
+      mensagens_do_bot: {
+        Args: { p_segredo: string; p_conversa: number; p_limite: number };
+        Returns: {
+          direcao: string;
+          tipo: string;
+          texto: string | null;
+          do_bot: boolean;
+          enviada_em: string;
+        }[];
+      };
+      /** ⚠️ Grava com `fkUser` NULO: e o que marca a mensagem como do bot. */
+      whatsapp_registrar_saida_do_bot: {
+        Args: { p_segredo: string; p_conversa: number; p_wamid: string; p_texto: string };
+        Returns: number;
+      };
+      atendimento_do_bot: {
+        Args: {
+          p_segredo: string;
+          p_conversa: number;
+          p_intencao: string | null;
+          p_resumo: string | null;
+          p_confianca: number | null;
+          p_setor: number | null;
+          p_situacao: string;
+        };
+        Returns: number;
+      };
+      whatsapp_credenciais_do_bot: {
+        Args: { p_segredo: string; p_conversa: number };
+        Returns: {
+          phone_number_id: string;
+          waba_id: string | null;
+          api_versao: string;
+          token: string;
+        }[];
+      };
+      gerar_demanda_do_atendimento: {
+        Args: {
+          p_atendimento: number;
+          p_projeto: number;
+          p_usuario: string | null;
+          p_titulo: string | null;
+          p_responsavel: string | null;
+        };
+        Returns: number;
+      };
+      whatsapp_contas_da_empresa: {
+        Args: { p_empresa: number };
+        Returns: {
+          id: number;
+          apelido: string | null;
+          numero: string | null;
+          phone_number_id: string;
+          waba_id: string | null;
+          api_versao: string;
+          ativo: boolean;
+          tem_token: boolean;
+          tem_app_secret: boolean;
+          verify_token: string | null;
+        }[];
+      };
+      /** ⚠️ Devolve o token em CLARO, do vault. Nunca sai do servidor. */
+      whatsapp_credenciais: {
+        Args: { p_conta: number };
+        Returns: {
+          phone_number_id: string;
+          waba_id: string | null;
+          api_versao: string;
+          token: string;
+        }[];
+      };
+      whatsapp_salvar_conta: {
+        Args: {
+          p_id: number | null;
+          p_empresa: number;
+          p_apelido: string | null;
+          p_numero: string | null;
+          p_phone_number_id: string;
+          p_waba_id: string | null;
+          p_api_versao: string;
+          p_verify_token: string | null;
+          p_token: string | null;
+          p_app_secret: string | null;
+        };
+        Returns: number;
+      };
+      whatsapp_desativar_conta: {
+        Args: { p_id: number; p_ativo: boolean };
+        Returns: undefined;
+      };
+      /** O `p_segredo` impede que o anon key vire oraculo de verify token. */
+      whatsapp_verify_token_valido: {
+        Args: { p_segredo: string; p_token: string };
+        Returns: boolean;
+      };
+      /** App Secret da conta dona do numero. Gated pelo segredo global. */
+      whatsapp_app_secret_do_numero: {
+        Args: { p_segredo: string; p_phone_number_id: string };
+        Returns: string | null;
+      };
+      whatsapp_registrar_evento: {
+        Args: { p_segredo: string; p_payload: unknown };
+        /**
+         * `ignorados` traz o `phone_number_id` de todo evento que nao casou com
+         * nenhuma conta, e `campos` o `field` de tudo que passou. Existem para o
+         * log dizer O QUE chegou: sem isso, evento descartado e silencio.
+         */
+        Returns: {
+          gravadas: number;
+          ignorados: string[];
+          campos: string[];
+          /** Conversas com mensagem nova. Vazio na reentrega: nada foi gravado. */
+          conversas: number[];
+        };
       };
     };
     Enums: { [_ in never]: never };

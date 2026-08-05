@@ -28,6 +28,15 @@ const COOKIE_EMPRESA = "vpay_empresa";
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  /*
+   * Webhook do WhatsApp: sai antes de tudo.
+   *
+   * Quem chama e a Meta, sem cookie nenhum — nao ha sessao para renovar, e o
+   * `getUser()` abaixo custaria uma ida a rede em toda entrega. Importa porque a
+   * Meta reentrega o lote quando a resposta demora, e reentrega demais acaba em
+   * webhook desassinado. Quem autentica esta rota e a assinatura HMAC do corpo.
+   */
+  if (pathname === "/api/v1/whatsapp/webhook") return NextResponse.next({ request });
 
   let response = NextResponse.next({ request });
 

@@ -20,6 +20,7 @@ export function Topbar({ aviso }: { aviso: "demo" | null }) {
       }}
     >
       <BuscaGlobal />
+
       {aviso && (
         <div style={{ position: "absolute", right: 12 }}>
           <Aviso />

@@ -27,6 +27,30 @@ export function browserClient() {
   );
 }
 
+/**
+ * Client SEM sessao, para quem e chamado de fora: hoje so o webhook do
+ * WhatsApp, que a Meta invoca sem cookie nenhum.
+ *
+ * Continua sendo o anon key sob RLS — nao e porta dos fundos. O webhook nao le
+ * nem escreve tabela direto: chama uma funcao `security definer` que exige um
+ * segredo compartilhado, mesma saida usada na pagina publica da cobranca.
+ *
+ * Existe separado de `serverClient()` porque `cookies()` num contexto sem
+ * requisicao estoura, e o silencio do try/catch de escrita esconderia isso.
+ */
+export function anonClient() {
+  return createServerClient<Database>(
+    publicEnv.NEXT_PUBLIC_SUPABASE_URL,
+    publicEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    {
+      cookies: {
+        getAll: () => [],
+        setAll: () => {},
+      },
+    },
+  );
+}
+
 /** Client de servidor com a sessao do usuario. Sujeito a RLS. */
 export async function serverClient() {
   const cookieStore = await cookies();

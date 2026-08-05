@@ -7,6 +7,7 @@ import { HidrataFavoritos } from "@/components/layout/hidrata-favoritos";
 import { Topbar } from "@/components/layout/topbar";
 import { sessaoUI } from "@/shared/auth/sessao-ui";
 import { Avisos } from "@/components/ui/avisos";
+import { PainelWhatsapp } from "@/components/whatsapp/painel";
 
 /**
  * Casca do app.
@@ -65,6 +66,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <main style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>{children}</main>
         </div>
       </div>
+
+      {/*
+        O WhatsApp fica na RAIZ da casca, e nao dentro da Topbar.
+        
+        Duas razoes. O botao e flutuante, presa a tela: dentro da Topbar, que tem
+        `position: relative` + `z-index`, ele herdaria aquele contexto de
+        empilhamento e ficaria abaixo da barra lateral. E responder cliente
+        interrompe outra tarefa, entao o acesso nao pertence a nenhuma tela.
+
+        Fora do modo demonstracao ele nao tem o que mostrar: sem Supabase nao ha
+        Realtime nem API, e o botao piscaria erro a cada montagem.
+      */}
+      {!sessao.demo && <PainelWhatsapp />}
     </Avisos>
   );
 }
