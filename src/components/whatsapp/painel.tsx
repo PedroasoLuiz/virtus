@@ -1626,14 +1626,33 @@ function ResumoDoAtendimento({
       style={{
         position: "absolute",
         bottom: "calc(100% + 6px)",
-        left: 10,
-        right: 10,
+        // Recuado dos 10 do campo de escrita: o cartao flutua, e coisa que
+        // flutua nao pode ter a mesma borda de quem esta no fluxo, senao le
+        // como se fizesse parte dele.
+        left: 26,
+        right: 26,
         zIndex: 3,
         padding: "10px 12px",
-        background: "var(--surface)",
-        border: `1px solid ${situacao.alerta ? "var(--warning)" : "var(--border)"}`,
+        /*
+         * Vidro: o fundo translucido desfoca a conversa por tras em vez de
+         * tapa-la. E o que faz o cartao parecer sobreposto e temporario, que e
+         * exatamente o que ele e.
+         *
+         * `color-mix` em vez de rgba fixo porque a cor de base muda com o tema:
+         * escrito na mao, o cartao ficaria branco leitoso no modo escuro.
+         */
+        background: "color-mix(in srgb, var(--surface) 72%, transparent)",
+        backdropFilter: "blur(20px) saturate(180%)",
+        WebkitBackdropFilter: "blur(20px) saturate(180%)",
+        border: `1px solid ${
+          situacao.alerta
+            ? "var(--warning)"
+            : "color-mix(in srgb, var(--border) 70%, transparent)"
+        }`,
         borderRadius: "var(--radius-lg)",
-        boxShadow: "var(--shadow-md)",
+        // Duas sombras: a larga descola do fundo, a fina de cima desenha o
+        // brilho da quina que o vidro tem quando pega luz.
+        boxShadow: "var(--shadow-md), inset 0 1px 0 rgba(255,255,255,0.22)",
         animation: "fade-in 160ms var(--ease-out)",
       }}
     >

@@ -903,6 +903,31 @@ export type Database = {
         Args: { p_segredo: string; p_conversa: number };
         Returns: undefined;
       };
+      whatsapp_verificacao_abrir: {
+        Args: { p_segredo: string; p_conversa: number; p_documento: string; p_hash: string };
+        Returns: { cliente_id: number; email_mascarado: string }[];
+      };
+      whatsapp_email_do_cliente: {
+        Args: { p_segredo: string; p_cliente: number };
+        Returns: string | null;
+      };
+      whatsapp_verificacao_conferir: {
+        Args: { p_segredo: string; p_conversa: number; p_hash: string };
+        Returns: boolean;
+      };
+      whatsapp_verificado: {
+        Args: { p_segredo: string; p_conversa: number };
+        Returns: { cliente_id: number; cliente_nome: string; vale_ate: string }[];
+      };
+      whatsapp_saldo_do_cliente: {
+        Args: { p_segredo: string; p_conversa: number };
+        Returns: {
+          em_aberto: number;
+          vencidas: number;
+          proximo_vencimento: string | null;
+          valor_do_proximo: number | null;
+        }[];
+      };
       atendimento_pede_humano: {
         Args: { p_segredo: string; p_conversa: number };
         Returns: undefined;

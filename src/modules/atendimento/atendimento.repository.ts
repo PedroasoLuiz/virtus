@@ -2,8 +2,10 @@ import { anonClient } from "@/infra/supabase/client";
 import type {
   ContextoDoBot,
   MensagemDoBot,
+  SaldoDoCliente,
   SetorDoBot,
   SituacaoAtendimento,
+  Verificado,
 } from "@/modules/atendimento/atendimento.types";
 import type { Credenciais } from "@/modules/whatsapp/whatsapp.types";
 
@@ -178,6 +180,110 @@ export async function abandonar(segredo: string, conversaId: number): Promise<vo
   });
 
   if (error) throw error;
+}
+
+/**
+ * Abre uma identificacao e devolve para onde o codigo foi.
+ *
+ * `null` quando nao ha cadastro unico com aquele documento, ou quando ele nao
+ * tem e-mail. ⚠️ Quem chama tem de responder a MESMA coisa nos dois casos: um
+ * "esse CNPJ nao e cliente" transforma o numero da empresa em consulta de
+ * carteira alheia.
+ */
+export async function abrirVerificacao(
+  segredo: string,
+  conversaId: number,
+  documento: string,
+  hash: string,
+): Promise<{ clienteId: number; emailMascarado: string } | null> {
+  const supabase = anonClient();
+
+  const { data, error } = await supabase.rpc("whatsapp_verificacao_abrir", {
+    p_segredo: segredo,
+    p_conversa: conversaId,
+    p_documento: documento,
+    p_hash: hash,
+  });
+
+  if (error) throw error;
+
+  const l = data?.[0];
+  return l ? { clienteId: l.cliente_id, emailMascarado: l.email_mascarado } : null;
+}
+
+export async function conferirCodigo(
+  segredo: string,
+  conversaId: number,
+  hash: string,
+): Promise<boolean> {
+  const supabase = anonClient();
+
+  const { data, error } = await supabase.rpc("whatsapp_verificacao_conferir", {
+    p_segredo: segredo,
+    p_conversa: conversaId,
+    p_hash: hash,
+  });
+
+  if (error) throw error;
+  return data === true;
+}
+
+export async function verificado(
+  segredo: string,
+  conversaId: number,
+): Promise<Verificado | null> {
+  const supabase = anonClient();
+
+  const { data, error } = await supabase.rpc("whatsapp_verificado", {
+    p_segredo: segredo,
+    p_conversa: conversaId,
+  });
+
+  if (error) throw error;
+
+  const l = data?.[0];
+  return l ? { clienteId: l.cliente_id, clienteNome: l.cliente_nome, valeAte: l.vale_ate } : null;
+}
+
+/** Para onde o codigo vai. Lido so na hora do envio. */
+export async function emailDoCliente(
+  segredo: string,
+  clienteId: number,
+): Promise<string | null> {
+  const supabase = anonClient();
+
+  const { data, error } = await supabase.rpc("whatsapp_email_do_cliente", {
+    p_segredo: segredo,
+    p_cliente: clienteId,
+  });
+
+  if (error) throw error;
+  return data ?? null;
+}
+
+/** ⚠️ Devolve `null` quando ninguem esta identificado. A trava e do banco. */
+export async function saldo(
+  segredo: string,
+  conversaId: number,
+): Promise<SaldoDoCliente | null> {
+  const supabase = anonClient();
+
+  const { data, error } = await supabase.rpc("whatsapp_saldo_do_cliente", {
+    p_segredo: segredo,
+    p_conversa: conversaId,
+  });
+
+  if (error) throw error;
+
+  const l = data?.[0];
+  if (!l) return null;
+
+  return {
+    emAberto: Number(l.em_aberto ?? 0),
+    vencidas: l.vencidas ?? 0,
+    proximoVencimento: l.proximo_vencimento,
+    valorDoProximo: l.valor_do_proximo == null ? null : Number(l.valor_do_proximo),
+  };
 }
 
 /** A IA desistiu: o atendimento passa a esperar uma pessoa. */

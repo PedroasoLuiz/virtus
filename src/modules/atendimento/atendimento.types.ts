@@ -53,6 +53,26 @@ export type ContextoDoBot = {
   humanoRespondeu: boolean;
 };
 
+/** Quem ja provou ser quem diz ser, nesta conversa. */
+export type Verificado = {
+  clienteId: number;
+  clienteNome: string;
+  valeAte: string;
+};
+
+/**
+ * O que o cliente identificado pode ouvir sobre a propria conta.
+ *
+ * ⚠️ Totais, nunca a lista. Boleto e dado bancario ficam de fora: eles servem
+ * para pagar, e meio de pagamento por WhatsApp e o formato do golpe.
+ */
+export type SaldoDoCliente = {
+  emAberto: number;
+  vencidas: number;
+  proximoVencimento: string | null;
+  valorDoProximo: number | null;
+};
+
 export type SetorDoBot = {
   id: number;
   nome: string;

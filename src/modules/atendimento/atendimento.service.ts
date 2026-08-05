@@ -1,7 +1,17 @@
 import { serverEnv } from "@/infra/config/env";
 import { logger } from "@/shared/utils/logger";
 import * as repo from "@/modules/atendimento/atendimento.repository";
-import type { ContextoDoBot } from "@/modules/atendimento/atendimento.types";
+import type { ContextoDoBot, Verificado } from "@/modules/atendimento/atendimento.types";
+import { enviarEmail } from "@/shared/email/enviar";
+import {
+  corpoDoEmail,
+  digitosDoDocumento,
+  gerarCodigo,
+  hashDoCodigo,
+  pareceCodigo,
+  pareceDocumento,
+  textoDoSaldo,
+} from "@/modules/atendimento/atendimento.identificacao";
 import * as iaRepo from "@/modules/ia/ia.repository";
 import * as ia from "@/modules/ia/ia.cloud";
 import * as whatsapp from "@/modules/whatsapp/whatsapp.cloud";
@@ -37,6 +47,7 @@ import {
  */
 export async function triar(conversaId: number): Promise<void> {
   try {
+    if (await aindaEstaEscrevendo(conversaId)) return;
     await executar(conversaId);
   } catch (err) {
     logger.error("falha na triagem automatica", {
@@ -141,6 +152,154 @@ async function fechar(
   await repo.registrarSaidaDoBot(segredo, conversaId, wamid, texto);
 }
 
+/** Manda e grava, na ordem em que o resto do modulo ja faz. */
+async function responderComo(
+  segredo: string,
+  ctx: ContextoDoBot,
+  conversaId: number,
+  texto: string,
+): Promise<void> {
+  const cred = await repo.credenciaisDoWhatsapp(segredo, conversaId);
+
+  if (!cred) {
+    logger.warn("bot tinha o que dizer mas o numero nao tem token", { conversaId });
+    return;
+  }
+
+  const wamid = await whatsapp.enviarTexto(cred, ctx.telefone, texto);
+  await repo.registrarSaidaDoBot(segredo, conversaId, wamid, texto);
+}
+
+/**
+ * Um passo da identificacao, e o texto que ele produz.
+ *
+ * ⚠️ As respostas de fracasso sao DELIBERADAMENTE iguais as de sucesso quando
+ * o assunto e "esse documento existe?". Dizer "não achei esse CNPJ" transforma
+ * o WhatsApp da empresa num verificador de carteira de clientes: qualquer um
+ * testaria documentos ate descobrir quem e cliente de quem.
+ */
+async function passoDaIdentificacao(
+  segredo: string,
+  ctx: ContextoDoBot,
+  conversaId: number,
+  triagem: Triagem,
+  jaVerificado: Verificado | null,
+): Promise<string | null> {
+  if (triagem.acao === "PEDIR_DOCUMENTO") {
+    return "Para eu poder falar da sua conta, preciso confirmar que é você. Me manda o CPF ou o CNPJ do cadastro, por favor.";
+  }
+
+  if (triagem.acao === "DOCUMENTO") {
+    if (!pareceDocumento(triagem.documento)) {
+      return "Esse número não parece um CPF nem um CNPJ. Pode conferir e mandar de novo?";
+    }
+
+    return await enviarCodigo(segredo, ctx, conversaId, triagem.documento);
+  }
+
+  if (triagem.acao === "CODIGO") {
+    if (!pareceCodigo(triagem.codigo)) {
+      return "O código tem 6 dígitos. Confere no e-mail e me manda de novo.";
+    }
+
+    const confere = await repo.conferirCodigo(
+      segredo,
+      conversaId,
+      hashDoCodigo(conversaId, triagem.codigo),
+    );
+
+    if (!confere) {
+      logger.info("codigo de identificacao recusado", { conversaId });
+      return "Esse código não confere ou já expirou. Me manda o CPF ou CNPJ de novo que eu envio outro.";
+    }
+
+    logger.info("cliente identificado no whatsapp", { conversaId });
+
+    // Emenda o saldo na confirmacao: a pessoa digitou o codigo justamente para
+    // saber isso, e mandar "pronto, identificado" e depois esperar ela
+    // perguntar de novo seria cobrar um passo a toa.
+    return `Confirmado, obrigado. ${await textoDaConta(segredo, conversaId)}`;
+  }
+
+  if (triagem.acao === "SALDO") {
+    if (!jaVerificado) {
+      return "Para eu poder falar da sua conta, preciso confirmar que é você. Me manda o CPF ou o CNPJ do cadastro, por favor.";
+    }
+
+    return await textoDaConta(segredo, conversaId);
+  }
+
+  return null;
+}
+
+/**
+ * Gera o codigo, manda no e-mail do cadastro e diz para onde foi.
+ *
+ * ⚠️ O codigo NUNCA vai para o log, nem para a resposta do WhatsApp. Ele existe
+ * para provar acesso aquela caixa de e-mail; visivel em qualquer outro lugar,
+ * nao prova nada.
+ */
+async function enviarCodigo(
+  segredo: string,
+  ctx: ContextoDoBot,
+  conversaId: number,
+  documento: string,
+): Promise<string> {
+  const codigo = gerarCodigo();
+
+  const aberta = await repo.abrirVerificacao(
+    segredo,
+    conversaId,
+    digitosDoDocumento(documento),
+    hashDoCodigo(conversaId, codigo),
+  );
+
+  /*
+   * Sem cadastro, cadastro duplicado ou cadastro sem e-mail caem todos aqui, e
+   * todos recebem a MESMA frase de quem teve sucesso. A diferenca aparece so
+   * para quem tem acesso ao e-mail: o código chega, ou não chega.
+   */
+  const resposta =
+    "Se houver um cadastro com esse documento, acabei de enviar um código de 6 dígitos para o e-mail cadastrado. Me manda o código aqui.";
+
+  if (!aberta) {
+    logger.info("identificacao sem cadastro utilizavel", { conversaId });
+    return resposta;
+  }
+
+  try {
+    const email = await repo.emailDoCliente(segredo, aberta.clienteId);
+
+    if (email) {
+      await enviarEmail({
+        para: [email],
+        assunto: `Seu código de acesso: ${codigo}`,
+        html: corpoDoEmail(codigo, ctx.clienteNome ?? "a empresa"),
+      });
+    }
+  } catch (err) {
+    // Falha de e-mail nao muda a resposta: mudar entregaria, pelo texto, que
+    // aquele documento tem cadastro.
+    logger.error("falha ao enviar o codigo de identificacao", {
+      conversaId,
+      erro: err instanceof Error ? err.message : err,
+    });
+  }
+
+  return resposta;
+}
+
+/** A situacao da conta em uma frase, ou o encaminhamento quando nao da. */
+async function textoDaConta(segredo: string, conversaId: number): Promise<string> {
+  const s = await repo.saldo(segredo, conversaId);
+
+  if (!s) {
+    return "Não consegui consultar sua conta agora. Vou passar para o financeiro dar retorno.";
+  }
+
+  return textoDoSaldo(s);
+}
+
 /**
  * Avisa que uma pessoa vai continuar dali em diante.
  *
@@ -192,6 +351,48 @@ async function escrever(
     .catch(() => null);
 
   return r?.texto?.trim() || null;
+}
+
+/** Quanto o bot espera a pessoa terminar de escrever antes de responder. */
+const ESPERA_DE_DIGITACAO_MS = 7_000;
+
+/**
+ * A pessoa ainda esta escrevendo?
+ *
+ * ⚠️ Isto e o que impede o bot de responder no meio de uma frase. Ninguem manda
+ * um paragrafo por WhatsApp: manda "oi", "bom dia", e so entao o assunto, em
+ * tres mensagens com segundos de diferenca. Sem espera, o bot respondia ao "oi"
+ * e triava a conversa inteira em cima de uma saudacao.
+ *
+ * Cada mensagem do webhook dispara uma triagem, entao a espera colapsa a rajada
+ * sozinha: todas veem mensagem nova depois de acordar e desistem, menos a
+ * ultima. Sem contador, sem estado compartilhado, sem relogio para comparar.
+ */
+async function aindaEstaEscrevendo(conversaId: number): Promise<boolean> {
+  const segredo = serverEnv().WHATSAPP_WEBHOOK_SEGREDO;
+  if (!segredo) return false;
+
+  const antes = await ultimaEntrada(segredo, conversaId);
+  await new Promise((r) => setTimeout(r, ESPERA_DE_DIGITACAO_MS));
+  const depois = await ultimaEntrada(segredo, conversaId);
+
+  if (antes === depois) return false;
+
+  logger.info("bot esperou: chegou mensagem nova durante a espera", { conversaId });
+  return true;
+}
+
+/** Carimbo da ultima mensagem recebida. `null` quando nao ha nenhuma. */
+async function ultimaEntrada(segredo: string, conversaId: number): Promise<string | null> {
+  const historico = await repo.mensagens(segredo, conversaId, 3);
+
+  return (
+    historico
+      .filter((m) => m.direcao === "entrada")
+      .map((m) => m.enviadaEm)
+      .sort()
+      .pop() ?? null
+  );
 }
 
 async function executar(conversaId: number): Promise<void> {
@@ -272,6 +473,10 @@ async function executar(conversaId: number): Promise<void> {
 
   const setores = await repo.setores(segredo, ctx.empresaId);
 
+  // Quem ja provou ser quem diz ser nesta conversa. Entra na instrucao para o
+  // modelo nao pedir documento a quem acabou de se identificar.
+  const jaVerificado = await repo.verificado(segredo, conversaId);
+
   /*
    * A partir daqui o painel mostra "a IA esta respondendo" e trava o campo de
    * escrita, para o atendente nao responder por cima.
@@ -284,12 +489,25 @@ async function executar(conversaId: number): Promise<void> {
   try {
     const triagem = await ia.responderEmJson<Triagem>(
       credencialIA,
-      instrucao(ctx, setores),
+      instrucao(ctx, setores, jaVerificado),
       conversaEmTexto(historico),
       ESQUEMA_DA_TRIAGEM,
     );
 
     if (!triagem) return;
+
+    /*
+     * Consulta da propria conta segue por fora da triagem.
+     *
+     * ⚠️ Nao vira atendimento e nao encaminha nada: a pessoa nao pediu para
+     * falar com ninguem, ela perguntou algo que o sistema sabe responder.
+     * Gravar isso na fila encheria o financeiro de tarefas ja resolvidas.
+     */
+    if (triagem.acao && triagem.acao !== "NENHUMA") {
+      const texto = await passoDaIdentificacao(segredo, ctx, conversaId, triagem, jaVerificado);
+      if (texto) await responderComo(segredo, ctx, conversaId, texto);
+      return;
+    }
 
     /*
      * Grava a triagem ANTES de responder.
@@ -318,14 +536,7 @@ async function executar(conversaId: number): Promise<void> {
     const resposta = triagem.resposta?.trim();
     if (!resposta) return;
 
-    const cred = await repo.credenciaisDoWhatsapp(segredo, conversaId);
-    if (!cred) {
-      logger.warn("bot triou mas o numero nao tem token", { conversaId });
-      return;
-    }
-
-    const wamid = await whatsapp.enviarTexto(cred, ctx.telefone, resposta);
-    await repo.registrarSaidaDoBot(segredo, conversaId, wamid, resposta);
+    await responderComo(segredo, ctx, conversaId, resposta);
 
     logger.info("bot respondeu", {
       conversaId,

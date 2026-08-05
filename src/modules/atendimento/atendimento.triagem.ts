@@ -1,4 +1,9 @@
-import type { ContextoDoBot, MensagemDoBot, SetorDoBot } from "@/modules/atendimento/atendimento.types";
+import type {
+  ContextoDoBot,
+  MensagemDoBot,
+  SetorDoBot,
+  Verificado,
+} from "@/modules/atendimento/atendimento.types";
 
 /**
  * O que o bot le e o que ele devolve.
@@ -59,7 +64,28 @@ export type Triagem = {
    * apagar o primeiro da fila do financeiro.
    */
   assuntoNovo: boolean;
+  /**
+   * O que o sistema deve FAZER antes de responder.
+   *
+   * ⚠️ O modelo so aponta o caminho; quem executa e o servico, e o texto com
+   * numero e escrito por nos. Deixar o modelo redigir valor e vencimento seria
+   * pedir para ele inventar quando o dado nao vier, que e exatamente o que ele
+   * faz com confianca total.
+   */
+  acao: AcaoDaTriagem;
+  /** CPF ou CNPJ que a pessoa escreveu, quando `acao` for DOCUMENTO. */
+  documento: string;
+  /** Codigo que a pessoa escreveu, quando `acao` for CODIGO. */
+  codigo: string;
 };
+
+/**
+ * NENHUMA e o caso comum: triagem normal, resposta do modelo.
+ *
+ * PEDIR_DOCUMENTO, DOCUMENTO, CODIGO e SALDO sao os quatro passos da
+ * identificacao, na ordem em que acontecem.
+ */
+export type AcaoDaTriagem = "NENHUMA" | "PEDIR_DOCUMENTO" | "DOCUMENTO" | "CODIGO" | "SALDO";
 
 /**
  * Esquema que o provedor e obrigado a cumprir.
@@ -77,6 +103,12 @@ export const ESQUEMA_DA_TRIAGEM = {
     resposta: { type: "string" },
     concluido: { type: "boolean" },
     assuntoNovo: { type: "boolean" },
+    acao: {
+      type: "string",
+      enum: ["NENHUMA", "PEDIR_DOCUMENTO", "DOCUMENTO", "CODIGO", "SALDO"],
+    },
+    documento: { type: "string" },
+    codigo: { type: "string" },
   },
   required: [
     "intencao",
@@ -86,6 +118,9 @@ export const ESQUEMA_DA_TRIAGEM = {
     "resposta",
     "concluido",
     "assuntoNovo",
+    "acao",
+    "documento",
+    "codigo",
   ],
 };
 
@@ -106,7 +141,11 @@ export const ESQUEMA_DA_TRIAGEM = {
  * O mesmo vale para identidade: CNPJ e quase publico no Brasil. Ele serve para
  * ACHAR o cadastro, nunca para liberar informacao.
  */
-export function instrucao(ctx: ContextoDoBot, setores: SetorDoBot[]): string {
+export function instrucao(
+  ctx: ContextoDoBot,
+  setores: SetorDoBot[],
+  verificado: Verificado | null,
+): string {
   const listaDeSetores = setores
     .map((s) => `- id ${s.id} | ${s.nome}: ${s.quandoUsar ?? "sem descrição"}`)
     .join("\n");
@@ -133,13 +172,17 @@ Antes de responder, decida: a última mensagem é sobre ESSE assunto ou sobre ou
 - Assunto diferente: esqueça o pedido anterior por completo e faça a triagem do novo do zero, começando pelo PASSO 1. Não mencione o pedido antigo. Marque assuntoNovo como true.`
       : "";
 
+  const identidade = verificado
+    ? `A pessoa JÁ SE IDENTIFICOU nesta conversa e está confirmada como "${verificado.clienteNome}". Não peça documento nem código de novo.`
+    : "A pessoa NÃO se identificou nesta conversa.";
+
   return `Você faz a TRIAGEM do WhatsApp de uma empresa. Seu trabalho é entender o problema real da pessoa e entregá-lo mastigado para o setor certo. Você não resolve nada e não é atendente.
 
 NUNCA, em nenhuma circunstância:
-- Informe valores, vencimentos, saldos, boletos, notas fiscais ou dados bancários. Você não tem esses dados e não pode adivinhar. Se perguntarem, diga que vai chamar o financeiro.
+- Escreva você mesmo um valor, saldo, vencimento, número de boleto, nota fiscal ou dado bancário. Nem quando a pessoa já se identificou, nem quando parece óbvio pela conversa. Você não tem esses dados. Quando houver algo a informar, o sistema escreve, não você. Para pedir isso, use o campo acao.
 - Prometa prazo, desconto, preço ou qualquer condição comercial.
 - Fale em nome de um setor. Você não sabe o que eles vão fazer nem quando.
-- Confirme ou negue se alguém é cliente, e não peça CPF ou CNPJ para "liberar" informação. Documento não autentica ninguém aqui.
+- Diga se um documento existe ou não no cadastro, e não confirme nem negue que alguém é cliente.
 - Invente informação sobre a empresa, os serviços ou o andamento de um trabalho.
 
 Em caso de dúvida, encaminhe para uma pessoa. Ficar sem resposta automática é melhor que responder errado.
@@ -166,8 +209,24 @@ COMO FALAR:
 - Não se apresente como robô nem como inteligência artificial.
 - Não repita o que a pessoa acabou de dizer, exceto no passo 2, onde repetir é justamente a tarefa.
 
+CONSULTA DA PRÓPRIA CONTA:
+
+Quando a pessoa perguntar quanto deve, se há algo em aberto, o que está vencido ou quando vence, ela tem direito à resposta, mas só depois de provar que é ela. Documento sozinho não prova nada: CNPJ é público e CPF circula em vazamento. Quem prova é o código que chega no e-mail já cadastrado.
+
+O caminho é este, e você conduz pelo campo acao:
+1. Ela pergunta e ainda não se identificou: acao = PEDIR_DOCUMENTO.
+2. Ela responde com um CPF ou CNPJ: acao = DOCUMENTO, e copie os dígitos para o campo documento.
+3. Ela responde com o código recebido: acao = CODIGO, e copie para o campo codigo.
+4. Ela já está identificada e quer saber da conta: acao = SALDO.
+Em qualquer outra situação, acao = NENHUMA.
+
+Quando usar acao diferente de NENHUMA, deixe resposta VAZIA. Quem escreve essas mensagens é o sistema, porque elas contêm número.
+
+Se ela pedir segunda via, boleto, nota fiscal ou qualquer coisa para pagar, isso NÃO é consulta: encaminhe para o financeiro normalmente. Meio de pagamento não sai por aqui.
+
 CONTEXTO:
-${quemFala}${andamento}
+${quemFala}
+${identidade}${andamento}
 
 SETORES DISPONÍVEIS:
 ${listaDeSetores || "- nenhum setor cadastrado"}
@@ -179,7 +238,10 @@ O QUE DEVOLVER:
 - confianca: 0 a 1, o quanto você tem certeza do problema e do setor. Antes da confirmação do passo 2, nunca passe de 0.5.
 - resposta: o que dizer AGORA, seguindo o passo em que você está.
 - concluido: true SOMENTE depois de a pessoa ter confirmado o problema no passo 2. Enquanto você ainda pergunta ou ainda espera a confirmação, false.
-- assuntoNovo: true quando a última mensagem trata de assunto diferente do já encaminhado. false em qualquer outro caso.`;
+- assuntoNovo: true quando a última mensagem trata de assunto diferente do já encaminhado. false em qualquer outro caso.
+- acao: um de NENHUMA, PEDIR_DOCUMENTO, DOCUMENTO, CODIGO, SALDO, conforme a seção de consulta acima.
+- documento: só os dígitos do CPF ou CNPJ, quando acao for DOCUMENTO. Vazio nos demais casos.
+- codigo: só os dígitos do código, quando acao for CODIGO. Vazio nos demais casos.`;
 }
 
 /** Uma frase e nada mais. Usado no lembrete e no encerramento. */
