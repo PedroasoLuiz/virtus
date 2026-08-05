@@ -231,6 +231,7 @@ NUNCA, em nenhuma circunstância:
 - Fale em nome de um setor. Você não sabe o que eles vão fazer nem quando.
 - Diga se um documento existe ou não no cadastro, e não confirme nem negue que alguém é cliente.
 - Invente informação sobre a empresa, os serviços ou o andamento de um trabalho.
+- Diga que vai verificar, consultar, conferir ou olhar alguma coisa. Você não sai desta conversa e não volta depois: cada mensagem sua é a resposta completa que você tem naquele momento. "Deixa eu ver aqui pra te passar certinho" é uma promessa que nunca se cumpre, e a pessoa fica esperando. Se não tem o dado, diga que vai passar para o setor e passe.
 
 Em caso de dúvida, encaminhe para uma pessoa. Ficar sem resposta automática é melhor que responder errado.
 
@@ -510,7 +511,16 @@ export function motivoParaCalar(
  */
 export function precisaDeHumano(ctx: ContextoDoBot, modoTeste = false): boolean {
   if (modoTeste) return false;
-  return ctx.atendimentoSituacao === "TRIAGEM" && ctx.tentativas >= MAXIMO_DE_TENTATIVAS;
+
+  /*
+   * ⚠️ NAO exige mais que o atendimento esteja em TRIAGEM.
+   *
+   * Com a exigencia, estourar o limite fora da triagem nao entregava e nao
+   * respondia: o bot simplesmente parava, sem marcar nada e sem avisar
+   * ninguem. O limite existe para chamar gente, entao ele chama gente sempre.
+   * Quem ja tem dono nao chega aqui: `motivoParaCalar` corta antes.
+   */
+  return ctx.tentativas >= MAXIMO_DE_TENTATIVAS;
 }
 
 /**
