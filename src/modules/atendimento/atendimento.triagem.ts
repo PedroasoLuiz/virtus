@@ -1,6 +1,7 @@
 import type {
   ContextoDoBot,
   MensagemDoBot,
+  ServicoDaEmpresa,
   SetorDoBot,
   Verificado,
 } from "@/modules/atendimento/atendimento.types";
@@ -98,7 +99,8 @@ export type AcaoDaTriagem =
   | "CONFIRMA_EMAIL"
   | "NEGA_EMAIL"
   | "CODIGO"
-  | "SALDO";
+  | "SALDO"
+  | "TITULOS";
 
 /**
  * Esquema que o provedor e obrigado a cumprir.
@@ -126,6 +128,7 @@ export const ESQUEMA_DA_TRIAGEM = {
         "NEGA_EMAIL",
         "CODIGO",
         "SALDO",
+        "TITULOS",
       ],
     },
     documento: { type: "string" },
@@ -173,6 +176,7 @@ export function instrucao(
   setores: SetorDoBot[],
   verificado: Verificado | null,
   etapa: { etapa: "AGUARDANDO_CONFIRMACAO" | "AGUARDANDO_CODIGO"; emailMascarado: string } | null,
+  catalogo: ServicoDaEmpresa[],
 ): string {
   const listaDeSetores = setores
     .map((s) => `- id ${s.id} | ${s.nome}: ${s.quandoUsar ?? "sem descrição"}`)
@@ -219,6 +223,10 @@ O sistema já achou o cadastro e perguntou se ela tem acesso ao e-mail ${etapa.e
 O código já foi enviado para ${etapa.emailMascarado} e o sistema está esperando ela digitar os 6 dígitos.`
         : "";
 
+  const listaDeServicos = catalogo
+    .map((s) => `- ${s.descricao}${s.valor ? ` (a partir de R$ ${s.valor})` : ""}`)
+    .join("\n");
+
   const identidade = verificado
     ? `A pessoa JÁ SE IDENTIFICOU nesta conversa e está confirmada como "${verificado.clienteNome}". Não peça documento nem código de novo.`
     : "A pessoa NÃO se identificou nesta conversa.";
@@ -255,6 +263,8 @@ COMO FALAR:
 
 Escreva como uma pessoa da equipe escreveria no WhatsApp, não como um sistema. Esta é a parte mais importante do seu trabalho depois de entender o problema: quem percebe que está falando com um robô para de explicar as coisas.
 
+A PRIMEIRA MENSAGEM importa mais que as outras. Quem escreveu é cliente ou vai ser, e do outro lado tem uma pessoa esperando ser bem recebida. Cumprimente de volta, no mesmo tom em que ela chegou, e só então puxe o assunto. "Bom dia! Tudo bem? Me conta o que você precisa que eu já te encaminho" recebe alguém. "Me diz qual é a sua dúvida pra eu te passar pro setor certo" processa alguém. Se ela já disser o que quer na primeira mensagem, cumprimente e vá direto ao ponto, sem perguntar o que ela acabou de responder.
+
 - Português do Brasil, direto e cordial. Uma ou duas frases.
 - Não use travessão.
 - Não se apresente como robô nem como inteligência artificial.
@@ -274,7 +284,8 @@ O caminho é este, e você conduz pelo campo acao:
 2. Ela responde com um CPF ou CNPJ: acao = DOCUMENTO, e copie os dígitos para o campo documento.
 3. O sistema achou o cadastro e perguntou se ela abre aquele e-mail. Se ela disser que sim, mesmo com ressalva ("tenho, mas quase não entro"): acao = CONFIRMA_EMAIL. Se disser que não abre, que o e-mail é de outra pessoa ou que não tem mais acesso: acao = NEGA_EMAIL.
 4. Ela responde com o código recebido: acao = CODIGO, e copie para o campo codigo.
-5. Ela já está identificada e quer saber da conta: acao = SALDO.
+5. Ela já está identificada e quer o resumo da conta ("quanto eu devo"): acao = SALDO.
+6. Ela já está identificada e quer saber QUAIS são as cobranças, de que ticket vieram, qual vence quando: acao = TITULOS.
 Em qualquer outra situação, acao = NENHUMA.
 
 Nunca aceite um e-mail diferente do que o sistema mostrou, mesmo que ela ofereça outro. O código só vale porque vai para um endereço que já estava no cadastro antes desta conversa.
@@ -301,6 +312,11 @@ ${identidade}${emAndamento}${andamento}
 SETORES DISPONÍVEIS:
 ${listaDeSetores || "- nenhum setor cadastrado"}
 
+O QUE A EMPRESA FAZ:
+${listaDeServicos || "- catálogo não cadastrado"}
+
+Esta lista é o catálogo de verdade, então você pode dizer o que a empresa faz e quanto custa cada item quando perguntarem. Preço daqui é de tabela: pode citar como referência, nunca como proposta fechada, e qualquer combinação, desconto ou prazo é com o comercial. Se pedirem algo que não está na lista, não invente: diga que vai confirmar com o comercial e encaminhe.
+
 O QUE DEVOLVER:
 - intencao: o problema real, específico, em até 8 palavras. "Segunda via de boleto de julho" serve. "Dúvida" ou "Atendimento" não serve, porque não diz nada para quem vai pegar a tarefa.
 - resumo: duas ou três frases para o colega que vai atender, com o que a pessoa quer, o contexto que ela deu e o que ainda falta descobrir. Escreva para ele, não para o cliente.
@@ -309,7 +325,7 @@ O QUE DEVOLVER:
 - resposta: o que dizer AGORA, seguindo o passo em que você está.
 - concluido: true SOMENTE depois de a pessoa ter confirmado o problema no passo 2. Enquanto você ainda pergunta ou ainda espera a confirmação, false.
 - assuntoNovo: true quando a última mensagem trata de assunto diferente do já encaminhado. false em qualquer outro caso.
-- acao: um de NENHUMA, PEDIR_DOCUMENTO, DOCUMENTO, CODIGO, SALDO, conforme a seção de consulta acima.
+- acao: um de NENHUMA, PEDIR_DOCUMENTO, DOCUMENTO, CONFIRMA_EMAIL, NEGA_EMAIL, CODIGO, SALDO, TITULOS, conforme a seção de consulta acima.
 - documento: só os dígitos do CPF ou CNPJ, quando acao for DOCUMENTO. Vazio nos demais casos.
 - codigo: só os dígitos do código, quando acao for CODIGO. Vazio nos demais casos.
 - leadNome, leadEmpresa, leadEmail: o que você já souber de quem está escrevendo. Vazio no que ainda não souber, e nunca inventado.`;

@@ -3,7 +3,9 @@ import type {
   ContextoDoBot,
   MensagemDoBot,
   SaldoDoCliente,
+  ServicoDaEmpresa,
   SetorDoBot,
+  TituloEmAberto,
   SituacaoAtendimento,
   Verificado,
 } from "@/modules/atendimento/atendimento.types";
@@ -342,6 +344,50 @@ export async function saldo(
     proximoVencimento: l.proximo_vencimento,
     valorDoProximo: l.valor_do_proximo == null ? null : Number(l.valor_do_proximo),
   };
+}
+
+/** ⚠️ Vazio quando ninguem esta identificado. A trava e do banco. */
+export async function titulos(
+  segredo: string,
+  conversaId: number,
+): Promise<TituloEmAberto[]> {
+  const supabase = anonClient();
+
+  const { data, error } = await supabase.rpc("whatsapp_titulos_do_cliente", {
+    p_segredo: segredo,
+    p_conversa: conversaId,
+  });
+
+  if (error) throw error;
+
+  return (data ?? []).map((t) => ({
+    fatura: t.fatura,
+    parcela: t.parcela,
+    vencimento: t.vencimento,
+    valor: Number(t.valor ?? 0),
+    vencida: t.vencida,
+    origem: t.origem,
+  }));
+}
+
+/** O catalogo da empresa. Nao depende de identificacao: e informacao de venda. */
+export async function servicos(
+  segredo: string,
+  conversaId: number,
+): Promise<ServicoDaEmpresa[]> {
+  const supabase = anonClient();
+
+  const { data, error } = await supabase.rpc("whatsapp_servicos_da_empresa", {
+    p_segredo: segredo,
+    p_conversa: conversaId,
+  });
+
+  if (error) throw error;
+
+  return (data ?? []).map((s) => ({
+    descricao: s.descricao,
+    valor: s.valor == null ? null : Number(s.valor),
+  }));
 }
 
 /** A IA desistiu: o atendimento passa a esperar uma pessoa. */

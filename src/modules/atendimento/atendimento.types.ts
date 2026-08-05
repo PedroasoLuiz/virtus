@@ -86,6 +86,23 @@ export type SaldoDoCliente = {
   valorDoProximo: number | null;
 };
 
+/** Uma cobranca em aberto, do jeito que o cliente reconhece. */
+export type TituloEmAberto = {
+  fatura: number;
+  parcela: number | null;
+  vencimento: string;
+  valor: number;
+  vencida: boolean;
+  /** De qual ticket ou contrato ela nasceu. */
+  origem: string | null;
+};
+
+/** O que a empresa vende, para o bot poder responder sem encaminhar. */
+export type ServicoDaEmpresa = {
+  descricao: string;
+  valor: number | null;
+};
+
 export type SetorDoBot = {
   id: number;
   nome: string;

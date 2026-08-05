@@ -923,6 +923,21 @@ export type Database = {
         Args: { p_segredo: string; p_conversa: number };
         Returns: undefined;
       };
+      whatsapp_titulos_do_cliente: {
+        Args: { p_segredo: string; p_conversa: number };
+        Returns: {
+          fatura: number;
+          parcela: number | null;
+          vencimento: string;
+          valor: number;
+          vencida: boolean;
+          origem: string | null;
+        }[];
+      };
+      whatsapp_servicos_da_empresa: {
+        Args: { p_segredo: string; p_conversa: number };
+        Returns: { descricao: string; valor: number | null }[];
+      };
       whatsapp_email_do_cliente: {
         Args: { p_segredo: string; p_cliente: number };
         Returns: string | null;

@@ -15,6 +15,7 @@ import {
   pareceCodigo,
   pareceDocumento,
   textoDoSaldo,
+  textoDosTitulos,
 } from "@/modules/atendimento/atendimento.identificacao";
 import * as iaRepo from "@/modules/ia/ia.repository";
 import * as ia from "@/modules/ia/ia.cloud";
@@ -266,6 +267,14 @@ async function passoDaIdentificacao(
     }
 
     return await conferirEResponder(segredo, conversaId, triagem.codigo);
+  }
+
+  if (triagem.acao === "TITULOS") {
+    if (!jaVerificado) {
+      return "Certo! Antes de falar de valores eu preciso ter certeza de que é você. Me confirma o CPF ou o CNPJ do cadastro?";
+    }
+
+    return textoDosTitulos(await repo.titulos(segredo, conversaId));
   }
 
   if (triagem.acao === "SALDO") {
@@ -607,6 +616,16 @@ async function executar(conversaId: number): Promise<void> {
   const setores = await repo.setores(segredo, ctx.empresaId);
 
   /*
+   * O catalogo entra na instrucao, e nao numa acao.
+   *
+   * "Voces fazem o quê?" e a primeira pergunta de quase todo contato novo, e
+   * ate agora a unica resposta possivel era encaminhar ao comercial. Como e
+   * informacao de venda, e a mesma para qualquer um, ela vem junto do texto em
+   * vez de custar um passo a mais na conversa.
+   */
+  const catalogo = await repo.servicos(segredo, conversaId).catch(() => []);
+
+  /*
    * A partir daqui o painel mostra "a IA esta respondendo" e trava o campo de
    * escrita, para o atendente nao responder por cima.
    *
@@ -618,7 +637,7 @@ async function executar(conversaId: number): Promise<void> {
   try {
     const triagem = await ia.responderEmJson<Triagem>(
       credencialIA,
-      instrucao(ctx, setores, jaVerificado, etapa),
+      instrucao(ctx, setores, jaVerificado, etapa, catalogo),
       conversaEmTexto(historico),
       ESQUEMA_DA_TRIAGEM,
       await imagensRecentes(segredo, conversaId, historico),

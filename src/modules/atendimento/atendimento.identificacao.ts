@@ -1,5 +1,5 @@
 import { createHash, randomInt } from "node:crypto";
-import type { SaldoDoCliente } from "@/modules/atendimento/atendimento.types";
+import type { SaldoDoCliente, TituloEmAberto } from "@/modules/atendimento/atendimento.types";
 
 /**
  * Identificacao de quem escreve, antes de qualquer numero sair daqui.
@@ -108,4 +108,33 @@ export function textoDoSaldo(s: SaldoDoCliente): string {
   partes.push(" Se precisar da segunda via para pagar, me diz que eu passo para o financeiro.");
 
   return partes.join("");
+}
+
+/**
+ * Os titulos em aberto, em lista.
+ *
+ * ⚠️ Continua sem boleto e sem linha digitavel. O que muda aqui e so o
+ * RECONHECIMENTO: numero da fatura sozinho nao diz nada para quem esta do lado
+ * de fora, e a origem ("aquele video institucional") diz.
+ */
+export function textoDosTitulos(titulos: TituloEmAberto[]): string {
+  if (titulos.length === 0) {
+    return "Consultei aqui e não há nada em aberto no seu cadastro.";
+  }
+
+  const linhas = titulos.map((t) => {
+    const parcela = t.parcela ? ` (parcela ${t.parcela})` : "";
+    const origem = t.origem ? ` referente a ${t.origem}` : "";
+    const situacao = t.vencida ? ", vencida" : "";
+
+    return `Fatura ${t.fatura}${parcela}${origem}: ${REAIS.format(t.valor)}, vence em ${emData(
+      t.vencimento,
+    )}${situacao}.`;
+  });
+
+  return [
+    titulos.length === 1 ? "É esta:" : `São ${titulos.length}:`,
+    ...linhas,
+    "Se precisar da segunda via para pagar, me diz que eu passo para o financeiro.",
+  ].join("\n");
 }
