@@ -13,6 +13,7 @@ import {
   instrucao,
   instrucaoDeFechamento,
   motivoParaCalar,
+  precisaDeHumano,
   situacaoFinal,
   type Triagem,
 } from "@/modules/atendimento/atendimento.triagem";
@@ -140,6 +141,35 @@ async function fechar(
   await repo.registrarSaidaDoBot(segredo, conversaId, wamid, texto);
 }
 
+/**
+ * Avisa que uma pessoa vai continuar dali em diante.
+ *
+ * Falha aqui nao desfaz a entrega: o atendimento ja esta marcado como esperando
+ * gente, e e isso que faz a equipe agir. Ficar sem o aviso e ruim; reverter a
+ * marcacao por causa dele seria pior.
+ */
+async function avisarQueVaiTerGente(
+  segredo: string,
+  ctx: ContextoDoBot,
+  conversaId: number,
+): Promise<void> {
+  const texto =
+    "Prefiro não arriscar te dar uma resposta errada, então já estou passando sua mensagem para alguém da equipe continuar por aqui.";
+
+  try {
+    const cred = await repo.credenciaisDoWhatsapp(segredo, conversaId);
+    if (!cred) return;
+
+    const wamid = await whatsapp.enviarTexto(cred, ctx.telefone, texto);
+    await repo.registrarSaidaDoBot(segredo, conversaId, wamid, texto);
+  } catch (err) {
+    logger.warn("nao consegui avisar que a conversa foi entregue", {
+      conversaId,
+      erro: err instanceof Error ? err.message : err,
+    });
+  }
+}
+
 /** A frase de retomada ou de despedida. `null` quando o provedor nao ajudou. */
 async function escrever(
   segredo: string,
@@ -214,6 +244,25 @@ async function executar(conversaId: number): Promise<void> {
 
   const historico = await repo.mensagens(segredo, conversaId);
   const temTexto = historico.some((m) => m.direcao === "entrada" && m.texto?.trim());
+
+  /*
+   * Desistir e um ato, nao a ausencia de um.
+   *
+   * ⚠️ Vem ANTES de `motivoParaCalar` porque nao e um caso de silencio: a
+   * conversa muda de estado, o cliente e avisado, e o pedido passa a aparecer
+   * para a equipe como esperando gente. Antes o bot simplesmente parava, e
+   * ninguem do lado de dentro ficava sabendo.
+   */
+  if (precisaDeHumano(ctx, modoTeste)) {
+    await repo.pedirHumano(segredo, conversaId);
+    await avisarQueVaiTerGente(segredo, ctx, conversaId);
+
+    logger.info("bot entregou a conversa a uma pessoa", {
+      conversaId,
+      tentativas: ctx.tentativas,
+    });
+    return;
+  }
 
   const calar = motivoParaCalar(ctx, temTexto, modoTeste);
   if (calar) {

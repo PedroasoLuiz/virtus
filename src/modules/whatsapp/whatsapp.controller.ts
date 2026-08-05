@@ -9,6 +9,7 @@ import * as service from "@/modules/whatsapp/whatsapp.service";
 import * as cloud from "@/modules/whatsapp/whatsapp.cloud";
 import { triar } from "@/modules/atendimento/atendimento.service";
 import {
+  atendimentoSchema,
   clienteCandidatoSchema,
   contaSchema,
   conversaSchema,
@@ -68,11 +69,12 @@ export async function abrirConversa({
   ctx,
 }: Entrada<undefined, undefined, ConversaIdParam>) {
   const empresaId = empresaObrigatoria(ctx);
-  const { conversa, mensagens } = await service.abrirConversa(empresaId, params.id);
+  const { conversa, mensagens, atendimento } = await service.abrirConversa(empresaId, params.id);
 
   return ok({
     conversa: conversaSchema.parse(conversa),
     mensagens: mensagens.map((m) => mensagemSchema.parse(m)),
+    atendimento: atendimento ? atendimentoSchema.parse(atendimento) : null,
   });
 }
 

@@ -150,6 +150,23 @@ export type Modelo = {
   parametros: number;
 };
 
+/**
+ * O resumo da triagem que aparece ao abrir a conversa.
+ *
+ * ⚠️ Existe para responder uma pergunta especifica de quem atende: "o bot disse
+ * que ia transferir, transferiu mesmo?". Por isso `situacao` e `setorNome` vem
+ * junto do texto, e nao so o resumo.
+ */
+export type AtendimentoDaConversa = {
+  id: number;
+  intencao: string | null;
+  resumo: string | null;
+  confianca: number | null;
+  situacao: "TRIAGEM" | "ENCAMINHADO" | "HUMANO" | "ACEITO" | "RECUSADO" | "ABANDONADO";
+  setorNome: string | null;
+  criadoEm: string;
+};
+
 /** Tipos de anexo que o painel envia. */
 export const TIPOS_DE_ENVIO = ["image", "audio", "video", "document"] as const;
 export type TipoDeEnvio = (typeof TIPOS_DE_ENVIO)[number];

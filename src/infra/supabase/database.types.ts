@@ -12,6 +12,39 @@
  * docs/03) — a traducao para o dominio acontece no repositorio, nao aqui.
  */
 
+/** O que a triagem entendeu de um contato. Vira tarefa ou e recusado. */
+export type AtendimentoRow = {
+  id: number;
+  created_at: string;
+  updated_at: string | null;
+  fkEmpresa: number;
+  fkConversa: number;
+  fkCliente: number | null;
+  fkSetor: number | null;
+  fkResponsavel: string | null;
+  intencao: string | null;
+  resumo: string | null;
+  confianca: number | null;
+  situacao: string;
+  fkDemanda: number | null;
+  motivo_recusa: string | null;
+  encerrado_em: string | null;
+  /** Quando saiu o lembrete de "voce ainda esta ai?". */
+  lembrete_em: string | null;
+  fkUserCriacao: string | null;
+  fkUserModificacao: string | null;
+};
+
+export type SetorRow = {
+  id: number;
+  created_at: string;
+  fkEmpresa: number;
+  nome: string;
+  descricao: string | null;
+  quando_usar: string | null;
+  ativo: boolean;
+};
+
 /**
  * ⚠️ O banco mistura convencoes: timestamps sao snake_case (`created_at`),
  * mas as chaves estrangeiras sao camelCase (`fkEmpresa`). Nao e engano de
@@ -703,6 +736,8 @@ export type Database = {
       assinaturas: { Row: AssinaturaRow; Insert: Partial<AssinaturaRow>; Update: Partial<AssinaturaRow>; Relationships: [] };
       whatsappconversas: { Row: WhatsappConversaRow; Insert: Partial<WhatsappConversaRow>; Update: Partial<WhatsappConversaRow>; Relationships: [] };
       whatsappmensagens: { Row: WhatsappMensagemRow; Insert: Partial<WhatsappMensagemRow>; Update: Partial<WhatsappMensagemRow>; Relationships: [] };
+      atendimentos: { Row: AtendimentoRow; Insert: Partial<AtendimentoRow>; Update: Partial<AtendimentoRow>; Relationships: [] };
+      setores: { Row: SetorRow; Insert: Partial<SetorRow>; Update: Partial<SetorRow>; Relationships: [] };
     };
     Views: {
       vw_origens_faturamento: { Row: OrigemFaturamentoRow; Relationships: [] };
@@ -865,6 +900,10 @@ export type Database = {
         Returns: { conversa_id: number; acao: string }[];
       };
       atendimento_marcar_lembrete: {
+        Args: { p_segredo: string; p_conversa: number };
+        Returns: undefined;
+      };
+      atendimento_pede_humano: {
         Args: { p_segredo: string; p_conversa: number };
         Returns: undefined;
       };

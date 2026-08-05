@@ -7,6 +7,10 @@
  */
 
 /**
+ * `HUMANO` e a IA declarando que nao deu conta. Existe para a desistencia
+ * aparecer: antes o bot so parava de falar, e por dentro a conversa ficava
+ * igual a qualquer outra.
+ *
  * `ABANDONADO` e encerramento por falta de retorno do cliente, e nao decisao de
  * ninguem. Fica separado de `RECUSADO` porque sao coisas diferentes de medir:
  * um diz quanta gente desiste no meio da triagem, o outro diz quanto pedido a
@@ -18,6 +22,7 @@
 export type SituacaoAtendimento =
   | "TRIAGEM"
   | "ENCAMINHADO"
+  | "HUMANO"
   | "ACEITO"
   | "RECUSADO"
   | "ABANDONADO";

@@ -151,6 +151,8 @@ PASSO 1, DESCOBRIR. Uma pergunta por mensagem, sempre concreta, nunca "como poss
   b) sobre o quê: qual serviço, qual cobrança, qual sistema, qual pedido.
 Pergunta genérica é o erro mais comum aqui. "Você quer contratar um serviço novo ou é sobre algo que já está em andamento?" serve. "Em que posso ajudar?" não serve, porque devolve o problema para quem já escreveu.
 
+Aproveite tudo o que já está na conversa e NUNCA pergunte o que a pessoa já respondeu. Enquanto estiver perguntando, recolha também o que o setor vai precisar para agir sem ter que voltar a ela: qual sistema ou serviço, desde quando acontece, qual número de nota ou pedido, se é urgente e por quê, quem é a pessoa dentro da empresa. Peça só o que fizer sentido para o caso, e uma coisa por vez. Você não está preenchendo formulário, está entendendo um problema.
+
 PASSO 2, DEVOLVER O PROBLEMA. Quando achar que entendeu, escreva o problema DE VOLTA para a pessoa, com as palavras dela, em uma frase, e peça confirmação. Exemplo de forma: "Só pra eu não errar: você quer X porque Y, é isso?". Este passo não é opcional e não pode ser pulado. É ele que faz a pessoa corrigir você antes de o pedido virar tarefa errada lá dentro.
 
 PASSO 3, ENCAMINHAR. Só depois de a pessoa confirmar. Diga para qual setor vai e pare.
@@ -267,6 +269,7 @@ export function motivoParaCalar(
    */
   if (!modoTeste && ctx.humanoRespondeu) return "uma pessoa ja assumiu esta conversa";
   if (ctx.atendimentoAceito) return "atendimento aceito por uma pessoa";
+  if (ctx.atendimentoSituacao === "HUMANO") return "atendimento entregue a uma pessoa";
   if (ctx.atendimentoSituacao === "ACEITO" || ctx.atendimentoSituacao === "RECUSADO") {
     return "atendimento ja encerrado nesta janela";
   }
@@ -276,6 +279,18 @@ export function motivoParaCalar(
   if (!temTexto) return "mensagem sem texto para interpretar";
 
   return null;
+}
+
+/**
+ * A IA gastou as tentativas sem entender e precisa entregar a conversa.
+ *
+ * ⚠️ Separado de `motivoParaCalar` de proposito: os outros motivos sao "nao ha
+ * o que dizer", este e "ha o que dizer, e nao sou eu quem diz". Confundir os
+ * dois foi o que fez o bot emudecer sem avisar ninguem.
+ */
+export function precisaDeHumano(ctx: ContextoDoBot, modoTeste = false): boolean {
+  if (modoTeste) return false;
+  return ctx.atendimentoSituacao === "TRIAGEM" && ctx.tentativas >= MAXIMO_DE_TENTATIVAS;
 }
 
 /**

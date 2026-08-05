@@ -8,6 +8,7 @@ import {
   janelaAberta,
   tipoDoArquivo,
   LIMITE_POR_TIPO,
+  type AtendimentoDaConversa,
   type ClienteCandidato,
   type ContaWhatsapp,
   type Conversa,
@@ -133,16 +134,28 @@ export async function vincularConversaACliente(
 export async function abrirConversa(
   empresaId: number,
   id: number,
-): Promise<{ conversa: Conversa; mensagens: Mensagem[] }> {
+): Promise<{
+  conversa: Conversa;
+  mensagens: Mensagem[];
+  atendimento: AtendimentoDaConversa | null;
+}> {
   const conversa = await obterConversa(empresaId, id);
   const mensagens = await repo.listarMensagens(empresaId, id);
+
+  /*
+   * Vem junto da conversa, e nao numa chamada propria: o resumo aparece no
+   * mesmo instante que a thread. Buscado a parte, ele entraria depois, e um
+   * cartao que surge sozinho em cima do campo de escrita chega justamente
+   * quando a pessoa ja comecou a digitar.
+   */
+  const atendimento = await repo.atendimentoDaConversa(empresaId, id);
 
   if (conversa.naoLidas > 0) {
     await repo.zerarNaoLidas(empresaId, id);
     conversa.naoLidas = 0;
   }
 
-  return { conversa, mensagens };
+  return { conversa, mensagens, atendimento };
 }
 
 /**

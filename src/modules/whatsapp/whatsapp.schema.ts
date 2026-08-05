@@ -29,6 +29,16 @@ export const conversaSchema = z.object({
   botRespondendoEm: z.string().nullable(),
 });
 
+export const atendimentoSchema = z.object({
+  id: z.number(),
+  intencao: z.string().nullable(),
+  resumo: z.string().nullable(),
+  confianca: z.number().nullable(),
+  situacao: z.enum(["TRIAGEM", "ENCAMINHADO", "HUMANO", "ACEITO", "RECUSADO", "ABANDONADO"]),
+  setorNome: z.string().nullable(),
+  criadoEm: z.string(),
+});
+
 export const clienteCandidatoSchema = z.object({
   id: z.number(),
   razao: z.string(),

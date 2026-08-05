@@ -180,6 +180,18 @@ export async function abandonar(segredo: string, conversaId: number): Promise<vo
   if (error) throw error;
 }
 
+/** A IA desistiu: o atendimento passa a esperar uma pessoa. */
+export async function pedirHumano(segredo: string, conversaId: number): Promise<void> {
+  const supabase = anonClient();
+
+  const { error } = await supabase.rpc("atendimento_pede_humano", {
+    p_segredo: segredo,
+    p_conversa: conversaId,
+  });
+
+  if (error) throw error;
+}
+
 export async function salvarAtendimento(
   segredo: string,
   conversaId: number,

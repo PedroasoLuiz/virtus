@@ -1,5 +1,6 @@
 import { anonClient, serverClient } from "@/infra/supabase/client";
 import type {
+  AtendimentoDaConversa,
   ClienteCandidato,
   ContaWhatsapp,
   Conversa,
@@ -244,6 +245,50 @@ export async function buscarConversa(empresaId: number, id: number): Promise<Con
 
   if (error) throw error;
   return data ? paraConversa(data as unknown as LinhaConversa) : null;
+}
+
+/**
+ * O que a triagem entendeu desta conversa, para quem for responder.
+ *
+ * Ultimo atendimento e nao "o aberto": encerrado tambem interessa, porque a
+ * pergunta que este dado responde e "o que essa pessoa queria?", e ela vale
+ * igual depois de a fila ter fechado o caso.
+ *
+ * Sem `fkEmpresa` explicito seria a RLS sozinha barrando o vazamento. Ela barra,
+ * mas o filtro fica escrito assim mesmo: uma politica trocada por engano nao
+ * pode virar leitura de conversa alheia.
+ */
+export async function atendimentoDaConversa(
+  empresaId: number,
+  conversaId: number,
+): Promise<AtendimentoDaConversa | null> {
+  const supabase = await serverClient();
+
+  const { data, error } = await supabase
+    .from("atendimentos")
+    .select("id, intencao, resumo, confianca, situacao, created_at, setores(nome)")
+    .eq("fkEmpresa", empresaId)
+    .eq("fkConversa", conversaId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return null;
+
+  // `setores` volta como objeto ou lista dependendo de como o PostgREST resolve
+  // a relacao. Normalizar aqui evita a checagem espalhada pela tela.
+  const setor = Array.isArray(data.setores) ? data.setores[0] : data.setores;
+
+  return {
+    id: data.id,
+    intencao: data.intencao,
+    resumo: data.resumo,
+    confianca: data.confianca == null ? null : Number(data.confianca),
+    situacao: data.situacao as AtendimentoDaConversa["situacao"],
+    setorNome: setor?.nome ?? null,
+    criadoEm: data.created_at,
+  };
 }
 
 export async function listarMensagens(

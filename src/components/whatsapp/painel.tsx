@@ -12,6 +12,7 @@ import {
   previaDoTexto,
   rotuloDaConta,
   rotuloDoTipo,
+  type AtendimentoDaConversa,
   type ClienteCandidato,
   type ContaWhatsapp,
   type Conversa,
@@ -87,6 +88,7 @@ export function PainelWhatsapp() {
   const [conversas, setConversas] = useState<Conversa[]>([]);
   const [selecionada, setSelecionada] = useState<Conversa | null>(null);
   const [mensagens, setMensagens] = useState<Mensagem[]>([]);
+  const [atendimento, setAtendimento] = useState<AtendimentoDaConversa | null>(null);
   const [busca, setBusca] = useState("");
   const [carregando, setCarregando] = useState(false);
   const [contas, setContas] = useState<ContaWhatsapp[]>([]);
@@ -133,6 +135,7 @@ export function PainelWhatsapp() {
   const abrirConversa = useCallback(async (conversa: Conversa) => {
     setSelecionada(conversa);
     setMensagens([]);
+    setAtendimento(null);
     setCarregando(true);
 
     const r = await fetch(`/api/v1/whatsapp/conversas/${conversa.id}/mensagens`);
@@ -142,6 +145,7 @@ export function PainelWhatsapp() {
     const corpo = await r.json();
     setSelecionada(corpo.data.conversa);
     setMensagens(corpo.data.mensagens);
+    setAtendimento(corpo.data.atendimento ?? null);
 
     setConversas((atuais) =>
       atuais.map((c) => (c.id === conversa.id ? { ...c, naoLidas: 0 } : c)),
@@ -442,6 +446,7 @@ export function PainelWhatsapp() {
             <Thread
               key={selecionada?.id ?? "vazia"}
               onVoltar={estreito ? () => setSelecionada(null) : null}
+              atendimento={atendimento}
               conversa={selecionada}
               mensagens={mensagens}
               carregando={carregando}
@@ -1311,6 +1316,7 @@ function Thread({
   onSair,
   onVinculou,
   onVoltar,
+  atendimento,
 }: {
   conversa: Conversa | null;
   mensagens: Mensagem[];
@@ -1329,9 +1335,15 @@ function Thread({
    * ha caminho de volta a nao ser fechar o painel inteiro.
    */
   onVoltar: (() => void) | null;
+  /** O que a triagem entendeu. `null` quando ninguem passou por aqui ainda. */
+  atendimento: AtendimentoDaConversa | null;
 }) {
   const area = useRef<HTMLDivElement>(null);
   const itens = useMemo(() => montarItens(mensagens), [mensagens]);
+
+  // Comeca aberto e nao precisa de efeito para reabrir: a Thread tem `key` pela
+  // conversa, entao trocar de contato remonta tudo e o resumo volta sozinho.
+  const [resumoAberto, setResumoAberto] = useState(true);
 
   /*
    * Rolagem so acompanha quem JA estava no fim.
@@ -1544,13 +1556,153 @@ function Thread({
 
       </div>
 
-      {botRespondendo(conversa.botRespondendoEm) ? (
-        <IaRespondendo />
-      ) : aberta ? (
-        <Composicao onEnviar={onResponder} onEnviarAnexo={onEnviarAnexo} />
-      ) : (
-        <EnvioPorModelo contaId={conversa.contaId} onEnviar={onEnviarModelo} />
-      )}
+      {/*
+        O resumo flutua SOBRE o campo de escrita, e nao acima dele no fluxo.
+        Empurrar a conversa para cima a cada abertura moveria as ultimas
+        mensagens de lugar, que e justamente onde o olho vai primeiro.
+      */}
+      <div style={{ position: "relative" }}>
+        {atendimento && resumoAberto && (
+          <ResumoDoAtendimento
+            atendimento={atendimento}
+            onFechar={() => setResumoAberto(false)}
+          />
+        )}
+
+        {botRespondendo(conversa.botRespondendoEm) ? (
+          <IaRespondendo />
+        ) : aberta ? (
+          <Composicao onEnviar={onResponder} onEnviarAnexo={onEnviarAnexo} />
+        ) : (
+          <EnvioPorModelo contaId={conversa.contaId} onEnviar={onEnviarModelo} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Como cada estado da triagem se chama para quem atende. */
+function rotuloDaSituacao(a: AtendimentoDaConversa): { texto: string; alerta: boolean } {
+  switch (a.situacao) {
+    case "ENCAMINHADO":
+      return {
+        // ⚠️ O setor entra NOMEADO. A pergunta que este cartao responde e "o bot
+        // disse que ia transferir, transferiu mesmo?", e "encaminhado" sozinho
+        // nao responde nada.
+        texto: a.setorNome ? `Encaminhado para ${a.setorNome}` : "Encaminhado",
+        alerta: false,
+      };
+    case "HUMANO":
+      return { texto: "A IA não entendeu, precisa de você", alerta: true };
+    case "TRIAGEM":
+      return { texto: "Em triagem", alerta: false };
+    case "ACEITO":
+      return { texto: "Aceito", alerta: false };
+    case "RECUSADO":
+      return { texto: "Recusado", alerta: false };
+    case "ABANDONADO":
+      return { texto: "Encerrado sem retorno", alerta: false };
+  }
+}
+
+/**
+ * O que o cliente quer, sem precisar reler a conversa.
+ *
+ * Fica colado no campo de escrita de proposito: e ali que a pessoa esta olhando
+ * quando vai responder, e um resumo no topo da thread seria rolado para fora da
+ * tela antes de ser lido.
+ */
+function ResumoDoAtendimento({
+  atendimento,
+  onFechar,
+}: {
+  atendimento: AtendimentoDaConversa;
+  onFechar: () => void;
+}) {
+  const situacao = rotuloDaSituacao(atendimento);
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        bottom: "calc(100% + 6px)",
+        left: 10,
+        right: 10,
+        zIndex: 3,
+        padding: "10px 12px",
+        background: "var(--surface)",
+        border: `1px solid ${situacao.alerta ? "var(--warning)" : "var(--border)"}`,
+        borderRadius: "var(--radius-lg)",
+        boxShadow: "var(--shadow-md)",
+        animation: "fade-in 160ms var(--ease-out)",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: "var(--text-xs)",
+              fontWeight: "var(--fw-semi)",
+              color: situacao.alerta ? "var(--warning)" : "var(--text-tertiary)",
+              textTransform: "uppercase",
+              letterSpacing: "0.03em",
+            }}
+          >
+            {situacao.texto}
+          </div>
+
+          {atendimento.intencao && (
+            <div
+              style={{
+                marginTop: 4,
+                fontSize: "var(--text-sm)",
+                fontWeight: "var(--fw-semi)",
+                lineHeight: "var(--lh-snug)",
+              }}
+            >
+              {atendimento.intencao}
+            </div>
+          )}
+
+          {atendimento.resumo && (
+            <p
+              style={{
+                marginTop: 2,
+                fontSize: "var(--text-xs)",
+                color: "var(--text-secondary)",
+                lineHeight: "var(--lh-normal)",
+              }}
+            >
+              {atendimento.resumo}
+            </p>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={onFechar}
+          aria-label="Esconder o resumo"
+          title="Esconder"
+          style={{
+            flexShrink: 0,
+            width: 22,
+            height: 22,
+            display: "grid",
+            placeItems: "center",
+            border: "none",
+            background: "transparent",
+            cursor: "pointer",
+            color: "var(--text-tertiary)",
+          }}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
     </div>
   );
 }
