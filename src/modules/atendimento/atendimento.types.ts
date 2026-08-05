@@ -99,6 +99,9 @@ export type MensagemDoBot = {
   /** Saida com `fkUser` nulo e o bot; com usuario e uma pessoa. */
   doBot: boolean;
   enviadaEm: string;
+  /** Id na Meta. So existe enquanto a midia esta la: 7 dias para o que entra. */
+  midiaId: string | null;
+  midiaMime: string | null;
 };
 
 export type Atendimento = {

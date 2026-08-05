@@ -38,11 +38,24 @@ type RespostaGemini = {
  * um campo a mais, ou o JSON dentro de uma frase — e o `parse` quebra em
  * producao, nao no teste.
  */
+/**
+ * Uma imagem que vai junto da conversa.
+ *
+ * ⚠️ Vai INLINE, em base64, e nao por URL. A midia da Meta so abre com o token
+ * no cabecalho, e o link expira em cinco minutos: mandar a URL faria o provedor
+ * receber um 401 ou um link morto.
+ */
+export type ImagemParaOModelo = {
+  mime: string;
+  conteudo: ArrayBuffer;
+};
+
 export async function responderEmJson<T>(
   cred: CredencialIA,
   instrucao: string,
   conversa: string,
   esquema: Record<string, unknown>,
+  imagens: ImagemParaOModelo[] = [],
 ): Promise<T | null> {
   const controle = new AbortController();
   const prazo = setTimeout(() => controle.abort(), LIMITE_MS);
@@ -61,7 +74,20 @@ export async function responderEmJson<T>(
         },
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: instrucao }] },
-          contents: [{ role: "user", parts: [{ text: conversa }] }],
+          contents: [
+            {
+              role: "user",
+              parts: [
+                { text: conversa },
+                ...imagens.map((i) => ({
+                  inlineData: {
+                    mimeType: i.mime,
+                    data: Buffer.from(i.conteudo).toString("base64"),
+                  },
+                })),
+              ],
+            },
+          ],
           generationConfig: {
             responseMimeType: "application/json",
             responseSchema: esquema,

@@ -90,6 +90,8 @@ export async function mensagens(
     texto: m.texto,
     doBot: m.do_bot,
     enviadaEm: m.enviada_em,
+    midiaId: m.midia_id,
+    midiaMime: m.midia_mime,
   }));
 }
 

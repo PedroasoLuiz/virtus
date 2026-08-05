@@ -1,7 +1,11 @@
 import { serverEnv } from "@/infra/config/env";
 import { logger } from "@/shared/utils/logger";
 import * as repo from "@/modules/atendimento/atendimento.repository";
-import type { ContextoDoBot, Verificado } from "@/modules/atendimento/atendimento.types";
+import type {
+  ContextoDoBot,
+  MensagemDoBot,
+  Verificado,
+} from "@/modules/atendimento/atendimento.types";
 import { enviarEmail } from "@/shared/email/enviar";
 import {
   corpoDoEmail,
@@ -20,6 +24,7 @@ import {
   ESQUEMA_DA_TRIAGEM,
   conversaEmTexto,
   ehONumeroDeTeste,
+  atalhoDeIdentificacao,
   instrucao,
   instrucaoDeFechamento,
   motivoParaCalar,
@@ -152,6 +157,55 @@ async function fechar(
   await repo.registrarSaidaDoBot(segredo, conversaId, wamid, texto);
 }
 
+/** Quantas imagens da conversa vao junto do texto para o modelo. */
+const MAXIMO_DE_IMAGENS = 2;
+
+/** Acima disto a imagem nao sobe: base64 infla um terco e o limite e do provedor. */
+const IMAGEM_MAXIMA_BYTES = 4 * 1024 * 1024;
+
+/**
+ * As ultimas imagens que o cliente mandou, prontas para o modelo ler.
+ *
+ * ⚠️ Print de tela e como cliente explica problema no WhatsApp. Sem isto o bot
+ * lia "[image]" e perguntava o que a pessoa quis dizer, com a resposta parada
+ * na tela dela.
+ *
+ * Nunca lanca: imagem que nao baixa vira triagem so com o texto, que e o
+ * comportamento de antes. Midia recebida vive 7 dias na Meta, entao conversa
+ * antiga simplesmente nao tem mais o que baixar.
+ */
+async function imagensRecentes(
+  segredo: string,
+  conversaId: number,
+  historico: MensagemDoBot[],
+): Promise<ia.ImagemParaOModelo[]> {
+  const candidatas = historico
+    .filter((m) => m.direcao === "entrada" && m.tipo === "image" && m.midiaId)
+    .slice(-MAXIMO_DE_IMAGENS);
+
+  if (candidatas.length === 0) return [];
+
+  try {
+    const cred = await repo.credenciaisDoWhatsapp(segredo, conversaId);
+    if (!cred) return [];
+
+    const baixadas = await Promise.all(
+      candidatas.map(async (m) => {
+        const { conteudo, mime } = await whatsapp.baixarMidia(cred, m.midiaId!);
+        return conteudo.byteLength > IMAGEM_MAXIMA_BYTES ? null : { conteudo, mime };
+      }),
+    );
+
+    return baixadas.filter((i): i is ia.ImagemParaOModelo => i !== null);
+  } catch (err) {
+    logger.warn("nao consegui ler as imagens da conversa", {
+      conversaId,
+      erro: err instanceof Error ? err.message : err,
+    });
+    return [];
+  }
+}
+
 /** Manda e grava, na ordem em que o resto do modulo ja faz. */
 async function responderComo(
   segredo: string,
@@ -202,23 +256,7 @@ async function passoDaIdentificacao(
       return "O código tem 6 dígitos. Dá uma olhada no e-mail e me manda?";
     }
 
-    const confere = await repo.conferirCodigo(
-      segredo,
-      conversaId,
-      hashDoCodigo(conversaId, triagem.codigo),
-    );
-
-    if (!confere) {
-      logger.info("codigo de identificacao recusado", { conversaId });
-      return "Esse não bateu, ou já passou do tempo. Me manda o documento de novo que eu disparo outro código.";
-    }
-
-    logger.info("cliente identificado no whatsapp", { conversaId });
-
-    // Emenda o saldo na confirmacao: a pessoa digitou o codigo justamente para
-    // saber isso, e mandar "pronto, identificado" e depois esperar ela
-    // perguntar de novo seria cobrar um passo a toa.
-    return `Confirmado, obrigado! ${await textoDaConta(segredo, conversaId)}`;
+    return await conferirEResponder(segredo, conversaId, triagem.codigo);
   }
 
   if (triagem.acao === "SALDO") {
@@ -230,6 +268,31 @@ async function passoDaIdentificacao(
   }
 
   return null;
+}
+
+/** Confere o codigo e, dando certo, ja emenda a situacao da conta. */
+async function conferirEResponder(
+  segredo: string,
+  conversaId: number,
+  codigo: string,
+): Promise<string> {
+  const confere = await repo.conferirCodigo(
+    segredo,
+    conversaId,
+    hashDoCodigo(conversaId, codigo),
+  );
+
+  if (!confere) {
+    logger.info("codigo de identificacao recusado", { conversaId });
+    return "Esse não bateu, ou já passou do tempo. Me manda o documento de novo que eu disparo outro código.";
+  }
+
+  logger.info("cliente identificado no whatsapp", { conversaId });
+
+  // Emenda o saldo na confirmacao: a pessoa digitou o codigo justamente para
+  // saber isso, e mandar "pronto, identificado" e depois esperar ela perguntar
+  // de novo seria cobrar um passo a toa.
+  return `Confirmado, obrigado! ${await textoDaConta(segredo, conversaId)}`;
 }
 
 /**
@@ -444,7 +507,9 @@ async function executar(conversaId: number): Promise<void> {
   }
 
   const historico = await repo.mensagens(segredo, conversaId);
-  const temTexto = historico.some((m) => m.direcao === "entrada" && m.texto?.trim());
+  const temTexto = historico.some(
+    (m) => m.direcao === "entrada" && (m.texto?.trim() || (m.tipo === "image" && m.midiaId)),
+  );
 
   /*
    * Desistir e um ato, nao a ausencia de um.
@@ -471,11 +536,35 @@ async function executar(conversaId: number): Promise<void> {
     return;
   }
 
-  const setores = await repo.setores(segredo, ctx.empresaId);
-
   // Quem ja provou ser quem diz ser nesta conversa. Entra na instrucao para o
   // modelo nao pedir documento a quem acabou de se identificar.
   const jaVerificado = await repo.verificado(segredo, conversaId);
+
+  /*
+   * O passo da identificacao nao passa pelo modelo.
+   *
+   * ⚠️ Vem antes de marcar "IA respondendo" e antes de qualquer chamada paga: o
+   * bot ja perguntou o CPF, a resposta e um numero de onze digitos, e nao ha o
+   * que interpretar. Deixar isso a cargo do modelo custou uma falha muda, com a
+   * pessoa esperando resposta que nunca veio.
+   */
+  const atalho = atalhoDeIdentificacao(historico);
+
+  if (atalho) {
+    const texto =
+      atalho.acao === "CODIGO"
+        ? await conferirEResponder(segredo, conversaId, atalho.valor)
+        : await enviarCodigo(segredo, ctx, conversaId, atalho.valor);
+
+    await responderComo(segredo, ctx, conversaId, texto);
+    logger.info("passo de identificacao resolvido sem o modelo", {
+      conversaId,
+      acao: atalho.acao,
+    });
+    return;
+  }
+
+  const setores = await repo.setores(segredo, ctx.empresaId);
 
   /*
    * A partir daqui o painel mostra "a IA esta respondendo" e trava o campo de
@@ -492,6 +581,7 @@ async function executar(conversaId: number): Promise<void> {
       instrucao(ctx, setores, jaVerificado),
       conversaEmTexto(historico),
       ESQUEMA_DA_TRIAGEM,
+      await imagensRecentes(segredo, conversaId, historico),
     );
 
     if (!triagem) return;
@@ -540,7 +630,13 @@ async function executar(conversaId: number): Promise<void> {
     });
 
     const resposta = triagem.resposta?.trim();
-    if (!resposta) return;
+
+    if (!resposta) {
+      // Silencio por resposta vazia era indistinguivel de erro de rede. Foi
+      // assim que um CPF ficou sem resposta sem deixar rastro.
+      logger.warn("modelo devolveu resposta vazia", { conversaId, acao: triagem.acao });
+      return;
+    }
 
     await responderComo(segredo, ctx, conversaId, resposta);
 

@@ -952,6 +952,8 @@ export type Database = {
           texto: string | null;
           do_bot: boolean;
           enviada_em: string;
+          midia_id: string | null;
+          midia_mime: string | null;
         }[];
       };
       /** ⚠️ Grava com `fkUser` NULO: e o que marca a mensagem como do bot. */

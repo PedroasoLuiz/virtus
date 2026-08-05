@@ -331,11 +331,65 @@ COMO FALAR:
 Devolva apenas o campo texto, com a mensagem pronta para enviar.`;
 }
 
+/**
+ * O passo da identificacao, lido da conversa e nao do modelo.
+ *
+ * ⚠️ Existe porque delegar isto ao modelo custou uma falha silenciosa: a pessoa
+ * mandou o CPF, o modelo devolveu `acao` NENHUMA com resposta vazia, e o bot
+ * simplesmente nao respondeu. Nao ha nada de ambiguo em "o bot pediu o CPF e a
+ * proxima mensagem e um numero de onze digitos": isso e comparacao de texto, e
+ * comparacao de texto nao erra por temperatura.
+ *
+ * O modelo continua decidindo o resto. Aqui so entram os dois passos em que a
+ * resposta anterior do bot ja diz o que esperar.
+ */
+export function atalhoDeIdentificacao(
+  historico: MensagemDoBot[],
+): { acao: "DOCUMENTO" | "CODIGO"; valor: string } | null {
+  const ultimaEntrada = [...historico].reverse().find((m) => m.direcao === "entrada");
+  if (!ultimaEntrada?.texto) return null;
+
+  const escrito = ultimaEntrada.texto.trim();
+
+  // So numero, com a pontuacao que as pessoas usam. "meu cpf e 123" nao entra:
+  // frase com contexto e assunto do modelo, nao deste atalho.
+  if (!/^[\d.\-/\s]+$/.test(escrito)) return null;
+
+  const digitos = escrito.replace(/\D/g, "");
+
+  const perguntaAnterior = [...historico]
+    .reverse()
+    .find((m) => m.direcao === "saida" && m.doBot && m.texto?.trim())
+    ?.texto?.toLowerCase();
+
+  if (!perguntaAnterior) return null;
+
+  if (perguntaAnterior.includes("código") && digitos.length === 6) {
+    return { acao: "CODIGO", valor: digitos };
+  }
+
+  const pediuDocumento =
+    perguntaAnterior.includes("cpf") || perguntaAnterior.includes("cnpj");
+
+  if (pediuDocumento && (digitos.length === 11 || digitos.length === 14)) {
+    return { acao: "DOCUMENTO", valor: digitos };
+  }
+
+  return null;
+}
+
 /** A conversa, do jeito que o modelo le. */
 export function conversaEmTexto(mensagens: MensagemDoBot[]): string {
   const linhas = mensagens.map((m) => {
     const quem = m.direcao === "entrada" ? "CLIENTE" : m.doBot ? "VOCE" : "ATENDENTE";
-    const corpo = m.texto?.trim() || `[${m.tipo}]`;
+    /*
+     * Imagem anunciada, e nao descrita: o arquivo em si vai junto da chamada,
+     * entao aqui basta dizer ao modelo em que ponto da conversa ela apareceu.
+     * Sem esta marca ele nao sabe se a foto veio antes ou depois da frase.
+     */
+    const corpo =
+      m.texto?.trim() ||
+      (m.tipo === "image" ? "[mandou uma imagem, que segue anexada]" : `[${m.tipo}]`);
     return `${quem}: ${corpo}`;
   });
 
@@ -383,6 +437,8 @@ export function motivoParaCalar(
   if (!modoTeste && ctx.tentativas >= MAXIMO_DE_TENTATIVAS) {
     return "limite de tentativas do bot nesta janela";
   }
+  // Imagem conta como conteudo: ela vai anexada para o modelo, e um print de
+  // tela sozinho ja diz o problema inteiro em muitos atendimentos.
   if (!temTexto) return "mensagem sem texto para interpretar";
 
   return null;
