@@ -26,6 +26,9 @@ export type AtendimentoRow = {
   resumo: string | null;
   confianca: number | null;
   situacao: string;
+  lead_nome: string | null;
+  lead_empresa: string | null;
+  lead_email: string | null;
   fkDemanda: number | null;
   motivo_recusa: string | null;
   encerrado_em: string | null;
@@ -893,6 +896,7 @@ export type Database = {
           atendimento_aceito: boolean;
           tentativas: number;
           humano_respondeu: boolean;
+          primeiro_contato: boolean;
         }[];
       };
       bot_conversas_pendentes: {
@@ -965,6 +969,9 @@ export type Database = {
           p_setor: number | null;
           p_situacao: string;
           p_novo: boolean;
+          p_lead_nome: string | null;
+          p_lead_empresa: string | null;
+          p_lead_email: string | null;
         };
         Returns: number;
       };

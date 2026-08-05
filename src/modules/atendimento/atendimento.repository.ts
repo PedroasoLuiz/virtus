@@ -48,6 +48,7 @@ export async function contexto(
     atendimentoAceito: l.atendimento_aceito ?? false,
     tentativas: l.tentativas,
     humanoRespondeu: l.humano_respondeu,
+    primeiroContato: l.primeiro_contato ?? false,
   };
 }
 
@@ -309,6 +310,9 @@ export async function salvarAtendimento(
     situacao: SituacaoAtendimento;
     /** Abre linha nova em vez de atualizar a corrente. */
     novo: boolean;
+    leadNome: string | null;
+    leadEmpresa: string | null;
+    leadEmail: string | null;
   },
 ): Promise<number> {
   const supabase = anonClient();
@@ -322,6 +326,9 @@ export async function salvarAtendimento(
     p_setor: entrada.setorId,
     p_situacao: entrada.situacao,
     p_novo: entrada.novo,
+    p_lead_nome: entrada.leadNome,
+    p_lead_empresa: entrada.leadEmpresa,
+    p_lead_email: entrada.leadEmail,
   });
 
   if (error) throw error;

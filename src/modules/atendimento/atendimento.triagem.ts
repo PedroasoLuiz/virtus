@@ -77,6 +77,12 @@ export type Triagem = {
   documento: string;
   /** Codigo que a pessoa escreveu, quando `acao` for CODIGO. */
   codigo: string;
+  /** Nome de quem escreve, quando ela disser. Vazio enquanto nao souber. */
+  leadNome: string;
+  /** Empresa dela, quando disser. */
+  leadEmpresa: string;
+  /** E-mail dela, quando disser. */
+  leadEmail: string;
 };
 
 /**
@@ -109,6 +115,9 @@ export const ESQUEMA_DA_TRIAGEM = {
     },
     documento: { type: "string" },
     codigo: { type: "string" },
+    leadNome: { type: "string" },
+    leadEmpresa: { type: "string" },
+    leadEmail: { type: "string" },
   },
   required: [
     "intencao",
@@ -121,6 +130,9 @@ export const ESQUEMA_DA_TRIAGEM = {
     "acao",
     "documento",
     "codigo",
+    "leadNome",
+    "leadEmpresa",
+    "leadEmail",
   ],
 };
 
@@ -172,6 +184,11 @@ Antes de responder, decida: a última mensagem é sobre ESSE assunto ou sobre ou
 - Assunto diferente: esqueça o pedido anterior por completo e faça a triagem do novo do zero, começando pelo PASSO 1. Não mencione o pedido antigo. Marque assuntoNovo como true.`
       : "";
 
+  // Lead e a interseccao das duas coisas: sem cadastro E primeira vez. Sem
+  // cadastro mas ja conhecido e alguem que a gente ainda nao vinculou, e
+  // perguntar o nome de novo soa como se ninguem lembrasse dele.
+  const ehLeadNovo = !ctx.clienteId && ctx.primeiroContato;
+
   const identidade = verificado
     ? `A pessoa JÁ SE IDENTIFICOU nesta conversa e está confirmada como "${verificado.clienteNome}". Não peça documento nem código de novo.`
     : "A pessoa NÃO se identificou nesta conversa.";
@@ -204,10 +221,18 @@ Se ela já disser tudo de primeira, pule o passo 1, mas nunca o passo 2.
 Se ela corrigir no passo 2, volte ao passo 1 com o que faltou.
 
 COMO FALAR:
+
+Escreva como uma pessoa da equipe escreveria no WhatsApp, não como um sistema. Esta é a parte mais importante do seu trabalho depois de entender o problema: quem percebe que está falando com um robô para de explicar as coisas.
+
 - Português do Brasil, direto e cordial. Uma ou duas frases.
 - Não use travessão.
 - Não se apresente como robô nem como inteligência artificial.
 - Não repita o que a pessoa acabou de dizer, exceto no passo 2, onde repetir é justamente a tarefa.
+
+Nunca escreva assim: "Informe seus dados", "Favor aguardar", "Prezado cliente", "Sua solicitação foi registrada", "Poderia gentilmente informar", "Estou à disposição", "Como posso ajudá-lo hoje?".
+Escreva assim: "Certo, só me confirma...", "Perfeito, já anotei", "Deixa eu ver aqui", "Me diz uma coisa:", "Entendi".
+
+Use contração natural do falado: "pra", "tá", "dá". Uma exclamação de vez em quando, não em toda frase. Não use emoji.
 
 CONSULTA DA PRÓPRIA CONTA:
 
@@ -223,6 +248,17 @@ Em qualquer outra situação, acao = NENHUMA.
 Quando usar acao diferente de NENHUMA, deixe resposta VAZIA. Quem escreve essas mensagens é o sistema, porque elas contêm número.
 
 Se ela pedir segunda via, boleto, nota fiscal ou qualquer coisa para pagar, isso NÃO é consulta: encaminhe para o financeiro normalmente. Meio de pagamento não sai por aqui.
+
+QUEM ESTÁ FALANDO:
+
+${ehLeadNovo ? `Este número nunca escreveu antes e não está em nenhum cadastro. É um contato novo, e é você quem vai registrar quem ele é.
+
+Enquanto conversa, e sem transformar isso em formulário, descubra e devolva nos campos leadNome, leadEmpresa e leadEmail:
+- o nome de quem está escrevendo;
+- a empresa, quando fizer sentido;
+- um e-mail para retorno.
+Peça um de cada vez, encaixado na conversa, e só o que couber. "Como você se chama?" no meio da conversa é natural. Pedir nome, empresa e e-mail de uma vez, no começo, não é: parece cadastro e a pessoa desiste.
+Nunca peça CPF ou CNPJ aqui. Documento só entra quando ela quer consultar a própria conta.` : "Este número já conversou com a gente antes. Não peça de novo o que já está na conversa."}
 
 CONTEXTO:
 ${quemFala}
@@ -241,7 +277,8 @@ O QUE DEVOLVER:
 - assuntoNovo: true quando a última mensagem trata de assunto diferente do já encaminhado. false em qualquer outro caso.
 - acao: um de NENHUMA, PEDIR_DOCUMENTO, DOCUMENTO, CODIGO, SALDO, conforme a seção de consulta acima.
 - documento: só os dígitos do CPF ou CNPJ, quando acao for DOCUMENTO. Vazio nos demais casos.
-- codigo: só os dígitos do código, quando acao for CODIGO. Vazio nos demais casos.`;
+- codigo: só os dígitos do código, quando acao for CODIGO. Vazio nos demais casos.
+- leadNome, leadEmpresa, leadEmail: o que você já souber de quem está escrevendo. Vazio no que ainda não souber, e nunca inventado.`;
 }
 
 /** Uma frase e nada mais. Usado no lembrete e no encerramento. */
@@ -285,8 +322,9 @@ ${assunto}
 ${tarefa}
 
 COMO FALAR:
-- Português do Brasil, cordial e natural, como uma pessoa escreveria.
+- Português do Brasil, cordial e natural, como uma pessoa da equipe escreveria no WhatsApp.
 - Uma ou duas frases. Não use travessão.
+- Nada de "prezado", "informamos que", "sua solicitação". Use contração do falado: "pra", "tá".
 - Não invente informação sobre valores, prazos ou andamento de trabalho.
 - Não se apresente como robô nem como inteligência artificial.
 
@@ -332,9 +370,16 @@ export function motivoParaCalar(
   if (!modoTeste && ctx.humanoRespondeu) return "uma pessoa ja assumiu esta conversa";
   if (ctx.atendimentoAceito) return "atendimento aceito por uma pessoa";
   if (ctx.atendimentoSituacao === "HUMANO") return "atendimento entregue a uma pessoa";
-  if (ctx.atendimentoSituacao === "ACEITO" || ctx.atendimentoSituacao === "RECUSADO") {
-    return "atendimento ja encerrado nesta janela";
-  }
+  if (ctx.atendimentoSituacao === "ACEITO") return "atendimento aceito na fila";
+  /*
+   * ⚠️ `RECUSADO` e `ABANDONADO` NAO calam mais.
+   *
+   * Eles dizem o que aconteceu com o pedido anterior, e nao com a mensagem que
+   * acabou de chegar. Um atendimento encerrado as 11h deixava a conversa muda
+   * pelo resto do dia: o cliente voltava e nao havia nada olhando para ele.
+   * Mensagem nova comeca um atendimento novo, que e o que `atendimento_do_bot`
+   * ja faz por nao reaproveitar linha encerrada.
+   */
   if (!modoTeste && ctx.tentativas >= MAXIMO_DE_TENTATIVAS) {
     return "limite de tentativas do bot nesta janela";
   }

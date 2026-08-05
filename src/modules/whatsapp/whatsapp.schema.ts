@@ -36,6 +36,10 @@ export const atendimentoSchema = z.object({
   confianca: z.number().nullable(),
   situacao: z.enum(["TRIAGEM", "ENCAMINHADO", "HUMANO", "ACEITO", "RECUSADO", "ABANDONADO"]),
   setorNome: z.string().nullable(),
+  // ⚠️ Faltar aqui APAGA o campo da resposta, mesmo com o banco preenchido.
+  leadNome: z.string().nullable(),
+  leadEmpresa: z.string().nullable(),
+  leadEmail: z.string().nullable(),
   criadoEm: z.string(),
 });
 

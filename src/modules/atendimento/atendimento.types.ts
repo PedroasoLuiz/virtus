@@ -49,8 +49,21 @@ export type ContextoDoBot = {
   atendimentoAceito: boolean;
   /** Quantas vezes o bot ja falou nesta janela. */
   tentativas: number;
-  /** ⚠️ A trava do silencio: uma pessoa respondeu depois do inicio da janela. */
+  /**
+   * ⚠️ A trava do silencio: uma pessoa escreveu nas ultimas duas horas.
+   *
+   * Tem prazo de proposito. Mediu a janela inteira por um dia e calou o bot em
+   * praticamente todo lugar: num painel de WhatsApp quase toda conversa tem
+   * alguma mensagem escrita a mao no mesmo dia.
+   */
   humanoRespondeu: boolean;
+  /**
+   * Nunca escreveu antes desta janela.
+   *
+   * Sem cadastro E primeiro contato e a definicao de lead: e quando vale a pena
+   * perguntar nome e empresa, porque nao ha de onde tirar.
+   */
+  primeiroContato: boolean;
 };
 
 /** Quem ja provou ser quem diz ser, nesta conversa. */

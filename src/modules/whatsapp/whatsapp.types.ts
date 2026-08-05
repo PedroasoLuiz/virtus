@@ -164,6 +164,10 @@ export type AtendimentoDaConversa = {
   confianca: number | null;
   situacao: "TRIAGEM" | "ENCAMINHADO" | "HUMANO" | "ACEITO" | "RECUSADO" | "ABANDONADO";
   setorNome: string | null;
+  /** Quem escreve, quando o contato e novo e nao havia cadastro. */
+  leadNome: string | null;
+  leadEmpresa: string | null;
+  leadEmail: string | null;
   criadoEm: string;
 };
 

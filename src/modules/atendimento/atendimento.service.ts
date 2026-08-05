@@ -186,12 +186,12 @@ async function passoDaIdentificacao(
   jaVerificado: Verificado | null,
 ): Promise<string | null> {
   if (triagem.acao === "PEDIR_DOCUMENTO") {
-    return "Para eu poder falar da sua conta, preciso confirmar que é você. Me manda o CPF ou o CNPJ do cadastro, por favor.";
+    return "Certo! Antes de falar de valores eu preciso ter certeza de que é você. Me confirma o CPF ou o CNPJ do cadastro?";
   }
 
   if (triagem.acao === "DOCUMENTO") {
     if (!pareceDocumento(triagem.documento)) {
-      return "Esse número não parece um CPF nem um CNPJ. Pode conferir e mandar de novo?";
+      return "Acho que veio faltando algum dígito aí. Dá uma conferida e manda de novo pra mim?";
     }
 
     return await enviarCodigo(segredo, ctx, conversaId, triagem.documento);
@@ -199,7 +199,7 @@ async function passoDaIdentificacao(
 
   if (triagem.acao === "CODIGO") {
     if (!pareceCodigo(triagem.codigo)) {
-      return "O código tem 6 dígitos. Confere no e-mail e me manda de novo.";
+      return "O código tem 6 dígitos. Dá uma olhada no e-mail e me manda?";
     }
 
     const confere = await repo.conferirCodigo(
@@ -210,7 +210,7 @@ async function passoDaIdentificacao(
 
     if (!confere) {
       logger.info("codigo de identificacao recusado", { conversaId });
-      return "Esse código não confere ou já expirou. Me manda o CPF ou CNPJ de novo que eu envio outro.";
+      return "Esse não bateu, ou já passou do tempo. Me manda o documento de novo que eu disparo outro código.";
     }
 
     logger.info("cliente identificado no whatsapp", { conversaId });
@@ -218,7 +218,7 @@ async function passoDaIdentificacao(
     // Emenda o saldo na confirmacao: a pessoa digitou o codigo justamente para
     // saber isso, e mandar "pronto, identificado" e depois esperar ela
     // perguntar de novo seria cobrar um passo a toa.
-    return `Confirmado, obrigado. ${await textoDaConta(segredo, conversaId)}`;
+    return `Confirmado, obrigado! ${await textoDaConta(segredo, conversaId)}`;
   }
 
   if (triagem.acao === "SALDO") {
@@ -260,7 +260,7 @@ async function enviarCodigo(
    * para quem tem acesso ao e-mail: o código chega, ou não chega.
    */
   const resposta =
-    "Se houver um cadastro com esse documento, acabei de enviar um código de 6 dígitos para o e-mail cadastrado. Me manda o código aqui.";
+    "Certo. Se esse documento estiver no cadastro, o código de 6 dígitos já saiu pro e-mail que temos aqui. É só me passar ele.";
 
   if (!aberta) {
     logger.info("identificacao sem cadastro utilizavel", { conversaId });
@@ -294,7 +294,7 @@ async function textoDaConta(segredo: string, conversaId: number): Promise<string
   const s = await repo.saldo(segredo, conversaId);
 
   if (!s) {
-    return "Não consegui consultar sua conta agora. Vou passar para o financeiro dar retorno.";
+    return "Não consegui puxar sua conta agora. Vou passar pro financeiro te dar retorno.";
   }
 
   return textoDoSaldo(s);
@@ -313,7 +313,7 @@ async function avisarQueVaiTerGente(
   conversaId: number,
 ): Promise<void> {
   const texto =
-    "Prefiro não arriscar te dar uma resposta errada, então já estou passando sua mensagem para alguém da equipe continuar por aqui.";
+    "Prefiro não te dar uma resposta errada, então já chamei alguém da equipe pra continuar com você por aqui.";
 
   try {
     const cred = await repo.credenciaisDoWhatsapp(segredo, conversaId);
@@ -531,6 +531,12 @@ async function executar(conversaId: number): Promise<void> {
        * "assunto novo" para o modelo, e cada uma viraria um atendimento.
        */
       novo: triagem.assuntoNovo === true && ctx.atendimentoSituacao === "ENCAMINHADO",
+      // Vazio vira null e o banco preserva o que ja tinha: o modelo devolve os
+      // tres campos em toda chamada, e sobrescrever apagaria o nome que a
+      // pessoa deu tres mensagens atras.
+      leadNome: triagem.leadNome?.trim() || null,
+      leadEmpresa: triagem.leadEmpresa?.trim() || null,
+      leadEmail: triagem.leadEmail?.trim() || null,
     });
 
     const resposta = triagem.resposta?.trim();

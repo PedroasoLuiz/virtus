@@ -266,7 +266,9 @@ export async function atendimentoDaConversa(
 
   const { data, error } = await supabase
     .from("atendimentos")
-    .select("id, intencao, resumo, confianca, situacao, created_at, setores(nome)")
+    .select(
+      "id, intencao, resumo, confianca, situacao, created_at, lead_nome, lead_empresa, lead_email, setores(nome)",
+    )
     .eq("fkEmpresa", empresaId)
     .eq("fkConversa", conversaId)
     .order("created_at", { ascending: false })
@@ -287,6 +289,9 @@ export async function atendimentoDaConversa(
     confianca: data.confianca == null ? null : Number(data.confianca),
     situacao: data.situacao as AtendimentoDaConversa["situacao"],
     setorNome: setor?.nome ?? null,
+    leadNome: data.lead_nome,
+    leadEmpresa: data.lead_empresa,
+    leadEmail: data.lead_email,
     criadoEm: data.created_at,
   };
 }

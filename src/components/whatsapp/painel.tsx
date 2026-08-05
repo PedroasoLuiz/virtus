@@ -1565,6 +1565,7 @@ function Thread({
         {atendimento && resumoAberto && (
           <ResumoDoAtendimento
             atendimento={atendimento}
+            conversa={conversa}
             onFechar={() => setResumoAberto(false)}
           />
         )}
@@ -1579,6 +1580,50 @@ function Thread({
       </div>
     </div>
   );
+}
+
+/**
+ * Salva o resumo como texto puro.
+ *
+ * ⚠️ Montado no navegador, sem rota nova: o cartao ja tem tudo o que vai no
+ * arquivo, e um endpoint so para reescrever os mesmos campos seria uma segunda
+ * versao da verdade para manter em dia.
+ *
+ * `.txt` e nao PDF porque isto e para colar em e-mail, CRM ou tarefa. Formato
+ * que abre em qualquer lugar vale mais que formato bonito.
+ */
+function baixarResumo(a: AtendimentoDaConversa, conversa: Conversa) {
+  const situacao = rotuloDaSituacao(a);
+
+  const linhas = [
+    `Atendimento #${a.id}`,
+    `Aberto em: ${new Date(a.criadoEm).toLocaleString("pt-BR")}`,
+    `Situação: ${situacao.texto}`,
+    "",
+    `Contato: ${conversa.nome ?? "sem nome"} (${formatarTelefone(conversa.telefone)})`,
+    conversa.clienteNome ? `Cadastro: ${conversa.clienteNome}` : null,
+    a.leadNome ? `Nome informado: ${a.leadNome}` : null,
+    a.leadEmpresa ? `Empresa informada: ${a.leadEmpresa}` : null,
+    a.leadEmail ? `E-mail informado: ${a.leadEmail}` : null,
+    "",
+    `Pedido: ${a.intencao ?? "não identificado"}`,
+    "",
+    "Resumo:",
+    a.resumo ?? "sem resumo",
+  ].filter((l) => l !== null);
+
+  const url = URL.createObjectURL(
+    new Blob([linhas.join("\n")], { type: "text/plain;charset=utf-8" }),
+  );
+
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `atendimento-${a.id}.txt`;
+  link.click();
+
+  // Sem isto o blob fica na memoria da aba ate ela fechar, e quem baixa varios
+  // resumos numa manha acumula todos.
+  URL.revokeObjectURL(url);
 }
 
 /** Como cada estado da triagem se chama para quem atende. */
@@ -1614,18 +1659,26 @@ function rotuloDaSituacao(a: AtendimentoDaConversa): { texto: string; alerta: bo
  */
 function ResumoDoAtendimento({
   atendimento,
+  conversa,
   onFechar,
 }: {
   atendimento: AtendimentoDaConversa;
+  conversa: Conversa;
   onFechar: () => void;
 }) {
   const situacao = rotuloDaSituacao(atendimento);
+
+  const lead = [
+    atendimento.leadNome && `Nome: ${atendimento.leadNome}`,
+    atendimento.leadEmpresa && `Empresa: ${atendimento.leadEmpresa}`,
+    atendimento.leadEmail && `E-mail: ${atendimento.leadEmail}`,
+  ].filter(Boolean) as string[];
 
   return (
     <div
       style={{
         position: "absolute",
-        bottom: "calc(100% + 6px)",
+        bottom: "calc(100% + 14px)",
         // Recuado dos 10 do campo de escrita: o cartao flutua, e coisa que
         // flutua nao pode ter a mesma borda de quem esta no fluxo, senao le
         // como se fizesse parte dele.
@@ -1698,6 +1751,45 @@ function ResumoDoAtendimento({
               {atendimento.resumo}
             </p>
           )}
+
+          {/*
+            Os dados do lead ficam em linha propria, e nao diluidos no resumo:
+            quem atende precisa bater o olho e achar o e-mail, nao ler um
+            paragrafo ate encontrar.
+          */}
+          {lead.length > 0 && (
+            <div
+              style={{
+                marginTop: 6,
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "2px 10px",
+                fontSize: "var(--text-xs)",
+                color: "var(--text-tertiary)",
+              }}
+            >
+              {lead.map((linha) => (
+                <span key={linha}>{linha}</span>
+              ))}
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => baixarResumo(atendimento, conversa)}
+            style={{
+              marginTop: 8,
+              padding: 0,
+              border: "none",
+              background: "transparent",
+              cursor: "pointer",
+              fontSize: "var(--text-xs)",
+              fontWeight: "var(--fw-semi)",
+              color: "var(--primary)",
+            }}
+          >
+            Baixar resumo
+          </button>
         </div>
 
         <button
