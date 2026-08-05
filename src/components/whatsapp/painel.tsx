@@ -50,9 +50,39 @@ const AGRUPA_ATE_MS = 5 * 60 * 1000;
  */
 const LARGURA_MIDIA = 240;
 
+/*
+ * Abaixo disto as duas colunas nao cabem: a lista ocupa 300 fixos, e num
+ * celular sobrariam menos de 60 para a conversa. O corte e 720 e nao um valor
+ * de dispositivo porque o que decide e a largura da JANELA, e meia tela num
+ * monitor sofre o mesmo problema que um telefone.
+ */
+const CORTE_ESTREITO = 720;
+
+/**
+ * A janela e estreita demais para as duas colunas.
+ *
+ * ⚠️ Comeca `false` e so muda depois de montar. O servidor nao sabe a largura da
+ * tela, entao qualquer outro valor inicial daria divergencia de hidratacao.
+ */
+function useEstreito(): boolean {
+  const [estreito, setEstreito] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${CORTE_ESTREITO}px)`);
+    const aplicar = () => setEstreito(mq.matches);
+
+    aplicar();
+    mq.addEventListener("change", aplicar);
+    return () => mq.removeEventListener("change", aplicar);
+  }, []);
+
+  return estreito;
+}
+
 export function PainelWhatsapp() {
   const { avisar } = useAvisos();
 
+  const estreito = useEstreito();
   const [aberto, setAberto] = useState(false);
   const [conversas, setConversas] = useState<Conversa[]>([]);
   const [selecionada, setSelecionada] = useState<Conversa | null>(null);
@@ -377,7 +407,14 @@ export function PainelWhatsapp() {
               </svg>
             </button>
 
+            {/*
+              Estreito mostra UMA coluna por vez: a lista, e a conversa no lugar
+              dela depois de escolher. Manter as duas nao encolhe o problema, so
+              o divide: a lista fica ilegivel e a conversa tambem.
+            */}
+            {(!estreito || !selecionada) && (
             <ListaDeConversas
+              estreito={estreito}
               conversas={conversas}
               contas={contasAtivas}
               contaAtual={contaAtual}
@@ -394,14 +431,17 @@ export function PainelWhatsapp() {
               onEscolher={(c) => void abrirConversa(c)}
               onAbrirConfig={() => setConfigAberta(true)}
             />
+            )}
 
             {/*
               `key` pela conversa: trocar de contato remonta a thread, e o que
               e estado da conversa anterior (gaveta de detalhes aberta, posicao
               da rolagem) morre junto, sem efeito para zerar.
             */}
+            {(!estreito || selecionada) && (
             <Thread
               key={selecionada?.id ?? "vazia"}
+              onVoltar={estreito ? () => setSelecionada(null) : null}
               conversa={selecionada}
               mensagens={mensagens}
               carregando={carregando}
@@ -414,6 +454,7 @@ export function PainelWhatsapp() {
                 void carregarConversas(contaAtual?.id ?? null, busca.trim() || undefined);
               }}
             />
+            )}
       </aside>
 
       {configAberta && (
@@ -658,6 +699,7 @@ function ListaDeConversas({
   onBuscar,
   onEscolher,
   onAbrirConfig,
+  estreito,
 }: {
   conversas: Conversa[];
   contas: ContaWhatsapp[];
@@ -668,11 +710,13 @@ function ListaDeConversas({
   onBuscar: (v: string) => void;
   onEscolher: (c: Conversa) => void;
   onAbrirConfig: () => void;
+  /** Unica coluna na tela: ocupa tudo em vez dos 300 fixos. */
+  estreito: boolean;
 }) {
   return (
     <div
       style={{
-        width: LARGURA_LISTA,
+        width: estreito ? "100%" : LARGURA_LISTA,
         flexShrink: 0,
         display: "flex",
         flexDirection: "column",
@@ -1266,6 +1310,7 @@ function Thread({
   onEnviarModelo,
   onSair,
   onVinculou,
+  onVoltar,
 }: {
   conversa: Conversa | null;
   mensagens: Mensagem[];
@@ -1277,6 +1322,13 @@ function Thread({
   onSair: () => void;
   /** Recarrega a conversa depois de vincular, para o nome e a foto entrarem. */
   onVinculou: () => void;
+  /**
+   * Volta para a lista. `null` quando as duas colunas estao na tela.
+   *
+   * ⚠️ Em tela estreita ele nao e enfeite: sem isso, escolhida uma conversa nao
+   * ha caminho de volta a nao ser fechar o painel inteiro.
+   */
+  onVoltar: (() => void) | null;
 }) {
   const area = useRef<HTMLDivElement>(null);
   const itens = useMemo(() => montarItens(mensagens), [mensagens]);
@@ -1370,6 +1422,31 @@ function Thread({
           background: "transparent",
         }}
       >
+        {onVoltar && (
+          <button
+            type="button"
+            onClick={onVoltar}
+            aria-label="Voltar para as conversas"
+            title="Voltar"
+            style={{
+              flexShrink: 0,
+              width: 28,
+              height: 28,
+              marginLeft: -4,
+              display: "grid",
+              placeItems: "center",
+              border: "none",
+              background: "transparent",
+              cursor: "pointer",
+              color: "var(--text-secondary)",
+            }}
+          >
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M15 18l-6-6 6-6" />
+            </svg>
+          </button>
+        )}
+
         <Avatar
           nome={titulo}
           semente={conversa.telefone}
