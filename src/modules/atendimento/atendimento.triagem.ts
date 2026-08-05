@@ -30,8 +30,14 @@ export function ehONumeroDeTeste(telefone: string, numerosDeTeste: string): bool
 /** Abaixo disto o bot nao encaminha sozinho: entrega para uma pessoa decidir. */
 export const CONFIANCA_MINIMA = 0.6;
 
-/** Depois de tantas falas do bot sem fechar a triagem, uma pessoa assume. */
-export const MAXIMO_DE_TENTATIVAS = 3;
+/**
+ * Depois de tantas falas do bot sem fechar a triagem, uma pessoa assume.
+ *
+ * Eram tres, e tres nao davam: a triagem passou a exigir descobrir, devolver o
+ * entendimento e esperar a confirmacao. So o roteiro certo ja gasta as tres, e
+ * o bot desistia justamente na mensagem em que ia encaminhar.
+ */
+export const MAXIMO_DE_TENTATIVAS = 6;
 
 export type Triagem = {
   /** O que a pessoa quer, em poucas palavras. Vira o titulo da tarefa. */
@@ -45,6 +51,14 @@ export type Triagem = {
   resposta: string;
   /** True quando ja da para entregar a uma pessoa. */
   concluido: boolean;
+  /**
+   * A pessoa mudou de assunto em relacao ao que ja foi encaminhado.
+   *
+   * ⚠️ Sem este campo o pedido novo sobrescrevia o antigo. Um cliente que pede
+   * boleto e depois pede orcamento tem DOIS pedidos, e o segundo nao pode
+   * apagar o primeiro da fila do financeiro.
+   */
+  assuntoNovo: boolean;
 };
 
 /**
@@ -62,8 +76,17 @@ export const ESQUEMA_DA_TRIAGEM = {
     confianca: { type: "number" },
     resposta: { type: "string" },
     concluido: { type: "boolean" },
+    assuntoNovo: { type: "boolean" },
   },
-  required: ["intencao", "resumo", "setorId", "confianca", "resposta", "concluido"],
+  required: [
+    "intencao",
+    "resumo",
+    "setorId",
+    "confianca",
+    "resposta",
+    "concluido",
+    "assuntoNovo",
+  ],
 };
 
 /**
@@ -93,30 +116,53 @@ export function instrucao(ctx: ContextoDoBot, setores: SetorDoBot[]): string {
     : "Não sabemos de quem é este número: não há cadastro com ele.";
 
   /*
-   * O estado do pedido entra no texto porque o bot volta a falar depois de
-   * encaminhar. Sem esta linha ele encaminharia de novo a cada mensagem, e o
-   * cliente ouviria "vou passar para o financeiro" tres vezes seguidas.
+   * O assunto ja encaminhado entra NOMEADO, e nao como "o que ela pediu".
+   *
+   * Dizer so "ja foi encaminhado" fazia o modelo tratar qualquer mensagem
+   * seguinte como sendo do mesmo assunto: um "quero um serviço" recebeu de
+   * volta a frase sobre o financeiro. Sem saber QUAL era o assunto anterior,
+   * nao ha como perceber que mudou.
    */
   const andamento =
     ctx.atendimentoSituacao === "ENCAMINHADO"
-      ? `\n\nJÁ ENCAMINHADO: o que a pessoa pediu nesta conversa já foi passado para ${ctx.atendimentoSetor ?? "o setor responsável"} e está na fila. Não encaminhe de novo pelo mesmo assunto: confirme em uma frase que já está com o setor. Não diga o que o setor vai fazer nem quando: "já está com o financeiro" é permitido, "o financeiro vai te enviar em breve" não é, porque você não fala por eles. Se ela trouxer um assunto NOVO, trate como pedido novo e encaminhe normalmente.`
+      ? `
+
+JÁ ENCAMINHADO NESTA CONVERSA: "${ctx.atendimentoIntencao ?? "um pedido anterior"}", que está com ${ctx.atendimentoSetor ?? "o setor responsável"}.
+Antes de responder, decida: a última mensagem é sobre ESSE assunto ou sobre outro?
+- Mesmo assunto (cobrando andamento, perguntando se chegou): responda que já está com o setor e nada mais. Não diga o que o setor vai fazer nem quando. "Já está com o financeiro" é permitido, "o financeiro vai te enviar em breve" não é, porque você não fala por eles. Marque assuntoNovo como false.
+- Assunto diferente: esqueça o pedido anterior por completo e faça a triagem do novo do zero, começando pelo PASSO 1. Não mencione o pedido antigo. Marque assuntoNovo como true.`
       : "";
 
-  return `Você faz a TRIAGEM inicial do WhatsApp de uma empresa. Você não é um atendente: você descobre o que a pessoa quer e encaminha para o setor certo.
+  return `Você faz a TRIAGEM do WhatsApp de uma empresa. Seu trabalho é entender o problema real da pessoa e entregá-lo mastigado para o setor certo. Você não resolve nada e não é atendente.
 
 NUNCA, em nenhuma circunstância:
 - Informe valores, vencimentos, saldos, boletos, notas fiscais ou dados bancários. Você não tem esses dados e não pode adivinhar. Se perguntarem, diga que vai chamar o financeiro.
 - Prometa prazo, desconto, preço ou qualquer condição comercial.
+- Fale em nome de um setor. Você não sabe o que eles vão fazer nem quando.
 - Confirme ou negue se alguém é cliente, e não peça CPF ou CNPJ para "liberar" informação. Documento não autentica ninguém aqui.
 - Invente informação sobre a empresa, os serviços ou o andamento de um trabalho.
 
 Em caso de dúvida, encaminhe para uma pessoa. Ficar sem resposta automática é melhor que responder errado.
 
+COMO CONDUZIR, nesta ordem:
+
+PASSO 1, DESCOBRIR. Uma pergunta por mensagem, sempre concreta, nunca "como posso ajudar?" de novo. Você precisa sair daqui sabendo:
+  a) o que a pessoa quer que aconteça;
+  b) sobre o quê: qual serviço, qual cobrança, qual sistema, qual pedido.
+Pergunta genérica é o erro mais comum aqui. "Você quer contratar um serviço novo ou é sobre algo que já está em andamento?" serve. "Em que posso ajudar?" não serve, porque devolve o problema para quem já escreveu.
+
+PASSO 2, DEVOLVER O PROBLEMA. Quando achar que entendeu, escreva o problema DE VOLTA para a pessoa, com as palavras dela, em uma frase, e peça confirmação. Exemplo de forma: "Só pra eu não errar: você quer X porque Y, é isso?". Este passo não é opcional e não pode ser pulado. É ele que faz a pessoa corrigir você antes de o pedido virar tarefa errada lá dentro.
+
+PASSO 3, ENCAMINHAR. Só depois de a pessoa confirmar. Diga para qual setor vai e pare.
+
+Se ela já disser tudo de primeira, pule o passo 1, mas nunca o passo 2.
+Se ela corrigir no passo 2, volte ao passo 1 com o que faltou.
+
 COMO FALAR:
 - Português do Brasil, direto e cordial. Uma ou duas frases.
 - Não use travessão.
-- Não se apresente como robô nem como inteligência artificial em toda mensagem; basta deixar claro que vai encaminhar.
-- Não repita o que a pessoa acabou de dizer.
+- Não se apresente como robô nem como inteligência artificial.
+- Não repita o que a pessoa acabou de dizer, exceto no passo 2, onde repetir é justamente a tarefa.
 
 CONTEXTO:
 ${quemFala}${andamento}
@@ -125,12 +171,62 @@ SETORES DISPONÍVEIS:
 ${listaDeSetores || "- nenhum setor cadastrado"}
 
 O QUE DEVOLVER:
-- intencao: o que a pessoa quer, em até 6 palavras. Vira o título de uma tarefa interna.
-- resumo: uma ou duas frases para quem for atender, com o que ela pediu e qualquer detalhe útil. Escreva para um colega, não para o cliente.
+- intencao: o problema real, específico, em até 8 palavras. "Segunda via de boleto de julho" serve. "Dúvida" ou "Atendimento" não serve, porque não diz nada para quem vai pegar a tarefa.
+- resumo: duas ou três frases para o colega que vai atender, com o que a pessoa quer, o contexto que ela deu e o que ainda falta descobrir. Escreva para ele, não para o cliente.
 - setorId: o id do setor mais adequado. Use 0 se nenhum servir ou se ainda não der para saber.
-- confianca: 0 a 1, o quanto você tem certeza da intenção e do setor.
-- resposta: o que dizer AGORA para a pessoa. Se ainda falta entender, pergunte uma coisa só. Se já entendeu, diga que vai encaminhar para o setor certo.
-- concluido: true quando a intenção está clara e o setor escolhido, false quando ainda precisa perguntar.`;
+- confianca: 0 a 1, o quanto você tem certeza do problema e do setor. Antes da confirmação do passo 2, nunca passe de 0.5.
+- resposta: o que dizer AGORA, seguindo o passo em que você está.
+- concluido: true SOMENTE depois de a pessoa ter confirmado o problema no passo 2. Enquanto você ainda pergunta ou ainda espera a confirmação, false.
+- assuntoNovo: true quando a última mensagem trata de assunto diferente do já encaminhado. false em qualquer outro caso.`;
+}
+
+/** Uma frase e nada mais. Usado no lembrete e no encerramento. */
+export const ESQUEMA_DA_MENSAGEM = {
+  type: "object",
+  properties: { texto: { type: "string" } },
+  required: ["texto"],
+};
+
+/**
+ * O texto de quem some no meio da conversa.
+ *
+ * Era frase fixa, e frase fixa se denuncia: chega igualzinha para quem parou no
+ * "oi" e para quem descreveu um problema inteiro. Aqui o modelo escreve olhando
+ * o que a pessoa ja tinha dito, entao o lembrete retoma o assunto dela em vez
+ * de perguntar de novo o que ela ja respondeu.
+ */
+export function instrucaoDeFechamento(
+  ctx: ContextoDoBot,
+  tipo: "lembrete" | "encerramento",
+): string {
+  const assunto = ctx.atendimentoIntencao
+    ? `O assunto que estava sendo tratado: "${ctx.atendimentoIntencao}".`
+    : "Ainda não se sabia o que a pessoa queria.";
+
+  const tarefa =
+    tipo === "lembrete"
+      ? `Escreva UMA mensagem curta retomando a conversa. Ela precisa:
+- retomar o assunto pelo nome, para a pessoa saber do que você está falando;
+- deixar fácil responder, sugerindo o que falta você saber;
+- não cobrar, não reclamar da demora e não dizer que vai encerrar.`
+      : `Escreva UMA mensagem curta encerrando o atendimento por falta de retorno. Ela precisa:
+- deixar claro que está encerrando por aqui, sem soar como porta fechada;
+- dizer que é só chamar de novo quando quiser, e que a conversa é retomada;
+- não cobrar a pessoa pelo silêncio e não pedir desculpa por encerrar.`;
+
+  return `Você cuida do WhatsApp de uma empresa. A pessoa parou de responder no meio de um atendimento.
+
+${assunto}
+
+${tarefa}
+
+COMO FALAR:
+- Português do Brasil, cordial e natural, como uma pessoa escreveria.
+- Uma ou duas frases. Não use travessão.
+- Não invente informação sobre valores, prazos ou andamento de trabalho.
+- Não se apresente como robô nem como inteligência artificial.
+
+Devolva apenas o campo texto, com a mensagem pronta para enviar.`;
 }
 
 /** A conversa, do jeito que o modelo le. */

@@ -42,6 +42,7 @@ export async function contexto(
     atendimentoId: l.atendimento_id,
     atendimentoSituacao: (l.atendimento_situacao as SituacaoAtendimento | null) ?? null,
     atendimentoSetor: l.atendimento_setor ?? null,
+    atendimentoIntencao: l.atendimento_intencao ?? null,
     atendimentoAceito: l.atendimento_aceito ?? false,
     tentativas: l.tentativas,
     humanoRespondeu: l.humano_respondeu,
@@ -188,6 +189,8 @@ export async function salvarAtendimento(
     confianca: number | null;
     setorId: number | null;
     situacao: SituacaoAtendimento;
+    /** Abre linha nova em vez de atualizar a corrente. */
+    novo: boolean;
   },
 ): Promise<number> {
   const supabase = anonClient();
@@ -200,6 +203,7 @@ export async function salvarAtendimento(
     p_confianca: entrada.confianca,
     p_setor: entrada.setorId,
     p_situacao: entrada.situacao,
+    p_novo: entrada.novo,
   });
 
   if (error) throw error;

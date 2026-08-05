@@ -38,6 +38,8 @@ export type ContextoDoBot = {
   atendimentoSituacao: SituacaoAtendimento | null;
   /** Para onde ja foi encaminhado, para o bot nao encaminhar duas vezes. */
   atendimentoSetor: string | null;
+  /** ⚠️ QUAL era o assunto. Sem isso o bot nao percebe quando ele muda. */
+  atendimentoIntencao: string | null;
   /** Uma pessoa pegou o atendimento na fila. */
   atendimentoAceito: boolean;
   /** Quantas vezes o bot ja falou nesta janela. */

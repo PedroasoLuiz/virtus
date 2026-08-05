@@ -854,6 +854,7 @@ export type Database = {
           atendimento_id: number | null;
           atendimento_situacao: string | null;
           atendimento_setor: string | null;
+          atendimento_intencao: string | null;
           atendimento_aceito: boolean;
           tentativas: number;
           humano_respondeu: boolean;
@@ -899,6 +900,7 @@ export type Database = {
           p_confianca: number | null;
           p_setor: number | null;
           p_situacao: string;
+          p_novo: boolean;
         };
         Returns: number;
       };

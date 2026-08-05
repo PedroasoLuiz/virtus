@@ -1,14 +1,17 @@
 import { serverEnv } from "@/infra/config/env";
 import { logger } from "@/shared/utils/logger";
 import * as repo from "@/modules/atendimento/atendimento.repository";
+import type { ContextoDoBot } from "@/modules/atendimento/atendimento.types";
 import * as iaRepo from "@/modules/ia/ia.repository";
 import * as ia from "@/modules/ia/ia.cloud";
 import * as whatsapp from "@/modules/whatsapp/whatsapp.cloud";
 import {
+  ESQUEMA_DA_MENSAGEM,
   ESQUEMA_DA_TRIAGEM,
   conversaEmTexto,
   ehONumeroDeTeste,
   instrucao,
+  instrucaoDeFechamento,
   motivoParaCalar,
   situacaoFinal,
   type Triagem,
@@ -45,11 +48,18 @@ export async function triar(conversaId: number): Promise<void> {
 /** Sem retorno do cliente, o atendimento nao fica em aberto para sempre. */
 const MINUTOS_DE_SILENCIO = 20;
 
-const LEMBRETE =
-  "Oi! Ainda posso ajudar com o que você precisa? Se preferir, me diga em uma frase o que procura que eu encaminho para o setor certo.";
-
-const ENCERRAMENTO =
-  "Vou encerrar este atendimento por aqui. Se precisar, é só chamar de novo que a gente retoma na hora.";
+/*
+ * Texto de reserva, usado so quando o provedor de IA nao responde.
+ *
+ * ⚠️ Nao e o caminho normal. Frase fixa se denuncia: chega identica para quem
+ * parou no "oi" e para quem ja tinha descrito o problema inteiro. Existe aqui
+ * porque calar de vez seria pior que uma frase generica.
+ */
+const RESERVA: Record<"lembrete" | "encerramento", string> = {
+  lembrete: "Oi! Ainda posso ajudar com o que você precisa?",
+  encerramento:
+    "Vou encerrar este atendimento por aqui. Se precisar, é só chamar de novo que a gente retoma.",
+};
 
 /**
  * A varredura periodica.
@@ -79,11 +89,11 @@ export async function varrer(): Promise<{ triados: number; lembrados: number; en
         await triar(p.conversaId);
         contagem.triados += 1;
       } else if (p.acao === "LEMBRAR") {
-        await falarSemIA(segredo, p.conversaId, LEMBRETE);
+        await fechar(segredo, p.conversaId, "lembrete");
         await repo.marcarLembrete(segredo, p.conversaId);
         contagem.lembrados += 1;
       } else {
-        await falarSemIA(segredo, p.conversaId, ENCERRAMENTO);
+        await fechar(segredo, p.conversaId, "encerramento");
         await repo.abandonar(segredo, p.conversaId);
         contagem.encerrados += 1;
       }
@@ -102,12 +112,18 @@ export async function varrer(): Promise<{ triados: number; lembrados: number; en
 }
 
 /**
- * Texto fixo, sem passar pelo provedor de IA.
+ * Retoma ou encerra quem parou de responder.
  *
- * Lembrete e encerramento nao dependem do que a pessoa disse, entao gerar cada
- * um deles custaria uma chamada paga para produzir sempre a mesma frase.
+ * O texto e gerado olhando o assunto da conversa, e nao tirado de uma constante:
+ * "ainda posso ajudar?" depois de a pessoa ter explicado o problema soa como se
+ * ninguem tivesse lido nada. Retomar pelo nome do assunto e o que faz a mensagem
+ * parecer de gente.
  */
-async function falarSemIA(segredo: string, conversaId: number, texto: string): Promise<void> {
+async function fechar(
+  segredo: string,
+  conversaId: number,
+  tipo: "lembrete" | "encerramento",
+): Promise<void> {
   const cred = await repo.credenciaisDoWhatsapp(segredo, conversaId);
 
   if (!cred) {
@@ -118,8 +134,34 @@ async function falarSemIA(segredo: string, conversaId: number, texto: string): P
   const ctx = await repo.contexto(segredo, conversaId);
   if (!ctx) return;
 
+  const texto = (await escrever(segredo, ctx, conversaId, tipo)) ?? RESERVA[tipo];
+
   const wamid = await whatsapp.enviarTexto(cred, ctx.telefone, texto);
   await repo.registrarSaidaDoBot(segredo, conversaId, wamid, texto);
+}
+
+/** A frase de retomada ou de despedida. `null` quando o provedor nao ajudou. */
+async function escrever(
+  segredo: string,
+  ctx: ContextoDoBot,
+  conversaId: number,
+  tipo: "lembrete" | "encerramento",
+): Promise<string | null> {
+  const credencialIA = await iaRepo.credencial(segredo, ctx.empresaId);
+  if (!credencialIA) return null;
+
+  const historico = await repo.mensagens(segredo, conversaId, 6);
+
+  const r = await ia
+    .responderEmJson<{ texto: string }>(
+      credencialIA,
+      instrucaoDeFechamento(ctx, tipo),
+      conversaEmTexto(historico),
+      ESQUEMA_DA_MENSAGEM,
+    )
+    .catch(() => null);
+
+  return r?.texto?.trim() || null;
 }
 
 async function executar(conversaId: number): Promise<void> {
@@ -216,6 +258,12 @@ async function executar(conversaId: number): Promise<void> {
       confianca: Number.isFinite(triagem.confianca) ? triagem.confianca : null,
       setorId,
       situacao,
+      /*
+       * Assunto novo abre linha nova, e so quando ja havia um encaminhado. Fora
+       * disso o campo e ruido: numa triagem em andamento toda mensagem parece
+       * "assunto novo" para o modelo, e cada uma viraria um atendimento.
+       */
+      novo: triagem.assuntoNovo === true && ctx.atendimentoSituacao === "ENCAMINHADO",
     });
 
     const resposta = triagem.resposta?.trim();
