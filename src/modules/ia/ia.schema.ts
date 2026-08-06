@@ -2,7 +2,7 @@ import { z } from "zod";
 
 /** Contratos de entrada e saida da configuracao de IA. */
 
-const provedorSchema = z.enum(["gemini", "openai", "deepseek"]);
+const provedorSchema = z.enum(["gemini", "openai", "anthropic", "deepseek"]);
 
 export const configIASchema = z.object({
   provedor: provedorSchema,

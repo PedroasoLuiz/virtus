@@ -973,6 +973,10 @@ export type Database = {
         Args: { p_empresa: number; p_numero: string | null };
         Returns: undefined;
       };
+      ia_definir_principal: {
+        Args: { p_empresa: number; p_provedor: string };
+        Returns: undefined;
+      };
       ia_remover_provedor: {
         Args: { p_empresa: number; p_provedor: string };
         Returns: undefined;

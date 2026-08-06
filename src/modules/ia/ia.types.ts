@@ -7,7 +7,7 @@
  * importando um modulo que nao tem nada a ver com ela.
  */
 
-export type ProvedorDeIA = "gemini" | "openai" | "deepseek";
+export type ProvedorDeIA = "gemini" | "openai" | "anthropic" | "deepseek";
 
 /**
  * Os provedores oferecidos, na ordem em que aparecem na tela.
@@ -19,6 +19,7 @@ export type ProvedorDeIA = "gemini" | "openai" | "deepseek";
 export const PROVEDORES: { valor: ProvedorDeIA; rotulo: string; modeloPadrao: string }[] = [
   { valor: "gemini", rotulo: "Google Gemini", modeloPadrao: "gemini-3.5-flash-lite" },
   { valor: "openai", rotulo: "OpenAI", modeloPadrao: "gpt-5-mini" },
+  { valor: "anthropic", rotulo: "Anthropic Claude", modeloPadrao: "claude-haiku-4-5" },
   { valor: "deepseek", rotulo: "DeepSeek", modeloPadrao: "deepseek-chat" },
 ];
 
@@ -99,6 +100,11 @@ export const MODELOS_POR_PROVEDOR: Record<ProvedorDeIA, { valor: string; rotulo:
     { valor: "gpt-5-mini", rotulo: "GPT-5 mini (rápido e barato)" },
     { valor: "gpt-5", rotulo: "GPT-5 (mais capaz)" },
     { valor: "gpt-4.1-mini", rotulo: "GPT-4.1 mini" },
+  ],
+  anthropic: [
+    { valor: "claude-haiku-4-5", rotulo: "Claude Haiku 4.5 (rápido e barato)" },
+    { valor: "claude-sonnet-5", rotulo: "Claude Sonnet 5 (mais capaz)" },
+    { valor: "claude-opus-5", rotulo: "Claude Opus 5 (raciocínio)" },
   ],
   deepseek: [
     { valor: "deepseek-chat", rotulo: "DeepSeek Chat (barato)" },

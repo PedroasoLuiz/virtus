@@ -40,3 +40,12 @@ export async function remover({ params, ctx }: Entrada<undefined, undefined, Pro
 
   return ok(provedores.map((p) => configIASchema.parse(p)));
 }
+
+export async function definirPrincipal({
+  params,
+  ctx,
+}: Entrada<undefined, undefined, ProvedorParam>) {
+  const provedores = await service.definirPrincipal(empresaObrigatoria(ctx), params.provedor);
+
+  return ok(provedores.map((p) => configIASchema.parse(p)));
+}

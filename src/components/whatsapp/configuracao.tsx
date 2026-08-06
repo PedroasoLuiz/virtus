@@ -331,7 +331,6 @@ export function ConfiguracaoDeContas({
       open
       onClose={onFechar}
       title="Configuração do WhatsApp"
-      subtitle="Números da empresa e atendimento automático"
     >
       {/*
         Quatro nomes CURTOS. "Atendimento automático" sozinho ocupava metade da

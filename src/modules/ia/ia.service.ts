@@ -43,3 +43,18 @@ export async function removerProvedor(
   await repo.removerProvedor(empresaId, provedor);
   return repo.listarProvedores(empresaId);
 }
+
+/**
+ * Elege o principal.
+ *
+ * ⚠️ Nao e "editar a ordem de um": mexer num numero deixaria dois provedores
+ * empatados em 1, e a preferencia passaria a depender do id. A renumeracao dos
+ * outros acontece junto, no banco.
+ */
+export async function definirPrincipal(
+  empresaId: number,
+  provedor: string,
+): Promise<ConfigIA[]> {
+  await repo.definirPrincipal(empresaId, provedor);
+  return repo.listarProvedores(empresaId);
+}

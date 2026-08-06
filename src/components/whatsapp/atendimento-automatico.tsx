@@ -76,6 +76,41 @@ export function AtendimentoAutomatico({
   const [editando, setEditando] = useState<ConfigIA | null>(null);
   const [pagina, setPagina] = useState(1);
 
+  async function definirPrincipal(provedor: string) {
+    const r = await fetch(`/api/v1/ia/provedores/${provedor}/principal`, { method: "PUT" });
+
+    if (!r.ok) {
+      const corpo = await r.json().catch(() => null);
+      avisar("atencao", corpo?.error?.message ?? "Não foi possível trocar o principal");
+      return;
+    }
+
+    onRecarregar();
+  }
+
+  async function alternarAtivo(p: ConfigIA) {
+    const r = await fetch("/api/v1/ia/config", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        provedor: p.provedor,
+        modelo: p.modelo,
+        ativo: !p.ativo,
+        ordem: p.ordem,
+        // Nula MANTEM a que esta no vault: o interruptor nao mexe em chave.
+        chave: null,
+      }),
+    });
+
+    if (!r.ok) {
+      const corpo = await r.json().catch(() => null);
+      avisar("atencao", corpo?.error?.message ?? "Não foi possível mudar o provedor");
+      return;
+    }
+
+    onRecarregar();
+  }
+
   async function remover(provedor: string) {
     const r = await fetch(`/api/v1/ia/provedores/${provedor}`, { method: "DELETE" });
 
@@ -146,57 +181,61 @@ export function AtendimentoAutomatico({
 
         <TableArea minWidth={0}>
           <TableHead>
-                <Th>Provedor</Th>
-                <Th>Situação</Th>
-          <Th> </Th>
+            <Th minWidth={72}>Principal</Th>
+            <Th>Provedor</Th>
+            <Th minWidth={90}>Situação</Th>
+            <Th> </Th>
           </TableHead>
 
             <tbody>
               {provedores == null ? (
-                <EmptyRow colSpan={3} message="Carregando…" />
+                <EmptyRow colSpan={4} message="Carregando…" />
               ) : visiveis!.length === 0 ? (
                 <EmptyRow
-                  colSpan={3}
+                  colSpan={4}
                   message="Nenhum provedor. Sem chave, o bot não responde a ninguém."
                 />
               ) : (
                 visiveis!.map((p) => (
                   <Tr key={p.provedor}>
                     {/*
-                      Provedor e modelo na MESMA celula, um sob o outro: e a
-                      anatomia dos cartoes de conversa, e evita a tabela de seis
-                      colunas que ninguem le da esquerda para a direita.
+                      Escolha EXCLUSIVA, e por isso um alvo redondo e nao um
+                      interruptor: interruptor promete que dois podem estar
+                      ligados ao mesmo tempo, e aqui so existe um principal.
                     */}
                     <Td>
-                      {/* ⚠️ Flag SEMPRE depois do titulo: quem le procura o
-                          nome primeiro, e a etiqueta na frente empurra o nome
-                          para uma posicao que muda a cada linha. */}
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <span style={{ fontWeight: "var(--fw-semi)" }}>
-                          {PROVEDORES.find((x) => x.valor === p.provedor)?.rotulo ?? p.provedor}
-                        </span>
-                        <Badge tom={p.ordem === 1 ? "info" : "neutral"}>
-                          {p.ordem === 1 ? "principal" : `reserva ${p.ordem}`}
-                        </Badge>
-                      </div>
-                      <div
-                        style={{
-                          marginTop: 2,
-                          fontSize: "var(--text-xs)",
-                          color: "var(--text-tertiary)",
-                        }}
-                      >
-                        {p.modelo}
+                      <MarcaDePrincipal
+                        principal={p.ordem === 1}
+                        onEscolher={() => void definirPrincipal(p.provedor)}
+                      />
+                    </Td>
+
+                    <Td>
+                      <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                        <IconeDoProvedor provedor={p.provedor} />
+
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontWeight: "var(--fw-semi)" }}>
+                            {PROVEDORES.find((x) => x.valor === p.provedor)?.rotulo ?? p.provedor}
+                          </div>
+                          <div
+                            style={{
+                              marginTop: 2,
+                              fontSize: "var(--text-xs)",
+                              color: "var(--text-tertiary)",
+                            }}
+                          >
+                            {p.modelo}
+                          </div>
+                        </div>
                       </div>
                     </Td>
 
                     <Td>
                       {!p.temChave ? (
                         <Badge tom="danger">falta a chave</Badge>
-                      ) : p.ativo ? (
-                        <Badge tom="success">ativo</Badge>
                       ) : (
-                        <Badge tom="neutral">desligado</Badge>
+                        <ActiveToggle active={p.ativo} onChange={() => void alternarAtivo(p)} />
                       )}
                     </Td>
 
@@ -270,6 +309,101 @@ export function AtendimentoAutomatico({
         ]}
       />
     </>
+  );
+}
+
+/**
+ * O alvo de escolha do principal.
+ *
+ * Circulo cheio no escolhido, contorno vazio nos outros: e a forma que o
+ * sistema inteiro usa para "um entre varios", e ela ja diz sozinha que marcar
+ * um desmarca o resto.
+ */
+function MarcaDePrincipal({
+  principal,
+  onEscolher,
+}: {
+  principal: boolean;
+  onEscolher: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onEscolher}
+      disabled={principal}
+      title={principal ? "Este é o principal" : "Tornar principal"}
+      aria-label={principal ? "Principal" : "Tornar principal"}
+      aria-pressed={principal}
+      style={{
+        display: "grid",
+        placeItems: "center",
+        width: 20,
+        height: 20,
+        padding: 0,
+        border: "none",
+        background: "transparent",
+        cursor: principal ? "default" : "pointer",
+        color: principal ? "var(--primary)" : "var(--border-strong)",
+      }}
+    >
+      <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6">
+        <circle cx="10" cy="10" r="7.2" />
+        {principal && <circle cx="10" cy="10" r="3.6" fill="currentColor" stroke="none" />}
+      </svg>
+    </button>
+  );
+}
+
+/**
+ * A marca de cada provedor, desenhada.
+ *
+ * ⚠️ SVG inline e monocromatico, em `currentColor`. Logo de terceiro como
+ * imagem exigiria hospedar o arquivo, acompanhar quando eles trocam, e ainda
+ * assim quebraria o tema escuro. Aqui e uma marca simplificada, o suficiente
+ * para o olho achar a linha certa na tabela.
+ */
+function IconeDoProvedor({ provedor }: { provedor: string }) {
+  const comum = {
+    width: 17,
+    height: 17,
+    viewBox: "0 0 24 24",
+    style: { flexShrink: 0, color: "var(--text-secondary)" },
+  } as const;
+
+  if (provedor === "gemini") {
+    // A faisca de quatro pontas.
+    return (
+      <svg {...comum} fill="currentColor" aria-hidden>
+        <path d="M12 2c.5 4.6 3.4 7.5 8 8-4.6.5-7.5 3.4-8 8-.5-4.6-3.4-7.5-8-8 4.6-.5 7.5-3.4 8-8z" />
+      </svg>
+    );
+  }
+
+  if (provedor === "anthropic") {
+    // O raio de traços que a Anthropic usa.
+    return (
+      <svg {...comum} fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" aria-hidden>
+        <path d="M12 3v18M4.2 7.5l15.6 9M19.8 7.5l-15.6 9" />
+      </svg>
+    );
+  }
+
+  if (provedor === "deepseek") {
+    // A baleia, reduzida ao corpo e ao olho.
+    return (
+      <svg {...comum} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="M3 13c3.5-4 8-5.5 12-4.5L21 6l-1.5 4.5c1 3.5-1.5 7-5.5 7.5-4 .5-8-1.5-11-5z" />
+        <circle cx="14.5" cy="11" r="1" fill="currentColor" stroke="none" />
+      </svg>
+    );
+  }
+
+  // OpenAI: o no hexagonal, simplificado em duas voltas.
+  return (
+    <svg {...comum} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" aria-hidden>
+      <path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z" />
+      <path d="M12 7.5l3.9 2.25v4.5L12 16.5l-3.9-2.25v-4.5z" />
+    </svg>
   );
 }
 

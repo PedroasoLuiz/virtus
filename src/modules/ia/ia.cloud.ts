@@ -96,9 +96,110 @@ export async function responderEmJson<T>(
   esquema: Record<string, unknown>,
   imagens: ImagemParaOModelo[] = [],
 ): Promise<T | null> {
-  return cred.provedor === "gemini"
-    ? peloGemini<T>(cred, instrucao, conversa, esquema, imagens)
-    : peloCompativel<T>(cred, instrucao, conversa, esquema, imagens);
+  if (cred.provedor === "gemini") {
+    return peloGemini<T>(cred, instrucao, conversa, esquema, imagens);
+  }
+
+  if (cred.provedor === "anthropic") {
+    return peloAnthropic<T>(cred, instrucao, conversa, esquema, imagens);
+  }
+
+  return peloCompativel<T>(cred, instrucao, conversa, esquema, imagens);
+}
+
+/**
+ * O caminho `messages`, da Anthropic.
+ *
+ * Cliente proprio porque nada bate com os outros dois: a chave vai em
+ * `x-api-key` e nao em `Authorization`, a versao da API e um cabecalho, e a
+ * instrucao do sistema e um campo de primeiro nivel, nao uma mensagem.
+ *
+ * ⚠️ O formato do JSON e obtido por FERRAMENTA, e nao por `response_format`.
+ * Declarar uma unica ferramenta e forcar o uso dela e o jeito de a Anthropic
+ * garantir esquema: sem isso ela devolve o JSON dentro de um texto explicativo,
+ * e o `parse` quebra em producao, nao no teste.
+ */
+async function peloAnthropic<T>(
+  cred: CredencialIA,
+  instrucao: string,
+  conversa: string,
+  esquema: Record<string, unknown>,
+  imagens: ImagemParaOModelo[],
+): Promise<T | null> {
+  const controle = new AbortController();
+  const prazo = setTimeout(() => controle.abort(), LIMITE_MS);
+
+  try {
+    const conteudo: Record<string, unknown>[] = [{ type: "text", text: conversa }];
+
+    for (const i of imagens) {
+      conteudo.push({
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: i.mime,
+          data: Buffer.from(i.conteudo).toString("base64"),
+        },
+      });
+    }
+
+    const resposta = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      signal: controle.signal,
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": cred.chave,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: cred.modelo,
+        max_tokens: 1024,
+        temperature: 0.2,
+        system: instrucao,
+        messages: [{ role: "user", content: conteudo }],
+        tools: [{ name: "responder", description: "Devolve a resposta.", input_schema: esquema }],
+        tool_choice: { type: "tool", name: "responder" },
+      }),
+    });
+
+    const corpo = (await resposta.json().catch(() => ({}))) as {
+      content?: { type: string; input?: unknown }[];
+      error?: { message?: string };
+    };
+
+    if (!resposta.ok) {
+      // A chave NAO entra no log, nem truncada.
+      logger.error("provedor de IA recusou a chamada", {
+        provedor: cred.provedor,
+        status: resposta.status,
+        modelo: cred.modelo,
+        detalhe: corpo.error?.message,
+      });
+      return null;
+    }
+
+    // O objeto ja vem estruturado no `input` da ferramenta: nao ha texto para
+    // interpretar, e por isso nao ha `JSON.parse` aqui.
+    const uso = corpo.content?.find((c) => c.type === "tool_use");
+    return (uso?.input as T) ?? null;
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      logger.warn("provedor de IA passou do tempo", {
+        provedor: cred.provedor,
+        modelo: cred.modelo,
+        limiteMs: LIMITE_MS,
+      });
+      return null;
+    }
+
+    logger.error("falha ao falar com o provedor de IA", {
+      provedor: cred.provedor,
+      erro: err instanceof Error ? err.message : err,
+    });
+    return null;
+  } finally {
+    clearTimeout(prazo);
+  }
 }
 
 /**

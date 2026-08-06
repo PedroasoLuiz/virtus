@@ -71,6 +71,18 @@ export async function salvarNumeroTeste(
   if (error) throw error;
 }
 
+/** Marca o principal e renumera os demais, tudo dentro do banco. */
+export async function definirPrincipal(empresaId: number, provedor: string): Promise<void> {
+  const supabase = await serverClient();
+
+  const { error } = await supabase.rpc("ia_definir_principal", {
+    p_empresa: empresaId,
+    p_provedor: provedor,
+  });
+
+  if (error) throw error;
+}
+
 export async function removerProvedor(empresaId: number, provedor: string): Promise<void> {
   const supabase = await serverClient();
 
