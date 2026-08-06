@@ -14,7 +14,7 @@ import {
   Button,
   EmptyRow,
   Field,
-  IncluirButton,
+  CabecalhoDeSecao,
   Pagination,
   SearchInput,
   TableArea,
@@ -25,6 +25,7 @@ import {
   Tr,
   inputStyle,
   selectStyle,
+  textareaStyle,
 } from "@/components/ui/kit";
 import {
   digitosDoTelefone,
@@ -61,6 +62,8 @@ type Rascunho = {
   verifyToken: string;
   token: string;
   appSecret: string;
+  botRespondeTodos: boolean;
+  botNumeros: string;
 };
 
 function vazio(): Rascunho {
@@ -76,6 +79,13 @@ function vazio(): Rascunho {
     verifyToken: `vpay-${Math.random().toString(36).slice(2, 10)}`,
     token: "",
     appSecret: "",
+    /*
+     * ⚠️ Nasce FECHADO. Numero novo que ja saisse respondendo a todo mundo
+     * faria o primeiro cliente real ser cobaia de uma configuracao que ninguem
+     * conferiu ainda.
+     */
+    botRespondeTodos: false,
+    botNumeros: "",
   };
 }
 
@@ -90,6 +100,8 @@ function daConta(c: ContaWhatsapp): Rascunho {
     verifyToken: c.verifyToken ?? "",
     token: "",
     appSecret: "",
+    botRespondeTodos: c.botRespondeTodos,
+    botNumeros: c.botNumeros ?? "",
   };
 }
 
@@ -156,6 +168,8 @@ export function ConfiguracaoDeContas({
         // Em branco NAO apaga: o servidor le ausente como "mantem o do vault".
         token: rascunho.token.trim() || null,
         appSecret: rascunho.appSecret.trim() || null,
+        botRespondeTodos: rascunho.botRespondeTodos,
+        botNumeros: rascunho.botNumeros.trim() || null,
       }),
     });
 
@@ -215,7 +229,13 @@ export function ConfiguracaoDeContas({
               size="sm"
               variant="primary"
               onClick={() => void salvar()}
-              disabled={salvando || rascunho.phoneNumberId.trim().length < 5}
+              disabled={
+                salvando ||
+                rascunho.phoneNumberId.trim().length < 5 ||
+                // Fechado e sem lista, o bot nao falaria com ninguem: em vez de
+                // salvar um estado inutil, o botao explica pelo proprio bloqueio.
+                (!rascunho.botRespondeTodos && rascunho.botNumeros.trim().length === 0)
+              }
             >
               {salvando ? "Salvando…" : "Salvar"}
             </Button>
@@ -252,17 +272,26 @@ export function ConfiguracaoDeContas({
         <Personas contas={contas} />
       ) : (
         <>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+      <CabecalhoDeSecao
+        titulo="Seus números de WhatsApp"
+        legenda="Cada número tem caixa de entrada própria e decide sozinho se o atendimento automático responde a todo mundo ou só a uma lista. É aqui que ficam o token e a chave que a Meta exige para enviar e receber."
+        onIncluir={() => setRascunho(vazio())}
+        rotuloIncluir="Cadastrar número"
+      />
+
+      {/*
+        Busca a DIREITA e curta: ela filtra uma lista de dois ou tres numeros, e
+        um campo de ponta a ponta prometia um volume que nao existe.
+      */}
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
         <SearchInput
           value={busca}
           onSearch={(v) => {
             setBusca(v);
             setPagina(1);
           }}
-          placeholder="Buscar apelido, número ou id"
-          width="100%"
+          placeholder="Buscar apelido ou número"
         />
-        <IncluirButton onClick={() => setRascunho(vazio())} rotulo="Cadastrar" />
       </div>
 
       {/*
@@ -276,7 +305,7 @@ export function ConfiguracaoDeContas({
           overflow: "hidden",
         }}
       >
-        <TableArea minWidth={480}>
+        <TableArea minWidth={0}>
           <TableHead>
             <Th>Apelido</Th>
             <Th>Número</Th>
@@ -399,6 +428,11 @@ function ModelosAprovados({ contas }: { contas: ContaWhatsapp[] }) {
 
   return (
     <>
+      <CabecalhoDeSecao
+        titulo="Modelos aprovados"
+        legenda="Lidos da Meta agora, porque o status muda lá sem aviso. Só modelo aprovado pode ser enviado, e é ele que permite falar com quem não escreve há mais de 24 horas. Para criar ou editar, use o painel da Meta."
+      />
+
       {ativas.length > 1 && (
         <select
           value={escolhida ?? ""}
@@ -413,17 +447,6 @@ function ModelosAprovados({ contas }: { contas: ContaWhatsapp[] }) {
         </select>
       )}
 
-      <p
-        style={{
-          fontSize: "var(--text-xs)",
-          color: "var(--text-tertiary)",
-          lineHeight: "var(--lh-normal)",
-          marginBottom: 12,
-        }}
-      >
-        Vindos da Meta agora. Só modelo aprovado pode ser enviado, e é ele que
-        permite falar com quem não escreve há mais de 24 horas.
-      </p>
 
       {erro && (
         <p style={{ fontSize: "var(--text-sm)", color: "var(--danger)", marginBottom: 12 }}>
@@ -431,7 +454,7 @@ function ModelosAprovados({ contas }: { contas: ContaWhatsapp[] }) {
         </p>
       )}
 
-      <TableArea minWidth={520}>
+      <TableArea minWidth={0}>
         <TableHead>
               <Th>Nome</Th>
               <Th>Categoria</Th>
@@ -448,15 +471,24 @@ function ModelosAprovados({ contas }: { contas: ContaWhatsapp[] }) {
               modelos.map((m) => (
                 <Tr key={`${m.nome}-${m.idioma}`}>
                   <Td>
-                    <div style={{ fontWeight: "var(--fw-semi)" }}>{m.nome}</div>
-                    {/* O corpo cru, com os `{{n}}` a mostra: e ele que diz o
-                        que cada variavel significa na hora de enviar. */}
+                    <div style={{ fontWeight: "var(--fw-semi)", marginBottom: 6 }}>{m.nome}</div>
+
+                    {/*
+                      O corpo desenhado como a BOLHA que o cliente vai receber,
+                      com os `{{n}}` a mostra. Em linha corrida ele parecia
+                      configuracao; assim, quem le ja enxerga a mensagem.
+                    */}
                     <div
                       style={{
-                        marginTop: 2,
+                        display: "inline-block",
+                        maxWidth: 340,
+                        padding: "7px 10px",
+                        borderRadius: "12px 12px 12px 3px",
+                        background: "var(--surface-2)",
+                        border: "1px solid var(--border)",
                         fontSize: "var(--text-xs)",
-                        color: "var(--text-tertiary)",
-                        lineHeight: "var(--lh-snug)",
+                        color: "var(--text-secondary)",
+                        lineHeight: "var(--lh-normal)",
                         whiteSpace: "pre-wrap",
                       }}
                     >
@@ -554,6 +586,44 @@ function Formulario({
       <Field label="Apelido" hint="Como este número aparece no seletor. Ex.: Financeiro.">
         <input style={inputStyle} value={rascunho.apelido} onChange={mudar("apelido")} />
       </Field>
+
+      {/*
+        A trava mora AQUI, e nao na tela de IA.
+        
+        Quem atende e o numero, e a pergunta "esse aqui responde sozinho?" so
+        faz sentido olhando para ele. Solta na configuracao da IA, ela valia
+        para a empresa inteira e ninguem entendia o que fazia.
+      */}
+      <Field
+        label="Responde a todos"
+        hint={
+          rascunho.botRespondeTodos
+            ? "O atendimento automático fala com qualquer contato deste número."
+            : "Desligado, só os números listados abaixo recebem resposta automática."
+        }
+      >
+        <ActiveToggle
+          active={rascunho.botRespondeTodos}
+          onChange={() =>
+            onMudar({ ...rascunho, botRespondeTodos: !rascunho.botRespondeTodos })
+          }
+        />
+      </Field>
+
+      {!rascunho.botRespondeTodos && (
+        <Field
+          label="Só estes números"
+          required
+          hint="Um por linha. Vazio, o bot não responde a ninguém neste número."
+        >
+          <textarea
+            style={{ ...textareaStyle, minHeight: 58 }}
+            placeholder={"+55 (35) 99999-9999\n+55 (35) 98888-8888"}
+            value={rascunho.botNumeros}
+            onChange={(e) => onMudar({ ...rascunho, botNumeros: e.target.value })}
+          />
+        </Field>
+      )}
 
       <Field label="Número" hint="Com DDD. O DDI 55 entra sozinho se faltar.">
         <input

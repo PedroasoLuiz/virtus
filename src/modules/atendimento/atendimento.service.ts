@@ -550,16 +550,20 @@ async function executar(conversaId: number): Promise<void> {
   }
 
   /*
-   * Modo de teste: o bot atende UM numero e mais ninguem.
+   * A trava do numero: responde a todos, ou so a uma lista.
    *
-   * ⚠️ Esta e a trava que permite ligar o bot em producao sem risco. Enquanto
-   * houver numero de teste, qualquer outra conversa e ignorada em silencio,
-   * mesmo com chave valida e interruptor ligado.
+   * ⚠️ E o que permite ligar o bot em producao sem risco. Desligado com a
+   * lista vazia ele nao fala com ninguem, e esse e o padrao de conta nova:
+   * atender automaticamente passa a ser um ato, e nao efeito colateral de
+   * cadastrar um numero.
    */
-  const modoTeste = Boolean(credencialIA.numeroTeste);
+  const modoTeste = !ctx.contaRespondeTodos;
 
-  if (modoTeste && !ehONumeroDeTeste(ctx.telefone, credencialIA.numeroTeste!)) {
-    logger.info("bot em modo de teste ignorou a conversa", { conversaId });
+  if (modoTeste && !ehONumeroDeTeste(ctx.telefone, ctx.contaNumeros ?? "")) {
+    logger.info("bot ignorou: numero fora da lista deste whatsapp", {
+      conversaId,
+      temLista: Boolean(ctx.contaNumeros),
+    });
     return;
   }
 

@@ -916,6 +916,8 @@ export type Database = {
           tentativas: number;
           humano_respondeu: boolean;
           primeiro_contato: boolean;
+          conta_responde_todos: boolean;
+          conta_numeros: string | null;
         }[];
       };
       bot_conversas_pendentes: {
@@ -1112,6 +1114,8 @@ export type Database = {
           tem_token: boolean;
           tem_app_secret: boolean;
           verify_token: string | null;
+          bot_responde_todos: boolean;
+          bot_numeros: string | null;
         }[];
       };
       /** ⚠️ Devolve o token em CLARO, do vault. Nunca sai do servidor. */
@@ -1136,6 +1140,8 @@ export type Database = {
           p_verify_token: string | null;
           p_token: string | null;
           p_app_secret: string | null;
+          p_bot_responde_todos: boolean;
+          p_bot_numeros: string | null;
         };
         Returns: number;
       };

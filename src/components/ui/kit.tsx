@@ -633,6 +633,101 @@ export function Button({
 }
 
 /** Botao de cadastro padrao, presente em todas as listagens. */
+/**
+ * Cabecalho de secao: titulo, acao redonda e a legenda embaixo.
+ *
+ * ⚠️ A legenda nao e enfeite. Estas telas sao de configuracao, e configuracao
+ * sem explicacao vira tentativa e erro em cima de coisa que manda mensagem para
+ * cliente. Uma frase dizendo o que se faz ali evita a pergunta.
+ *
+ * O titulo fica um degrau abaixo do titulo do drawer (`--text-lg` contra
+ * `--text-xl`): sao secoes DENTRO dele, e igualar os dois apagaria a hierarquia.
+ */
+export function CabecalhoDeSecao({
+  titulo,
+  legenda,
+  onIncluir,
+  rotuloIncluir = "Adicionar",
+}: {
+  titulo: string;
+  legenda: string;
+  onIncluir?: () => void;
+  rotuloIncluir?: string;
+}) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 10,
+        }}
+      >
+        <span
+          style={{
+            fontSize: "var(--text-lg)",
+            fontWeight: "var(--fw-semi)",
+            color: "var(--text-primary)",
+            letterSpacing: "var(--tracking-snug)",
+          }}
+        >
+          {titulo}
+        </span>
+
+        {onIncluir && <BotaoMais rotulo={rotuloIncluir} onClick={onIncluir} />}
+      </div>
+
+      <p
+        style={{
+          marginTop: 4,
+          fontSize: "var(--text-xs)",
+          color: "var(--text-tertiary)",
+          lineHeight: "var(--lh-normal)",
+          maxWidth: "62ch",
+        }}
+      >
+        {legenda}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Circulo pequeno com o mais dentro.
+ *
+ * Redondo e so com o icone: a acao e sempre a mesma em toda secao, e o rotulo
+ * escrito repetiria "Adicionar" quatro vezes na mesma tela. O nome vive no
+ * `title` e no `aria-label`, onde serve a quem precisa dele.
+ */
+export function BotaoMais({ rotulo, onClick }: { rotulo: string; onClick?: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={rotulo}
+      aria-label={rotulo}
+      style={{
+        flexShrink: 0,
+        width: 24,
+        height: 24,
+        display: "grid",
+        placeItems: "center",
+        border: "none",
+        borderRadius: "var(--radius-full)",
+        background: "var(--success)",
+        color: "#fff",
+        cursor: "pointer",
+        boxShadow: "var(--shadow-sm)",
+      }}
+    >
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+        <path d="M6.75 1.75a.75.75 0 0 0-1.5 0V5.25H1.75a.75.75 0 0 0 0 1.5H5.25v3.5a.75.75 0 0 0 1.5 0V6.75h3.5a.75.75 0 0 0 0-1.5H6.75V1.75z" />
+      </svg>
+    </button>
+  );
+}
+
 export function IncluirButton({ onClick, rotulo = "Incluir" }: { onClick?: () => void; rotulo?: string }) {
   return (
     <Button variant="primary" size="sm" onClick={onClick} style={{ padding: "0 16px" }}>

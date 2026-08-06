@@ -89,6 +89,9 @@ export const contaSchema = z.object({
   temToken: z.boolean(),
   temAppSecret: z.boolean(),
   verifyToken: z.string().nullable(),
+  // ⚠️ Faltar aqui APAGA o campo da resposta, mesmo com o banco preenchido.
+  botRespondeTodos: z.boolean(),
+  botNumeros: z.string().nullable(),
 });
 
 /**
@@ -108,6 +111,9 @@ export const salvarContaBodySchema = z.object({
   verifyToken: z.string().trim().min(6).max(120).nullable().default(null),
   token: z.string().trim().min(20).nullable().default(null),
   appSecret: z.string().trim().min(16).nullable().default(null),
+  /** Ligado responde a qualquer contato; desligado, so aos numeros da lista. */
+  botRespondeTodos: z.boolean().default(false),
+  botNumeros: z.string().trim().max(400).nullable().default(null),
 });
 
 export const vincularBodySchema = z.object({

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Bloco, Drawer } from "@/components/ui/drawer";
+import { Drawer } from "@/components/ui/drawer";
 import { useAvisos } from "@/components/ui/avisos";
 import {
   AcoesDaLinha,
@@ -12,7 +12,7 @@ import {
   Button,
   EmptyRow,
   Field,
-  IncluirButton,
+  CabecalhoDeSecao,
   TableArea,
   TableHead,
   Td,
@@ -43,18 +43,11 @@ import { formatarTelefone, type ContaWhatsapp } from "@/modules/whatsapp/whatsap
  * uma rolagem so, e as tres pareciam a mesma coisa.
  */
 
-/** Quantos numeros de teste ha no campo, aceitando virgula, ponto e virgula ou linha. */
-function contarNumeros(texto: string): number {
-  return texto.split(/[,;\n]/).filter((n) => n.trim()).length;
-}
-
 export function AtendimentoAutomatico() {
   const { avisar } = useAvisos();
   const [provedores, setProvedores] = useState<ConfigIA[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [editando, setEditando] = useState<ConfigIA | null>(null);
-  const [numeroTeste, setNumeroTeste] = useState("");
-  const [salvandoTeste, setSalvandoTeste] = useState(false);
 
   const carregar = useCallback(async () => {
     const r = await fetch("/api/v1/ia/config");
@@ -77,35 +70,12 @@ export function AtendimentoAutomatico() {
 
     setErro(null);
     setProvedores(corpo.data ?? []);
-    setNumeroTeste(corpo.data?.[0]?.numeroTeste ?? "");
   }, []);
 
   useEffect(() => {
     const t = setTimeout(() => void carregar(), 0);
     return () => clearTimeout(t);
   }, [carregar]);
-
-  async function salvarTrava() {
-    if (salvandoTeste) return;
-    setSalvandoTeste(true);
-
-    const r = await fetch("/api/v1/ia/numero-teste", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ numeroTeste: numeroTeste.trim() || null }),
-    });
-
-    setSalvandoTeste(false);
-
-    if (!r.ok) {
-      const corpo = await r.json().catch(() => null);
-      avisar("atencao", corpo?.error?.message ?? "Não foi possível salvar");
-      return;
-    }
-
-    avisar("sucesso", numeroTeste.trim() ? "Trava de teste ativa." : "Trava de teste removida.");
-    void carregar();
-  }
 
   async function remover(provedor: string) {
     const r = await fetch(`/api/v1/ia/provedores/${provedor}`, { method: "DELETE" });
@@ -135,7 +105,6 @@ export function AtendimentoAutomatico() {
   }
 
   const ligados = (provedores ?? []).filter((p) => p.ativo && p.temChave);
-  const emTeste = numeroTeste.trim().length > 0;
 
   return (
     <>
@@ -149,35 +118,34 @@ export function AtendimentoAutomatico() {
 
       <div style={{ marginBottom: 20 }}>
         {ligados.length === 0 ? (
-          <Alert variant="warning" title="O bot não está respondendo">
-            Nenhum provedor ativo com chave cadastrada.
-          </Alert>
-        ) : emTeste ? (
-          <Alert variant="info" title={`Em teste: ${contarNumeros(numeroTeste)} número(s)`}>
-            Só eles recebem resposta automática. Os demais contatos esperam uma
-            pessoa, como antes.
+          <Alert variant="warning" title="Sem provedor, o bot não responde">
+            Cadastre uma chave e deixe pelo menos um provedor ativo.
           </Alert>
         ) : (
-          <Alert variant="success" title="Respondendo a todos os contatos">
-            {ligados.length === 1
-              ? "Um provedor ativo."
-              : `${ligados.length} provedores ativos, tentados na ordem.`}
+          <Alert
+            variant="success"
+            title={
+              ligados.length === 1
+                ? "Um provedor ativo"
+                : `${ligados.length} provedores ativos, tentados na ordem`
+            }
+          >
+            Quem recebe resposta automática é decidido em cada número, na aba
+            Números.
           </Alert>
         )}
       </div>
 
-      <Bloco
-        titulo="Provedores"
-        acao={
-          <IncluirButton
-            rotulo="Adicionar"
-            onClick={() =>
-              setEditando({ ...CONFIG_IA_PADRAO, ordem: (provedores?.length ?? 0) + 1 })
-            }
-          />
+      <CabecalhoDeSecao
+        titulo="Provedores de IA"
+        legenda="A chave que faz o atendimento automático funcionar. O de ordem 1 responde; os outros existem para o dia em que ele estiver fora do ar ou sem cota, e são tentados na sequência. Quem recebe resposta é decidido em cada número, na aba Números."
+        onIncluir={() =>
+          setEditando({ ...CONFIG_IA_PADRAO, ordem: (provedores?.length ?? 0) + 1 })
         }
-      >
-        <TableArea minWidth={520}>
+        rotuloIncluir="Adicionar provedor"
+      />
+
+      <TableArea minWidth={0}>
           <TableHead>
                 <Th>Provedor</Th>
                 <Th>Situação</Th>
@@ -201,13 +169,16 @@ export function AtendimentoAutomatico() {
                       colunas que ninguem le da esquerda para a direita.
                     */}
                     <Td>
+                      {/* ⚠️ Flag SEMPRE depois do titulo: quem le procura o
+                          nome primeiro, e a etiqueta na frente empurra o nome
+                          para uma posicao que muda a cada linha. */}
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <Badge tom={p.ordem === 1 ? "info" : "neutral"}>
-                          {p.ordem === 1 ? "principal" : `reserva ${p.ordem}`}
-                        </Badge>
                         <span style={{ fontWeight: "var(--fw-semi)" }}>
                           {PROVEDORES.find((x) => x.valor === p.provedor)?.rotulo ?? p.provedor}
                         </span>
+                        <Badge tom={p.ordem === 1 ? "info" : "neutral"}>
+                          {p.ordem === 1 ? "principal" : `reserva ${p.ordem}`}
+                        </Badge>
                       </div>
                       <div
                         style={{
@@ -243,34 +214,9 @@ export function AtendimentoAutomatico() {
                   </Tr>
                 ))
               )}
-          </tbody>
-        </TableArea>
-      </Bloco>
+        </tbody>
+      </TableArea>
 
-      <Bloco
-        titulo="Quem recebe resposta automática"
-        acao={
-          <Button size="sm" onClick={() => void salvarTrava()} disabled={salvandoTeste}>
-            {salvandoTeste ? "Salvando…" : "Salvar"}
-          </Button>
-        }
-      >
-        <Field
-          label="Só responde a"
-          hint="Um número por linha. Vazio atende todo mundo."
-        >
-          {/*
-            Textarea e nao input: validar com uma pessoa so nao basta, e o teste
-            que vale e com quem nao conhece o sistema.
-          */}
-          <textarea
-            style={{ ...textareaStyle, minHeight: 62 }}
-            placeholder={"+55 (35) 99999-9999\n+55 (35) 98888-8888"}
-            value={numeroTeste}
-            onChange={(e) => setNumeroTeste(e.target.value)}
-          />
-        </Field>
-      </Bloco>
     </>
   );
 }
@@ -491,33 +437,24 @@ export function Personas({ contas }: { contas: ContaWhatsapp[] }) {
 
   return (
     <>
-      <div style={{ marginBottom: 20 }}>
-        <Alert variant="info" title="Persona é permissão, não obrigação">
-          Sem persona para um setor, a IA continua só entendendo e encaminhando.
-          Com persona, ela fecha sozinha o que estiver na lista, e nada além.
-        </Alert>
-      </div>
-
-      <Bloco
-        titulo="Personas"
-        acao={
-          <IncluirButton
-            rotulo="Adicionar"
-            onClick={() =>
-              setEditando({
-                id: 0,
-                contaId: null,
-                setorId: null,
-                nome: "",
-                descricao: null,
-                podeResolver: null,
-                ativo: true,
-              })
-            }
-          />
+      <CabecalhoDeSecao
+        titulo="Personas do atendimento"
+        legenda="O que a IA pode resolver sozinha, por setor. Sem persona, ela continua só entendendo e encaminhando. Com persona, fecha sozinha o que estiver na lista e nada além, e nunca é autorizada a falar de valor, vencimento ou boleto."
+        onIncluir={() =>
+          setEditando({
+            id: 0,
+            contaId: null,
+            setorId: null,
+            nome: "",
+            descricao: null,
+            podeResolver: null,
+            ativo: true,
+          })
         }
-      >
-        <TableArea minWidth={520}>
+        rotuloIncluir="Adicionar persona"
+      />
+
+      <TableArea minWidth={0}>
           <TableHead>
                 <Th>Persona</Th>
                 <Th>Onde vale</Th>
@@ -589,9 +526,8 @@ export function Personas({ contas }: { contas: ContaWhatsapp[] }) {
                   </Tr>
                 ))
               )}
-          </tbody>
-        </TableArea>
-      </Bloco>
+        </tbody>
+      </TableArea>
     </>
   );
 }

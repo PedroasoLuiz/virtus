@@ -25,6 +25,15 @@ export type ContaWhatsapp = {
   ativo: boolean;
   temToken: boolean;
   temAppSecret: boolean;
+  /**
+   * O bot responde a qualquer contato deste numero.
+   *
+   * ⚠️ Desligado com a lista vazia, ele nao responde a NINGUEM. E o padrao de
+   * conta nova: ligar o atendimento automatico passa a ser um ato.
+   */
+  botRespondeTodos: boolean;
+  /** Quando nao responde a todos, so estes. Um por linha. */
+  botNumeros: string | null;
   verifyToken: string | null;
 };
 

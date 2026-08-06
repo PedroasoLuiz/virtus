@@ -64,6 +64,15 @@ export type ContextoDoBot = {
    * perguntar nome e empresa, porque nao ha de onde tirar.
    */
   primeiroContato: boolean;
+  /**
+   * ⚠️ A trava do atendimento automatico, agora POR NUMERO.
+   *
+   * Era da empresa e ninguem entendia o que era. Aqui ela pertence a quem
+   * atende: uma linha de vendas pode ter o bot solto e a de suporte presa.
+   */
+  contaRespondeTodos: boolean;
+  /** Quando nao responde a todos, so estes. Vazio significa ninguem. */
+  contaNumeros: string | null;
 };
 
 /** Quem ja provou ser quem diz ser, nesta conversa. */

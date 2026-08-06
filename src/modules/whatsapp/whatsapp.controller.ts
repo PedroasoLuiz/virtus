@@ -40,6 +40,7 @@ export async function salvarConta({ body, ctx }: Entrada<SalvarContaBody, undefi
   const empresaId = empresaObrigatoria(ctx);
   const conta = await service.salvarConta(empresaId, body);
 
+
   return created(contaSchema.parse(conta));
 }
 

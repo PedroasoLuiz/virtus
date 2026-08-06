@@ -52,6 +52,8 @@ export async function contexto(
     tentativas: l.tentativas,
     humanoRespondeu: l.humano_respondeu,
     primeiroContato: l.primeiro_contato ?? false,
+    contaRespondeTodos: l.conta_responde_todos ?? false,
+    contaNumeros: l.conta_numeros ?? null,
   };
 }
 
