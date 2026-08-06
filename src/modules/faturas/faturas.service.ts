@@ -1,7 +1,7 @@
 import { logger } from "@/shared/utils/logger";
 import * as whatsapp from "@/modules/whatsapp/whatsapp.service";
 import { paraFormatoMeta } from "@/modules/whatsapp/whatsapp.types";
-import { BusinessRuleError, NotFoundError } from "@/shared/errors/app-error";
+import { AppError, BusinessRuleError, NotFoundError, isAppError } from "@/shared/errors/app-error";
 import {
   centavos,
   formatarSemSimbolo,
@@ -481,6 +481,32 @@ export async function enviarParcelaPorEmail(
   return { para };
 }
 
+/**
+ * Deixa a causa aparecer em vez de virar "Erro interno".
+ *
+ * ⚠️ Erro do PostgREST e um objeto comum, nao um `AppError`, entao ele cai no
+ * ramo generico do handler e chega na tela sem dizer nada. Este disparo toca
+ * banco, vault e a API da Meta em sequencia: sem a causa, descobrir qual dos
+ * tres falhou vira leitura de log com sorte de pegar a janela certa.
+ */
+async function comCausaVisivel<T>(acao: () => Promise<T>): Promise<T> {
+  try {
+    return await acao();
+  } catch (err) {
+    if (isAppError(err)) throw err;
+
+    const causa =
+      err instanceof Error
+        ? err.message
+        : typeof err === "object" && err !== null && "message" in err
+          ? String((err as { message: unknown }).message)
+          : String(err);
+
+    logger.error("falha ao enviar cobranca por whatsapp", { causa, erro: err });
+    throw new AppError("INTERNAL", 500, `Nao foi possivel enviar: ${causa}`);
+  }
+}
+
 /** O modelo aprovado na Meta. Trocar o nome aqui exige aprovar outro la. */
 const MODELO_DE_COBRANCA = "cobranca";
 
@@ -528,22 +554,24 @@ export async function enviarParcelaPorWhatsapp(
   const token = await repo.tokenDaParcela(parcelaId);
   const tickets = fatura.tickets.map((t) => t.numero);
 
-  const mensagem = await whatsapp.dispararModelo(
-    empresaId,
-    usuarioId,
-    { telefone: paraFormatoMeta(bruto), nome: destino.clienteNome },
-    MODELO_DE_COBRANCA,
-    [
-      // A ORDEM E O CONTRATO com o modelo aprovado: nome, valor, vencimento,
-      // ticket. Trocar duas de lugar passa na validacao de quantidade e chega
-      // errado no cliente.
-      destino.clienteNome ?? "cliente",
-      formatarSemSimbolo(parcela.total),
-      parcela.vencimento ? paraFormatoBR(parcela.vencimento) : "a combinar",
-      tickets.length > 0 ? tickets.join(", ") : String(fatura.id),
-    ],
-    // So o token: o comeco da URL ja esta fixo no modelo aprovado.
-    token,
+  const mensagem = await comCausaVisivel(() =>
+    whatsapp.dispararModelo(
+      empresaId,
+      usuarioId,
+      { telefone: paraFormatoMeta(bruto), nome: destino.clienteNome },
+      MODELO_DE_COBRANCA,
+      [
+        // A ORDEM E O CONTRATO com o modelo aprovado: nome, valor, vencimento,
+        // ticket. Trocar duas de lugar passa na validacao de quantidade e chega
+        // errado no cliente.
+        destino.clienteNome ?? "cliente",
+        formatarSemSimbolo(parcela.total),
+        parcela.vencimento ? paraFormatoBR(parcela.vencimento) : "a combinar",
+        tickets.length > 0 ? tickets.join(", ") : String(fatura.id),
+      ],
+      // So o token: o comeco da URL ja esta fixo no modelo aprovado.
+      token,
+    ),
   );
 
   logger.info("cobranca enviada por whatsapp", {

@@ -31,9 +31,27 @@ function clienteAnonimo() {
   );
 }
 
+/**
+ * Tira do token o marcador do modelo, quando ele vem colado.
+ *
+ * ⚠️ Existe por causa de um link que JA ESTA na mao de clientes. O modelo
+ * aprovado na Meta guardou o `{{1}}` do botao percent-encoded, entao ela nao o
+ * reconheceu como variavel: em vez de substituir, grudou o valor no fim e o
+ * link saiu como `/p/{{1}}<token>`.
+ *
+ * O conserto de verdade e no modelo, e ele nao alcanca mensagem ja entregue.
+ * Link enviado nao volta atras, e um cliente abrindo uma pagina quebrada por
+ * erro nosso e pior que estas quatro linhas.
+ */
+export function tokenLimpo(bruto: string): string {
+  return decodeURIComponent(bruto).replace(/^\{\{\s*\d+\s*\}\}/, "").trim();
+}
+
 export async function cobrancaPorToken(token: string): Promise<CobrancaCompartilhada | null> {
   const supabase = clienteAnonimo();
-  const { data, error } = await supabase.rpc("tickets_compartilhados", { p_token: token });
+  const { data, error } = await supabase.rpc("tickets_compartilhados", {
+    p_token: tokenLimpo(token),
+  });
 
   if (error) throw error;
 
@@ -121,7 +139,8 @@ export async function arquivoPorToken(
   const supabase = clienteAnonimo();
 
   const { data: caminho, error } = await supabase.rpc("caminho_compartilhado", {
-    p_token: token,
+    // Mesmo saneamento da pagina: o link do documento sai de dentro dela.
+    p_token: tokenLimpo(token),
     p_tipo: tipo,
   });
 
