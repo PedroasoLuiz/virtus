@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { cobrancaPorToken } from "@/modules/publico/publico.repository";
+import { cobrancaPorToken, tokenLimpo } from "@/modules/publico/publico.repository";
 import { CobrancaPublicaView } from "./cobranca-publica";
 
 /**
@@ -25,6 +25,15 @@ export default async function CobrancaPublicaPage({
   const { token } = await params;
   const cobranca = await cobrancaPorToken(token).catch(() => null);
 
+  /*
+   * Os links de dentro da pagina saem do token LIMPO.
+   *
+   * Chegando torto, o de fora ja e o que e; propagar o defeito para o download
+   * do boleto faria a sujeira se multiplicar a cada clique, em vez de parar na
+   * porta de entrada.
+   */
+  const limpo = tokenLimpo(token);
+
   // 404 e não uma tela de erro: quem tem link inválido não precisa saber se o
   // token existiu um dia.
   if (!cobranca) notFound();
@@ -43,7 +52,7 @@ export default async function CobrancaPublicaPage({
         color: "#1a1a1a",
       }}
     >
-      <CobrancaPublicaView cobranca={cobranca} token={token} />
+      <CobrancaPublicaView cobranca={cobranca} token={limpo} />
     </main>
   );
 }
