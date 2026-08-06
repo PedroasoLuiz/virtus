@@ -186,6 +186,30 @@ export async function responder(
 
   const cred = await credenciaisDaConversa(conversa);
   const corpo = comAssinaturaDoAutor(autorNome, texto);
+
+  /*
+   * ⚠️ Clique duplo NAO manda duas vezes.
+   *
+   * A tela ja desabilita o botao enquanto envia, mas rede lenta faz a pessoa
+   * clicar de novo antes de a primeira resposta chegar, e um recarregamento no
+   * meio reenvia o formulario. No WhatsApp isso nao se desfaz: o cliente ve as
+   * duas.
+   */
+  const segredo = serverEnv().WHATSAPP_WEBHOOK_SEGREDO;
+
+  if (segredo) {
+    const repetida = await repo.saidaRepetida(segredo, conversaId, corpo).catch(() => null);
+
+    if (repetida != null) {
+      const anterior = await repo.buscarMensagem(empresaId, repetida);
+
+      if (anterior) {
+        logger.info("envio repetido descartado", { conversaId, mensagemId: repetida });
+        return anterior;
+      }
+    }
+  }
+
   const wamid = await cloud.enviarTexto(cred, conversa.telefone, corpo);
 
   return gravarOuAvisar(empresaId, conversaId, usuarioId, {

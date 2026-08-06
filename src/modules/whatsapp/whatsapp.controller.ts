@@ -203,6 +203,7 @@ export async function enviarAnexo({
  * id de midia leria anexo de conversa alheia.
  */
 export async function obterMidia({
+  req,
   params,
   query,
   ctx,
@@ -213,12 +214,53 @@ export async function obterMidia({
   // conta que a recebeu — e e ela quem diz qual conta e.
   const { conteudo, mime } = await service.baixarMidia(empresaId, query.conversaId, params.id);
 
-  return new Response(conteudo, {
+  const comum = {
+    "Content-Type": mime,
+    // Midia da Meta e imutavel e o id nunca se repete: cache longo, privado
+    // porque o conteudo e de um tenant so.
+    "Cache-Control": "private, max-age=86400",
+    /*
+     * ⚠️ Sem `Accept-Ranges`, o navegador trata o vídeo como fluxo contínuo: a
+     * barra de progresso não aceita clique, não dá para voltar dez segundos, e
+     * em alguns navegadores o `<video>` nem mostra a duração.
+     */
+    "Accept-Ranges": "bytes",
+  };
+
+  const total = conteudo.byteLength;
+  const pedido = req.headers.get("range");
+  const faixa = pedido ? /bytes=(\d*)-(\d*)/.exec(pedido) : null;
+
+  if (!faixa) {
+    return new Response(conteudo, {
+      headers: { ...comum, "Content-Length": String(total) },
+    });
+  }
+
+  /*
+   * A faixa é servida do que já está na memória.
+   *
+   * O arquivo veio inteiro da Meta de qualquer forma: ela não aceita range no
+   * download e o link dela vive cinco minutos. Recortar aqui não economiza
+   * banda com o provedor, mas devolve ao navegador o 206 que ele precisa para
+   * navegar dentro do vídeo.
+   */
+  const inicio = faixa[1] ? Number(faixa[1]) : 0;
+  const fim = faixa[2] ? Math.min(Number(faixa[2]), total - 1) : total - 1;
+
+  if (Number.isNaN(inicio) || inicio > fim || inicio >= total) {
+    return new Response(null, {
+      status: 416,
+      headers: { ...comum, "Content-Range": `bytes */${total}` },
+    });
+  }
+
+  return new Response(conteudo.slice(inicio, fim + 1), {
+    status: 206,
     headers: {
-      "Content-Type": mime,
-      // Midia da Meta e imutavel e o id nunca se repete: cache longo, privado
-      // porque o conteudo e de um tenant so.
-      "Cache-Control": "private, max-age=86400",
+      ...comum,
+      "Content-Range": `bytes ${inicio}-${fim}/${total}`,
+      "Content-Length": String(fim - inicio + 1),
     },
   });
 }

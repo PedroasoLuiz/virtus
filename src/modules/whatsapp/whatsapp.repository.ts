@@ -336,6 +336,49 @@ export async function atendimentoDaConversa(
   };
 }
 
+/**
+ * Ja saiu esta mesma mensagem ha poucos segundos?
+ *
+ * ⚠️ Devolve o id da anterior, para o chamador reaproveitar em vez de mandar de
+ * novo. Nao ha como desfazer no WhatsApp: o clique duplo vira duas mensagens na
+ * tela do cliente, e no caso de cobranca vira duas cobrancas.
+ */
+export async function saidaRepetida(
+  segredo: string,
+  conversaId: number,
+  texto: string,
+  segundos = 10,
+): Promise<number | null> {
+  const supabase = anonClient();
+
+  const { data, error } = await supabase.rpc("whatsapp_saida_repetida", {
+    p_segredo: segredo,
+    p_conversa: conversaId,
+    p_texto: texto,
+    p_segundos: segundos,
+  });
+
+  if (error) throw error;
+  return data ?? null;
+}
+
+export async function buscarMensagem(
+  empresaId: number,
+  id: number,
+): Promise<Mensagem | null> {
+  const supabase = await serverClient();
+
+  const { data, error } = await supabase
+    .from("whatsappmensagens")
+    .select(COLUNAS_MENSAGEM)
+    .eq("fkEmpresa", empresaId)
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data ? paraMensagem(data as unknown as LinhaMensagem) : null;
+}
+
 export async function listarMensagens(
   empresaId: number,
   conversaId: number,

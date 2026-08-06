@@ -486,27 +486,35 @@ async function aindaEstaEscrevendo(conversaId: number): Promise<boolean> {
   const segredo = serverEnv().WHATSAPP_WEBHOOK_SEGREDO;
   if (!segredo) return false;
 
-  const antes = await ultimaEntrada(segredo, conversaId);
-  await new Promise((r) => setTimeout(r, ESPERA_DE_DIGITACAO_MS));
-  const depois = await ultimaEntrada(segredo, conversaId);
-
-  if (antes === depois) return false;
-
-  logger.info("bot esperou: chegou mensagem nova durante a espera", { conversaId });
-  return true;
-}
-
-/** Carimbo da ultima mensagem recebida. `null` quando nao ha nenhuma. */
-async function ultimaEntrada(segredo: string, conversaId: number): Promise<string | null> {
-  const historico = await repo.mensagens(segredo, conversaId, 3);
-
-  return (
-    historico
-      .filter((m) => m.direcao === "entrada")
-      .map((m) => m.enviadaEm)
-      .sort()
-      .pop() ?? null
+  /*
+   * ⚠️ SO UMA invocacao espera pela rajada inteira.
+   *
+   * Antes, cada mensagem recebida dormia os 7 segundos por conta propria: cinco
+   * mensagens seguidas eram cinco funcoes serverless de pe ao mesmo tempo, 35
+   * segundos pagos para produzir uma resposta so. A reserva vive no banco, onde
+   * o proprio `update` serializa a disputa.
+   */
+  const minha = await repo.reservarEspera(
+    segredo,
+    conversaId,
+    Math.ceil(ESPERA_DE_DIGITACAO_MS / 1000) + 5,
   );
+
+  if (!minha) {
+    logger.info("bot ja tem alguem esperando esta rajada", { conversaId });
+    return true;
+  }
+
+  await new Promise((r) => setTimeout(r, ESPERA_DE_DIGITACAO_MS));
+
+  /*
+   * Libera ANTES de triar, e nao depois: a triagem chama o provedor de IA e
+   * pode demorar. Presa ate o fim, a reserva bloquearia a mensagem seguinte da
+   * pessoa, que e justamente quando ela corrige o que acabou de escrever.
+   */
+  await repo.liberarEspera(segredo, conversaId).catch(() => {});
+
+  return false;
 }
 
 async function executar(conversaId: number): Promise<void> {

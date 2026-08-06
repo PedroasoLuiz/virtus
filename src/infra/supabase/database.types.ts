@@ -1001,6 +1001,18 @@ export type Database = {
           setor_nome: string | null;
         }[];
       };
+      whatsapp_saida_repetida: {
+        Args: { p_segredo: string; p_conversa: number; p_texto: string; p_segundos: number };
+        Returns: number | null;
+      };
+      whatsapp_reservar_espera: {
+        Args: { p_segredo: string; p_conversa: number; p_segundos: number };
+        Returns: boolean;
+      };
+      whatsapp_liberar_espera: {
+        Args: { p_segredo: string; p_conversa: number };
+        Returns: undefined;
+      };
       whatsapp_garantir_conversa: {
         Args: { p_empresa: number; p_conta: number; p_telefone: string; p_nome: string | null };
         Returns: number;

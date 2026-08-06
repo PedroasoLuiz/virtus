@@ -413,6 +413,41 @@ export async function servicos(
   }));
 }
 
+/**
+ * Fica com a espera desta conversa, se ninguem estiver com ela.
+ *
+ * ⚠️ `false` significa "va embora": outra invocacao ja esta segurando a rajada
+ * e vai responder por todas. Sem isso, cinco mensagens seguidas eram cinco
+ * funcoes dormindo ao mesmo tempo.
+ */
+export async function reservarEspera(
+  segredo: string,
+  conversaId: number,
+  segundos: number,
+): Promise<boolean> {
+  const supabase = anonClient();
+
+  const { data, error } = await supabase.rpc("whatsapp_reservar_espera", {
+    p_segredo: segredo,
+    p_conversa: conversaId,
+    p_segundos: segundos,
+  });
+
+  if (error) throw error;
+  return data === true;
+}
+
+export async function liberarEspera(segredo: string, conversaId: number): Promise<void> {
+  const supabase = anonClient();
+
+  const { error } = await supabase.rpc("whatsapp_liberar_espera", {
+    p_segredo: segredo,
+    p_conversa: conversaId,
+  });
+
+  if (error) throw error;
+}
+
 /** A IA desistiu: o atendimento passa a esperar uma pessoa. */
 export async function pedirHumano(segredo: string, conversaId: number): Promise<void> {
   const supabase = anonClient();
