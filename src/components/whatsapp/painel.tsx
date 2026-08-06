@@ -164,13 +164,23 @@ export function PainelWhatsapp() {
     return () => clearTimeout(t);
   }, [carregarContas]);
 
+  /*
+   * ⚠️ `aberto` esta nas dependencias de proposito, e nao e sobra.
+   *
+   * O painel vive na casca e nunca desmonta, entao o estado sobrevive a ele
+   * fechado. Uma cobranca disparada da tela de contas a receber escreve no
+   * banco sem passar por aqui: sem recarregar na abertura, o painel reabria
+   * com a lista de quando a aba foi carregada, parada numa mensagem de horas
+   * atras.
+   */
   useEffect(() => {
     const t = setTimeout(
       () => void carregarConversas(contaAtual?.id ?? null, busca.trim() || undefined),
       250,
     );
     return () => clearTimeout(t);
-  }, [busca, contaAtual?.id, carregarConversas]);
+  }, [busca, contaAtual?.id, carregarConversas, aberto]);
+
 
   /*
    * O que o Realtime precisa saber, sem virar dependencia do efeito.
