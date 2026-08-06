@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { Duvida } from "@/components/ui/ajuda";
+import { CabecalhoDeSecao } from "@/components/ui/kit";
 
 /**
  * O que a pessoa precisa levar ao painel da Meta.
@@ -17,71 +18,86 @@ export function UrlDeCallback() {
   const url = `${typeof window !== "undefined" ? window.location.origin : ""}${URL_WEBHOOK}`;
 
   return (
-    <div
-      style={{
-        marginTop: 8,
-        padding: "10px 12px",
-        borderRadius: "var(--radius-md)",
-        background: "var(--primary-subtle)",
-        border: "1px solid var(--primary-border)",
-        fontSize: "var(--text-sm)",
-        lineHeight: "var(--lh-snug)",
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
-        <span className="rotulo" style={{ flex: 1, color: "var(--primary)" }}>
-          URL de callback na Meta
+    <section>
+      {/*
+        O titulo diz o QUE e, nao o nome do campo.
+
+        "Callback" e o rotulo do lado da Meta, e so quem ja esta naquela tela
+        entende. Quem chega aqui precisa saber para que serve; o nome tecnico
+        aparece adiante, na hora de achar o campo la.
+      */}
+      <CabecalhoDeSecao
+        titulo="Onde as mensagens chegam"
+        legenda="Este é o endereço do seu sistema que a Meta procura quando alguém escreve. A mesma URL serve todos os números; o que muda entre eles é o Verify token. Assine o campo messages, senão a URL verifica e mesmo assim nada chega."
+      />
+
+      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+        <span
+          style={{
+            flexShrink: 0,
+            fontSize: "var(--text-sm)",
+            color: "var(--text-tertiary)",
+          }}
+        >
+          Callback URL:
         </span>
+
+        {/*
+          A URL no verde da marca e o icone COLADO nela, e nao na outra ponta da
+          linha. Na extremidade, o copiar vira um botao solto que nao se liga ao
+          que copia; ao lado do texto, ele le como parte dele.
+        */}
+        <code
+          style={{
+            minWidth: 0,
+            fontSize: "var(--text-sm)",
+            color: "var(--primary)",
+            wordBreak: "break-all",
+          }}
+        >
+          {url}
+        </code>
+
+        {/*
+          Icone sem moldura, no verde da marca: e uma acao de apoio ao lado do
+          dado, e nao um botao com peso proprio. A confirmacao troca o desenho
+          por um certo, porque copiar nao tem retorno visivel nenhum.
+        */}
         <button
           type="button"
           onClick={() => {
             void navigator.clipboard.writeText(url);
             setCopiada(true);
           }}
+          title={copiada ? "Copiada" : "Copiar"}
+          aria-label={copiada ? "Copiada" : "Copiar a URL"}
           style={{
-            border: "1px solid var(--primary-border)",
-            background: "var(--surface)",
+            flexShrink: 0,
+            width: 24,
+            height: 24,
+            display: "grid",
+            placeItems: "center",
+            border: "none",
+            background: "transparent",
             color: "var(--primary)",
-            borderRadius: "var(--radius-sm)",
-            fontSize: "var(--text-xs)",
-            fontWeight: "var(--fw-semi)",
-            padding: "3px 8px",
             cursor: "pointer",
           }}
         >
-          {copiada ? "Copiada" : "Copiar"}
+          {copiada ? (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 12.5l5.5 5.5L20 7" />
+            </svg>
+          ) : (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="9" y="9" width="12" height="12" rx="2.5" />
+              <path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" />
+            </svg>
+          )}
         </button>
       </div>
-
-      <code
-        style={{
-          display: "block",
-          fontSize: "var(--text-sm)",
-          wordBreak: "break-all",
-          color: "var(--text-primary)",
-        }}
-      >
-        {url}
-      </code>
-
-      <div style={{ marginTop: 6, color: "var(--text-secondary)" }}>
-        A mesma URL serve todos os números. Assine o campo <strong>messages</strong>,
-        senão a URL verifica e mesmo assim nada chega.
-      </div>
-    </div>
+    </section>
   );
 }
-
-/**
- * Como conectar, em cinco passos.
- *
- * Sem cartao e sem moldura: e texto de apoio, nao dado. Uma linha divisoria
- * entre os itens basta para separa-los, e a primeira e a ultima ficam sem para o
- * bloco nao virar uma caixa por acidente.
- *
- * Minimalista de proposito: cada passo diz onde clicar e leva ao documento da
- * Meta. Reescrever a documentacao deles aqui envelheceria em duas semanas.
- */
 
 /**
  * Como conectar, em cinco passos.

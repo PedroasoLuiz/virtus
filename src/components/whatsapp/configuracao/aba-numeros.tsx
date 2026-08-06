@@ -322,10 +322,13 @@ export function AbaDeNumeros({
 function Grupo({
   titulo,
   legenda,
+  primeiro,
   children,
 }: {
   titulo: string;
   legenda: string;
+  /** Primeiro do formulario: metade do respiro em cima. */
+  primeiro?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -334,7 +337,7 @@ function Grupo({
         O MESMO cabecalho das secoes da listagem: mesmo tamanho, mesma legenda
         embaixo. Um formulario com titulo de outro peso pareceria outra tela.
       */}
-      <CabecalhoDeSecao titulo={titulo} legenda={legenda} />
+      <CabecalhoDeSecao titulo={titulo} legenda={legenda} primeiro={primeiro} />
       <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>{children}</div>
     </section>
   );
@@ -404,6 +407,7 @@ function Formulario({
      */
     <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
       <Grupo
+        primeiro
         titulo="O número"
         legenda="Como ele aparece para a sua equipe no seletor de caixas de entrada. O país define o formato do número e entra no envio."
       >
@@ -495,7 +499,7 @@ function Formulario({
         </Field>
 
         <Field
-          label="WhatsApp Business Account ID"
+          label="WB Account ID"
           hint="Na mesma tela da Meta. Sem ele não dá para listar os modelos aprovados."
         >
           <input style={inputStyle} value={rascunho.wabaId} onChange={mudar("wabaId")} />

@@ -667,11 +667,20 @@ export function CabecalhoDeSecao({
   legenda,
   onIncluir,
   rotuloIncluir = "Adicionar",
+  primeiro = false,
 }: {
   titulo: string;
   legenda: string;
   onIncluir?: () => void;
   rotuloIncluir?: string;
+  /**
+   * Primeiro da tela: metade do respiro em cima.
+   *
+   * O vao de 22 existe para separar uma secao da ANTERIOR. No topo nao ha
+   * anterior, e o mesmo vao vira um buraco entre o cabecalho do drawer e o
+   * comeco do conteudo.
+   */
+  primeiro?: boolean;
 }) {
   return (
     /*
@@ -679,7 +688,7 @@ export function CabecalhoDeSecao({
      * e sem folga o titulo de uma cola no fim da anterior e as quatro viram uma
      * parede so.
      */
-    <div style={{ marginTop: 22, marginBottom: 26 }}>
+    <div style={{ marginTop: primeiro ? 11 : 22, marginBottom: 26 }}>
       {/*
         O mais fica COLADO no titulo, e nao na outra ponta da linha.
         
