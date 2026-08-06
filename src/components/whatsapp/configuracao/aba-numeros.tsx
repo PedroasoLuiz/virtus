@@ -299,6 +299,24 @@ export function AbaDeNumeros({
   );
 }
 
+/**
+ * Um assunto do formulario.
+ *
+ * ⚠️ Rotulo pequeno, sem moldura e sem fundo: o que separa os grupos e o vao
+ * entre eles, nao uma caixa. Caixa dentro de drawer vira cartao sobre cartao, e
+ * o formulario passa a parecer tres telas empilhadas.
+ */
+function Grupo({ titulo, children }: { titulo: string; children: React.ReactNode }) {
+  return (
+    <section>
+      <div className="rotulo" style={{ marginBottom: 8 }}>
+        {titulo}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>{children}</div>
+    </section>
+  );
+}
+
 function Situacao({
   conta,
   onAlternar,
@@ -354,134 +372,154 @@ function Formulario({
 
   return (
     /*
-     * gap 3, e nao os 8 do `FormDrawer`.
+     * gap 3 dentro do grupo, e nao os 8 do `FormDrawer`.
      *
-     * Desvio consciente do padrao: os formularios do sistema tem tres ou quatro
-     * campos, e ali o respiro de 8 separa. Aqui sao oito campos seguidos, todos
-     * do mesmo assunto, e o mesmo respiro os desmancha numa lista de itens
-     * soltos. O `Field` ja reserva 28px de altura por linha, entao o que separa
-     * uma da outra e a propria linha, nao o vao.
+     * Desvio consciente: os formularios do sistema tem tres ou quatro campos, e
+     * ali o respiro de 8 separa. Aqui sao nove, e o mesmo respiro os desmancha
+     * numa lista de itens soltos. O que separa uma linha da outra e a propria
+     * linha; o que separa um ASSUNTO do outro e o grupo.
      */
-    <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-      <Field label="Apelido" hint="Como este número aparece no seletor. Ex.: Financeiro.">
-        <input style={inputStyle} value={rascunho.apelido} onChange={mudar("apelido")} />
-      </Field>
+    <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+      <Grupo titulo="O número">
+        <Field label="Apelido" hint="Como este número aparece no seletor. Ex.: Financeiro.">
+          <input style={inputStyle} value={rascunho.apelido} onChange={mudar("apelido")} />
+        </Field>
 
-      {/*
-        A trava mora AQUI, e nao na tela de IA.
-        
-        Quem atende e o numero, e a pergunta "esse aqui responde sozinho?" so
-        faz sentido olhando para ele. Solta na configuracao da IA, ela valia
-        para a empresa inteira e ninguem entendia o que fazia.
-      */}
-      <Field
-        label="Responde a todos"
-        hint={
-          rascunho.botRespondeTodos
-            ? "O atendimento automático fala com qualquer contato deste número."
-            : "Desligado, só os números listados abaixo recebem resposta automática."
-        }
-      >
-        <ActiveToggle
-          active={rascunho.botRespondeTodos}
-          onChange={() =>
-            onMudar({ ...rascunho, botRespondeTodos: !rascunho.botRespondeTodos })
-          }
-        />
-      </Field>
-
-      {!rascunho.botRespondeTodos && (
-        <Field
-          label="Só estes números"
-          required
-          hint="Um por linha. Vazio, o bot não responde a ninguém neste número."
-        >
-          <textarea
-            style={{ ...textareaStyle, minHeight: 58 }}
-            placeholder={"+55 (35) 99999-9999\n+55 (35) 98888-8888"}
-            value={rascunho.botNumeros}
-            onChange={(e) => onMudar({ ...rascunho, botNumeros: e.target.value })}
+        <Field label="Número" hint="Com DDD. O DDI 55 entra sozinho se faltar.">
+          <input
+            style={inputStyle}
+            inputMode="tel"
+            // Zeros e nao um numero plausivel: assim a dica se le como FORMATO. Um
+            // exemplo verossimil parece dado de verdade, e o que estava ali era o
+            // proprio numero da empresa.
+            placeholder="+55 (00) 00000-0000"
+            // Exibe mascarado, guarda so digitos: mascara em coluna de banco vira
+            // dois formatos para a mesma coisa, que e o que ja atrapalha o
+            // casamento com `clientes.contato`.
+            value={mascararTelefone(rascunho.numero)}
+            onChange={(e) =>
+              onMudar({ ...rascunho, numero: digitosDoTelefone(e.target.value) })
+            }
           />
         </Field>
-      )}
+      </Grupo>
 
-      <Field label="Número" hint="Com DDD. O DDI 55 entra sozinho se faltar.">
-        <input
-          style={inputStyle}
-          inputMode="tel"
-          // Zeros e nao um numero plausivel: assim a dica se le como FORMATO. Um
-          // exemplo verossimil parece dado de verdade, e o que estava ali era o
-          // proprio numero da empresa.
-          placeholder="+55 (00) 00000-0000"
-          // Exibe mascarado, guarda so digitos: mascara em coluna de banco vira
-          // dois formatos para a mesma coisa, que e o que ja atrapalha o
-          // casamento com `clientes.contato`.
-          value={mascararTelefone(rascunho.numero)}
-          onChange={(e) =>
-            onMudar({ ...rascunho, numero: digitosDoTelefone(e.target.value) })
+      {/*
+        As credenciais em bloco proprio, e com os nomes DA META.
+
+        Quem preenche esta parte esta com o painel deles aberto na outra aba,
+        copiando e colando. Um rotulo traduzido obriga a adivinhar qual campo de
+        la corresponde a qual daqui, e "Identificação" nao existe em lugar
+        nenhum do painel da Meta.
+      */}
+      <Grupo titulo="Credenciais da Meta">
+        <Field
+          label="Phone number ID"
+          required
+          hint="Meta, WhatsApp, Configuração da API. É o identificador do número, não o número."
+        >
+          <input
+            style={inputStyle}
+            value={rascunho.phoneNumberId}
+            onChange={mudar("phoneNumberId")}
+          />
+        </Field>
+
+        <Field
+          label="WhatsApp Business Account ID"
+          hint="Na mesma tela da Meta. Sem ele não dá para listar os modelos aprovados."
+        >
+          <input style={inputStyle} value={rascunho.wabaId} onChange={mudar("wabaId")} />
+        </Field>
+
+        <Field
+          label="Access token"
+          required={!editando}
+          hint="Use um token de Usuário do sistema, no Business Manager. O do API Setup expira em 24 horas."
+        >
+          <input
+            style={inputStyle}
+            type="password"
+            autoComplete="off"
+            placeholder={marcador}
+            value={rascunho.token}
+            onChange={mudar("token")}
+          />
+        </Field>
+
+        <Field
+          label="App Secret"
+          required={!editando}
+          hint="Meta, Configurações do app, aba Básico. É ele que prova que o webhook veio da Meta."
+        >
+          <input
+            style={inputStyle}
+            type="password"
+            autoComplete="off"
+            placeholder={marcador}
+            value={rascunho.appSecret}
+            onChange={mudar("appSecret")}
+          />
+        </Field>
+
+        <Field
+          label="Verify token"
+          hint="Você inventa este texto e cola o MESMO nos dois lados. Serve só para a Meta provar que o webhook é seu."
+        >
+          <input
+            style={inputStyle}
+            value={rascunho.verifyToken}
+            onChange={mudar("verifyToken")}
+          />
+        </Field>
+
+        <Field
+          label="Versão da API"
+          hint="A Meta descontinua versão por data. Trocar aqui não exige deploy."
+        >
+          <input style={inputStyle} value={rascunho.apiVersao} onChange={mudar("apiVersao")} />
+        </Field>
+      </Grupo>
+
+      {/*
+        O comportamento do bot vem POR ULTIMO.
+
+        Ele estava entre o apelido e o numero, cortando o cadastro no meio com
+        uma decisao de outra natureza. Aqui o formulario le em ordem: que numero
+        e este, como falo com a Meta, e so entao o que ele faz sozinho.
+      */}
+      <Grupo titulo="Atendimento automático">
+        <Field
+          label="Responde a todos"
+          hint={
+            rascunho.botRespondeTodos
+              ? "O atendimento automático fala com qualquer contato deste número."
+              : "Desligado, só os números listados abaixo recebem resposta automática."
           }
-        />
-      </Field>
+        >
+          <ActiveToggle
+            active={rascunho.botRespondeTodos}
+            onChange={() =>
+              onMudar({ ...rascunho, botRespondeTodos: !rascunho.botRespondeTodos })
+            }
+          />
+        </Field>
 
-      <Field
-        label="Identificação"
-        required
-        hint="Meta, WhatsApp, Configuração da API. Campo Phone number ID."
-      >
-        <input
-          style={inputStyle}
-          value={rascunho.phoneNumberId}
-          onChange={mudar("phoneNumberId")}
-        />
-      </Field>
-
-      <Field
-        label="Conta (WABA)"
-        hint="Na mesma tela da Meta. Sem ela não dá para listar os modelos aprovados."
-      >
-        <input style={inputStyle} value={rascunho.wabaId} onChange={mudar("wabaId")} />
-      </Field>
-
-      <Field
-        label="Versão da API"
-        hint="A Meta descontinua versão por data. Trocar aqui não exige deploy."
-      >
-        <input style={inputStyle} value={rascunho.apiVersao} onChange={mudar("apiVersao")} />
-      </Field>
-
-      <Field
-        label="Token de acesso"
-        required={!editando}
-        hint="Use um token de Usuário do sistema, no Business Manager. O do API Setup expira em 24 horas."
-      >
-        <input
-          style={inputStyle}
-          type="password"
-          autoComplete="off"
-          placeholder={marcador}
-          value={rascunho.token}
-          onChange={mudar("token")}
-        />
-      </Field>
-
-      <Field
-        label="Chave secreta"
-        required={!editando}
-        hint="Meta, Configurações do app, aba Básico. É ela que prova que o webhook veio da Meta."
-      >
-        <input
-          style={inputStyle}
-          type="password"
-          autoComplete="off"
-          placeholder={marcador}
-          value={rascunho.appSecret}
-          onChange={mudar("appSecret")}
-        />
-      </Field>
-
-      <Field label="Verificar token" hint="Invente um texto e cole o MESMO no webhook da Meta.">
-        <input style={inputStyle} value={rascunho.verifyToken} onChange={mudar("verifyToken")} />
-      </Field>
+        {!rascunho.botRespondeTodos && (
+          <Field
+            label="Só estes números"
+            required
+            hint="Um por linha. Vazio, o bot não responde a ninguém neste número."
+          >
+            <textarea
+              style={{ ...textareaStyle, minHeight: 58 }}
+              placeholder={"+55 (35) 99999-9999\n+55 (35) 98888-8888"}
+              value={rascunho.botNumeros}
+              onChange={(e) => onMudar({ ...rascunho, botNumeros: e.target.value })}
+            />
+          </Field>
+        )}
+      </Grupo>
 
       <UrlDeCallback />
       <ComoConectar />
