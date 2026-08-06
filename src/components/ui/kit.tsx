@@ -227,6 +227,12 @@ export function TableHead({ children }: { children: React.ReactNode }) {
       */}
       <tr
         style={{
+          /*
+           * Traco em CIMA tambem, como nas listas da Apple: o cabecalho fica
+           * entre duas linhas e le como um rotulo da tabela, nao como a
+           * primeira linha dela.
+           */
+          borderTop: "1px solid var(--border)",
           borderBottom: "1px solid var(--border)",
           height: "var(--h-th)",
         }}
@@ -668,7 +674,12 @@ export function CabecalhoDeSecao({
   rotuloIncluir?: string;
 }) {
   return (
-    <div style={{ marginBottom: 14 }}>
+    /*
+     * Respiro generoso em cima e embaixo: sao quatro abas com a mesma anatomia,
+     * e sem folga o titulo de uma cola no fim da anterior e as quatro viram uma
+     * parede so.
+     */
+    <div style={{ marginTop: 6, marginBottom: 18 }}>
       {/*
         O mais fica COLADO no titulo, e nao na outra ponta da linha.
         
@@ -695,7 +706,7 @@ export function CabecalhoDeSecao({
 
       <p
         style={{
-          marginTop: 4,
+          marginTop: 6,
           // Um acima do `--text-xs`: a legenda e para ser LIDA, e 9px cobra
           // esforco de quem chega numa tela que ja e de configuracao.
           fontSize: "calc(var(--text-xs) + 1px)",

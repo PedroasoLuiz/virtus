@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Drawer } from "@/components/ui/drawer";
 import { useAvisos } from "@/components/ui/avisos";
 import { comFormatacaoDoWhatsapp } from "@/components/whatsapp/formatacao";
+import { PrecisaDeAjuda } from "@/components/ui/ajuda";
 import {
   AtendimentoAutomatico,
   Personas,
@@ -584,6 +585,32 @@ function ModelosAprovados({
           onPage={setPagina}
         />
 
+        <PrecisaDeAjuda
+          duvidas={[
+            {
+              pergunta: "Como crio um modelo novo?",
+              resposta:
+                "Modelo é criado e aprovado no painel da Meta, não aqui. Esta tela só lê o que já está aprovado, porque enviar um que não está gera erro no envio.",
+              href: "https://business.facebook.com/wa/manage/message-templates/",
+              rotuloDoLink: "Abrir o gerenciador de modelos",
+            },
+            {
+              pergunta: "Meu modelo sumiu da lista",
+              resposta:
+                "Editar um modelo o devolve para revisão, e nesse estado ele sai de aprovado. A lista mostra só os aprovados, então ele volta sozinho quando a Meta liberar.",
+              href: "https://business.facebook.com/wa/manage/message-templates/",
+              rotuloDoLink: "Ver o status lá",
+            },
+            {
+              pergunta: "Por que preciso de modelo?",
+              resposta:
+                "Passadas 24 horas da última mensagem do cliente, a Meta recusa texto livre. Só modelo aprovado passa, e é por isso que a cobrança sai por modelo.",
+              href: "https://developers.facebook.com/docs/whatsapp/cloud-api/guides/send-message-templates",
+              rotuloDoLink: "Ver a regra da janela",
+            },
+          ]}
+        />
+
         {espiando && <PreviaDoModelo espiada={espiando} />}
     </>
   );
@@ -657,15 +684,16 @@ function PreviaDoModelo({ espiada }: { espiada: Espiada }) {
         maxWidth: 320,
         padding: 10,
         /*
-         * O fundo de CONVERSA em volta da bolha.
+         * O MESMO fundo da area de mensagens do painel.
          *
-         * A bolha sozinha usa `primary-subtle`, que e translucido: solta sobre
-         * o branco da tela ela sumia. Aqui ela ganha o bege de fundo de chat
-         * por tras, que e o que a recorta e o que faz a previa parecer o
-         * WhatsApp em vez de um balao perdido.
+         * A bolha usa `primary-subtle`, que e translucido: solta sobre o branco
+         * da tela ela sumia. Por tras dela vai o fundo de conversa de verdade,
+         * o mesmo empilhamento que a thread usa, e nao um bege inventado que
+         * nao existia em lugar nenhum do sistema.
          */
         borderRadius: "var(--radius-lg)",
-        background: "var(--fundo-conversa)",
+        background:
+          "linear-gradient(var(--kanban-coluna-bg), var(--kanban-coluna-bg)), var(--sidebar-bg)",
         boxShadow: "var(--shadow-lg)",
         pointerEvents: "none",
       }}
@@ -889,6 +917,30 @@ function Formulario({
 
       <UrlDeCallback />
       <ComoConectar />
+
+      <PrecisaDeAjuda
+        duvidas={[
+          {
+            pergunta: "Meu número não recebe as mensagens",
+            resposta:
+              "O webhook precisa apontar para a URL desta tela e estar assinado no campo messages. Sem isso a Meta aceita o cadastro e não entrega nada.",
+            href: "https://developers.facebook.com/docs/whatsapp/cloud-api/guides/set-up-webhooks",
+            rotuloDoLink: "Ver na documentação da Meta",
+          },
+          {
+            pergunta: "Onde consigo o token e o App Secret?",
+            resposta:
+              "No painel de apps da Meta, dentro do app que tem o produto WhatsApp. O token precisa ser permanente, de usuário do sistema: o temporário expira em 24 horas e o envio para de funcionar sem aviso.",
+            href: "https://developers.facebook.com/docs/whatsapp/business-management-api/get-started",
+            rotuloDoLink: "Ver como gerar",
+          },
+          {
+            pergunta: "O que é responder a todos?",
+            resposta:
+              "É o interruptor dentro de cada número que decide se o atendimento automático fala com qualquer contato ou só com uma lista. Número novo nasce fechado, para o primeiro cliente real não virar cobaia de uma configuração que ninguém conferiu.",
+          },
+        ]}
+      />
     </div>
   );
 }

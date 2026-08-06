@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { PrecisaDeAjuda } from "@/components/ui/ajuda";
 import { Drawer } from "@/components/ui/drawer";
 import { useAvisos } from "@/components/ui/avisos";
 import {
@@ -215,6 +216,33 @@ export function AtendimentoAutomatico({
         total={provedores?.length ?? 0}
         pageSize={POR_PAGINA}
         onPage={setPagina}
+      />
+
+      <PrecisaDeAjuda
+        duvidas={[
+          {
+            pergunta: "O bot não está respondendo",
+            resposta:
+              "São três coisas, nesta ordem: existe provedor ativo com chave? O número que recebeu a mensagem está com responder a todos ligado, ou com aquele contato na lista? E alguém da equipe respondeu à mão nas últimas duas horas, o que cala o bot de propósito?",
+          },
+          {
+            pergunta: "Para que serve mais de um provedor?",
+            resposta:
+              "Provedor cai, estoura cota e recusa conteúdo. Com uma chave só, qualquer um dos três para o atendimento inteiro. O de ordem 1 responde, e os outros são tentados na sequência quando ele falha.",
+          },
+          {
+            pergunta: "Onde pego a chave do Gemini?",
+            resposta:
+              "No Google AI Studio, com a conta que vai pagar o uso. A chave fica cifrada aqui e nunca volta para a tela.",
+            href: "https://aistudio.google.com/apikey",
+            rotuloDoLink: "Abrir o AI Studio",
+          },
+          {
+            pergunta: "Quanto isso custa?",
+            resposta:
+              "A cobrança é do provedor, por mensagem processada, e triagem é o trabalho mais barato que existe: mensagem curta, resposta curta. Por isso o modelo sugerido é o mais leve de cada um.",
+          },
+        ]}
       />
     </>
   );
@@ -529,6 +557,31 @@ export function Personas({
         total={personas?.length ?? 0}
         pageSize={POR_PAGINA}
         onPage={setPagina}
+      />
+
+      <PrecisaDeAjuda
+        duvidas={[
+          {
+            pergunta: "O que escrevo em pode resolver?",
+            resposta:
+              "Uma lista curta do que a IA fecha sozinha naquele setor: horário de atendimento, como enviar a nota, prazo padrão de retorno. Fora dessa lista ela encaminha, mesmo que pareça saber a resposta.",
+          },
+          {
+            pergunta: "Ela pode falar de valores?",
+            resposta:
+              "Não, e persona nenhuma muda isso. Valor, vencimento e boleto continuam saindo só da consulta que exige CPF ou CNPJ e o código enviado ao e-mail do cadastro.",
+          },
+          {
+            pergunta: "Preciso cadastrar persona?",
+            resposta:
+              "Não. Sem persona, a IA entende o pedido e encaminha para o setor certo, que é o comportamento padrão. Persona é permissão para ela resolver um recorte sem chamar ninguém.",
+          },
+          {
+            pergunta: "Não aparece nenhum setor na lista",
+            resposta:
+              "A persona pode ficar geral, sem setor, e vale para tudo que não tiver persona própria. Setor é cadastro à parte e ainda não tem tela própria.",
+          },
+        ]}
       />
     </>
   );
