@@ -203,6 +203,27 @@ function Migalha({ rotulo, href }: { rotulo: string; href: string }) {
   );
 }
 
+/**
+ * A moldura fina em volta de uma tabela dentro de drawer.
+ *
+ * Existe porque `TableFrame` desenha um CARTAO, e cartao branco sobre o branco
+ * do drawer nao recorta nada. Aqui fica so a borda e o raio, que e o que
+ * separa a tabela do texto acima dela.
+ */
+export function MolduraDeTabela({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        border: "1px solid var(--border)",
+        borderRadius: "var(--radius-lg)",
+        overflow: "hidden",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 export function TableArea({
   children,
   minWidth = 760,
@@ -656,14 +677,14 @@ export function CabecalhoDeSecao({
 }) {
   return (
     <div style={{ marginBottom: 14 }}>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 10,
-        }}
-      >
+      {/*
+        O mais fica COLADO no titulo, e nao na outra ponta da linha.
+        
+        Jogado a direita, ele vira um botao solto que ninguem associa a secao, e
+        o olho precisa atravessar a tela para ligar "Personas" a "adicionar".
+        Ao lado do texto, ele le como parte do titulo.
+      */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <span
           style={{
             fontSize: "var(--text-lg)",
@@ -709,19 +730,23 @@ export function BotaoMais({ rotulo, onClick }: { rotulo: string; onClick?: () =>
       aria-label={rotulo}
       style={{
         flexShrink: 0,
-        width: 24,
-        height: 24,
+        width: 18,
+        height: 18,
         display: "grid",
         placeItems: "center",
         border: "none",
-        borderRadius: "var(--radius-full)",
+        /*
+         * ⚠️ Circulo de verdade, e nao o raio do sistema. Os tokens de raio
+         * servem a caixas; este e um alvo de 18px, e qualquer raio menor que
+         * metade dele o deixaria com cara de quadrado amassado.
+         */
+        borderRadius: "50%",
         background: "var(--success)",
         color: "#fff",
         cursor: "pointer",
-        boxShadow: "var(--shadow-sm)",
       }}
     >
-      <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+      <svg width="10" height="10" viewBox="0 0 12 12" fill="currentColor">
         <path d="M6.75 1.75a.75.75 0 0 0-1.5 0V5.25H1.75a.75.75 0 0 0 0 1.5H5.25v3.5a.75.75 0 0 0 1.5 0V6.75h3.5a.75.75 0 0 0 0-1.5H6.75V1.75z" />
       </svg>
     </button>

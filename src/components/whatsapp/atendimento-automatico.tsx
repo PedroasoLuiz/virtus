@@ -13,6 +13,7 @@ import {
   EmptyRow,
   Field,
   CabecalhoDeSecao,
+  MolduraDeTabela,
   TableArea,
   TableHead,
   Td,
@@ -72,10 +73,19 @@ export function AtendimentoAutomatico() {
     setProvedores(corpo.data ?? []);
   }, []);
 
+  /*
+   * ⚠️ Carrega UMA vez por abertura do painel, e nao a cada visita a aba.
+   *
+   * O componente monta e desmonta ao trocar de aba, entao sem a guarda cada
+   * ida e volta era uma consulta nova. Num SaaS isso multiplica por usuario e
+   * por sessao, e o dado aqui muda quando ALGUEM SALVA, o que ja recarrega.
+   */
   useEffect(() => {
+    if (provedores != null) return;
+
     const t = setTimeout(() => void carregar(), 0);
     return () => clearTimeout(t);
-  }, [carregar]);
+  }, [carregar, provedores]);
 
   async function remover(provedor: string) {
     const r = await fetch(`/api/v1/ia/provedores/${provedor}`, { method: "DELETE" });
@@ -116,25 +126,20 @@ export function AtendimentoAutomatico() {
         </div>
       )}
 
-      <div style={{ marginBottom: 20 }}>
-        {ligados.length === 0 ? (
-          <Alert variant="warning" title="Sem provedor, o bot não responde">
-            Cadastre uma chave e deixe pelo menos um provedor ativo.
+      {/*
+        ⚠️ Aviso e EXCECAO, nao placar.
+        
+        Um `Alert` verde dizendo "esta tudo bem" a cada visita ensina a ignorar
+        a caixa, e ai o dia em que ela ficar ambar tambem passa batido. Estando
+        tudo certo, a tabela abaixo ja mostra quem esta ativo.
+      */}
+      {provedores != null && ligados.length === 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <Alert variant="warning" title="Sem provedor ativo, o bot não responde">
+            Cadastre uma chave e deixe pelo menos um provedor ligado.
           </Alert>
-        ) : (
-          <Alert
-            variant="success"
-            title={
-              ligados.length === 1
-                ? "Um provedor ativo"
-                : `${ligados.length} provedores ativos, tentados na ordem`
-            }
-          >
-            Quem recebe resposta automática é decidido em cada número, na aba
-            Números.
-          </Alert>
-        )}
-      </div>
+        </div>
+      )}
 
       <CabecalhoDeSecao
         titulo="Provedores de IA"
@@ -145,7 +150,8 @@ export function AtendimentoAutomatico() {
         rotuloIncluir="Adicionar provedor"
       />
 
-      <TableArea minWidth={0}>
+      <MolduraDeTabela>
+        <TableArea minWidth={0}>
           <TableHead>
                 <Th>Provedor</Th>
                 <Th>Situação</Th>
@@ -214,8 +220,9 @@ export function AtendimentoAutomatico() {
                   </Tr>
                 ))
               )}
-        </tbody>
-      </TableArea>
+          </tbody>
+        </TableArea>
+      </MolduraDeTabela>
 
     </>
   );
@@ -402,10 +409,13 @@ export function Personas({ contas }: { contas: ContaWhatsapp[] }) {
     setSetores(rs.ok ? (cs?.data ?? []) : []);
   }, []);
 
+  // Mesma guarda dos provedores: trocar de aba nao vale uma consulta nova.
   useEffect(() => {
+    if (personas != null) return;
+
     const t = setTimeout(() => void carregar(), 0);
     return () => clearTimeout(t);
-  }, [carregar]);
+  }, [carregar, personas]);
 
   async function excluir(id: number) {
     const r = await fetch(`/api/v1/atendimento/personas/${id}`, { method: "DELETE" });
@@ -454,7 +464,8 @@ export function Personas({ contas }: { contas: ContaWhatsapp[] }) {
         rotuloIncluir="Adicionar persona"
       />
 
-      <TableArea minWidth={0}>
+      <MolduraDeTabela>
+        <TableArea minWidth={0}>
           <TableHead>
                 <Th>Persona</Th>
                 <Th>Onde vale</Th>
@@ -526,8 +537,9 @@ export function Personas({ contas }: { contas: ContaWhatsapp[] }) {
                   </Tr>
                 ))
               )}
-        </tbody>
-      </TableArea>
+          </tbody>
+        </TableArea>
+      </MolduraDeTabela>
     </>
   );
 }

@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Drawer } from "@/components/ui/drawer";
 import { useAvisos } from "@/components/ui/avisos";
+import { comFormatacaoDoWhatsapp } from "@/components/whatsapp/formatacao";
 import {
   AtendimentoAutomatico,
   Personas,
@@ -15,6 +16,7 @@ import {
   EmptyRow,
   Field,
   CabecalhoDeSecao,
+  MolduraDeTabela,
   Pagination,
   SearchInput,
   TableArea,
@@ -119,6 +121,19 @@ export function ConfiguracaoDeContas({
   const [salvando, setSalvando] = useState(false);
   const [busca, setBusca] = useState("");
   const [pagina, setPagina] = useState(1);
+
+  /*
+   * Os modelos ja lidos da Meta, por conta.
+   *
+   * Vive AQUI e nao na aba porque a aba desmonta ao trocar de guia, e este
+   * dado custa uma chamada externa. Zera quando o painel fecha, que e a hora
+   * em que faz sentido perguntar de novo.
+   */
+  const [modelosPorConta, setModelosPorConta] = useState<Record<number, Modelo[]>>({});
+
+  const guardarModelos = useCallback((contaId: number, lista: Modelo[]) => {
+    setModelosPorConta((atual) => ({ ...atual, [contaId]: lista }));
+  }, []);
 
   /*
    * Abas, e nao uma secao no fim da lista.
@@ -265,7 +280,11 @@ export function ConfiguracaoDeContas({
       />
 
       {aba === "Modelos" ? (
-        <ModelosAprovados contas={contas} />
+        <ModelosAprovados
+          contas={contas}
+          cache={modelosPorConta}
+          onCarregou={guardarModelos}
+        />
       ) : aba === "Automação" ? (
         <AtendimentoAutomatico />
       ) : aba === "Personas" ? (
@@ -294,17 +313,7 @@ export function ConfiguracaoDeContas({
         />
       </div>
 
-      {/*
-        Sem `TableFrame`: o corpo do drawer JA e branco, e cartao branco sobre
-        branco nao recorta nada. Fica so a moldura fina.
-      */}
-      <div
-        style={{
-          border: "1px solid var(--border)",
-          borderRadius: "var(--radius-lg)",
-          overflow: "hidden",
-        }}
-      >
+      <MolduraDeTabela>
         <TableArea minWidth={0}>
           <TableHead>
             <Th>Apelido</Th>
@@ -349,7 +358,7 @@ export function ConfiguracaoDeContas({
           pageSize={POR_PAGINA}
           onPage={setPagina}
         />
-      </div>
+      </MolduraDeTabela>
         </>
       )}
     </Drawer>
@@ -375,16 +384,33 @@ export function ConfiguracaoDeContas({
  * o edita, e uma copia nossa mostraria "aprovado" ate alguem reparar no erro
  * de envio.
  */
-function ModelosAprovados({ contas }: { contas: ContaWhatsapp[] }) {
+function ModelosAprovados({
+  contas,
+  cache,
+  onCarregou,
+}: {
+  contas: ContaWhatsapp[];
+  /** Ja lidos da Meta nesta abertura do painel, por conta. */
+  cache: Record<number, Modelo[]>;
+  onCarregou: (contaId: number, modelos: Modelo[]) => void;
+}) {
   const ativas = useMemo(() => contas.filter((c) => c.ativo && c.temToken), [contas]);
   const [contaId, setContaId] = useState<number | null>(null);
-  const [modelos, setModelos] = useState<Modelo[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
 
   const escolhida = contaId ?? ativas[0]?.id ?? null;
+  const modelos = escolhida == null ? null : (cache[escolhida] ?? null);
 
   useEffect(() => {
-    if (escolhida == null) return;
+    /*
+     * ⚠️ Ja lido nesta abertura, nao pergunta de novo.
+     *
+     * Esta consulta sai para a META, nao para o nosso banco, e o componente
+     * monta e desmonta a cada troca de aba: sem o cache, ir e voltar entre
+     * "Modelos" e "Números" gastava uma chamada externa por vez. Num SaaS isso
+     * multiplica por usuario e por sessao.
+     */
+    if (escolhida == null || cache[escolhida]) return;
 
     const controle = new AbortController();
 
@@ -392,30 +418,34 @@ function ModelosAprovados({ contas }: { contas: ContaWhatsapp[] }) {
      * Adiado por um tique: limpar a lista de forma sincrona dentro do efeito
      * encadeia um render extra so para mostrar "carregando" por um quadro.
      */
-    const t = setTimeout(() => {
-      setModelos(null);
-      setErro(null);
-    }, 0);
+    const t = setTimeout(() => setErro(null), 0);
 
     fetch(`/api/v1/whatsapp/modelos?contaId=${escolhida}`, { signal: controle.signal })
       .then(async (r) => {
         const corpo = await r.json().catch(() => null);
         if (!r.ok) throw new Error(corpo?.error?.message ?? "Não foi possível ler os modelos");
-        setModelos(corpo.data ?? []);
+        onCarregou(escolhida, corpo.data ?? []);
       })
       .catch((e: unknown) => {
         if (e instanceof DOMException && e.name === "AbortError") return;
         // Falha aparece: silenciada, a lista vazia mentiria dizendo que a
         // empresa nao tem modelo nenhum.
         setErro(e instanceof Error ? e.message : "Não foi possível ler os modelos");
-        setModelos([]);
+        onCarregou(escolhida, []);
       });
 
     return () => {
       clearTimeout(t);
       controle.abort();
     };
-  }, [escolhida]);
+    /*
+     * ⚠️ `escolhida` e a UNICA dependencia, de proposito.
+     *
+     * Esta consulta sai para a Meta, nao para o nosso banco: trocar de aba e
+     * voltar disparava uma chamada externa a cada vez. O componente monta e
+     * desmonta com a aba, entao o cache vive um nivel acima, em `modelosPorConta`.
+     */
+  }, [escolhida, cache, onCarregou]);
 
   if (ativas.length === 0) {
     return (
@@ -454,13 +484,14 @@ function ModelosAprovados({ contas }: { contas: ContaWhatsapp[] }) {
         </p>
       )}
 
-      <TableArea minWidth={0}>
-        <TableHead>
-              <Th>Nome</Th>
-              <Th>Categoria</Th>
-              <Th>Idioma</Th>
-          <Th>Variáveis</Th>
-        </TableHead>
+      <MolduraDeTabela>
+        <TableArea minWidth={0}>
+          <TableHead>
+            <Th>Nome</Th>
+            <Th>Categoria</Th>
+            <Th>Idioma</Th>
+            <Th>Variáveis</Th>
+          </TableHead>
 
           <tbody>
             {modelos == null ? (
@@ -482,17 +513,30 @@ function ModelosAprovados({ contas }: { contas: ContaWhatsapp[] }) {
                       style={{
                         display: "inline-block",
                         maxWidth: 340,
+                        marginBottom: 8,
                         padding: "7px 10px",
-                        borderRadius: "12px 12px 12px 3px",
-                        background: "var(--surface-2)",
-                        border: "1px solid var(--border)",
+                        // Ponta viva embaixo a DIREITA: e mensagem que sai
+                        // daqui, e no chat a saida tem a ponta desse lado.
+                        /*
+                         * Os MESMOS tokens da bolha de saida do painel: raio
+                         * grande com a ponta viva embaixo a direita, fundo
+                         * `primary-subtle` e elevacao no lugar de borda. Bolha
+                         * nao tem contorno em lugar nenhum do sistema; o que a
+                         * recorta e a sombra.
+                         */
+                        borderRadius:
+                          "var(--radius-lg) var(--radius-lg) var(--radius-xs) var(--radius-lg)",
+                        background: "var(--primary-subtle)",
+                        boxShadow: "var(--shadow-xs)",
                         fontSize: "var(--text-xs)",
-                        color: "var(--text-secondary)",
+                        color: "var(--text-primary)",
                         lineHeight: "var(--lh-normal)",
                         whiteSpace: "pre-wrap",
                       }}
                     >
-                      {m.corpo}
+                      {/* Os `*assim*` viram negrito de verdade: crus, a tela
+                          mentiria sobre o que o cliente vai ver. */}
+                      {comFormatacaoDoWhatsapp(m.corpo)}
                     </div>
                   </Td>
                   <Td>{m.categoria.toLowerCase()}</Td>
@@ -501,8 +545,9 @@ function ModelosAprovados({ contas }: { contas: ContaWhatsapp[] }) {
                 </Tr>
               ))
             )}
-        </tbody>
-      </TableArea>
+          </tbody>
+        </TableArea>
+      </MolduraDeTabela>
     </>
   );
 }
