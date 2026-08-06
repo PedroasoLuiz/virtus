@@ -7,6 +7,7 @@ import {
   CabecalhoDeSecao,
   EmptyRow,
   Pagination,
+  SkeletonRows,
   TableArea,
   TableHead,
   Td,
@@ -114,11 +115,28 @@ export function AbaDeModelos({
         legenda="Lidos da Meta agora, porque o status muda lá sem aviso. Só modelo aprovado pode ser enviado, e é ele que permite falar com quem não escreve há mais de 24 horas. Para criar ou editar, use o painel da Meta."
       />
 
-      {ativas.length > 1 && (
+      {/*
+        ⚠️ Aparece SEMPRE, mesmo com um número só.
+
+        Escondido quando havia um, a tabela dizia "modelos aprovados" sem dizer
+        de quem — e modelo é da conta da Meta, não da empresa. Com dois números
+        em WABAs diferentes, as listas são outras, e quem viu a tela sem seletor
+        não tem motivo para desconfiar disso. Visível, ele é o rótulo do que
+        está logo abaixo.
+
+        Estreito e à esquerda, colado na tabela: é um filtro do que vem a
+        seguir, não um campo de formulário.
+      */}
+      <div style={{ marginBottom: 10 }}>
         <select
           value={escolhida ?? ""}
-          onChange={(e) => setContaId(Number(e.target.value))}
-          style={{ ...selectStyle, marginBottom: 12 }}
+          onChange={(e) => {
+            setContaId(Number(e.target.value));
+            // Página 1: a 3 de um número não corresponde à 3 do outro.
+            setPagina(1);
+          }}
+          aria-label="Número"
+          style={{ ...selectStyle, width: "auto", minWidth: 180, maxWidth: "100%" }}
         >
           {ativas.map((c) => (
             <option key={c.id} value={c.id}>
@@ -126,7 +144,7 @@ export function AbaDeModelos({
             </option>
           ))}
         </select>
-      )}
+      </div>
 
 
       {erro && (
@@ -145,7 +163,11 @@ export function AbaDeModelos({
 
           <tbody>
             {modelos == null ? (
-              <EmptyRow colSpan={4} message="Carregando…" />
+              <SkeletonRows
+                cols={4}
+                rows={3}
+                labels={["Nome", "Categoria", "Idioma", "Variáveis"]}
+              />
             ) : modelos.length === 0 ? (
               <EmptyRow colSpan={4} message="Nenhum modelo aprovado neste número." />
             ) : (
