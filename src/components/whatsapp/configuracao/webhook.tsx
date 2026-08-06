@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import type { Duvida } from "@/components/ui/ajuda";
 
 /**
  * O que a pessoa precisa levar ao painel da Meta.
@@ -92,101 +93,50 @@ export function UrlDeCallback() {
  * Minimalista de proposito: cada passo diz onde clicar e leva ao documento da
  * Meta. Reescrever a documentacao deles aqui envelheceria em duas semanas.
  */
-export function ComoConectar() {
-  const passos = [
-    {
-      titulo: "Criar o app",
-      texto: "No painel de apps da Meta, tipo Empresa, com o produto WhatsApp.",
-      href: "https://developers.facebook.com/apps",
-    },
-    {
-      titulo: "Pegar as identificações",
-      texto: "Em WhatsApp, Configuração da API. Copie o Phone number ID e o da conta.",
-      href: "https://developers.facebook.com/docs/whatsapp/cloud-api/get-started",
-    },
-    {
-      titulo: "Gerar o token permanente",
-      texto: "Em Usuários do sistema, no Business Manager. O do API Setup expira em 24 horas.",
-      href: "https://developers.facebook.com/docs/whatsapp/business-management-api/get-started",
-    },
-    {
-      titulo: "Pegar a chave secreta",
-      texto: "Em Configurações do app, aba Básico.",
-      href: "https://developers.facebook.com/docs/facebook-login/security",
-    },
-    {
-      titulo: "Ligar o webhook",
-      texto: "Cole a URL verde acima e o token de verificação, e assine o campo messages.",
-      href: "https://developers.facebook.com/docs/graph-api/webhooks/getting-started",
-    },
-  ];
-
-  return (
-    <section style={{ marginTop: 10 }}>
-      <div className="rotulo" style={{ marginBottom: 2 }}>
-        Como conectar
-      </div>
-
-      {passos.map((p, i) => (
-        <a
-          key={p.titulo}
-          href={p.href}
-          target="_blank"
-          rel="noreferrer"
-          style={{
-            display: "block",
-            padding: "9px 0",
-            borderTop: i === 0 ? "none" : "1px solid var(--border)",
-            textDecoration: "none",
-            color: "inherit",
-          }}
-        >
-          {/*
-            O icone vai no TITULO, e nao num "Ver mais" abaixo: ele ja diz que
-            abre fora, e a linha inteira e clicavel. Um link extra so repetiria
-            o gesto que o titulo ja oferece.
-          */}
-          <span
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 5,
-              fontSize: "var(--text-sm)",
-              fontWeight: "var(--fw-semi)",
-              color: "var(--primary)",
-            }}
-          >
-            {p.titulo}
-            <svg
-              width="11"
-              height="11"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.1"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              style={{ flexShrink: 0 }}
-            >
-              <path d="M14 4h6v6" />
-              <path d="M20 4 10 14" />
-              <path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" />
-            </svg>
-          </span>
-
-          <span
-            style={{
-              display: "block",
-              fontSize: "var(--text-sm)",
-              color: "var(--text-tertiary)",
-              lineHeight: "var(--lh-snug)",
-              marginTop: 2,
-            }}
-          >
-            {p.texto}
-          </span>
-        </a>
-      ))}
-    </section>
-  );
-}
+/**
+ * Os passos para ligar um numero, na ordem em que se faz.
+ *
+ * ⚠️ Sao dados, e nao componente: eles entram na MESMA sanfona das duvidas, ao
+ * lado delas. Passo a passo e pergunta frequente sao a mesma coisa para quem
+ * le — o que fazer, por que, e para onde ir — e duas sanfonas diferentes so
+ * criariam dois lugares para procurar a mesma resposta.
+ *
+ * Minimalista de proposito: cada passo diz onde clicar e leva ao documento da
+ * Meta. Reescrever a documentacao deles aqui envelheceria em duas semanas.
+ */
+export const PASSOS_PARA_CONECTAR: Duvida[] = [
+  {
+    pergunta: "1. Criar o app na Meta",
+    resposta: "No painel de apps, tipo Empresa, com o produto WhatsApp adicionado.",
+    href: "https://developers.facebook.com/apps",
+    rotuloDoLink: "Abrir o painel de apps",
+  },
+  {
+    pergunta: "2. Pegar as identificações",
+    resposta:
+      "Em WhatsApp, Configuração da API. Copie o Phone number ID e o WhatsApp Business Account ID.",
+    href: "https://developers.facebook.com/docs/whatsapp/cloud-api/get-started",
+    rotuloDoLink: "Ver onde ficam",
+  },
+  {
+    pergunta: "3. Gerar o token permanente",
+    resposta:
+      "Em Usuários do sistema, no Business Manager. O token do API Setup expira em 24 horas e o envio para sem aviso.",
+    href: "https://developers.facebook.com/docs/whatsapp/business-management-api/get-started",
+    rotuloDoLink: "Ver como gerar",
+  },
+  {
+    pergunta: "4. Pegar o App Secret",
+    resposta:
+      "Em Configurações do app, aba Básico. É ele que prova que o webhook veio mesmo da Meta.",
+    href: "https://developers.facebook.com/docs/facebook-login/security",
+    rotuloDoLink: "Ver onde fica",
+  },
+  {
+    pergunta: "5. Ligar o webhook",
+    resposta:
+      "Cole a URL verde acima e o mesmo Verify token que você escreveu aqui, e assine o campo messages. Sem assinar, a Meta aceita o cadastro e não entrega nada.",
+    href: "https://developers.facebook.com/docs/graph-api/webhooks/getting-started",
+    rotuloDoLink: "Ver o passo a passo",
+  },
+];

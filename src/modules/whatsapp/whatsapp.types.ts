@@ -298,6 +298,51 @@ export function digitosDoTelefone(bruto: string): string {
  * O nono digito NUNCA e inventado aqui: quem responde e sempre um numero que ja
  * escreveu, e esse veio pronto da Meta.
  */
+/**
+ * Os paises oferecidos no cadastro de numero.
+ *
+ * ⚠️ Lista curta de proposito, e nao a tabela E.164 inteira. Ela existe para
+ * quem cadastra escolher o DDI sem decorar, e um seletor com 200 linhas atrapalha
+ * mais que ajuda. Pais que falte se resolve digitando o numero completo.
+ *
+ * Ordenada por uso esperado, nao por alfabeto: o Brasil e o caso de quase todo
+ * cadastro, e deixa-lo no meio da lista custaria uma rolagem por numero.
+ */
+export const PAISES: { ddi: string; nome: string; bandeira: string }[] = [
+  { ddi: "55", nome: "Brasil", bandeira: "🇧🇷" },
+  { ddi: "351", nome: "Portugal", bandeira: "🇵🇹" },
+  { ddi: "1", nome: "Estados Unidos e Canadá", bandeira: "🇺🇸" },
+  { ddi: "54", nome: "Argentina", bandeira: "🇦🇷" },
+  { ddi: "595", nome: "Paraguai", bandeira: "🇵🇾" },
+  { ddi: "598", nome: "Uruguai", bandeira: "🇺🇾" },
+  { ddi: "56", nome: "Chile", bandeira: "🇨🇱" },
+  { ddi: "244", nome: "Angola", bandeira: "🇦🇴" },
+  { ddi: "258", nome: "Moçambique", bandeira: "🇲🇿" },
+  { ddi: "34", nome: "Espanha", bandeira: "🇪🇸" },
+  { ddi: "44", nome: "Reino Unido", bandeira: "🇬🇧" },
+];
+
+/**
+ * Separa o DDI do resto, a partir do numero ja guardado.
+ *
+ * ⚠️ Testa do DDI MAIS LONGO para o mais curto. Comecar pelo curto faria "1"
+ * casar antes de "351" e devolver Portugal como Estados Unidos com um numero
+ * estranho junto.
+ */
+export function separarDdi(bruto: string): { ddi: string; local: string } {
+  const d = digitosDoTelefone(bruto);
+
+  const encontrado = [...PAISES]
+    .sort((a, b) => b.ddi.length - a.ddi.length)
+    .find((p) => d.startsWith(p.ddi));
+
+  // Sem DDI reconhecido, assume Brasil e devolve o numero inteiro como local:
+  // e o caso do cadastro antigo, gravado antes de existir seletor.
+  if (!encontrado) return { ddi: "55", local: d };
+
+  return { ddi: encontrado.ddi, local: d.slice(encontrado.ddi.length) };
+}
+
 export function paraFormatoMeta(bruto: string): string {
   const d = digitosDoTelefone(bruto);
   return d.length === 10 || d.length === 11 ? `55${d}` : d;

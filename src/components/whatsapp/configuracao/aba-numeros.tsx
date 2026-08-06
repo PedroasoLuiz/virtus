@@ -19,16 +19,18 @@ import {
   Th,
   Tr,
   inputStyle,
+  selectStyle,
   textareaStyle,
 } from "@/components/ui/kit";
 import {
   digitosDoTelefone,
   formatarTelefone,
   mascararTelefone,
-  paraFormatoMeta,
+  PAISES,
+  separarDdi,
   type ContaWhatsapp,
 } from "@/modules/whatsapp/whatsapp.types";
-import { ComoConectar, UrlDeCallback } from "./webhook";
+import { PASSOS_PARA_CONECTAR, UrlDeCallback } from "./webhook";
 
 /**
  * Os numeros de WhatsApp da empresa.
@@ -53,6 +55,8 @@ type Rascunho = {
   appSecret: string;
   botRespondeTodos: boolean;
   botNumeros: string;
+  /** ⚠️ Separado do numero: e ele que decide como a mascara agrupa os digitos. */
+  ddi: string;
 };
 
 function vazio(): Rascunho {
@@ -75,6 +79,7 @@ function vazio(): Rascunho {
      */
     botRespondeTodos: false,
     botNumeros: "",
+    ddi: "55",
   };
 }
 
@@ -82,7 +87,7 @@ function daConta(c: ContaWhatsapp): Rascunho {
   return {
     id: c.id,
     apelido: c.apelido ?? "",
-    numero: c.numero ?? "",
+    numero: separarDdi(c.numero ?? "").local,
     phoneNumberId: c.phoneNumberId,
     wabaId: c.wabaId ?? "",
     apiVersao: c.apiVersao,
@@ -91,6 +96,8 @@ function daConta(c: ContaWhatsapp): Rascunho {
     appSecret: "",
     botRespondeTodos: c.botRespondeTodos,
     botNumeros: c.botNumeros ?? "",
+    // O numero vem inteiro do banco; aqui ele volta a ser pais + local.
+    ddi: separarDdi(c.numero ?? "").ddi,
   };
 }
 
@@ -124,9 +131,15 @@ export function AbaDeNumeros({
       body: JSON.stringify({
         id: rascunho.id,
         apelido: rascunho.apelido.trim() || null,
-        // `paraFormatoMeta` completa o DDI quando falta, decidindo por
-        // comprimento. A mascara nunca chega aqui: o estado ja guarda digitos.
-        numero: rascunho.numero ? paraFormatoMeta(rascunho.numero) : null,
+        /*
+         * O DDI vem do SELETOR, e nao de adivinhacao por comprimento.
+         *
+         * `paraFormatoMeta` decidia pelo tamanho: 10 ou 11 digitos viravam
+         * Brasil. Isso funciona ate alguem cadastrar um numero de Portugal, que
+         * tem nove, ou um dos Estados Unidos, que tem dez — e ai o numero sai
+         * com o pais errado sem nada acusar.
+         */
+        numero: rascunho.numero ? `${rascunho.ddi}${digitosDoTelefone(rascunho.numero)}` : null,
         phoneNumberId: rascunho.phoneNumberId.trim(),
         wabaId: rascunho.wabaId.trim() || null,
         apiVersao: rascunho.apiVersao.trim() || "v19.0",
@@ -306,12 +319,22 @@ export function AbaDeNumeros({
  * entre eles, nao uma caixa. Caixa dentro de drawer vira cartao sobre cartao, e
  * o formulario passa a parecer tres telas empilhadas.
  */
-function Grupo({ titulo, children }: { titulo: string; children: React.ReactNode }) {
+function Grupo({
+  titulo,
+  legenda,
+  children,
+}: {
+  titulo: string;
+  legenda: string;
+  children: React.ReactNode;
+}) {
   return (
     <section>
-      <div className="rotulo" style={{ marginBottom: 8 }}>
-        {titulo}
-      </div>
+      {/*
+        O MESMO cabecalho das secoes da listagem: mesmo tamanho, mesma legenda
+        embaixo. Um formulario com titulo de outro peso pareceria outra tela.
+      */}
+      <CabecalhoDeSecao titulo={titulo} legenda={legenda} />
       <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>{children}</div>
     </section>
   );
@@ -380,27 +403,70 @@ function Formulario({
      * linha; o que separa um ASSUNTO do outro e o grupo.
      */
     <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
-      <Grupo titulo="O número">
+      <Grupo
+        titulo="O número"
+        legenda="Como ele aparece para a sua equipe no seletor de caixas de entrada. O país define o formato do número e entra no envio."
+      >
         <Field label="Apelido" hint="Como este número aparece no seletor. Ex.: Financeiro.">
           <input style={inputStyle} value={rascunho.apelido} onChange={mudar("apelido")} />
         </Field>
 
-        <Field label="Número" hint="Com DDD. O DDI 55 entra sozinho se faltar.">
-          <input
-            style={inputStyle}
-            inputMode="tel"
-            // Zeros e nao um numero plausivel: assim a dica se le como FORMATO. Um
-            // exemplo verossimil parece dado de verdade, e o que estava ali era o
-            // proprio numero da empresa.
-            placeholder="+55 (00) 00000-0000"
-            // Exibe mascarado, guarda so digitos: mascara em coluna de banco vira
-            // dois formatos para a mesma coisa, que e o que ja atrapalha o
-            // casamento com `clientes.contato`.
-            value={mascararTelefone(rascunho.numero)}
-            onChange={(e) =>
-              onMudar({ ...rascunho, numero: digitosDoTelefone(e.target.value) })
-            }
-          />
+        <Field label="País" hint="Define o DDI que vai junto do número no envio.">
+          <select
+            style={selectStyle}
+            value={rascunho.ddi}
+            onChange={(e) => onMudar({ ...rascunho, ddi: e.target.value })}
+          >
+            {PAISES.map((p) => (
+              <option key={p.ddi} value={p.ddi}>
+                {p.bandeira} {p.nome} (+{p.ddi})
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        <Field label="Número" hint="Sem o país. No Brasil, com DDD.">
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {/*
+              O DDI aparece FIXO ao lado do campo, e nao dentro dele.
+
+              Dentro, ele seria apagavel por engano e voltaria a ser adivinhado
+              no salvar. Ao lado, ele mostra o que o seletor escolheu sem virar
+              texto que se edita.
+            */}
+            <span
+              style={{
+                flexShrink: 0,
+                fontSize: "var(--text-base)",
+                color: "var(--text-tertiary)",
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              +{rascunho.ddi}
+            </span>
+
+            <input
+              style={{ ...inputStyle, flex: 1 }}
+              inputMode="tel"
+              // Zeros e nao um numero plausivel: assim a dica se le como FORMATO.
+              // Um exemplo verossimil parece dado de verdade, e o que estava ali
+              // era o proprio numero da empresa.
+              placeholder={rascunho.ddi === "55" ? "(00) 00000-0000" : "000000000"}
+              /*
+               * Mascara so onde ela e conhecida. Fora do Brasil, agrupar os
+               * digitos em DDD e sufixo inventaria um formato que nao existe no
+               * pais, e o campo passaria a mentir sobre o que e valido.
+               */
+              value={
+                rascunho.ddi === "55"
+                  ? mascararTelefone(`55${rascunho.numero}`).replace(/^\+55\s*/, "")
+                  : rascunho.numero
+              }
+              onChange={(e) =>
+                onMudar({ ...rascunho, numero: digitosDoTelefone(e.target.value) })
+              }
+            />
+          </div>
         </Field>
       </Grupo>
 
@@ -412,7 +478,10 @@ function Formulario({
         la corresponde a qual daqui, e "Identificação" nao existe em lugar
         nenhum do painel da Meta.
       */}
-      <Grupo titulo="Credenciais da Meta">
+      <Grupo
+        titulo="Credenciais da Meta"
+        legenda="Os campos têm o mesmo nome que no painel da Meta, para copiar e colar sem procurar. Token e App Secret entram e nunca voltam para a tela."
+      >
         <Field
           label="Phone number ID"
           required
@@ -488,7 +557,10 @@ function Formulario({
         uma decisao de outra natureza. Aqui o formulario le em ordem: que numero
         e este, como falo com a Meta, e so entao o que ele faz sozinho.
       */}
-      <Grupo titulo="Atendimento automático">
+      <Grupo
+        titulo="Atendimento automático"
+        legenda="Decide quem recebe resposta da IA neste número. Ligar para todos é um ato: número novo nasce fechado."
+      >
         <Field
           label="Responde a todos"
           hint={
@@ -522,28 +594,30 @@ function Formulario({
       </Grupo>
 
       <UrlDeCallback />
-      <ComoConectar />
 
+      {/*
+        Uma sanfona so, com os passos e as duvidas juntos.
+
+        Eram duas secoes: "Como conectar" sempre aberta empurrando o formulario
+        para baixo, e "Precisa de ajuda?" logo abaixo dela. Quem ja conectou
+        pagava a primeira toda vez, e quem estava travado nao sabia em qual das
+        duas procurar.
+      */}
       <PrecisaDeAjuda
+        titulo="Como conectar"
         duvidas={[
+          ...PASSOS_PARA_CONECTAR,
           {
             pergunta: "Meu número não recebe as mensagens",
             resposta:
-              "O webhook precisa apontar para a URL desta tela e estar assinado no campo messages. Sem isso a Meta aceita o cadastro e não entrega nada.",
+              "O webhook precisa apontar para a URL acima e estar assinado no campo messages. Sem isso a Meta aceita o cadastro e não entrega nada.",
             href: "https://developers.facebook.com/docs/whatsapp/cloud-api/guides/set-up-webhooks",
             rotuloDoLink: "Ver na documentação da Meta",
           },
           {
-            pergunta: "Onde consigo o token e o App Secret?",
-            resposta:
-              "No painel de apps da Meta, dentro do app que tem o produto WhatsApp. O token precisa ser permanente, de usuário do sistema: o temporário expira em 24 horas e o envio para de funcionar sem aviso.",
-            href: "https://developers.facebook.com/docs/whatsapp/business-management-api/get-started",
-            rotuloDoLink: "Ver como gerar",
-          },
-          {
             pergunta: "O que é responder a todos?",
             resposta:
-              "É o interruptor dentro de cada número que decide se o atendimento automático fala com qualquer contato ou só com uma lista. Número novo nasce fechado, para o primeiro cliente real não virar cobaia de uma configuração que ninguém conferiu.",
+              "É o interruptor deste número que decide se o atendimento automático fala com qualquer contato ou só com uma lista. Número novo nasce fechado, para o primeiro cliente real não virar cobaia de uma configuração que ninguém conferiu.",
           },
         ]}
       />

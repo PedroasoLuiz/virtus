@@ -25,7 +25,21 @@ export type Duvida = {
   onIr?: () => void;
 };
 
-export function PrecisaDeAjuda({ duvidas }: { duvidas: Duvida[] }) {
+export function PrecisaDeAjuda({
+  duvidas,
+  titulo = "Precisa de ajuda?",
+}: {
+  duvidas: Duvida[];
+  /**
+   * O que a sanfona diz fechada.
+   *
+   * ⚠️ Existe porque a mesma peca serve a dois usos: a duvida que aparece
+   * depois do erro e o passo a passo de conectar. Sao a mesma coisa do ponto de
+   * vista de quem le — pergunta, resposta, e para onde ir — e desenhar duas
+   * sanfonas diferentes so criaria dois lugares para procurar.
+   */
+  titulo?: string;
+}) {
   const [aberta, setAberta] = useState(false);
   const [item, setItem] = useState<number | null>(null);
 
@@ -57,7 +71,7 @@ export function PrecisaDeAjuda({ duvidas }: { duvidas: Duvida[] }) {
           letterSpacing: "var(--tracking-snug)",
         }}
       >
-        Precisa de ajuda?
+        {titulo}
         <svg
           width="13"
           height="13"
