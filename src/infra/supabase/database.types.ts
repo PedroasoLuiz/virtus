@@ -923,6 +923,10 @@ export type Database = {
         Args: { p_segredo: string; p_conversa: number };
         Returns: undefined;
       };
+      whatsapp_garantir_conversa: {
+        Args: { p_empresa: number; p_conta: number; p_telefone: string; p_nome: string | null };
+        Returns: number;
+      };
       whatsapp_titulos_do_cliente: {
         Args: { p_segredo: string; p_conversa: number };
         Returns: {

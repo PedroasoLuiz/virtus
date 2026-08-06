@@ -234,12 +234,15 @@ export async function listarConversas(
 }
 
 /**
- * A conversa daquele telefone naquele numero, criando se ainda nao existir.
+ * A conversa daquele contato naquele numero, criando se ainda nao existir.
  *
  * ⚠️ Necessaria porque cobranca sai do sistema para quem talvez nunca tenha
- * escrito: ate agora toda conversa nascia de uma mensagem RECEBIDA. Sem isto o
- * disparo iria para a Meta e nao apareceria no painel, e ninguem saberia que a
- * cobranca foi enviada nem veria a resposta do cliente chegar.
+ * escrito: ate agora toda conversa nascia de uma mensagem RECEBIDA.
+ *
+ * ⚠️ O casamento e pelos 8 ULTIMOS digitos, dentro do banco, e nao por
+ * igualdade. O cadastro guarda "(35) 9 9898-2044" e a Meta manda
+ * "553598982044", sem o nono digito: comparacao exata abria uma conversa nova
+ * ao lado da que ja existia, com o historico todo do outro lado.
  */
 export async function garantirConversa(
   empresaId: number,
@@ -249,25 +252,19 @@ export async function garantirConversa(
 ): Promise<Conversa> {
   const supabase = await serverClient();
 
-  const existente = await supabase
-    .from("whatsappconversas")
-    .select(`${COLUNAS_CONVERSA}, ${RELACAO_CLIENTE}`)
-    .eq("fkEmpresa", empresaId)
-    .eq("fkConta", contaId)
-    .eq("telefone", telefone)
-    .maybeSingle();
+  const { data: id, error } = await supabase.rpc("whatsapp_garantir_conversa", {
+    p_empresa: empresaId,
+    p_conta: contaId,
+    p_telefone: telefone,
+    p_nome: nome,
+  });
 
-  if (existente.error) throw existente.error;
-  if (existente.data) return paraConversa(existente.data as unknown as LinhaConversa);
+  if (error) throw error;
 
-  const criada = await supabase
-    .from("whatsappconversas")
-    .insert({ fkEmpresa: empresaId, fkConta: contaId, telefone, nome })
-    .select(`${COLUNAS_CONVERSA}, ${RELACAO_CLIENTE}`)
-    .single();
+  const conversa = await buscarConversa(empresaId, id as number);
+  if (!conversa) throw new Error("conversa criada mas nao encontrada");
 
-  if (criada.error) throw criada.error;
-  return paraConversa(criada.data as unknown as LinhaConversa);
+  return conversa;
 }
 
 export async function buscarConversa(empresaId: number, id: number): Promise<Conversa | null> {
