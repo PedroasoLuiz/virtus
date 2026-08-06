@@ -88,19 +88,6 @@ export function AbaDeProvedores({
     onRecarregar();
   }
 
-  async function remover(id: number) {
-    const r = await fetch(`/api/v1/ia/provedores/${id}`, { method: "DELETE" });
-
-    if (!r.ok) {
-      const corpo = await r.json().catch(() => null);
-      avisar("atencao", corpo?.error?.message ?? "Não foi possível remover");
-      return;
-    }
-
-    avisar("sucesso", "Provedor removido.");
-    onRecarregar();
-  }
-
   if (editando) {
     return (
       <FormularioDoProvedor
@@ -242,13 +229,18 @@ export function AbaDeProvedores({
                       )}
                     </Td>
 
+                    {/*
+                      ⚠️ So editar. Excluir mora DENTRO do drawer, no fim.
+
+                      Na linha, ele ficava a um clique de distancia do editar,
+                      com o mesmo tamanho e o mesmo cinza — e a linha erra sem
+                      dar tempo de ler qual chave era. Dentro do formulario, a
+                      chave ja esta aberta e nomeada na frente de quem decide.
+                    */}
                     <Td>
                       <AcoesDaLinha>
                         <BotaoDeAcao rotulo="Editar" onClick={() => setEditando(p)}>
                           <path d="M11.6 2.6a1.6 1.6 0 0 1 2.3 2.3L5.6 13.2l-3 .7.7-3z" />
-                        </BotaoDeAcao>
-                        <BotaoDeAcao rotulo="Remover" onClick={() => void remover(p.id)}>
-                          <path d="M3.4 4.6h9.2M6.4 4.6V3.4h3.2v1.2M5 4.6l.5 8.4h5l.5-8.4" />
                         </BotaoDeAcao>
                       </AcoesDaLinha>
                     </Td>
@@ -384,7 +376,26 @@ function FormularioDoProvedor({
   const [rascunho, setRascunho] = useState(config);
   const [chave, setChave] = useState("");
   const [salvando, setSalvando] = useState(false);
+  const [excluindo, setExcluindo] = useState(false);
   const [teste, setTeste] = useState<ResultadoDoTeste | null>(null);
+
+  async function excluir() {
+    if (excluindo) return;
+    setExcluindo(true);
+
+    const r = await fetch(`/api/v1/ia/provedores/${rascunho.id}`, { method: "DELETE" });
+
+    setExcluindo(false);
+
+    if (!r.ok) {
+      const corpo = await r.json().catch(() => null);
+      avisar("atencao", corpo?.error?.message ?? "Não foi possível excluir");
+      return;
+    }
+
+    avisar("sucesso", "Chave excluída.");
+    onSalvou();
+  }
 
   // Já cadastrada significa que há chave no vault: em branco mantém, não apaga.
   const jaTemChave = existentes.some((p) => p.id === rascunho.id && p.temChave);
@@ -562,6 +573,29 @@ function FormularioDoProvedor({
           </Field>
         </Grupo>
 
+        <Grupo
+          titulo="Quando usar"
+          legenda="Quem responde com esta chave é decidido em cada número, na aba Números."
+        >
+          <Field
+            label="Ativo"
+            hint="Desligada, os números que usam esta chave param de responder sozinhos."
+          >
+            <ActiveToggle
+              active={rascunho.ativo}
+              onChange={() => setRascunho({ ...rascunho, ativo: !rascunho.ativo })}
+            />
+          </Field>
+        </Grupo>
+
+        {/*
+          ⚠️ O teste e o ULTIMO bloco, depois de todos os campos.
+
+          Antes ele ficava no meio e pedia para confirmar antes de a pessoa
+          terminar de preencher, o que fazia o resultado zerar em seguida quando
+          ela mexia no que vinha depois. Como fecho, ele le como o que e: o
+          passo final antes de gravar.
+        */}
         <TesteDeConexao
           titulo="Confirmar antes de salvar"
           legenda="Nem a chave nem o nome do modelo dão para conferir por formato, então o jeito de saber é perguntar ao provedor. É uma chamada mínima, de fração de centavo."
@@ -582,22 +616,195 @@ function FormularioDoProvedor({
           onResultado={setTeste}
         />
 
-        <Grupo
-          titulo="Quando usar"
-          legenda="Quem responde com esta chave é decidido em cada número, na aba Números."
-        >
-          <Field
-            label="Ativo"
-            hint="Desligada, os números que usam esta chave param de responder sozinhos."
-          >
-            <ActiveToggle
-              active={rascunho.ativo}
-              onChange={() => setRascunho({ ...rascunho, ativo: !rascunho.ativo })}
-            />
-          </Field>
-        </Grupo>
+        {/* Chave que nunca foi gravada não tem o que excluir: basta fechar. */}
+        {rascunho.id > 0 && (
+          <AreaDeExclusao
+            nome={rascunho.nome.trim() || "esta chave"}
+            emUso={rascunho.emUso}
+            onExcluir={excluir}
+            excluindo={excluindo}
+          />
+        )}
       </div>
     </Drawer>
+  );
+}
+
+/**
+ * Excluir, no fim do formulário.
+ *
+ * ⚠️ Sem fundo e sem borda. Área de perigo emoldurada em vermelho vira um bloco
+ * que o olho procura, e a moldura acaba anunciando a ação destrutiva melhor do
+ * que o formulário anuncia a construtiva. Aqui é uma linha discreta no fim de
+ * tudo: quem procura acha, quem não procura não esbarra.
+ *
+ * ⚠️ A confirmação abre NO LUGAR, e não num alerta do navegador. O `confirm()`
+ * não cabe a frase que importa — quantos números param de responder — e é
+ * dispensado no reflexo, que é justamente o que não se quer aqui.
+ */
+function AreaDeExclusao({
+  nome,
+  emUso,
+  onExcluir,
+  excluindo,
+}: {
+  nome: string;
+  emUso: number;
+  onExcluir: () => void;
+  excluindo: boolean;
+}) {
+  const [aberta, setAberta] = useState(false);
+  const [confirmando, setConfirmando] = useState(false);
+
+  return (
+    /*
+     * Respiro extra em cima: o `gap` do formulário separa um grupo de campos do
+     * outro, e aqui a separação é de outra natureza. Excluir não é o próximo
+     * campo depois de testar a conexão.
+     */
+    <section style={{ marginTop: 12 }}>
+      {/*
+        ⚠️ Fechada por padrão, e essa é a razão de existir.
+
+        Excluir não é o que se vem fazer aqui: o formulário é de cadastro, e a
+        ação destrutiva aberta no fim dele fica a um clique de distância de
+        salvar. Uma sanfona cobra o gesto de quem realmente quer, e some do
+        caminho de quem não quer. Mesma anatomia da sanfona de ajuda.
+      */}
+      <button
+        type="button"
+        onClick={() => {
+          setAberta((v) => !v);
+          setConfirmando(false);
+        }}
+        aria-expanded={aberta}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          padding: 0,
+          border: "none",
+          background: "transparent",
+          cursor: "pointer",
+          fontSize: "calc(var(--text-lg) + 2px)",
+          fontWeight: "var(--fw-semi)",
+          color: "var(--text-primary)",
+          letterSpacing: "var(--tracking-snug)",
+        }}
+      >
+        Mais
+        <svg
+          width="13"
+          height="13"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.4"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{
+            color: "var(--text-tertiary)",
+            transform: aberta ? "rotate(180deg)" : "none",
+            transition: "transform 160ms var(--ease-out)",
+          }}
+        >
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+
+      {aberta && !confirmando && (
+        <div style={{ marginTop: 12 }}>
+          <button
+            type="button"
+            onClick={() => setConfirmando(true)}
+            style={{
+              border: "none",
+              background: "transparent",
+              padding: 0,
+              fontSize: "var(--text-base)",
+              color: "var(--danger-text)",
+              cursor: "pointer",
+            }}
+          >
+            Excluir esta chave
+          </button>
+        </div>
+      )}
+
+      {aberta && confirmando && (
+        <Confirmacao
+          nome={nome}
+          emUso={emUso}
+          onExcluir={onExcluir}
+          onCancelar={() => setConfirmando(false)}
+          excluindo={excluindo}
+        />
+      )}
+    </section>
+  );
+}
+
+function Confirmacao({
+  nome,
+  emUso,
+  onExcluir,
+  onCancelar,
+  excluindo,
+}: {
+  nome: string;
+  emUso: number;
+  onExcluir: () => void;
+  onCancelar: () => void;
+  excluindo: boolean;
+}) {
+  return (
+    <div style={{ marginTop: 12, color: "var(--danger-text)" }}>
+      <div style={{ fontSize: "var(--text-base)", fontWeight: "var(--fw-semi)" }}>
+        Excluir {nome}?
+      </div>
+
+      {/*
+        O que ACONTECE, e não "esta ação não pode ser desfeita".
+
+        A contagem é a única frase que muda a decisão: com números usando a
+        chave, eles param de responder sozinhos na hora, e ninguém adivinha isso
+        de um aviso genérico.
+      */}
+      <p
+        style={{
+          marginTop: 4,
+          fontSize: "calc(var(--text-xs) + 1px)",
+          color: "var(--text-tertiary)",
+          lineHeight: "var(--lh-normal)",
+        }}
+      >
+        {emUso > 0
+          ? `${emUso} ${emUso === 1 ? "número usa" : "números usam"} esta chave e ${emUso === 1 ? "vai" : "vão"} parar de responder sozinhos. A chave some da lista, e o histórico de consumo dela continua guardado.`
+          : "A chave some da lista. O histórico de consumo dela continua guardado."}
+      </p>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 10 }}>
+        <Button size="sm" variant="danger" onClick={onExcluir} disabled={excluindo}>
+          {excluindo ? "Excluindo…" : "Excluir"}
+        </Button>
+
+        <button
+          type="button"
+          onClick={onCancelar}
+          disabled={excluindo}
+          style={{
+            border: "none",
+            background: "transparent",
+            padding: 0,
+            fontSize: "var(--text-sm)",
+            color: "var(--text-tertiary)",
+            cursor: "pointer",
+          }}
+        >
+          Cancelar
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -646,13 +853,15 @@ function problemas(
   if (teste && !teste.ok && teste.definitivo) erros.push(teste.mensagem);
 
   /*
-   * Cadastro NOVO exige ter testado. Editar, nao.
+   * ⚠️ SEMPRE exige ter testado, cadastro novo ou edicao.
    *
-   * Sem isto o teste vira enfeite: quem esta com pressa ignora e o erro volta
-   * a aparecer so no primeiro atendimento. Na edicao a exigencia atrapalharia
-   * mais do que ajuda, porque trocar o apelido nao mexe na credencial.
+   * Sem isto o teste vira enfeite: quem esta com pressa ignora, e o erro volta
+   * a aparecer so no primeiro atendimento, como silencio. Na edicao ele custa
+   * um clique a mais para trocar so o nome, e vale: chave revogada e cota
+   * estourada acontecem sem ninguem mexer no cadastro, e este e o unico momento
+   * em que alguem estava olhando para ela.
    */
-  if (!jaTemChave && teste == null) erros.push("Teste a conexão antes de salvar");
+  if (teste == null) erros.push("Teste a conexão antes de salvar");
 
   return erros;
 }

@@ -138,6 +138,22 @@ export function AbaDeNumeros({
   const [pagina, setPagina] = useState(1);
   const [teste, setTeste] = useState<ResultadoDoTeste | null>(null);
 
+  /*
+   * Abre o formulario com o veredito zerado.
+   *
+   * ⚠️ O resultado vive AQUI, no pai, porque e o pai que decide se o salvar
+   * libera — e o pai nao desmonta ao fechar o drawer. Sem zerar, testar o
+   * numero A e depois abrir o B deixaria o B salvavel com o veredito do A, que
+   * e exatamente o que a exigencia de testar existe para impedir.
+   *
+   * Zerado aqui, e nao num efeito: `setRascunho` tambem e o que responde a cada
+   * tecla digitada, e so a ABERTURA passa por esta funcao.
+   */
+  function abrir(r: Rascunho) {
+    setTeste(null);
+    setRascunho(r);
+  }
+
   async function testar(): Promise<ResultadoDoTeste> {
     if (!rascunho) throw new Error("sem rascunho");
 
@@ -294,7 +310,7 @@ export function AbaDeNumeros({
       <CabecalhoDeSecao
         titulo="Seus números de WhatsApp"
         legenda="Cada número tem caixa de entrada própria e decide sozinho se o atendimento automático responde a todo mundo ou só a uma lista. É aqui que ficam o token e a chave que a Meta exige para enviar e receber."
-        onIncluir={() => setRascunho(vazio())}
+        onIncluir={() => abrir(vazio())}
         rotuloIncluir="Cadastrar número"
       />
 
@@ -320,7 +336,7 @@ export function AbaDeNumeros({
                   </Td>
                   <Td>
                     <AcoesDaLinha>
-                      <BotaoDeAcao rotulo="Editar" onClick={() => setRascunho(daConta(c))}>
+                      <BotaoDeAcao rotulo="Editar" onClick={() => abrir(daConta(c))}>
                         <path d="M11.5 2.5a1.6 1.6 0 0 1 2.3 2.3L5.5 13 2 14l1-3.5 8.5-8z" />
                       </BotaoDeAcao>
                     </AcoesDaLinha>
@@ -428,9 +444,16 @@ function problemas(r: Rascunho, teste: ResultadoDoTeste | null): string[] {
    */
   if (teste && !teste.ok && teste.definitivo) erros.push(teste.mensagem);
 
-  // Numero NOVO exige ter testado; editar, nao. Sem isso o teste vira enfeite,
-  // e o erro volta a aparecer so quando o primeiro cliente escrever.
-  if (r.id == null && teste == null) erros.push("Teste a conexão antes de salvar");
+  /*
+   * ⚠️ SEMPRE exige ter testado, cadastro novo ou edicao.
+   *
+   * Sem isto o teste vira enfeite, e o erro volta a aparecer so quando o
+   * primeiro cliente escrever. Na edicao ele custa um clique a mais para trocar
+   * so o apelido, e vale: o token do API Setup expira em 24 horas sozinho, sem
+   * ninguem mexer no cadastro, e este e o unico momento em que alguem estava
+   * olhando para ele.
+   */
+  if (teste == null) erros.push("Teste a conexão antes de salvar");
 
   return erros;
 }
