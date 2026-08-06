@@ -7,7 +7,20 @@
  * importando um modulo que nao tem nada a ver com ela.
  */
 
-export type ProvedorDeIA = "gemini";
+export type ProvedorDeIA = "gemini" | "openai" | "deepseek";
+
+/**
+ * Os provedores oferecidos, na ordem em que aparecem na tela.
+ *
+ * OpenAI e DeepSeek falam o MESMO protocolo (chat completions), entao um
+ * cliente serve os dois: muda a base e o nome do modelo. Gemini tem formato
+ * proprio e cliente proprio.
+ */
+export const PROVEDORES: { valor: ProvedorDeIA; rotulo: string; modeloPadrao: string }[] = [
+  { valor: "gemini", rotulo: "Google Gemini", modeloPadrao: "gemini-3.5-flash-lite" },
+  { valor: "openai", rotulo: "OpenAI", modeloPadrao: "gpt-5-mini" },
+  { valor: "deepseek", rotulo: "DeepSeek", modeloPadrao: "deepseek-chat" },
+];
 
 /**
  * ⚠️ NAO carrega a chave. Ela vive no `supabase_vault` e nunca sai do servidor —
@@ -19,6 +32,13 @@ export type ConfigIA = {
   modelo: string;
   ativo: boolean;
   temChave: boolean;
+  /**
+   * Ordem de tentativa. 1 e o principal.
+   *
+   * ⚠️ Existe porque provedor cai, estoura cota e muda de preco. Com uma chave
+   * so, qualquer um desses tres para o atendimento inteiro.
+   */
+  ordem: number;
   /**
    * Modo de teste: o bot atende SO estes numeros.
    *
@@ -38,6 +58,7 @@ export type CredencialIA = {
   modelo: string;
   chave: string;
   numeroTeste: string | null;
+  ordem: number;
 };
 
 /**
@@ -64,5 +85,23 @@ export const CONFIG_IA_PADRAO: ConfigIA = {
   modelo: "gemini-3.5-flash-lite",
   ativo: false,
   temChave: false,
+  ordem: 1,
   numeroTeste: null,
+};
+
+/**
+ * Sugestoes por provedor. Como as do Gemini, ENVELHECEM: o campo continua
+ * aceitando texto livre para modelo novo nao exigir deploy.
+ */
+export const MODELOS_POR_PROVEDOR: Record<ProvedorDeIA, { valor: string; rotulo: string }[]> = {
+  gemini: MODELOS_SUGERIDOS,
+  openai: [
+    { valor: "gpt-5-mini", rotulo: "GPT-5 mini (rápido e barato)" },
+    { valor: "gpt-5", rotulo: "GPT-5 (mais capaz)" },
+    { valor: "gpt-4.1-mini", rotulo: "GPT-4.1 mini" },
+  ],
+  deepseek: [
+    { valor: "deepseek-chat", rotulo: "DeepSeek Chat (barato)" },
+    { valor: "deepseek-reasoner", rotulo: "DeepSeek Reasoner (raciocínio)" },
+  ],
 };

@@ -450,14 +450,14 @@ async function escrever(
   conversaId: number,
   tipo: "lembrete" | "encerramento",
 ): Promise<string | null> {
-  const credencialIA = await iaRepo.credencial(segredo, ctx.empresaId);
-  if (!credencialIA) return null;
+  const credenciaisIA = await iaRepo.credenciais(segredo, ctx.empresaId);
+  if (credenciaisIA.length === 0) return null;
 
   const historico = await repo.mensagens(segredo, conversaId, 6);
 
   const r = await ia
-    .responderEmJson<{ texto: string }>(
-      credencialIA,
+    .responderComReserva<{ texto: string }>(
+      credenciaisIA,
       instrucaoDeFechamento(ctx, tipo),
       conversaEmTexto(historico),
       ESQUEMA_DA_MENSAGEM,
@@ -532,8 +532,14 @@ async function executar(conversaId: number): Promise<void> {
     return;
   }
 
-  // A chave e o interruptor sao da EMPRESA. Sem os dois, nao ha bot.
-  const credencialIA = await iaRepo.credencial(segredo, ctx.empresaId);
+  /*
+   * As chaves e o interruptor sao da EMPRESA. Sem nenhuma ativa, nao ha bot.
+   *
+   * Vem em ordem de preferencia: a primeira responde, e as outras existem para
+   * o dia em que ela nao responder.
+   */
+  const credenciaisIA = await iaRepo.credenciais(segredo, ctx.empresaId);
+  const credencialIA = credenciaisIA[0] ?? null;
 
   if (!credencialIA) {
     logger.info("bot nao rodou: atendimento automatico desligado ou sem chave", {
@@ -626,6 +632,12 @@ async function executar(conversaId: number): Promise<void> {
   const catalogo = await repo.servicos(segredo, conversaId).catch(() => []);
 
   /*
+   * As personas dizem o que a IA pode FECHAR sozinha, por setor. Sem persona
+   * para o setor, o comportamento continua sendo o de sempre: encaminhar.
+   */
+  const personas = await repo.personas(segredo, conversaId).catch(() => []);
+
+  /*
    * A partir daqui o painel mostra "a IA esta respondendo" e trava o campo de
    * escrita, para o atendente nao responder por cima.
    *
@@ -635,9 +647,9 @@ async function executar(conversaId: number): Promise<void> {
   await repo.marcarRespondendo(segredo, conversaId, true).catch(() => {});
 
   try {
-    const triagem = await ia.responderEmJson<Triagem>(
-      credencialIA,
-      instrucao(ctx, setores, jaVerificado, etapa, catalogo),
+    const triagem = await ia.responderComReserva<Triagem>(
+      credenciaisIA,
+      instrucao(ctx, setores, jaVerificado, etapa, catalogo, personas),
       conversaEmTexto(historico),
       ESQUEMA_DA_TRIAGEM,
       await imagensRecentes(segredo, conversaId, historico),

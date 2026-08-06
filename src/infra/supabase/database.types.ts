@@ -12,6 +12,24 @@
  * docs/03) — a traducao para o dominio acontece no repositorio, nao aqui.
  */
 
+/** O que a IA pode resolver sozinha num setor, e com que voz. */
+export type PersonaRow = {
+  id: number;
+  created_at: string;
+  updated_at: string | null;
+  fkEmpresa: number;
+  /** Nulo vale para todos os numeros da empresa. */
+  fkConta: number | null;
+  /** Nulo e a persona geral, usada quando o setor nao tem uma propria. */
+  fkSetor: number | null;
+  nome: string;
+  descricao: string | null;
+  pode_resolver: string | null;
+  ativo: boolean;
+  fkUserCriacao: string | null;
+  fkUserModificacao: string | null;
+};
+
 /** O que a triagem entendeu de um contato. Vira tarefa ou e recusado. */
 export type AtendimentoRow = {
   id: number;
@@ -739,6 +757,7 @@ export type Database = {
       assinaturas: { Row: AssinaturaRow; Insert: Partial<AssinaturaRow>; Update: Partial<AssinaturaRow>; Relationships: [] };
       whatsappconversas: { Row: WhatsappConversaRow; Insert: Partial<WhatsappConversaRow>; Update: Partial<WhatsappConversaRow>; Relationships: [] };
       whatsappmensagens: { Row: WhatsappMensagemRow; Insert: Partial<WhatsappMensagemRow>; Update: Partial<WhatsappMensagemRow>; Relationships: [] };
+      iapersonas: { Row: PersonaRow; Insert: Partial<PersonaRow>; Update: Partial<PersonaRow>; Relationships: [] };
       atendimentos: { Row: AtendimentoRow; Insert: Partial<AtendimentoRow>; Update: Partial<AtendimentoRow>; Relationships: [] };
       setores: { Row: SetorRow; Insert: Partial<SetorRow>; Update: Partial<SetorRow>; Relationships: [] };
     };
@@ -922,6 +941,59 @@ export type Database = {
       whatsapp_verificacao_cancelar: {
         Args: { p_segredo: string; p_conversa: number };
         Returns: undefined;
+      };
+      ia_provedores_da_empresa: {
+        Args: { p_empresa: number };
+        Returns: {
+          provedor: string;
+          modelo: string;
+          ativo: boolean;
+          tem_chave: boolean;
+          ordem: number;
+        }[];
+      };
+      ia_numero_teste: {
+        Args: { p_empresa: number };
+        Returns: string | null;
+      };
+      ia_salvar_provedor: {
+        Args: {
+          p_empresa: number;
+          p_provedor: string;
+          p_modelo: string;
+          p_ativo: boolean;
+          p_ordem: number;
+          p_chave: string | null;
+        };
+        Returns: undefined;
+      };
+      ia_salvar_numero_teste: {
+        Args: { p_empresa: number; p_numero: string | null };
+        Returns: undefined;
+      };
+      ia_remover_provedor: {
+        Args: { p_empresa: number; p_provedor: string };
+        Returns: undefined;
+      };
+      ia_credenciais: {
+        Args: { p_segredo: string; p_empresa: number };
+        Returns: {
+          provedor: string;
+          modelo: string;
+          chave: string;
+          numero_teste: string | null;
+          ordem: number;
+        }[];
+      };
+      personas_do_bot: {
+        Args: { p_segredo: string; p_conversa: number };
+        Returns: {
+          nome: string;
+          descricao: string | null;
+          pode_resolver: string | null;
+          setor_id: number | null;
+          setor_nome: string | null;
+        }[];
       };
       whatsapp_garantir_conversa: {
         Args: { p_empresa: number; p_conta: number; p_telefone: string; p_nome: string | null };

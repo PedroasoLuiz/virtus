@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Drawer } from "@/components/ui/drawer";
 import { useAvisos } from "@/components/ui/avisos";
-import { MODELOS_SUGERIDOS } from "@/modules/ia/ia.types";
+import { AtendimentoAutomatico } from "@/components/whatsapp/atendimento-automatico";
 import {
   AcoesDaLinha,
   ActiveToggle,
@@ -29,6 +29,7 @@ import {
   mascararTelefone,
   paraFormatoMeta,
   type ContaWhatsapp,
+  type Modelo,
 } from "@/modules/whatsapp/whatsapp.types";
 
 /**
@@ -112,7 +113,7 @@ export function ConfiguracaoDeContas({
    * outro. Sao duas configuracoes distintas do mesmo lugar: cada uma merece um
    * nome visivel na entrada.
    */
-  const [aba, setAba] = useState<"Números" | "Atendimento automático">("Números");
+  const [aba, setAba] = useState<"Números" | "Modelos" | "Atendimento automático">("Números");
 
   const filtradas = useMemo(() => {
     const termo = busca.trim().toLowerCase();
@@ -229,13 +230,15 @@ export function ConfiguracaoDeContas({
       subtitle="Números da empresa e atendimento automático"
     >
       <PanelTabs
-        tabs={["Números", "Atendimento automático"]}
+        tabs={["Números", "Modelos", "Atendimento automático"]}
         active={aba}
         onChange={(t) => setAba(t as typeof aba)}
       />
 
-      {aba === "Atendimento automático" ? (
-        <AtendimentoAutomatico />
+      {aba === "Modelos" ? (
+        <ModelosAprovados contas={contas} />
+      ) : aba === "Atendimento automático" ? (
+        <AtendimentoAutomatico contas={contas} />
       ) : (
         <>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
@@ -324,315 +327,147 @@ export function ConfiguracaoDeContas({
  * existe. Por isso o campo aparece vazio quando ja ha uma, com o aviso de que em
  * branco mantem, e nao apaga.
  */
-/** Quantos numeros de teste ha no campo, aceitando virgula, ponto e virgula ou linha. */
-function contarNumeros(texto: string): number {
-  return texto.split(/[,;\n]/).filter((n) => n.trim()).length;
-}
-
-function AtendimentoAutomatico() {
-  const { avisar } = useAvisos();
-  const [config, setConfig] = useState<{
-    modelo: string;
-    ativo: boolean;
-    temChave: boolean;
-    numeroTeste: string | null;
-  } | null>(null);
-  const [chave, setChave] = useState("");
-  const [salvando, setSalvando] = useState(false);
+/**
+ * Os modelos que a Meta ja aprovou, por numero.
+ *
+ * ⚠️ Lidos da Meta a cada abertura, sem copia local. O status muda no painel
+ * dela e sem aviso: um modelo aprovado ontem volta para revisao quando alguem
+ * o edita, e uma copia nossa mostraria "aprovado" ate alguem reparar no erro
+ * de envio.
+ */
+function ModelosAprovados({ contas }: { contas: ContaWhatsapp[] }) {
+  const ativas = useMemo(() => contas.filter((c) => c.ativo && c.temToken), [contas]);
+  const [contaId, setContaId] = useState<number | null>(null);
+  const [modelos, setModelos] = useState<Modelo[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
 
+  const escolhida = contaId ?? ativas[0]?.id ?? null;
+
   useEffect(() => {
+    if (escolhida == null) return;
+
     const controle = new AbortController();
 
-    fetch("/api/v1/ia/config", { signal: controle.signal })
+    /*
+     * Adiado por um tique: limpar a lista de forma sincrona dentro do efeito
+     * encadeia um render extra so para mostrar "carregando" por um quadro.
+     */
+    const t = setTimeout(() => {
+      setModelos(null);
+      setErro(null);
+    }, 0);
+
+    fetch(`/api/v1/whatsapp/modelos?contaId=${escolhida}`, { signal: controle.signal })
       .then(async (r) => {
         const corpo = await r.json().catch(() => null);
-
-        if (!r.ok) {
-          // `details` traz o campo que o Zod recusou. Sem ele a mensagem e so
-          // "Dados invalidos", que nao diz onde procurar.
-          const d = corpo?.error?.details?.[0];
-          throw new Error(
-            d ? `${corpo.error.message} (${d.campo}: ${d.mensagem})`
-              : (corpo?.error?.message ?? `Erro ${r.status}`),
-          );
-        }
-        setConfig(corpo.data);
-        setErro(null);
+        if (!r.ok) throw new Error(corpo?.error?.message ?? "Não foi possível ler os modelos");
+        setModelos(corpo.data ?? []);
       })
       .catch((e: unknown) => {
-        /*
-         * ⚠️ Falha aqui vira TEXTO NA TELA, nunca silencio.
-         *
-         * A versao anterior engolia o erro e o `if (!config) return null`
-         * abaixo deixava a aba em branco: quem abrisse via uma tela vazia, sem
-         * saber se era carregamento, permissao ou defeito. Aba vazia nao e
-         * estado, e ausencia de resposta.
-         */
-        if (e instanceof Error && e.name === "AbortError") return;
-        setErro(e instanceof Error ? e.message : "Falha ao carregar a configuração");
+        if (e instanceof DOMException && e.name === "AbortError") return;
+        // Falha aparece: silenciada, a lista vazia mentiria dizendo que a
+        // empresa nao tem modelo nenhum.
+        setErro(e instanceof Error ? e.message : "Não foi possível ler os modelos");
+        setModelos([]);
       });
 
-    return () => controle.abort();
-  }, []);
+    return () => {
+      clearTimeout(t);
+      controle.abort();
+    };
+  }, [escolhida]);
 
-  async function salvar(parcial?: { ativo?: boolean }) {
-    if (!config || salvando) return;
-    setSalvando(true);
-
-    const r = await fetch("/api/v1/ia/config", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        modelo: config.modelo,
-        ativo: parcial?.ativo ?? config.ativo,
-        // Em branco NAO apaga: o servidor le ausente como "mantem a do vault".
-        chave: chave.trim() || null,
-        // Aqui em branco APAGA, e tem de apagar: e assim que se sai do modo de
-        // teste e o bot passa a atender todo mundo. A normalizacao acontece na
-        // comparacao, nao aqui: o campo guarda o texto como a pessoa digitou.
-        numeroTeste: (config.numeroTeste ?? "").trim() || null,
-      }),
-    });
-
-    setSalvando(false);
-    const corpo = await r.json().catch(() => null);
-
-    if (!r.ok) {
-      const detalhe = corpo?.error?.details?.[0];
-      avisar(
-        "atencao",
-        detalhe
-          ? `${detalhe.campo}: ${detalhe.mensagem}`
-          : (corpo?.error?.message ?? "Não foi possível salvar"),
-      );
-      return;
-    }
-
-    setConfig(corpo.data);
-    setChave("");
-
-    /*
-     * Salvar a chave NAO liga o bot, e a diferenca precisa ser dita.
-     *
-     * Guardar credencial e escolher atender sozinho sao decisoes distintas, e
-     * ligar por conta propria seria presumir. Mas deixar so "salvo" fez a chave
-     * ficar cadastrada com o bot mudo, sem ninguem entender por que.
-     */
-    avisar(
-      "sucesso",
-      corpo.data.ativo
-        ? "Atendimento automático salvo."
-        : "Chave salva. Ligue o interruptor acima para o bot começar a responder.",
-    );
-  }
-
-  if (erro) {
+  if (ativas.length === 0) {
     return (
-      <div
-        style={{
-          padding: "12px 14px",
-          borderRadius: "var(--radius-md)",
-          background: "var(--danger-bg)",
-          border: "1px solid var(--danger-border)",
-          fontSize: "var(--text-sm)",
-          color: "var(--danger-text)",
-          lineHeight: "var(--lh-snug)",
-        }}
-      >
-        Não foi possível carregar o atendimento automático: {erro}
-      </div>
-    );
-  }
-
-  if (!config) {
-    return (
-      <p style={{ fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>Carregando…</p>
+      <EmptyRow
+        colSpan={1}
+        message="Cadastre um número ativo com token para ver os modelos aprovados."
+      />
     );
   }
 
   return (
-    <section>
+    <>
+      {ativas.length > 1 && (
+        <select
+          value={escolhida ?? ""}
+          onChange={(e) => setContaId(Number(e.target.value))}
+          style={{ ...selectStyle, marginBottom: 12 }}
+        >
+          {ativas.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.apelido || formatarTelefone(c.numero ?? "")}
+            </option>
+          ))}
+        </select>
+      )}
+
       <p
         style={{
-          fontSize: "var(--text-sm)",
-          color: "var(--text-secondary)",
-          lineHeight: "var(--lh-snug)",
-          marginBottom: 14,
+          fontSize: "var(--text-xs)",
+          color: "var(--text-tertiary)",
+          lineHeight: "var(--lh-normal)",
+          marginBottom: 12,
         }}
       >
-        Quem chamar no WhatsApp é atendido por uma inteligência artificial, que
-        descobre o que a pessoa quer, encaminha para o setor certo e deixa o
-        pedido registrado. Quando um atendente responde, ela para de falar.
+        Vindos da Meta agora. Só modelo aprovado pode ser enviado, e é ele que
+        permite falar com quem não escreve há mais de 24 horas.
       </p>
 
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          marginBottom: 14,
-          padding: "10px 12px",
-          borderRadius: "var(--radius-md)",
-          background: config.ativo ? "var(--primary-subtle)" : "var(--surface-2)",
-          border: `1px solid ${config.ativo ? "var(--primary-border)" : "var(--border)"}`,
-        }}
-      >
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: "var(--text-md)", fontWeight: "var(--fw-semi)" }}>
-            {config.ativo ? "Ligado" : "Desligado"}
-          </div>
-          <div style={{ fontSize: "var(--text-xs)", color: "var(--text-tertiary)", marginTop: 1 }}>
-            {!config.temChave
-              ? "Cadastre a chave abaixo para poder ligar"
-              : config.ativo && config.numeroTeste
-                ? `Em teste: só responde a ${contarNumeros(config.numeroTeste)} número(s)`
-                : config.ativo
-                  ? "Respondendo a todos os contatos"
-                  : "A chave está salva, mas o interruptor ao lado está desligado"}
-          </div>
-        </div>
+      {erro && (
+        <p style={{ fontSize: "var(--text-sm)", color: "var(--danger)", marginBottom: 12 }}>
+          {erro}
+        </p>
+      )}
 
-        <ActiveToggle
-          active={config.ativo}
-          onChange={() => {
-            const novo = !config.ativo;
+      <TableArea>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <TableHead>
+            <tr>
+              <Th>Nome</Th>
+              <Th>Categoria</Th>
+              <Th>Idioma</Th>
+              <Th>Variáveis</Th>
+            </tr>
+          </TableHead>
 
-            if (novo && !config.temChave && !chave.trim()) {
-              avisar("atencao", "Cadastre a chave antes de ligar.");
-              return;
-            }
-
-            setConfig({ ...config, ativo: novo });
-            void salvar({ ativo: novo });
-          }}
-        />
-      </div>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <Field label="Modelo" hint="Trocar aqui não exige deploy. Flash é o mais barato.">
-          <select
-            style={selectStyle}
-            value={config.modelo}
-            onChange={(e) => setConfig({ ...config, modelo: e.target.value })}
-          >
-            {MODELOS_SUGERIDOS.map((m) => (
-              <option key={m.valor} value={m.valor}>
-                {m.rotulo}
-              </option>
-            ))}
-            {/* Modelo gravado que saiu da lista continua selecionavel. */}
-            {!MODELOS_SUGERIDOS.some((m) => m.valor === config.modelo) && (
-              <option value={config.modelo}>{config.modelo}</option>
+          <tbody>
+            {modelos == null ? (
+              <EmptyRow colSpan={4} message="Carregando…" />
+            ) : modelos.length === 0 ? (
+              <EmptyRow colSpan={4} message="Nenhum modelo aprovado neste número." />
+            ) : (
+              modelos.map((m) => (
+                <Tr key={`${m.nome}-${m.idioma}`}>
+                  <Td>
+                    <div style={{ fontWeight: "var(--fw-semi)" }}>{m.nome}</div>
+                    {/* O corpo cru, com os `{{n}}` a mostra: e ele que diz o
+                        que cada variavel significa na hora de enviar. */}
+                    <div
+                      style={{
+                        marginTop: 2,
+                        fontSize: "var(--text-xs)",
+                        color: "var(--text-tertiary)",
+                        lineHeight: "var(--lh-snug)",
+                        whiteSpace: "pre-wrap",
+                      }}
+                    >
+                      {m.corpo}
+                    </div>
+                  </Td>
+                  <Td>{m.categoria.toLowerCase()}</Td>
+                  <Td>{m.idioma}</Td>
+                  <Td>{m.parametros}</Td>
+                </Tr>
+              ))
             )}
-          </select>
-        </Field>
-
-        <Field
-          label="Só responde a"
-          hint="Um por linha. Enquanto houver número aqui, o bot ignora todos os outros. Vazio atende todo mundo."
-        >
-          {/*
-            Textarea e nao input: validar com uma pessoa so nao basta, e o teste
-            que vale e com quem nao conhece o sistema. Sem espaco para o segundo
-            numero, a saida seria apagar a trava inteira.
-          */}
-          <textarea
-            style={{
-              ...inputStyle,
-              height: "auto",
-              minHeight: 56,
-              padding: "6px 8px",
-              lineHeight: "var(--lh-snug)",
-              resize: "vertical",
-            }}
-            placeholder={"+55 (35) 99999-9999\n+55 (35) 98888-8888"}
-            value={config.numeroTeste ?? ""}
-            onChange={(e) => setConfig({ ...config, numeroTeste: e.target.value })}
-          />
-        </Field>
-
-        <Field
-          label="Chave da API"
-          required={!config.temChave}
-          hint="Fica guardada cifrada, e nunca volta para a tela."
-        >
-          <input
-            style={inputStyle}
-            type="password"
-            autoComplete="off"
-            placeholder={config.temChave ? "Deixe em branco para manter a atual" : "AIza…"}
-            value={chave}
-            onChange={(e) => setChave(e.target.value)}
-          />
-        </Field>
-
-        {/*
-          O link fica ao lado do campo, e nao numa ajuda a parte: a duvida
-          "onde consigo isso?" acontece exatamente aqui, com o cursor no campo.
-        */}
-        {!config.temChave && (
-          <div style={{ display: "flex", gap: 12, paddingLeft: 142 }}>
-            <a
-              href="https://aistudio.google.com/apikey"
-              target="_blank"
-              rel="noreferrer"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 5,
-                fontSize: "var(--text-sm)",
-                fontWeight: "var(--fw-semi)",
-                color: "var(--primary)",
-                textDecoration: "none",
-              }}
-            >
-              Pegar uma chave no Google AI Studio
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M14 4h6v6" />
-                <path d="M20 4 10 14" />
-                <path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" />
-              </svg>
-            </a>
-          </div>
-        )}
-
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            marginTop: 4,
-            paddingTop: 12,
-            borderTop: "1px solid var(--border)",
-          }}
-        >
-          <span
-            style={{
-              flex: 1,
-              fontSize: "var(--text-xs)",
-              color: "var(--text-tertiary)",
-              lineHeight: "var(--lh-snug)",
-            }}
-          >
-            {!config.temChave
-              ? "Salve a chave primeiro. O interruptor acima só liga depois disso."
-              : "Depois de salvar, mande uma mensagem para o número e veja a resposta na conversa."}
-          </span>
-
-          <Button
-            size="sm"
-            variant="primary"
-            onClick={() => void salvar()}
-            disabled={salvando || (!config.temChave && chave.trim().length < 20)}
-          >
-            {salvando ? "Salvando…" : "Salvar"}
-          </Button>
-        </div>
-      </div>
-    </section>
+          </tbody>
+        </table>
+      </TableArea>
+    </>
   );
 }
+
 
 /**
  * Situacao do numero: o proprio interruptor.

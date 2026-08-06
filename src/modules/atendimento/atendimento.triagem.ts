@@ -1,6 +1,7 @@
 import type {
   ContextoDoBot,
   MensagemDoBot,
+  PersonaDoBot,
   ServicoDaEmpresa,
   SetorDoBot,
   Verificado,
@@ -177,6 +178,7 @@ export function instrucao(
   verificado: Verificado | null,
   etapa: { etapa: "AGUARDANDO_CONFIRMACAO" | "AGUARDANDO_CODIGO"; emailMascarado: string } | null,
   catalogo: ServicoDaEmpresa[],
+  personas: PersonaDoBot[],
 ): string {
   const listaDeSetores = setores
     .map((s) => `- id ${s.id} | ${s.nome}: ${s.quandoUsar ?? "sem descrição"}`)
@@ -222,6 +224,25 @@ O sistema já achou o cadastro e perguntou se ela tem acesso ao e-mail ${etapa.e
         ? `
 O código já foi enviado para ${etapa.emailMascarado} e o sistema está esperando ela digitar os 6 dígitos.`
         : "";
+
+  /*
+   * As personas entram NOMEANDO o setor a que pertencem.
+   *
+   * E o que faz a regra ser decidivel: o modelo ja escolhe o setor, entao
+   * "existe persona para este setor?" vira uma consulta a uma lista, e nao um
+   * julgamento. Sem persona, o comportamento e o de sempre.
+   */
+  const listaDePersonas = personas
+    .map((p) => {
+      const onde = p.setorNome ? `setor ${p.setorNome}` : "qualquer assunto";
+      const quem = p.descricao ? ` ${p.descricao}` : "";
+      const limite = p.podeResolver
+        ? `\n  Pode resolver sozinha: ${p.podeResolver}`
+        : "\n  Sem lista do que pode resolver: só acolha e encaminhe.";
+
+      return `- "${p.nome}" (${onde}).${quem}${limite}`;
+    })
+    .join("\n");
 
   const listaDeServicos = catalogo
     .map((s) => `- ${s.descricao}${s.valor ? ` (a partir de R$ ${s.valor})` : ""}`)
@@ -311,6 +332,16 @@ ${identidade}${emAndamento}${andamento}
 
 SETORES DISPONÍVEIS:
 ${listaDeSetores || "- nenhum setor cadastrado"}
+
+PERSONAS DISPONÍVEIS:
+${listaDePersonas || "- nenhuma persona cadastrada"}
+
+Persona é a autorização escrita de resolver um recorte, e nada além dele.
+
+- Quando o assunto for de um setor que TEM persona: incorpore o jeito dela e responda o que a lista "pode resolver" permite, sem encaminhar. Saindo dessa lista, mesmo um passo, encaminhe.
+- Quando o setor NÃO tiver persona: não invente jeito nem resposta. Faça a triagem e encaminhe, como sempre.
+- Persona nunca autoriza dizer valor, vencimento, saldo, boleto ou dado de cliente. Isso continua saindo só das consultas do sistema, pelo campo acao.
+- Nunca diga que está incorporando uma persona, nem cite o nome dela como se fosse um personagem. Ela é o seu jeito de falar naquele assunto, não um crachá.
 
 O QUE A EMPRESA FAZ:
 ${listaDeServicos || "- catálogo não cadastrado"}

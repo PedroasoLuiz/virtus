@@ -1583,7 +1583,20 @@ function Thread({
         {botRespondendo(conversa.botRespondendoEm) ? (
           <IaRespondendo />
         ) : aberta ? (
-          <Composicao onEnviar={onResponder} onEnviarAnexo={onEnviarAnexo} />
+          /*
+            Modelo tambem DENTRO da janela.
+            
+            Antes ele so aparecia com a janela fechada, quando e a unica saida.
+            Mas modelo nao serve so para furar a janela: e o jeito de mandar
+            cobranca e aviso com o texto ja aprovado, e ate agora, com a
+            conversa quente, nao havia como usar um.
+          */
+          <Composicao
+            onEnviar={onResponder}
+            onEnviarAnexo={onEnviarAnexo}
+            contaId={conversa.contaId}
+            onEnviarModelo={onEnviarModelo}
+          />
         ) : (
           <EnvioPorModelo contaId={conversa.contaId} onEnviar={onEnviarModelo} />
         )}
@@ -3329,10 +3342,15 @@ function formatoDeGravacao(): { mime: string; extensao: string } | null {
 function Composicao({
   onEnviar,
   onEnviarAnexo,
+  contaId,
+  onEnviarModelo,
 }: {
   onEnviar: (texto: string) => Promise<void>;
   onEnviarAnexo: (arquivo: File, legenda: string) => Promise<void>;
+  contaId: number;
+  onEnviarModelo: (nome: string, parametros: string[]) => Promise<void>;
 }) {
+  const [modeloAberto, setModeloAberto] = useState(false);
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
   const campo = useRef<HTMLTextAreaElement>(null);
@@ -3396,6 +3414,21 @@ function Composicao({
   const podeEnviar = (pendente != null || texto.trim().length > 0) && !enviando;
   const mostraEnviar = !gravandoAudio && (pendente != null || texto.trim().length > 0);
 
+  /*
+   * Aberto, o seletor de modelo OCUPA o lugar da escrita livre em vez de
+   * conviver com ela. Duas caixas de envio na tela deixariam ambiguo o que o
+   * botao de enviar manda.
+   */
+  if (modeloAberto) {
+    return (
+      <EnvioPorModelo
+        contaId={contaId}
+        onEnviar={onEnviarModelo}
+        onFechar={() => setModeloAberto(false)}
+      />
+    );
+  }
+
   return (
     <footer
       style={{
@@ -3442,6 +3475,33 @@ function Composicao({
             alvo.click();
           }}
         />
+
+        {/* Ao lado do clipe porque e a mesma familia de gesto: sair do texto
+            livre para mandar algo pronto. */}
+        <button
+          type="button"
+          onClick={() => setModeloAberto(true)}
+          disabled={enviando || gravandoAudio}
+          aria-label="Enviar modelo aprovado"
+          title="Enviar modelo aprovado"
+          style={{
+            flexShrink: 0,
+            width: 30,
+            height: 30,
+            display: "grid",
+            placeItems: "center",
+            border: "none",
+            background: "transparent",
+            cursor: enviando || gravandoAudio ? "default" : "pointer",
+            color: "var(--text-tertiary)",
+            opacity: enviando || gravandoAudio ? 0.4 : 1,
+          }}
+        >
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="4" width="18" height="16" rx="2.5" />
+            <path d="M3 9h18M8 13h8M8 16.5h5" />
+          </svg>
+        </button>
 
         {pendenteEhAudio ? (
           <PreviaDeVoz arquivo={pendente!} onDescartar={() => setPendente(null)} />
@@ -3843,15 +3903,21 @@ function IaRespondendo() {
 function EnvioPorModelo({
   contaId,
   onEnviar,
+  onFechar,
 }: {
   contaId: number;
   onEnviar: (nome: string, parametros: string[]) => Promise<void>;
+  /**
+   * Volta para a escrita livre. `undefined` com a janela fechada, onde nao ha
+   * para onde voltar: ali o modelo e a unica saida.
+   */
+  onFechar?: () => void;
 }) {
   const [modelos, setModelos] = useState<Modelo[] | null>(null);
   const [escolhido, setEscolhido] = useState<string>("");
   const [valores, setValores] = useState<string[]>([]);
   const [enviando, setEnviando] = useState(false);
-  const [abertoParaEnvio, setAbertoParaEnvio] = useState(false);
+  const [abertoParaEnvio, setAbertoParaEnvio] = useState(onFechar != null);
 
   useEffect(() => {
     if (!abertoParaEnvio) return;
@@ -3880,6 +3946,7 @@ function EnvioPorModelo({
     setEscolhido("");
     setValores([]);
     setAbertoParaEnvio(false);
+    onFechar?.();
   }
 
   if (!abertoParaEnvio) {
@@ -3947,7 +4014,12 @@ function EnvioPorModelo({
         </span>
         <button
           type="button"
-          onClick={() => setAbertoParaEnvio(false)}
+          onClick={() => {
+            setAbertoParaEnvio(false);
+            // Dentro da janela, cancelar devolve a escrita livre; fora dela,
+            // volta ao aviso das 24 horas, que e o unico estado possivel.
+            onFechar?.();
+          }}
           style={{
             border: "none",
             background: "transparent",

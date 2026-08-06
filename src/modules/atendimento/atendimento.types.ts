@@ -103,6 +103,21 @@ export type ServicoDaEmpresa = {
   valor: number | null;
 };
 
+/**
+ * O que a IA pode resolver sozinha, e com que voz.
+ *
+ * ⚠️ Persona NAO amplia o que a IA sabe do banco. Valor, vencimento e dado de
+ * cliente continuam saindo so das consultas verificadas. Ela muda o tom e a
+ * lista de assuntos que a IA pode fechar sem chamar ninguem.
+ */
+export type PersonaDoBot = {
+  nome: string;
+  descricao: string | null;
+  podeResolver: string | null;
+  setorId: number | null;
+  setorNome: string | null;
+};
+
 export type SetorDoBot = {
   id: number;
   nome: string;

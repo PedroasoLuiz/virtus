@@ -2,6 +2,7 @@ import { anonClient } from "@/infra/supabase/client";
 import type {
   ContextoDoBot,
   MensagemDoBot,
+  PersonaDoBot,
   SaldoDoCliente,
   ServicoDaEmpresa,
   SetorDoBot,
@@ -68,6 +69,26 @@ export async function setores(segredo: string, empresaId: number): Promise<Setor
     id: s.id,
     nome: s.nome,
     quandoUsar: s.quando_usar,
+  }));
+}
+
+/** As personas que valem para o numero que recebeu esta conversa. */
+export async function personas(segredo: string, conversaId: number): Promise<PersonaDoBot[]> {
+  const supabase = anonClient();
+
+  const { data, error } = await supabase.rpc("personas_do_bot", {
+    p_segredo: segredo,
+    p_conversa: conversaId,
+  });
+
+  if (error) throw error;
+
+  return (data ?? []).map((p) => ({
+    nome: p.nome,
+    descricao: p.descricao,
+    podeResolver: p.pode_resolver,
+    setorId: p.setor_id,
+    setorNome: p.setor_nome,
   }));
 }
 

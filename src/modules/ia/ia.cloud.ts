@@ -15,6 +15,16 @@ import type { CredencialIA } from "@/modules/ia/ia.types";
 const BASE = "https://generativelanguage.googleapis.com/v1beta";
 
 /**
+ * OpenAI e DeepSeek falam o MESMO protocolo, o `chat/completions`. Muda a base
+ * e o nome do modelo, entao um cliente serve os dois: escrever dois seria
+ * manter duas copias do mesmo tratamento de erro.
+ */
+const BASE_COMPATIVEL: Record<"openai" | "deepseek", string> = {
+  openai: "https://api.openai.com/v1",
+  deepseek: "https://api.deepseek.com/v1",
+};
+
+/**
  * Quanto esperamos pela resposta.
  *
  * ⚠️ Isto roda depois do 200 do webhook, entao demorar nao faz a Meta reentregar
@@ -50,7 +60,142 @@ export type ImagemParaOModelo = {
   conteudo: ArrayBuffer;
 };
 
+/**
+ * Tenta cada credencial na ordem ate uma responder.
+ *
+ * ⚠️ E o motivo de existir mais de uma. Provedor cai, estoura cota e recusa
+ * conteudo, e nesses tres casos a resposta certa nao e desistir do atendimento:
+ * e perguntar ao proximo da fila. Todas falharem devolve `null`, que o servico
+ * ja trata como "sem resposta automatica".
+ */
+export async function responderComReserva<T>(
+  credenciais: CredencialIA[],
+  instrucao: string,
+  conversa: string,
+  esquema: Record<string, unknown>,
+  imagens: ImagemParaOModelo[] = [],
+): Promise<T | null> {
+  for (const cred of credenciais) {
+    const r = await responderEmJson<T>(cred, instrucao, conversa, esquema, imagens);
+    if (r != null) return r;
+
+    logger.warn("provedor de IA nao respondeu, tentando o proximo", {
+      provedor: cred.provedor,
+      modelo: cred.modelo,
+      ordem: cred.ordem,
+    });
+  }
+
+  return null;
+}
+
 export async function responderEmJson<T>(
+  cred: CredencialIA,
+  instrucao: string,
+  conversa: string,
+  esquema: Record<string, unknown>,
+  imagens: ImagemParaOModelo[] = [],
+): Promise<T | null> {
+  return cred.provedor === "gemini"
+    ? peloGemini<T>(cred, instrucao, conversa, esquema, imagens)
+    : peloCompativel<T>(cred, instrucao, conversa, esquema, imagens);
+}
+
+/**
+ * O caminho `chat/completions`, de OpenAI e DeepSeek.
+ *
+ * `json_schema` com `strict` e o equivalente ao `responseSchema` do Gemini: o
+ * formato passa a ser obrigacao do provedor, e nao um pedido no texto.
+ */
+async function peloCompativel<T>(
+  cred: CredencialIA,
+  instrucao: string,
+  conversa: string,
+  esquema: Record<string, unknown>,
+  imagens: ImagemParaOModelo[],
+): Promise<T | null> {
+  const base = BASE_COMPATIVEL[cred.provedor as "openai" | "deepseek"];
+  const controle = new AbortController();
+  const prazo = setTimeout(() => controle.abort(), LIMITE_MS);
+
+  try {
+    const conteudo: Record<string, unknown>[] = [{ type: "text", text: conversa }];
+
+    for (const i of imagens) {
+      conteudo.push({
+        type: "image_url",
+        image_url: { url: `data:${i.mime};base64,${Buffer.from(i.conteudo).toString("base64")}` },
+      });
+    }
+
+    const resposta = await fetch(`${base}/chat/completions`, {
+      method: "POST",
+      signal: controle.signal,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${cred.chave}`,
+      },
+      body: JSON.stringify({
+        model: cred.modelo,
+        messages: [
+          { role: "system", content: instrucao },
+          { role: "user", content: conteudo },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "resposta",
+            strict: true,
+            // `additionalProperties: false` e exigencia do modo estrito da
+            // OpenAI. O esquema do Gemini nao pede, entao entra aqui.
+            schema: { ...esquema, additionalProperties: false },
+          },
+        },
+        temperature: 0.2,
+      }),
+    });
+
+    const corpo = (await resposta.json().catch(() => ({}))) as {
+      choices?: { message?: { content?: string } }[];
+      error?: { message?: string };
+    };
+
+    if (!resposta.ok) {
+      // A chave NAO entra no log, nem truncada.
+      logger.error("provedor de IA recusou a chamada", {
+        provedor: cred.provedor,
+        status: resposta.status,
+        modelo: cred.modelo,
+        detalhe: corpo.error?.message,
+      });
+      return null;
+    }
+
+    const texto = corpo.choices?.[0]?.message?.content;
+    if (!texto) return null;
+
+    return JSON.parse(texto) as T;
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      logger.warn("provedor de IA passou do tempo", {
+        provedor: cred.provedor,
+        modelo: cred.modelo,
+        limiteMs: LIMITE_MS,
+      });
+      return null;
+    }
+
+    logger.error("falha ao falar com o provedor de IA", {
+      provedor: cred.provedor,
+      erro: err instanceof Error ? err.message : err,
+    });
+    return null;
+  } finally {
+    clearTimeout(prazo);
+  }
+}
+
+async function peloGemini<T>(
   cred: CredencialIA,
   instrucao: string,
   conversa: string,
