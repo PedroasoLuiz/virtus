@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Drawer } from "@/components/ui/drawer";
+import { Bloco, Drawer } from "@/components/ui/drawer";
 import { useAvisos } from "@/components/ui/avisos";
 import {
   AcoesDaLinha,
   ActiveToggle,
+  Alert,
+  Badge,
   BotaoDeAcao,
   Button,
   EmptyRow,
@@ -27,18 +29,18 @@ import {
   type ConfigIA,
 } from "@/modules/ia/ia.types";
 import type { Persona } from "@/modules/atendimento/personas.types";
-import type { ContaWhatsapp } from "@/modules/whatsapp/whatsapp.types";
+import { formatarTelefone, type ContaWhatsapp } from "@/modules/whatsapp/whatsapp.types";
 
 /**
- * Atendimento automatico: provedores, trava de teste e personas.
+ * Atendimento automatico: o estado, os provedores e quem recebe resposta.
  *
- * ⚠️ As tres coisas moram juntas porque so se explicam juntas. A chave LIGA o
- * atendimento, a trava diz PARA QUEM ele responde, e a persona diz O QUE ele
- * pode resolver. Separadas em telas, descobrir por que o bot esta calado
- * exigiria passear pelas tres.
+ * ⚠️ O `Alert` do topo nao e enfeite: e a resposta a unica pergunta que traz
+ * alguem a esta tela, que e "por que o bot nao respondeu?". Ele vem ANTES dos
+ * cadastros porque a causa quase sempre e estado — sem chave, desligado, ou
+ * preso na trava de teste — e nao configuracao errada.
  *
- * Arquivo proprio, e nao mais uma secao em `configuracao.tsx`: aquele arquivo
- * ja passava de mil linhas cuidando de numeros e modelos.
+ * Personas moram na aba ao lado. Empilhadas aqui, viravam a terceira tabela de
+ * uma rolagem so, e as tres pareciam a mesma coisa.
  */
 
 /** Quantos numeros de teste ha no campo, aceitando virgula, ponto e virgula ou linha. */
@@ -46,7 +48,7 @@ function contarNumeros(texto: string): number {
   return texto.split(/[,;\n]/).filter((n) => n.trim()).length;
 }
 
-export function AtendimentoAutomatico({ contas }: { contas: ContaWhatsapp[] }) {
+export function AtendimentoAutomatico() {
   const { avisar } = useAvisos();
   const [provedores, setProvedores] = useState<ConfigIA[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -133,133 +135,142 @@ export function AtendimentoAutomatico({ contas }: { contas: ContaWhatsapp[] }) {
   }
 
   const ligados = (provedores ?? []).filter((p) => p.ativo && p.temChave);
+  const emTeste = numeroTeste.trim().length > 0;
 
   return (
     <>
       {erro && (
-        <p style={{ fontSize: "var(--text-sm)", color: "var(--danger)", marginBottom: 12 }}>
-          {erro}
-        </p>
+        <div style={{ marginBottom: 16 }}>
+          <Alert variant="danger" title="Não foi possível carregar">
+            {erro}
+          </Alert>
+        </div>
       )}
 
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 10,
-          marginBottom: 8,
-        }}
-      >
-        <span className="rotulo">Provedores</span>
-        <IncluirButton
-          rotulo="Adicionar"
-          onClick={() =>
-            setEditando({ ...CONFIG_IA_PADRAO, ordem: (provedores?.length ?? 0) + 1 })
-          }
-        />
+      <div style={{ marginBottom: 20 }}>
+        {ligados.length === 0 ? (
+          <Alert variant="warning" title="O bot não está respondendo">
+            Nenhum provedor ativo com chave cadastrada.
+          </Alert>
+        ) : emTeste ? (
+          <Alert variant="info" title={`Em teste: ${contarNumeros(numeroTeste)} número(s)`}>
+            Só eles recebem resposta automática. Os demais contatos esperam uma
+            pessoa, como antes.
+          </Alert>
+        ) : (
+          <Alert variant="success" title="Respondendo a todos os contatos">
+            {ligados.length === 1
+              ? "Um provedor ativo."
+              : `${ligados.length} provedores ativos, tentados na ordem.`}
+          </Alert>
+        )}
       </div>
 
-      <p
-        style={{
-          fontSize: "var(--text-xs)",
-          color: "var(--text-tertiary)",
-          lineHeight: "var(--lh-normal)",
-          marginBottom: 12,
-        }}
+      <Bloco
+        titulo="Provedores"
+        acao={
+          <IncluirButton
+            rotulo="Adicionar"
+            onClick={() =>
+              setEditando({ ...CONFIG_IA_PADRAO, ordem: (provedores?.length ?? 0) + 1 })
+            }
+          />
+        }
       >
-        O de ordem 1 responde. Os outros existem para o dia em que ele estiver
-        fora do ar ou sem cota, e são tentados na ordem.
-      </p>
-
-      <TableArea>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <TableArea minWidth={520}>
           <TableHead>
-            <tr>
-              <Th>Ordem</Th>
-              <Th>Provedor</Th>
-              <Th>Modelo</Th>
-              <Th>Chave</Th>
-              <Th>Ativo</Th>
-              <Th> </Th>
-            </tr>
+                <Th>Provedor</Th>
+                <Th>Situação</Th>
+          <Th> </Th>
           </TableHead>
 
-          <tbody>
-            {provedores == null ? (
-              <EmptyRow colSpan={6} message="Carregando…" />
-            ) : provedores.length === 0 ? (
-              <EmptyRow
-                colSpan={6}
-                message="Nenhum provedor cadastrado. Sem chave, o bot não responde."
-              />
-            ) : (
-              provedores.map((p) => (
-                <Tr key={p.provedor}>
-                  <Td>{p.ordem}</Td>
-                  <Td>{PROVEDORES.find((x) => x.valor === p.provedor)?.rotulo ?? p.provedor}</Td>
-                  <Td>{p.modelo}</Td>
-                  <Td>{p.temChave ? "Guardada" : "Falta cadastrar"}</Td>
-                  <Td>{p.ativo ? "Sim" : "Não"}</Td>
-                  <Td>
-                    <AcoesDaLinha>
-                      <BotaoDeAcao rotulo="Editar" onClick={() => setEditando(p)}>
-                        <path d="M11.6 2.6a1.6 1.6 0 0 1 2.3 2.3L5.6 13.2l-3 .7.7-3z" />
-                      </BotaoDeAcao>
-                      <BotaoDeAcao rotulo="Remover" onClick={() => void remover(p.provedor)}>
-                        <path d="M3.4 4.6h9.2M6.4 4.6V3.4h3.2v1.2M5 4.6l.5 8.4h5l.5-8.4" />
-                      </BotaoDeAcao>
-                    </AcoesDaLinha>
-                  </Td>
-                </Tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </TableArea>
+            <tbody>
+              {provedores == null ? (
+                <EmptyRow colSpan={3} message="Carregando…" />
+              ) : provedores.length === 0 ? (
+                <EmptyRow
+                  colSpan={3}
+                  message="Nenhum provedor. Sem chave, o bot não responde a ninguém."
+                />
+              ) : (
+                provedores.map((p) => (
+                  <Tr key={p.provedor}>
+                    {/*
+                      Provedor e modelo na MESMA celula, um sob o outro: e a
+                      anatomia dos cartoes de conversa, e evita a tabela de seis
+                      colunas que ninguem le da esquerda para a direita.
+                    */}
+                    <Td>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <Badge tom={p.ordem === 1 ? "info" : "neutral"}>
+                          {p.ordem === 1 ? "principal" : `reserva ${p.ordem}`}
+                        </Badge>
+                        <span style={{ fontWeight: "var(--fw-semi)" }}>
+                          {PROVEDORES.find((x) => x.valor === p.provedor)?.rotulo ?? p.provedor}
+                        </span>
+                      </div>
+                      <div
+                        style={{
+                          marginTop: 2,
+                          fontSize: "var(--text-xs)",
+                          color: "var(--text-tertiary)",
+                        }}
+                      >
+                        {p.modelo}
+                      </div>
+                    </Td>
 
-      <div style={{ marginTop: 20 }}>
+                    <Td>
+                      {!p.temChave ? (
+                        <Badge tom="danger">falta a chave</Badge>
+                      ) : p.ativo ? (
+                        <Badge tom="success">ativo</Badge>
+                      ) : (
+                        <Badge tom="neutral">desligado</Badge>
+                      )}
+                    </Td>
+
+                    <Td>
+                      <AcoesDaLinha>
+                        <BotaoDeAcao rotulo="Editar" onClick={() => setEditando(p)}>
+                          <path d="M11.6 2.6a1.6 1.6 0 0 1 2.3 2.3L5.6 13.2l-3 .7.7-3z" />
+                        </BotaoDeAcao>
+                        <BotaoDeAcao rotulo="Remover" onClick={() => void remover(p.provedor)}>
+                          <path d="M3.4 4.6h9.2M6.4 4.6V3.4h3.2v1.2M5 4.6l.5 8.4h5l.5-8.4" />
+                        </BotaoDeAcao>
+                      </AcoesDaLinha>
+                    </Td>
+                  </Tr>
+                ))
+              )}
+          </tbody>
+        </TableArea>
+      </Bloco>
+
+      <Bloco
+        titulo="Quem recebe resposta automática"
+        acao={
+          <Button size="sm" onClick={() => void salvarTrava()} disabled={salvandoTeste}>
+            {salvandoTeste ? "Salvando…" : "Salvar"}
+          </Button>
+        }
+      >
         <Field
           label="Só responde a"
-          hint="Um por linha. Enquanto houver número aqui, o bot ignora todos os outros. Vazio atende todo mundo."
+          hint="Um número por linha. Vazio atende todo mundo."
         >
           {/*
             Textarea e nao input: validar com uma pessoa so nao basta, e o teste
             que vale e com quem nao conhece o sistema.
           */}
           <textarea
-            style={{ ...textareaStyle, minHeight: 56 }}
+            style={{ ...textareaStyle, minHeight: 62 }}
             placeholder={"+55 (35) 99999-9999\n+55 (35) 98888-8888"}
             value={numeroTeste}
             onChange={(e) => setNumeroTeste(e.target.value)}
           />
         </Field>
-
-        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
-          <Button size="sm" onClick={() => void salvarTrava()} disabled={salvandoTeste}>
-            {salvandoTeste ? "Salvando…" : "Salvar trava"}
-          </Button>
-        </div>
-
-        <p
-          style={{
-            marginTop: 10,
-            fontSize: "var(--text-xs)",
-            color: ligados.length > 0 ? "var(--text-tertiary)" : "var(--warning)",
-            lineHeight: "var(--lh-normal)",
-          }}
-        >
-          {ligados.length === 0
-            ? "Nenhum provedor ativo com chave: o bot não vai responder ninguém."
-            : numeroTeste.trim()
-              ? `Em teste: ${contarNumeros(numeroTeste)} número(s) recebem resposta automática.`
-              : `Respondendo a todos os contatos, por ${ligados.length} provedor(es).`}
-        </p>
-      </div>
-
-      <div style={{ marginTop: 26 }}>
-        <Personas contas={contas} />
-      </div>
+      </Bloco>
     </>
   );
 }
@@ -325,6 +336,7 @@ function FormularioDoProvedor({
       open
       onClose={onFechar}
       title={jaTemChave ? "Editar provedor" : "Adicionar provedor"}
+      subtitle="A chave fica cifrada e nunca volta para a tela"
       footer={
         <div style={{ display: "flex", justifyContent: "flex-end" }}>
           <Button
@@ -390,13 +402,13 @@ function FormularioDoProvedor({
       <Field
         label="Chave da API"
         required={!jaTemChave}
-        hint="Fica guardada cifrada, e nunca volta para a tela."
+        hint={jaTemChave ? "Em branco mantém a atual." : undefined}
       >
         <input
           style={inputStyle}
           type="password"
           autoComplete="off"
-          placeholder={jaTemChave ? "Deixe em branco para manter a atual" : "cole a chave"}
+          placeholder={jaTemChave ? "Deixe em branco para manter" : "cole a chave"}
           value={chave}
           onChange={(e) => setChave(e.target.value)}
         />
@@ -420,10 +432,10 @@ type Setor = { id: number; nome: string };
  * O que a IA pode resolver sozinha, por setor.
  *
  * ⚠️ Sem persona para um setor, o comportamento continua sendo encaminhar.
- * Persona é autorização, não obrigação: quem não cadastra nenhuma segue com o
- * bot que só tria e passa adiante.
+ * Persona e autorizacao, nao obrigacao: quem nao cadastra nenhuma segue com o
+ * bot que so tria e passa adiante.
  */
-function Personas({ contas }: { contas: ContaWhatsapp[] }) {
+export function Personas({ contas }: { contas: ContaWhatsapp[] }) {
   const { avisar } = useAvisos();
   const [personas, setPersonas] = useState<Persona[] | null>(null);
   const [setores, setSetores] = useState<Setor[]>([]);
@@ -479,90 +491,107 @@ function Personas({ contas }: { contas: ContaWhatsapp[] }) {
 
   return (
     <>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 10,
-          marginBottom: 8,
-        }}
-      >
-        <span className="rotulo">Personas</span>
-        <IncluirButton
-          rotulo="Adicionar"
-          onClick={() =>
-            setEditando({
-              id: 0,
-              contaId: null,
-              setorId: null,
-              nome: "",
-              descricao: null,
-              podeResolver: null,
-              ativo: true,
-            })
-          }
-        />
+      <div style={{ marginBottom: 20 }}>
+        <Alert variant="info" title="Persona é permissão, não obrigação">
+          Sem persona para um setor, a IA continua só entendendo e encaminhando.
+          Com persona, ela fecha sozinha o que estiver na lista, e nada além.
+        </Alert>
       </div>
 
-      <p
-        style={{
-          fontSize: "var(--text-xs)",
-          color: "var(--text-tertiary)",
-          lineHeight: "var(--lh-normal)",
-          marginBottom: 12,
-        }}
+      <Bloco
+        titulo="Personas"
+        acao={
+          <IncluirButton
+            rotulo="Adicionar"
+            onClick={() =>
+              setEditando({
+                id: 0,
+                contaId: null,
+                setorId: null,
+                nome: "",
+                descricao: null,
+                podeResolver: null,
+                ativo: true,
+              })
+            }
+          />
+        }
       >
-        Sem persona para o setor, a IA só entende e encaminha. Com persona, ela
-        pode fechar sozinha o que estiver escrito em &quot;pode resolver&quot;, e
-        nada além disso.
-      </p>
-
-      <TableArea>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <TableArea minWidth={520}>
           <TableHead>
-            <tr>
-              <Th>Nome</Th>
-              <Th>Setor</Th>
-              <Th>Número</Th>
-              <Th>Ativa</Th>
-              <Th> </Th>
-            </tr>
+                <Th>Persona</Th>
+                <Th>Onde vale</Th>
+          <Th> </Th>
           </TableHead>
 
-          <tbody>
-            {personas == null ? (
-              <EmptyRow colSpan={5} message="Carregando…" />
-            ) : personas.length === 0 ? (
-              <EmptyRow
-                colSpan={5}
-                message="Nenhuma persona. A IA vai triar e encaminhar tudo."
-              />
-            ) : (
-              personas.map((p) => (
-                <Tr key={p.id}>
-                  <Td>{p.nome}</Td>
-                  <Td>{setores.find((s) => s.id === p.setorId)?.nome ?? "Geral"}</Td>
-                  <Td>
-                    {contas.find((c) => c.id === p.contaId)?.apelido ?? "Todos"}
-                  </Td>
-                  <Td>{p.ativo ? "Sim" : "Não"}</Td>
-                  <Td>
-                    <AcoesDaLinha>
-                      <BotaoDeAcao rotulo="Editar" onClick={() => setEditando(p)}>
-                        <path d="M11.6 2.6a1.6 1.6 0 0 1 2.3 2.3L5.6 13.2l-3 .7.7-3z" />
-                      </BotaoDeAcao>
-                      <BotaoDeAcao rotulo="Excluir" onClick={() => void excluir(p.id)}>
-                        <path d="M3.4 4.6h9.2M6.4 4.6V3.4h3.2v1.2M5 4.6l.5 8.4h5l.5-8.4" />
-                      </BotaoDeAcao>
-                    </AcoesDaLinha>
-                  </Td>
-                </Tr>
-              ))
-            )}
+            <tbody>
+              {personas == null ? (
+                <EmptyRow colSpan={3} message="Carregando…" />
+              ) : personas.length === 0 ? (
+                <EmptyRow
+                  colSpan={3}
+                  message="Nenhuma persona. A IA vai triar e encaminhar tudo."
+                />
+              ) : (
+                personas.map((p) => (
+                  <Tr key={p.id}>
+                    <Td>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontWeight: "var(--fw-semi)" }}>{p.nome}</span>
+                        {!p.ativo && <Badge tom="neutral">desligada</Badge>}
+                      </div>
+                      {/* O que ela resolve, cortado em uma linha: e o que
+                          distingue duas personas do mesmo setor. */}
+                      <div
+                        style={{
+                          marginTop: 2,
+                          fontSize: "var(--text-xs)",
+                          color: "var(--text-tertiary)",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          maxWidth: 320,
+                        }}
+                      >
+                        {p.podeResolver?.replace(/\s*\n\s*/g, " · ") ||
+                          "Sem lista: só acolhe e encaminha"}
+                      </div>
+                    </Td>
+
+                    <Td>
+                      <div>{setores.find((s) => s.id === p.setorId)?.nome ?? "Qualquer setor"}</div>
+                      <div
+                        style={{
+                          marginTop: 2,
+                          fontSize: "var(--text-xs)",
+                          color: "var(--text-tertiary)",
+                        }}
+                      >
+                        {contas.find((c) => c.id === p.contaId)?.apelido ??
+                          (p.contaId
+                            ? formatarTelefone(
+                                contas.find((c) => c.id === p.contaId)?.numero ?? "",
+                              )
+                            : "Todos os números")}
+                      </div>
+                    </Td>
+
+                    <Td>
+                      <AcoesDaLinha>
+                        <BotaoDeAcao rotulo="Editar" onClick={() => setEditando(p)}>
+                          <path d="M11.6 2.6a1.6 1.6 0 0 1 2.3 2.3L5.6 13.2l-3 .7.7-3z" />
+                        </BotaoDeAcao>
+                        <BotaoDeAcao rotulo="Excluir" onClick={() => void excluir(p.id)}>
+                          <path d="M3.4 4.6h9.2M6.4 4.6V3.4h3.2v1.2M5 4.6l.5 8.4h5l.5-8.4" />
+                        </BotaoDeAcao>
+                      </AcoesDaLinha>
+                    </Td>
+                  </Tr>
+                ))
+              )}
           </tbody>
-        </table>
-      </TableArea>
+        </TableArea>
+      </Bloco>
     </>
   );
 }
@@ -625,6 +654,7 @@ function FormularioDaPersona({
       open
       onClose={onFechar}
       title={rascunho.id ? "Editar persona" : "Nova persona"}
+      subtitle="Nunca autoriza dizer valor, vencimento ou boleto"
       footer={
         <div style={{ display: "flex", justifyContent: "flex-end" }}>
           <Button
@@ -646,10 +676,7 @@ function FormularioDaPersona({
         />
       </Field>
 
-      <Field
-        label="Setor"
-        hint="Vazio vale para qualquer assunto que não tenha persona própria."
-      >
+      <Field label="Setor" hint="Vazio vale para o que não tiver persona própria.">
         <select
           style={selectStyle}
           value={rascunho.setorId ?? ""}
@@ -657,7 +684,7 @@ function FormularioDaPersona({
             setRascunho({ ...rascunho, setorId: e.target.value ? Number(e.target.value) : null })
           }
         >
-          <option value="">Geral</option>
+          <option value="">Qualquer setor</option>
           {setores.map((s) => (
             <option key={s.id} value={s.id}>
               {s.nome}
@@ -674,10 +701,10 @@ function FormularioDaPersona({
             setRascunho({ ...rascunho, contaId: e.target.value ? Number(e.target.value) : null })
           }
         >
-          <option value="">Todos</option>
+          <option value="">Todos os números</option>
           {contas.map((c) => (
             <option key={c.id} value={c.id}>
-              {c.apelido || c.numero || `Número ${c.id}`}
+              {c.apelido || formatarTelefone(c.numero ?? "") || `Número ${c.id}`}
             </option>
           ))}
         </select>
@@ -685,7 +712,7 @@ function FormularioDaPersona({
 
       <Field
         label="Quem ela é"
-        hint="O jeito de falar. Ex.: direta e prática, evita jargão, sempre confirma antes de encerrar."
+        hint="O jeito de falar. Ex.: direta e prática, evita jargão, confirma antes de encerrar."
       >
         <textarea
           style={{ ...textareaStyle, minHeight: 80 }}
@@ -696,12 +723,12 @@ function FormularioDaPersona({
 
       <Field
         label="Pode resolver"
-        hint="O que ela fecha sozinha, em lista. Fora disso, encaminha. Nunca autoriza dizer valor, vencimento ou boleto: isso continua vindo só do sistema."
+        hint="Um item por linha. Fora dessa lista, ela encaminha."
       >
         <textarea
           style={{ ...textareaStyle, minHeight: 110 }}
           placeholder={
-            "Ex.:\n- horário de atendimento e endereço\n- como enviar a nota fiscal\n- prazo padrão de retorno do setor"
+            "horário de atendimento e endereço\ncomo enviar a nota fiscal\nprazo padrão de retorno do setor"
           }
           value={rascunho.podeResolver ?? ""}
           onChange={(e) => setRascunho({ ...rascunho, podeResolver: e.target.value })}

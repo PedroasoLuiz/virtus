@@ -3,7 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Drawer } from "@/components/ui/drawer";
 import { useAvisos } from "@/components/ui/avisos";
-import { AtendimentoAutomatico } from "@/components/whatsapp/atendimento-automatico";
+import {
+  AtendimentoAutomatico,
+  Personas,
+} from "@/components/whatsapp/atendimento-automatico";
 import {
   AcoesDaLinha,
   ActiveToggle,
@@ -113,7 +116,9 @@ export function ConfiguracaoDeContas({
    * outro. Sao duas configuracoes distintas do mesmo lugar: cada uma merece um
    * nome visivel na entrada.
    */
-  const [aba, setAba] = useState<"Números" | "Modelos" | "Atendimento automático">("Números");
+  const [aba, setAba] = useState<
+    "Números" | "Modelos" | "Automação" | "Personas"
+  >("Números");
 
   const filtradas = useMemo(() => {
     const termo = busca.trim().toLowerCase();
@@ -229,16 +234,22 @@ export function ConfiguracaoDeContas({
       title="Configuração do WhatsApp"
       subtitle="Números da empresa e atendimento automático"
     >
+      {/*
+        Quatro nomes CURTOS. "Atendimento automático" sozinho ocupava metade da
+        barra e empurrava os outros, e a aba mais usada e a primeira.
+      */}
       <PanelTabs
-        tabs={["Números", "Modelos", "Atendimento automático"]}
+        tabs={["Números", "Modelos", "Automação", "Personas"]}
         active={aba}
         onChange={(t) => setAba(t as typeof aba)}
       />
 
       {aba === "Modelos" ? (
         <ModelosAprovados contas={contas} />
-      ) : aba === "Atendimento automático" ? (
-        <AtendimentoAutomatico contas={contas} />
+      ) : aba === "Automação" ? (
+        <AtendimentoAutomatico />
+      ) : aba === "Personas" ? (
+        <Personas contas={contas} />
       ) : (
         <>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
@@ -420,16 +431,13 @@ function ModelosAprovados({ contas }: { contas: ContaWhatsapp[] }) {
         </p>
       )}
 
-      <TableArea>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <TableHead>
-            <tr>
+      <TableArea minWidth={520}>
+        <TableHead>
               <Th>Nome</Th>
               <Th>Categoria</Th>
               <Th>Idioma</Th>
-              <Th>Variáveis</Th>
-            </tr>
-          </TableHead>
+          <Th>Variáveis</Th>
+        </TableHead>
 
           <tbody>
             {modelos == null ? (
@@ -461,8 +469,7 @@ function ModelosAprovados({ contas }: { contas: ContaWhatsapp[] }) {
                 </Tr>
               ))
             )}
-          </tbody>
-        </table>
+        </tbody>
       </TableArea>
     </>
   );
