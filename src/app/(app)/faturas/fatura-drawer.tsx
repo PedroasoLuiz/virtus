@@ -1302,6 +1302,21 @@ function AcoesDaParcela({
     avisar("sucesso", "E-mail enviado", `Para ${dados.data.para}.`);
   }
 
+  async function enviarWhatsapp() {
+    const r = await fetch(`/api/v1/faturas/${faturaId}/parcelas/${parcela.id}/whatsapp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const dados = await r.json().catch(() => null);
+
+    if (!r.ok) {
+      avisar("atencao", dados?.error?.message ?? "Não foi possível enviar");
+      return;
+    }
+    avisar("sucesso", "WhatsApp enviado", `Para ${dados.data.para}.`);
+  }
+
   return (
     <>
       {!bloqueado && !parcela.nfs && (
@@ -1423,13 +1438,22 @@ function AcoesDaParcela({
         <path d="M10.4 12.2h4.2M12.8 10.4l1.8 1.8-1.8 1.8" />
       </ItemDoMenu>
 
-      {/* ⚠️ Depende do token da Meta, que ainda precisa ser rotacionado: o do
-          legado esta em texto puro num zip de backup. Ver docs/02. */}
+      {/* Sem exigir nota nem boleto, ao contrário do e-mail: o que vai aqui é o
+          LINK da cobrança, e a página pública se vira com o que houver. O
+          e-mail exige documento porque é ele quem anuncia documento. */}
       <ItemDoMenu
         rotulo="Enviar por WhatsApp"
-        desabilitado
-        motivo="Depende do token da Meta, ainda não configurado"
-        onClick={fechar}
+        desabilitado={bloqueado}
+        motivo={bloqueado ? "Parcela conciliada ou conta cancelada" : undefined}
+        onClick={() => {
+          fechar();
+          confirmar(
+            "Enviar esta cobrança pelo WhatsApp?",
+            "Enviar",
+            enviarWhatsapp,
+            "Vai o modelo aprovado, com valor, vencimento e o link da cobrança.",
+          );
+        }}
       >
         <path d="M2.6 13.4l.8-2.8a5.4 5.4 0 1 1 2 2z" />
         <path d="M6 6.4c.3 1.6 1.7 3 3.3 3.3" />

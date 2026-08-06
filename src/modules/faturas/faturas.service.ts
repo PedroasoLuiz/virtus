@@ -1,3 +1,6 @@
+import { logger } from "@/shared/utils/logger";
+import * as whatsapp from "@/modules/whatsapp/whatsapp.service";
+import { paraFormatoMeta } from "@/modules/whatsapp/whatsapp.types";
 import { BusinessRuleError, NotFoundError } from "@/shared/errors/app-error";
 import {
   centavos,
@@ -476,6 +479,80 @@ export async function enviarParcelaPorEmail(
   });
 
   return { para };
+}
+
+/** O modelo aprovado na Meta. Trocar o nome aqui exige aprovar outro la. */
+const MODELO_DE_COBRANCA = "cobranca";
+
+/**
+ * Manda a parcela pelo WhatsApp, com o modelo aprovado.
+ *
+ * ⚠️ Modelo, e nao texto livre, e isso nao e escolha de estilo: fora da janela
+ * de 24 horas a Meta so entrega template aprovado, e cobranca quase sempre sai
+ * para quem nao escreveu nada nesse dia.
+ *
+ * O link do botao leva o MESMO token do e-mail. Dois links diferentes para a
+ * mesma parcela dobrariam o que precisa ser revogado quando algo sai errado, e
+ * o cliente que recebeu os dois nao saberia qual vale.
+ */
+export async function enviarParcelaPorWhatsapp(
+  empresaId: number,
+  usuarioId: string,
+  faturaId: number,
+  parcelaId: number,
+  telefoneAlternativo?: string | null,
+): Promise<{ para: string }> {
+  const fatura = await obterFatura(empresaId, faturaId);
+  const parcela = fatura.parcelas.find((p) => p.id === parcelaId);
+
+  if (!parcela) throw new NotFoundError("Parcela nao encontrada nesta conta");
+  if (fatura.cancelada) throw new BusinessRuleError("Conta cancelada nao e enviada");
+  if (parcela.pago) throw new BusinessRuleError("Esta parcela ja foi baixada");
+
+  const destino = await repo.destinatarioDaFatura(empresaId, fatura.clienteId);
+  const bruto = (telefoneAlternativo ?? "").trim() || destino.telefone;
+
+  if (!bruto) {
+    throw new BusinessRuleError(
+      "Este cliente nao tem telefone cadastrado. Informe um numero ou preencha o cadastro.",
+    );
+  }
+
+  /*
+   * ⚠️ Sem exigir nota ou boleto, ao contrario do e-mail.
+   *
+   * O que vai no WhatsApp e o LINK da cobranca, e a pagina publica se vira com
+   * o que houver. O e-mail exige documento porque ele anuncia documento; aqui a
+   * mensagem anuncia valor e vencimento, que a parcela sempre tem.
+   */
+  const token = await repo.tokenDaParcela(parcelaId);
+  const tickets = fatura.tickets.map((t) => t.numero);
+
+  const mensagem = await whatsapp.dispararModelo(
+    empresaId,
+    usuarioId,
+    { telefone: paraFormatoMeta(bruto), nome: destino.clienteNome },
+    MODELO_DE_COBRANCA,
+    [
+      // A ORDEM E O CONTRATO com o modelo aprovado: nome, valor, vencimento,
+      // ticket. Trocar duas de lugar passa na validacao de quantidade e chega
+      // errado no cliente.
+      destino.clienteNome ?? "cliente",
+      formatarSemSimbolo(parcela.total),
+      parcela.vencimento ? paraFormatoBR(parcela.vencimento) : "a combinar",
+      tickets.length > 0 ? tickets.join(", ") : String(fatura.id),
+    ],
+    // So o token: o comeco da URL ja esta fixo no modelo aprovado.
+    token,
+  );
+
+  logger.info("cobranca enviada por whatsapp", {
+    faturaId,
+    parcelaId,
+    mensagemId: mensagem.id,
+  });
+
+  return { para: bruto };
 }
 
 /**

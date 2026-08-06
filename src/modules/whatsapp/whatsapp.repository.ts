@@ -233,6 +233,43 @@ export async function listarConversas(
   return (data ?? []).map((l) => paraConversa(l as unknown as LinhaConversa));
 }
 
+/**
+ * A conversa daquele telefone naquele numero, criando se ainda nao existir.
+ *
+ * ⚠️ Necessaria porque cobranca sai do sistema para quem talvez nunca tenha
+ * escrito: ate agora toda conversa nascia de uma mensagem RECEBIDA. Sem isto o
+ * disparo iria para a Meta e nao apareceria no painel, e ninguem saberia que a
+ * cobranca foi enviada nem veria a resposta do cliente chegar.
+ */
+export async function garantirConversa(
+  empresaId: number,
+  contaId: number,
+  telefone: string,
+  nome: string | null,
+): Promise<Conversa> {
+  const supabase = await serverClient();
+
+  const existente = await supabase
+    .from("whatsappconversas")
+    .select(`${COLUNAS_CONVERSA}, ${RELACAO_CLIENTE}`)
+    .eq("fkEmpresa", empresaId)
+    .eq("fkConta", contaId)
+    .eq("telefone", telefone)
+    .maybeSingle();
+
+  if (existente.error) throw existente.error;
+  if (existente.data) return paraConversa(existente.data as unknown as LinhaConversa);
+
+  const criada = await supabase
+    .from("whatsappconversas")
+    .insert({ fkEmpresa: empresaId, fkConta: contaId, telefone, nome })
+    .select(`${COLUNAS_CONVERSA}, ${RELACAO_CLIENTE}`)
+    .single();
+
+  if (criada.error) throw criada.error;
+  return paraConversa(criada.data as unknown as LinhaConversa);
+}
+
 export async function buscarConversa(empresaId: number, id: number): Promise<Conversa | null> {
   const supabase = await serverClient();
 

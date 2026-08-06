@@ -680,7 +680,12 @@ export async function gravarDocumentoDaParcela(
 export async function destinatarioDaFatura(
   empresaId: number,
   clienteId: number | null,
-): Promise<{ email: string | null; clienteNome: string | null; empresaNome: string }> {
+): Promise<{
+  email: string | null;
+  telefone: string | null;
+  clienteNome: string | null;
+  empresaNome: string;
+}> {
   const supabase = await serverClient();
 
   const [cliente, empresa] = await Promise.all([
@@ -688,7 +693,7 @@ export async function destinatarioDaFatura(
       ? Promise.resolve(null)
       : supabase
           .from("clientes")
-          .select("email, razao, nomefantasia")
+          .select("email, contato, razao, nomefantasia")
           .eq("id", clienteId)
           .maybeSingle(),
     supabase.from("empresas").select("nome, fantasia, razaosocial").eq("id", empresaId).maybeSingle(),
@@ -699,6 +704,9 @@ export async function destinatarioDaFatura(
 
   return {
     email: (cliente?.data?.email ?? "").trim() || null,
+    // `contato` e onde este banco guarda o telefone do cliente, herdado do
+    // legado. O nome nao ajuda, mas trocar a coluna e outra conversa.
+    telefone: (cliente?.data?.contato ?? "").trim() || null,
     clienteNome: primeiroPreenchido(
       cliente?.data?.nomefantasia,
       cliente?.data?.razao,

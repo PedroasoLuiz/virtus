@@ -11,6 +11,7 @@ import {
   type AlterarStatusBody,
   type CriarFaturaBody,
   type EnviarParcelaBody,
+  type EnviarParcelaWhatsappBody,
   type IdParam,
   type ListarQuery,
   type ParcelaParam,
@@ -162,6 +163,22 @@ export async function enviarParcela({
       params.id,
       params.parcelaId,
       body.para,
+    ),
+  );
+}
+
+export async function enviarParcelaPorWhatsapp({
+  body,
+  params,
+  ctx,
+}: Entrada<EnviarParcelaWhatsappBody, undefined, ParcelaParam>) {
+  return ok(
+    await service.enviarParcelaPorWhatsapp(
+      empresaObrigatoria(ctx),
+      ctx.usuarioId,
+      params.id,
+      params.parcelaId,
+      body.telefone,
     ),
   );
 }

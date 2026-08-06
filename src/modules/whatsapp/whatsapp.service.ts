@@ -363,6 +363,77 @@ export async function enviarModelo(
   });
 }
 
+/**
+ * Dispara um modelo para um TELEFONE, sem depender de conversa existente.
+ *
+ * ⚠️ Diferente de `enviarModelo`, que parte de uma conversa aberta no painel.
+ * Aqui quem chama e a cobranca: o cliente pode nunca ter escrito, e modelo
+ * aprovado e justamente o que a Meta deixa enviar nesse caso.
+ *
+ * A conversa e criada de qualquer forma, para o disparo aparecer no painel e a
+ * resposta do cliente cair no mesmo lugar.
+ */
+export async function dispararModelo(
+  empresaId: number,
+  usuarioId: string,
+  destino: { telefone: string; nome: string | null },
+  nome: string,
+  parametros: string[],
+  urlDoBotao?: string,
+): Promise<Mensagem> {
+  const contas = await listarContas(empresaId);
+  const conta = contas.find((c) => c.ativo && c.temToken);
+
+  if (!conta) {
+    throw new BusinessRuleError(
+      "Nenhum numero de WhatsApp ativo com token. Confira em Configuracao de contas.",
+    );
+  }
+
+  const cred = await repo.credenciais(conta.id);
+
+  if (!cred) {
+    throw new BusinessRuleError("O numero escolhido esta sem token cadastrado.");
+  }
+
+  const modelos = await cloud.listarModelos(cred);
+  const modelo = modelos.find((m) => m.nome === nome);
+
+  if (!modelo) {
+    throw new BusinessRuleError(
+      `O modelo "${nome}" nao esta aprovado. Confira o status no painel da Meta.`,
+    );
+  }
+
+  if (parametros.length !== modelo.parametros) {
+    throw new BusinessRuleError(
+      `O modelo "${nome}" espera ${modelo.parametros} parametro(s), recebeu ${parametros.length}.`,
+    );
+  }
+
+  const conversa = await repo.garantirConversa(
+    empresaId,
+    conta.id,
+    destino.telefone,
+    destino.nome,
+  );
+
+  const wamid = await cloud.enviarModelo(
+    cred,
+    destino.telefone,
+    modelo.nome,
+    modelo.idioma,
+    parametros,
+    urlDoBotao,
+  );
+
+  return gravarOuAvisar(empresaId, conversa.id, usuarioId, {
+    wamid,
+    tipo: "template",
+    texto: preencherModelo(modelo.corpo, parametros),
+  });
+}
+
 /** Troca `{{1}}`, `{{2}}`… pelos valores, na ordem. */
 export function preencherModelo(corpo: string, parametros: string[]): string {
   return corpo.replace(/\{\{\s*(\d+)\s*\}\}/g, (marcador, n: string) => {

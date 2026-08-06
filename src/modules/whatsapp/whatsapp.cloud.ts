@@ -171,8 +171,35 @@ export async function enviarModelo(
   nome: string,
   idioma: string,
   parametros: string[],
+  /**
+   * O pedaco variavel da URL do botao.
+   *
+   * ⚠️ E o SUFIXO, nao a URL inteira. O modelo aprovado guarda o comeco fixo
+   * (`https://.../p/{{1}}`) e a Meta so aceita completar o que falta: mandar a
+   * URL completa aqui produziria um link com o dominio duas vezes.
+   */
+  urlDoBotao?: string,
 ): Promise<string> {
   const { token, phoneNumberId: phoneId, apiVersao: versao } = cred;
+
+  const componentes: Record<string, unknown>[] = [];
+
+  if (parametros.length > 0) {
+    componentes.push({
+      type: "body",
+      parameters: parametros.map((text) => ({ type: "text", text })),
+    });
+  }
+
+  if (urlDoBotao) {
+    componentes.push({
+      type: "button",
+      sub_type: "url",
+      // Indice do botao no modelo, em texto. Um botao so: sempre "0".
+      index: "0",
+      parameters: [{ type: "text", text: urlDoBotao }],
+    });
+  }
 
   return despachar(
     `${BASE}/${versao}/${phoneId}/messages`,
@@ -185,16 +212,7 @@ export async function enviarModelo(
       template: {
         name: nome,
         language: { code: idioma },
-        ...(parametros.length > 0
-          ? {
-              components: [
-                {
-                  type: "body",
-                  parameters: parametros.map((text) => ({ type: "text", text })),
-                },
-              ],
-            }
-          : {}),
+        ...(componentes.length > 0 ? { components: componentes } : {}),
       },
     },
   );
