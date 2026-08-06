@@ -7,6 +7,7 @@ import {
   testeFalhou,
   testeInconclusivo,
   testeOk,
+  tempoDaChamada,
   type ResultadoDoTeste,
 } from "@/shared/domain/teste-conexao";
 
@@ -273,6 +274,7 @@ export async function listarModelos(cred: Credenciais): Promise<Modelo[]> {
 export async function testarConta(cred: Credenciais): Promise<ResultadoDoTeste> {
   const controle = new AbortController();
   const prazo = setTimeout(() => controle.abort(), 12_000);
+  const inicio = performance.now();
 
   try {
     const resposta = await fetch(
@@ -286,20 +288,36 @@ export async function testarConta(cred: Credenciais): Promise<ResultadoDoTeste> 
       error?: { message?: string; code?: number; type?: string };
     };
 
+    /*
+     * O que a chamada revelou, sempre: ate na falha.
+     *
+     * ⚠️ O `display_phone_number` e a informacao mais valiosa da tela inteira.
+     * Token certo com o Phone number ID de OUTRA linha passa em qualquer
+     * validacao de formato, e sem isto so se descobre quando o cliente errado
+     * recebe a mensagem.
+     */
+    const infos = [
+      { rotulo: "Phone number ID", valor: cred.phoneNumberId },
+      ...(corpo.display_phone_number
+        ? [{ rotulo: "Número", valor: corpo.display_phone_number }]
+        : []),
+      ...(corpo.verified_name ? [{ rotulo: "Nome verificado", valor: corpo.verified_name }] : []),
+      { rotulo: "Versão da API", valor: cred.apiVersao },
+      {
+        rotulo: "Resposta",
+        valor: corpo.error?.code
+          ? `HTTP ${resposta.status}, código ${corpo.error.code}`
+          : `HTTP ${resposta.status}`,
+      },
+      tempoDaChamada(inicio),
+    ];
+
     if (resposta.ok) {
-      /*
-       * Devolve o numero que a Meta diz ser aquele ID.
-       *
-       * ⚠️ E a parte mais util do teste. Token certo com o Phone number ID de
-       * OUTRA linha passa em qualquer verificacao de formato e so aparece
-       * quando o cliente errado recebe a mensagem. Aqui a pessoa le o numero
-       * na tela e compara com o que digitou.
-       */
-      const nome = corpo.verified_name ? ` (${corpo.verified_name})` : "";
       return testeOk(
         corpo.display_phone_number
-          ? `Conectado ao número ${corpo.display_phone_number}${nome}. Confira se é este mesmo.`
+          ? "A Meta aceitou as credenciais. Confira abaixo se o número é este mesmo."
           : "A Meta aceitou o token e o Phone number ID.",
+        infos,
       );
     }
 
@@ -312,6 +330,7 @@ export async function testarConta(cred: Credenciais): Promise<ResultadoDoTeste> 
       return testeFalhou(
         "A Meta recusou o token. Se ele veio do API Setup, dura só 24 horas: gere um permanente em Usuários do sistema.",
         detalhe,
+        infos,
       );
     }
 
@@ -319,25 +338,32 @@ export async function testarConta(cred: Credenciais): Promise<ResultadoDoTeste> 
       return testeFalhou(
         "A Meta não encontrou este Phone number ID, ou o token não tem acesso a ele.",
         detalhe,
+        infos,
       );
     }
 
     // Versao inexistente responde 400 dizendo isso no texto. Vale barrar: a
     // versao errada quebra TODO envio depois, e em silencio.
     if (/unsupported.*version|unknown version/i.test(detalhe ?? "")) {
-      return testeFalhou(`A Meta não reconhece a versão ${cred.apiVersao} da API.`, detalhe);
+      return testeFalhou(
+        `A Meta não reconhece a versão ${cred.apiVersao} da API.`,
+        detalhe,
+        infos,
+      );
     }
 
     if (resposta.status === 429) {
       return testeInconclusivo(
         "A Meta está limitando as chamadas agora. Dá para salvar e conferir depois.",
         detalhe,
+        infos,
       );
     }
 
     return testeInconclusivo(
       "A Meta respondeu com um erro que não dá para interpretar. Dá para salvar assim mesmo.",
       detalhe,
+      infos,
     );
   } catch (err) {
     return testeDeErroDeRede(err);

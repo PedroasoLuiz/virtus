@@ -6,6 +6,7 @@ import {
   testeFalhou,
   testeInconclusivo,
   testeOk,
+  tempoDaChamada,
   type ResultadoDoTeste,
 } from "@/shared/domain/teste-conexao";
 
@@ -419,12 +420,27 @@ const LIMITE_TESTE_MS = 12_000;
 export async function testarCredencial(cred: CredencialIA): Promise<ResultadoDoTeste> {
   const controle = new AbortController();
   const prazo = setTimeout(() => controle.abort(), LIMITE_TESTE_MS);
+  const inicio = performance.now();
 
   try {
     const { status, detalhe } = await bater(cred, controle.signal);
 
+    /*
+     * O que a chamada revelou, sempre: ate na falha.
+     *
+     * ⚠️ Numa falha, o status e o tempo sao o que separa "a chave esta errada"
+     * de "a rede esta ruim". Mostrar so na vitoria esconderia justamente quando
+     * eles importam.
+     */
+    const infos = [
+      { rotulo: "Provedor", valor: cred.provedor },
+      { rotulo: "Modelo", valor: cred.modelo },
+      { rotulo: "Resposta", valor: `HTTP ${status}` },
+      tempoDaChamada(inicio),
+    ];
+
     if (status === 200) {
-      return testeOk("Chave e modelo confirmados. O provedor respondeu.");
+      return testeOk("Chave e modelo confirmados. O provedor respondeu.", infos);
     }
 
     /*
@@ -434,7 +450,7 @@ export async function testarCredencial(cred: CredencialIA): Promise<ResultadoDoT
      * cobre corpo invalido nosso — por isso ele NAO entra como definitivo.
      */
     if (status === 401 || status === 403) {
-      return testeFalhou("O provedor recusou esta chave.", detalhe);
+      return testeFalhou("O provedor recusou esta chave.", detalhe, infos);
     }
 
     // 404: o nome do modelo nao existe nesse provedor. O erro mais comum, e o
@@ -443,6 +459,7 @@ export async function testarCredencial(cred: CredencialIA): Promise<ResultadoDoT
       return testeFalhou(
         `O provedor não conhece o modelo "${cred.modelo}". Confira o nome exato.`,
         detalhe,
+        infos,
       );
     }
 
@@ -455,12 +472,14 @@ export async function testarCredencial(cred: CredencialIA): Promise<ResultadoDoT
       return testeInconclusivo(
         "A chave foi reconhecida, mas está sem cota agora. Dá para salvar; o atendimento volta quando a cota voltar.",
         detalhe,
+        infos,
       );
     }
 
     return testeInconclusivo(
       "O provedor respondeu com um erro que não dá para interpretar. Dá para salvar assim mesmo.",
       detalhe,
+      infos,
     );
   } catch (err) {
     return testeDeErroDeRede(err);

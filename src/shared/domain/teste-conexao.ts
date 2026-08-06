@@ -6,6 +6,16 @@
  * salvar?") e merece a mesma resposta, com o mesmo desenho.
  */
 
+/**
+ * Um pedaco do que o servico respondeu.
+ *
+ * ⚠️ Nunca a credencial, nem parte dela. E o que a resposta REVELOU: qual numero
+ * o ID aponta, quanto tempo levou, que status voltou. Sao esses detalhes que
+ * transformam "deu erro" em algo que da para agir, e "deu certo" em algo que da
+ * para conferir.
+ */
+export type InfoDoTeste = { rotulo: string; valor: string };
+
 export type ResultadoDoTeste = {
   ok: boolean;
   /** Frase pronta para a tela, em portugues, sem jargao do provedor. */
@@ -24,21 +34,38 @@ export type ResultadoDoTeste = {
   definitivo: boolean;
   /** O que o provedor respondeu, quando ajuda a entender. Nunca a credencial. */
   detalhe?: string | null;
+  /** O que a resposta revelou, em pares para a tela listar. */
+  infos?: InfoDoTeste[];
 };
 
 /** Deu certo. */
-export function testeOk(mensagem: string): ResultadoDoTeste {
-  return { ok: true, mensagem, definitivo: true, detalhe: null };
+export function testeOk(mensagem: string, infos?: InfoDoTeste[]): ResultadoDoTeste {
+  return { ok: true, mensagem, definitivo: true, detalhe: null, infos };
 }
 
 /** Esta errado, e salvar assim nao vai funcionar. */
-export function testeFalhou(mensagem: string, detalhe?: string | null): ResultadoDoTeste {
-  return { ok: false, mensagem, definitivo: true, detalhe: detalhe ?? null };
+export function testeFalhou(
+  mensagem: string,
+  detalhe?: string | null,
+  infos?: InfoDoTeste[],
+): ResultadoDoTeste {
+  return { ok: false, mensagem, definitivo: true, detalhe: detalhe ?? null, infos };
 }
 
 /** Nao deu para saber. O salvar continua liberado. */
-export function testeInconclusivo(mensagem: string, detalhe?: string | null): ResultadoDoTeste {
-  return { ok: false, mensagem, definitivo: false, detalhe: detalhe ?? null };
+export function testeInconclusivo(
+  mensagem: string,
+  detalhe?: string | null,
+  infos?: InfoDoTeste[],
+): ResultadoDoTeste {
+  return { ok: false, mensagem, definitivo: false, detalhe: detalhe ?? null, infos };
+}
+
+/** Quanto a chamada levou, arredondado para o que a pessoa consegue comparar. */
+export function tempoDaChamada(inicioMs: number): InfoDoTeste {
+  const ms = Math.round(performance.now() - inicioMs);
+
+  return { rotulo: "Tempo", valor: ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${ms} ms` };
 }
 
 /**

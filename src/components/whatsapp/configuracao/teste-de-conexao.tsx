@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/kit";
 import type { ResultadoDoTeste } from "@/shared/domain/teste-conexao";
 
@@ -234,7 +234,17 @@ function Barra() {
   );
 }
 
-/** O desfecho, com o mesmo desenho dos avisos do resto da tela. */
+/**
+ * O desfecho.
+ *
+ * ⚠️ Sem fundo e sem borda, ao contrário dos avisos da listagem. Lá o cartão
+ * separa uma exceção do resto da tela; aqui a resposta é o resultado do botão
+ * logo acima, e não precisa de moldura para se ligar a ele. Uma caixa tingida
+ * dentro de um formulário já cheio de campos vira mais uma parede.
+ *
+ * Aqui a cor VAI para o texto, e não para o fundo: sem a caixa, o ícone sozinho
+ * ficaria pequeno demais para dizer o desfecho a quem só bate o olho.
+ */
 function Veredito({
   resultado,
   demonstracao,
@@ -245,17 +255,8 @@ function Veredito({
   const tom = resultado.ok ? "success" : resultado.definitivo ? "danger" : "warning";
 
   return (
-    <div
-      style={{
-        display: "flex",
-        gap: 9,
-        padding: "10px 12px",
-        borderRadius: "var(--radius-lg)",
-        backgroundColor: `var(--${tom}-bg)`,
-        border: `1px solid var(--${tom}-border)`,
-      }}
-    >
-      <span style={{ flexShrink: 0, marginTop: 1, color: `var(--${tom}-text)` }}>
+    <div style={{ display: "flex", gap: 8, color: `var(--${tom}-text)` }}>
+      <span style={{ flexShrink: 0, marginTop: 1 }}>
         <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
           <circle cx="10" cy="10" r="7.4" />
           {resultado.ok ? (
@@ -270,14 +271,42 @@ function Veredito({
       </span>
 
       <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: "var(--text-base)", color: "var(--text-primary)" }}>
-          {resultado.mensagem}
-        </div>
+        <div style={{ fontSize: "var(--text-base)" }}>{resultado.mensagem}</div>
+
+        {/*
+          O que a chamada respondeu.
+
+          ⚠️ Aparece também na FALHA, e é ali que serve mais: o status e o tempo
+          são o que separa "a chave está errada" de "a rede está ruim". Em cinza
+          neutro de propósito — é apoio para quem for investigar, não parte do
+          veredito.
+        */}
+        {resultado.infos && resultado.infos.length > 0 && (
+          <dl
+            style={{
+              display: "grid",
+              gridTemplateColumns: "auto 1fr",
+              gap: "2px 10px",
+              margin: "6px 0 0",
+              fontSize: "var(--text-xs)",
+              color: "var(--text-tertiary)",
+            }}
+          >
+            {resultado.infos.map((i) => (
+              <Fragment key={i.rotulo}>
+                <dt>{i.rotulo}</dt>
+                <dd style={{ margin: 0, color: "var(--text-secondary)", wordBreak: "break-word" }}>
+                  {i.valor}
+                </dd>
+              </Fragment>
+            ))}
+          </dl>
+        )}
 
         {resultado.detalhe && (
           <div
             style={{
-              marginTop: 3,
+              marginTop: 6,
               fontSize: "var(--text-xs)",
               color: "var(--text-tertiary)",
               wordBreak: "break-word",
@@ -288,7 +317,7 @@ function Veredito({
         )}
 
         {demonstracao && (
-          <div style={{ marginTop: 3, fontSize: "var(--text-xs)", color: "var(--text-tertiary)" }}>
+          <div style={{ marginTop: 6, fontSize: "var(--text-xs)", color: "var(--text-tertiary)" }}>
             Demonstração: nenhuma chamada foi feita. Clique de novo para ver o próximo caso.
           </div>
         )}
@@ -304,12 +333,24 @@ const DEMONSTRACOES: ResultadoDoTeste[] = [
     definitivo: true,
     mensagem: "Chave e modelo confirmados. O provedor respondeu.",
     detalhe: null,
+    infos: [
+      { rotulo: "Provedor", valor: "gemini" },
+      { rotulo: "Modelo", valor: "gemini-3.5-flash-lite" },
+      { rotulo: "Resposta", valor: "HTTP 200" },
+      { rotulo: "Tempo", valor: "412 ms" },
+    ],
   },
   {
     ok: false,
     definitivo: true,
     mensagem: 'O provedor não conhece o modelo "gemini-3.5-flash-lte". Confira o nome exato.',
     detalhe: "models/gemini-3.5-flash-lte is not found for API version v1beta",
+    infos: [
+      { rotulo: "Provedor", valor: "gemini" },
+      { rotulo: "Modelo", valor: "gemini-3.5-flash-lte" },
+      { rotulo: "Resposta", valor: "HTTP 404" },
+      { rotulo: "Tempo", valor: "287 ms" },
+    ],
   },
   {
     ok: false,
@@ -317,5 +358,6 @@ const DEMONSTRACOES: ResultadoDoTeste[] = [
     mensagem:
       "Não foi possível falar com o serviço agora. Dá para salvar assim mesmo e tentar de novo depois.",
     detalhe: null,
+    infos: [{ rotulo: "Tempo", valor: "12.0 s" }],
   },
 ];
