@@ -5,6 +5,9 @@ import { z } from "zod";
 const provedorSchema = z.enum(["gemini", "openai", "anthropic", "deepseek"]);
 
 export const configIASchema = z.object({
+  id: z.number(),
+  nome: z.string(),
+  chaveFinal: z.string().nullable(),
   provedor: provedorSchema,
   modelo: z.string(),
   ativo: z.boolean(),
@@ -19,6 +22,8 @@ export const configIASchema = z.object({
  * precise ter recebido a chave para reenvia-la.
  */
 export const salvarProvedorBodySchema = z.object({
+  id: z.number().int().positive().nullable().default(null),
+  nome: z.string().trim().min(2).max(60),
   provedor: provedorSchema,
   modelo: z.string().trim().min(3).max(60),
   ativo: z.boolean(),
@@ -33,7 +38,7 @@ export const salvarNumeroTesteBodySchema = z.object({
 });
 
 export const provedorParamSchema = z.object({
-  provedor: provedorSchema,
+  id: z.coerce.number().int().positive(),
 });
 
 export type SalvarProvedorBody = z.infer<typeof salvarProvedorBodySchema>;

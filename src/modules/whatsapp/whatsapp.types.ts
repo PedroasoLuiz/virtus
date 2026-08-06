@@ -33,6 +33,14 @@ export type ContaWhatsapp = {
    */
   /** Este numero usa atendimento por IA. Desligado, os dois abaixo nao valem. */
   botAtivo: boolean;
+  /**
+   * Com qual credencial de IA este numero fala.
+   *
+   * ⚠️ Nulo cai na fila da empresa. Preenchido, so aquela chave e tentada: e o
+   * que permite a conta de cada setor sair separada, e uma reserva de outro
+   * setor furaria justamente essa separacao.
+   */
+  iaCredencialId: number | null;
   botRespondeTodos: boolean;
   /** Quando nao responde a todos, so estes. Um por linha. */
   botNumeros: string | null;

@@ -29,6 +29,24 @@ export const PROVEDORES: { valor: ProvedorDeIA; rotulo: string; modeloPadrao: st
  * nao exigir redigitacao ao trocar o modelo.
  */
 export type ConfigIA = {
+  /** 0 enquanto nao foi gravada. */
+  id: number;
+  /**
+   * Como esta chave se chama aqui dentro.
+   *
+   * ⚠️ Existe porque uma empresa pode ter varias chaves do MESMO provedor, uma
+   * por setor, para a conta de cada um sair separada. So o provedor no rotulo
+   * faria "Gemini" aparecer dez vezes sem jeito de distinguir.
+   */
+  nome: string;
+  /**
+   * Os quatro ultimos caracteres da chave.
+   *
+   * ⚠️ E o unico pedaco dela que volta para a tela, e volta de proposito: sem
+   * nada, ninguem sabe qual chave esta ali; com a chave inteira, um vazamento
+   * de sessao vira vazamento de credencial paga.
+   */
+  chaveFinal: string | null;
   provedor: ProvedorDeIA;
   modelo: string;
   ativo: boolean;
@@ -58,7 +76,6 @@ export type CredencialIA = {
   provedor: ProvedorDeIA;
   modelo: string;
   chave: string;
-  numeroTeste: string | null;
   ordem: number;
 };
 
@@ -82,6 +99,9 @@ export const MODELOS_SUGERIDOS = [
 ];
 
 export const CONFIG_IA_PADRAO: ConfigIA = {
+  id: 0,
+  nome: "",
+  chaveFinal: null,
   provedor: "gemini",
   modelo: "gemini-3.5-flash-lite",
   ativo: false,

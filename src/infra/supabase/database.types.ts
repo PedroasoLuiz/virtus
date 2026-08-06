@@ -948,12 +948,19 @@ export type Database = {
       ia_provedores_da_empresa: {
         Args: { p_empresa: number };
         Returns: {
+          id: number;
+          nome: string;
           provedor: string;
           modelo: string;
           ativo: boolean;
           tem_chave: boolean;
+          chave_final: string | null;
           ordem: number;
         }[];
+      };
+      ia_credenciais_da_conversa: {
+        Args: { p_segredo: string; p_conversa: number };
+        Returns: { provedor: string; modelo: string; chave: string; ordem: number }[];
       };
       ia_numero_teste: {
         Args: { p_empresa: number };
@@ -962,24 +969,26 @@ export type Database = {
       ia_salvar_provedor: {
         Args: {
           p_empresa: number;
+          p_id: number | null;
+          p_nome: string;
           p_provedor: string;
           p_modelo: string;
           p_ativo: boolean;
           p_ordem: number;
           p_chave: string | null;
         };
-        Returns: undefined;
+        Returns: number;
       };
       ia_salvar_numero_teste: {
         Args: { p_empresa: number; p_numero: string | null };
         Returns: undefined;
       };
       ia_definir_principal: {
-        Args: { p_empresa: number; p_provedor: string };
+        Args: { p_empresa: number; p_id: number };
         Returns: undefined;
       };
       ia_remover_provedor: {
-        Args: { p_empresa: number; p_provedor: string };
+        Args: { p_empresa: number; p_id: number };
         Returns: undefined;
       };
       ia_credenciais: {
@@ -1134,6 +1143,7 @@ export type Database = {
           bot_ativo: boolean;
           bot_responde_todos: boolean;
           bot_numeros: string | null;
+          ia_credencial: number | null;
         }[];
       };
       /** ⚠️ Devolve o token em CLARO, do vault. Nunca sai do servidor. */
@@ -1161,6 +1171,7 @@ export type Database = {
           p_bot_responde_todos: boolean;
           p_bot_numeros: string | null;
           p_bot_ativo: boolean;
+          p_ia_credencial: number | null;
         };
         Returns: number;
       };

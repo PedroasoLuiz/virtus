@@ -96,8 +96,13 @@ export function ConfiguracaoDeContas({
   }, []);
 
   // Carrega ao ENTRAR na aba, e só na primeira vez.
+  /*
+   * As credenciais sao lidas tambem quando a aba de NUMEROS abre: o cadastro
+   * precisa delas para o seletor de chave, e sem isto o campo apareceria vazio
+   * ate alguem visitar a aba de automacao antes.
+   */
   useEffect(() => {
-    if (aba === "Automação" && provedores == null) {
+    if ((aba === "Automação" || aba === "Números") && provedores == null) {
       const t = setTimeout(() => void carregarProvedores(), 0);
       return () => clearTimeout(t);
     }
@@ -120,7 +125,9 @@ export function ConfiguracaoDeContas({
         onChange={(t) => setAba(t as Aba)}
       />
 
-      {aba === "Números" && <AbaDeNumeros contas={contas} onMudou={onMudou} />}
+      {aba === "Números" && (
+        <AbaDeNumeros contas={contas} credenciais={provedores} onMudou={onMudou} />
+      )}
 
       {aba === "Modelos" && (
         <AbaDeModelos contas={contas} cache={modelosPorConta} onCarregou={guardarModelos} />

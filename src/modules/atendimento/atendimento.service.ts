@@ -450,7 +450,7 @@ async function escrever(
   conversaId: number,
   tipo: "lembrete" | "encerramento",
 ): Promise<string | null> {
-  const credenciaisIA = await iaRepo.credenciais(segredo, ctx.empresaId);
+  const credenciaisIA = await iaRepo.credenciaisDaConversa(segredo, conversaId);
   if (credenciaisIA.length === 0) return null;
 
   const historico = await repo.mensagens(segredo, conversaId, 6);
@@ -558,7 +558,7 @@ async function executar(conversaId: number): Promise<void> {
    * Vem em ordem de preferencia: a primeira responde, e as outras existem para
    * o dia em que ela nao responder.
    */
-  const credenciaisIA = await iaRepo.credenciais(segredo, ctx.empresaId);
+  const credenciaisIA = await iaRepo.credenciaisDaConversa(segredo, conversaId);
   const credencialIA = credenciaisIA[0] ?? null;
 
   if (!credencialIA) {

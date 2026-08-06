@@ -61,8 +61,8 @@ export function AbaDeProvedores({
   const [editando, setEditando] = useState<ConfigIA | null>(null);
   const [pagina, setPagina] = useState(1);
 
-  async function definirPrincipal(provedor: string) {
-    const r = await fetch(`/api/v1/ia/provedores/${provedor}/principal`, { method: "PUT" });
+  async function definirPrincipal(id: number) {
+    const r = await fetch(`/api/v1/ia/provedores/${id}/principal`, { method: "PUT" });
 
     if (!r.ok) {
       const corpo = await r.json().catch(() => null);
@@ -78,6 +78,8 @@ export function AbaDeProvedores({
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        id: p.id,
+        nome: p.nome,
         provedor: p.provedor,
         modelo: p.modelo,
         ativo: !p.ativo,
@@ -96,8 +98,8 @@ export function AbaDeProvedores({
     onRecarregar();
   }
 
-  async function remover(provedor: string) {
-    const r = await fetch(`/api/v1/ia/provedores/${provedor}`, { method: "DELETE" });
+  async function remover(id: number) {
+    const r = await fetch(`/api/v1/ia/provedores/${id}`, { method: "DELETE" });
 
     if (!r.ok) {
       const corpo = await r.json().catch(() => null);
@@ -182,15 +184,23 @@ export function AbaDeProvedores({
                 />
               ) : (
                 visiveis!.map((p) => (
-                  <Tr key={p.provedor}>
+                  <Tr key={p.id}>
                     <Td>
                       <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
                         <IconeDoProvedor provedor={p.provedor} />
 
                         <div style={{ minWidth: 0 }}>
-                          <div style={{ fontWeight: "var(--fw-semi)" }}>
-                            {PROVEDORES.find((x) => x.valor === p.provedor)?.rotulo ?? p.provedor}
-                          </div>
+                          <div style={{ fontWeight: "var(--fw-semi)" }}>{p.nome}</div>
+
+                          {/*
+                            Provedor, modelo e o fim da chave numa linha so.
+
+                            ⚠️ Os quatro ultimos caracteres sao o que responde
+                            "qual chave e essa?" para quem cadastrou dez. A chave
+                            inteira nao volta: ela entra e fica cifrada, e
+                            devolve-la faria um vazamento de sessao virar
+                            vazamento de credencial paga.
+                          */}
                           <div
                             style={{
                               marginTop: 2,
@@ -198,7 +208,10 @@ export function AbaDeProvedores({
                               color: "var(--text-tertiary)",
                             }}
                           >
+                            {PROVEDORES.find((x) => x.valor === p.provedor)?.rotulo ?? p.provedor}
+                            {" · "}
                             {p.modelo}
+                            {p.chaveFinal && ` · ····${p.chaveFinal}`}
                           </div>
                         </div>
                       </div>
@@ -212,7 +225,7 @@ export function AbaDeProvedores({
                     <Td>
                       <MarcaDePrincipal
                         principal={p.ordem === 1}
-                        onEscolher={() => void definirPrincipal(p.provedor)}
+                        onEscolher={() => void definirPrincipal(p.id)}
                       />
                     </Td>
 
@@ -229,7 +242,7 @@ export function AbaDeProvedores({
                         <BotaoDeAcao rotulo="Editar" onClick={() => setEditando(p)}>
                           <path d="M11.6 2.6a1.6 1.6 0 0 1 2.3 2.3L5.6 13.2l-3 .7.7-3z" />
                         </BotaoDeAcao>
-                        <BotaoDeAcao rotulo="Remover" onClick={() => void remover(p.provedor)}>
+                        <BotaoDeAcao rotulo="Remover" onClick={() => void remover(p.id)}>
                           <path d="M3.4 4.6h9.2M6.4 4.6V3.4h3.2v1.2M5 4.6l.5 8.4h5l.5-8.4" />
                         </BotaoDeAcao>
                       </AcoesDaLinha>
@@ -409,8 +422,8 @@ function FormularioDoProvedor({
   const [chave, setChave] = useState("");
   const [salvando, setSalvando] = useState(false);
 
-  // Já cadastrado significa que há chave no vault: em branco mantém, não apaga.
-  const jaTemChave = existentes.some((p) => p.provedor === rascunho.provedor && p.temChave);
+  // Já cadastrada significa que há chave no vault: em branco mantém, não apaga.
+  const jaTemChave = existentes.some((p) => p.id === rascunho.id && p.temChave);
 
   async function salvar() {
     if (salvando) return;
@@ -420,6 +433,8 @@ function FormularioDoProvedor({
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        id: rascunho.id || null,
+        nome: rascunho.nome.trim(),
         provedor: rascunho.provedor,
         modelo: rascunho.modelo.trim(),
         ativo: rascunho.ativo,
@@ -482,6 +497,18 @@ function FormularioDoProvedor({
           titulo="O provedor"
           legenda="Quem responde e com qual modelo. A lista de modelos é sugestão: a Meta dos provedores muda de nome com frequência, e um modelo novo pode ser digitado direto."
         >
+          <Field
+            label="Nome"
+            required
+            hint="Como esta chave aparece na hora de escolher. Ex.: Gemini do suporte."
+          >
+            <input
+              style={inputStyle}
+              value={rascunho.nome}
+              onChange={(e) => setRascunho({ ...rascunho, nome: e.target.value })}
+            />
+          </Field>
+
           <Field label="Provedor">
             <select
               style={selectStyle}
@@ -583,6 +610,8 @@ const CHAVES: Record<string, string> = {
  */
 function problemas(r: ConfigIA, chave: string, jaTemChave: boolean): string[] {
   const erros: string[] = [];
+
+  if (r.nome.trim().length < 2) erros.push("Dê um nome a esta chave");
 
   if (r.modelo.trim().length < 3) erros.push("Escolha ou digite o modelo");
 

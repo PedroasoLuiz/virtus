@@ -87,6 +87,7 @@ export async function listarContas(empresaId: number): Promise<ContaWhatsapp[]> 
     temAppSecret: c.tem_app_secret,
     verifyToken: c.verify_token,
     botAtivo: c.bot_ativo ?? false,
+    iaCredencialId: c.ia_credencial ?? null,
     botRespondeTodos: c.bot_responde_todos ?? false,
     botNumeros: c.bot_numeros ?? null,
   }));
@@ -133,6 +134,7 @@ export async function salvarConta(
     botAtivo: boolean;
     botRespondeTodos: boolean;
     botNumeros: string | null;
+    iaCredencialId: number | null;
   },
 ): Promise<number> {
   const supabase = await serverClient();
@@ -149,6 +151,7 @@ export async function salvarConta(
     p_token: entrada.token,
     p_app_secret: entrada.appSecret,
     p_bot_ativo: entrada.botAtivo,
+    p_ia_credencial: entrada.iaCredencialId,
     p_bot_responde_todos: entrada.botRespondeTodos,
     p_bot_numeros: entrada.botNumeros,
   });

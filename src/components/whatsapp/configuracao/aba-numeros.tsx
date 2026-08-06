@@ -37,6 +37,7 @@ import {
 } from "@/modules/whatsapp/whatsapp.types";
 import { PASSOS_PARA_CONECTAR, UrlDeCallback } from "./webhook";
 import { temPalavrao } from "@/shared/domain/linguagem";
+import type { ConfigIA } from "@/modules/ia/ia.types";
 
 /**
  * Os numeros de WhatsApp da empresa.
@@ -60,6 +61,7 @@ type Rascunho = {
   token: string;
   appSecret: string;
   botAtivo: boolean;
+  iaCredencialId: number | null;
   botRespondeTodos: boolean;
   botNumeros: string;
   /** ⚠️ Separado do numero: e ele que decide como a mascara agrupa os digitos. */
@@ -85,6 +87,7 @@ function vazio(): Rascunho {
      * conferiu ainda.
      */
     botAtivo: false,
+    iaCredencialId: null,
     botRespondeTodos: false,
     botNumeros: "",
     ddi: "55",
@@ -103,6 +106,7 @@ function daConta(c: ContaWhatsapp): Rascunho {
     token: "",
     appSecret: "",
     botAtivo: c.botAtivo,
+    iaCredencialId: c.iaCredencialId,
     botRespondeTodos: c.botRespondeTodos,
     botNumeros: c.botNumeros ?? "",
     // O numero vem inteiro do banco; aqui ele volta a ser pais + local.
@@ -112,9 +116,18 @@ function daConta(c: ContaWhatsapp): Rascunho {
 
 export function AbaDeNumeros({
   contas,
+  credenciais,
   onMudou,
 }: {
   contas: ContaWhatsapp[];
+  /**
+   * As chaves de IA da empresa, para escolher qual este numero usa.
+   *
+   * ⚠️ Vem de FORA, do drawer, e nao de uma consulta daqui: a mesma lista ja e
+   * lida pela aba de provedores, e buscar de novo aqui seria a segunda consulta
+   * do mesmo dado na mesma abertura.
+   */
+  credenciais: ConfigIA[] | null;
   onMudou: () => void;
 }) {
   const { avisar } = useAvisos();
@@ -157,6 +170,7 @@ export function AbaDeNumeros({
         token: rascunho.token.trim() || null,
         appSecret: rascunho.appSecret.trim() || null,
         botAtivo: rascunho.botAtivo,
+        iaCredencialId: rascunho.iaCredencialId,
         botRespondeTodos: rascunho.botRespondeTodos,
         botNumeros: rascunho.botNumeros.trim() || null,
       }),
@@ -225,7 +239,7 @@ export function AbaDeNumeros({
           </div>
         }
       >
-        <Formulario rascunho={rascunho} onMudar={setRascunho} />
+        <Formulario rascunho={rascunho} credenciais={credenciais} onMudar={setRascunho} />
       </Drawer>
     );
   }
@@ -426,9 +440,11 @@ function Situacao({
 
 function Formulario({
   rascunho,
+  credenciais,
   onMudar,
 }: {
   rascunho: Rascunho;
+  credenciais: ConfigIA[] | null;
   onMudar: (r: Rascunho) => void;
 }) {
   const mudar =
@@ -648,6 +664,39 @@ function Formulario({
             onChange={() => onMudar({ ...rascunho, botAtivo: !rascunho.botAtivo })}
           />
         </Field>
+
+        {rascunho.botAtivo && (
+          <Field
+            label="Chave de IA"
+            hint="Qual credencial este número usa. Assim o gasto de cada setor sai separado."
+          >
+            <select
+              style={selectStyle}
+              value={rascunho.iaCredencialId ?? ""}
+              onChange={(e) =>
+                onMudar({
+                  ...rascunho,
+                  iaCredencialId: e.target.value ? Number(e.target.value) : null,
+                })
+              }
+            >
+              {/*
+                Vazio cai na fila da empresa, que e o comportamento de quem tem
+                uma chave so. Escolhida uma, o numero fala com ela e mais
+                nenhuma: cair na reserva de outro setor furaria justamente a
+                separacao de gasto que a escolha existe para garantir.
+              */}
+              <option value="">Usar a fila da empresa</option>
+              {(credenciais ?? [])
+                .filter((c) => c.ativo && c.temChave)
+                .map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.nome} · {c.modelo}
+                  </option>
+                ))}
+            </select>
+          </Field>
+        )}
 
         {rascunho.botAtivo && (
           <Field

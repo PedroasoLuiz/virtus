@@ -94,6 +94,7 @@ export const contaSchema = z.object({
   botAtivo: z.boolean(),
   botRespondeTodos: z.boolean(),
   botNumeros: z.string().nullable(),
+  iaCredencialId: z.number().nullable(),
 });
 
 /**
@@ -142,6 +143,8 @@ export const salvarContaBodySchema = z.object({
   /** Ligado responde a qualquer contato; desligado, so aos numeros da lista. */
   /** Sem isto, o numero nao usa IA e os dois campos abaixo nao valem nada. */
   botAtivo: z.boolean().default(false),
+  /** Nulo cai na fila da empresa; preenchido, so essa chave e tentada. */
+  iaCredencialId: z.number().int().positive().nullable().default(null),
   botRespondeTodos: z.boolean().default(false),
   botNumeros: z.string().trim().max(400).nullable().default(null),
 });

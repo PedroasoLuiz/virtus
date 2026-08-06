@@ -36,7 +36,7 @@ export async function salvarNumeroTeste({
 }
 
 export async function remover({ params, ctx }: Entrada<undefined, undefined, ProvedorParam>) {
-  const provedores = await service.removerProvedor(empresaObrigatoria(ctx), params.provedor);
+  const provedores = await service.removerProvedor(empresaObrigatoria(ctx), params.id);
 
   return ok(provedores.map((p) => configIASchema.parse(p)));
 }
@@ -45,7 +45,7 @@ export async function definirPrincipal({
   params,
   ctx,
 }: Entrada<undefined, undefined, ProvedorParam>) {
-  const provedores = await service.definirPrincipal(empresaObrigatoria(ctx), params.provedor);
+  const provedores = await service.definirPrincipal(empresaObrigatoria(ctx), params.id);
 
   return ok(provedores.map((p) => configIASchema.parse(p)));
 }

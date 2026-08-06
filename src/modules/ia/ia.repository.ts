@@ -24,6 +24,9 @@ export async function listarProvedores(empresaId: number): Promise<ConfigIA[]> {
    * nada de invalido.
    */
   return (data ?? []).map((l) => ({
+    id: l.id,
+    nome: l.nome,
+    chaveFinal: l.chave_final ?? null,
     provedor: (l.provedor ?? "gemini") as ConfigIA["provedor"],
     modelo: l.modelo ?? CONFIG_IA_PADRAO.modelo,
     ativo: l.ativo ?? false,
@@ -36,6 +39,8 @@ export async function listarProvedores(empresaId: number): Promise<ConfigIA[]> {
 export async function salvarProvedor(
   empresaId: number,
   entrada: {
+    id: number | null;
+    nome: string;
     provedor: string;
     modelo: string;
     ativo: boolean;
@@ -47,6 +52,8 @@ export async function salvarProvedor(
 
   const { error } = await supabase.rpc("ia_salvar_provedor", {
     p_empresa: empresaId,
+    p_id: entrada.id,
+    p_nome: entrada.nome,
     p_provedor: entrada.provedor,
     p_modelo: entrada.modelo,
     p_ativo: entrada.ativo,
@@ -72,23 +79,23 @@ export async function salvarNumeroTeste(
 }
 
 /** Marca o principal e renumera os demais, tudo dentro do banco. */
-export async function definirPrincipal(empresaId: number, provedor: string): Promise<void> {
+export async function definirPrincipal(empresaId: number, id: number): Promise<void> {
   const supabase = await serverClient();
 
   const { error } = await supabase.rpc("ia_definir_principal", {
     p_empresa: empresaId,
-    p_provedor: provedor,
+    p_id: id,
   });
 
   if (error) throw error;
 }
 
-export async function removerProvedor(empresaId: number, provedor: string): Promise<void> {
+export async function removerProvedor(empresaId: number, id: number): Promise<void> {
   const supabase = await serverClient();
 
   const { error } = await supabase.rpc("ia_remover_provedor", {
     p_empresa: empresaId,
-    p_provedor: provedor,
+    p_id: id,
   });
 
   if (error) throw error;
@@ -101,15 +108,23 @@ export async function removerProvedor(empresaId: number, provedor: string): Prom
  * o mesmo que protege a ingestao. Devolve `null` quando a empresa nao tem chave
  * ou desligou o bot, e nesse caso ninguem responde nada.
  */
-export async function credenciais(
+/**
+ * As credenciais que valem para esta CONVERSA, ja na ordem de tentativa.
+ *
+ * ⚠️ Parte da conversa, e nao da empresa: o numero pode apontar para uma chave
+ * especifica, e nesse caso so ela e tentada. E o que permite a conta de cada
+ * setor sair separada — cair na reserva de outro setor furaria justamente a
+ * separacao que a escolha existe para garantir.
+ */
+export async function credenciaisDaConversa(
   segredo: string,
-  empresaId: number,
+  conversaId: number,
 ): Promise<CredencialIA[]> {
   const supabase = anonClient();
 
-  const { data, error } = await supabase.rpc("ia_credenciais", {
+  const { data, error } = await supabase.rpc("ia_credenciais_da_conversa", {
     p_segredo: segredo,
-    p_empresa: empresaId,
+    p_conversa: conversaId,
   });
 
   if (error) throw error;
@@ -118,7 +133,6 @@ export async function credenciais(
     provedor: l.provedor as CredencialIA["provedor"],
     modelo: l.modelo,
     chave: l.chave,
-    numeroTeste: l.numero_teste,
     ordem: l.ordem ?? 1,
   }));
 }

@@ -10,6 +10,8 @@ export async function listarProvedores(empresaId: number): Promise<ConfigIA[]> {
 export async function salvarProvedor(
   empresaId: number,
   entrada: {
+    id: number | null;
+    nome: string;
     provedor: string;
     modelo: string;
     ativo: boolean;
@@ -38,9 +40,9 @@ export async function salvarNumeroTeste(
 
 export async function removerProvedor(
   empresaId: number,
-  provedor: string,
+  id: number,
 ): Promise<ConfigIA[]> {
-  await repo.removerProvedor(empresaId, provedor);
+  await repo.removerProvedor(empresaId, id);
   return repo.listarProvedores(empresaId);
 }
 
@@ -53,8 +55,8 @@ export async function removerProvedor(
  */
 export async function definirPrincipal(
   empresaId: number,
-  provedor: string,
+  id: number,
 ): Promise<ConfigIA[]> {
-  await repo.definirPrincipal(empresaId, provedor);
+  await repo.definirPrincipal(empresaId, id);
   return repo.listarProvedores(empresaId);
 }
