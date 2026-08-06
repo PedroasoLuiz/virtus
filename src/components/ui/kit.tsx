@@ -513,9 +513,12 @@ export function Pagination({
          * e um vao de 60px, e a alternativa seria a paginacao ter de saber quem
          * mais esta na tela.
          */
-        padding: "0 76px 0 16px",
-        borderTop: "1px solid var(--border)",
-        backgroundColor: "var(--surface-2)",
+        padding: "0 76px 0 0",
+        /*
+         * Sem fundo e sem borda de topo: a paginacao vira rodape da tabela, e
+         * uma barra cinza embaixo de uma tabela que ja nao tem moldura
+         * desenhava um rodape que nao existe mais.
+         */
         fontSize: "var(--text-sm)",
         color: "var(--text-tertiary)",
       }}
@@ -694,7 +697,6 @@ export function CabecalhoDeSecao({
           fontSize: "calc(var(--text-xs) + 1px)",
           color: "var(--text-tertiary)",
           lineHeight: "var(--lh-normal)",
-          maxWidth: "62ch",
         }}
       >
         {legenda}

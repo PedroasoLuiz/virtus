@@ -20,7 +20,6 @@ import {
   Field,
   CabecalhoDeSecao,
   Pagination,
-  SearchInput,
   TableArea,
   PanelTabs,
   TableHead,
@@ -121,7 +120,6 @@ export function ConfiguracaoDeContas({
   const { avisar } = useAvisos();
   const [rascunho, setRascunho] = useState<Rascunho | null>(null);
   const [salvando, setSalvando] = useState(false);
-  const [busca, setBusca] = useState("");
   const [pagina, setPagina] = useState(1);
 
   /*
@@ -213,15 +211,8 @@ export function ConfiguracaoDeContas({
   }, [aba, provedores, personas, carregarProvedores, carregarPersonas]);
 
   const filtradas = useMemo(() => {
-    const termo = busca.trim().toLowerCase();
-    if (!termo) return contas;
-
-    return contas.filter((c) =>
-      [c.apelido, c.numero, c.phoneNumberId, c.wabaId]
-        .filter(Boolean)
-        .some((campo) => campo!.toLowerCase().includes(termo)),
-    );
-  }, [contas, busca]);
+    return contas;
+  }, [contas]);
 
   const totalPaginas = Math.max(1, Math.ceil(filtradas.length / POR_PAGINA));
   const paginaAtual = Math.min(pagina, totalPaginas);
@@ -372,20 +363,6 @@ export function ConfiguracaoDeContas({
         rotuloIncluir="Cadastrar número"
       />
 
-      {/*
-        Busca a DIREITA e curta: ela filtra uma lista de dois ou tres numeros, e
-        um campo de ponta a ponta prometia um volume que nao existe.
-      */}
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
-        <SearchInput
-          value={busca}
-          onSearch={(v) => {
-            setBusca(v);
-            setPagina(1);
-          }}
-          placeholder="Buscar apelido ou número"
-        />
-      </div>
 
         <TableArea minWidth={0}>
           <TableHead>
@@ -397,12 +374,7 @@ export function ConfiguracaoDeContas({
 
           <tbody>
             {visiveis.length === 0 ? (
-              <EmptyRow
-                colSpan={4}
-                message={
-                  busca ? "Nenhum número com esse termo." : "Nenhum número cadastrado ainda."
-                }
-              />
+              <EmptyRow colSpan={4} message="Nenhum número cadastrado ainda." />
             ) : (
               visiveis.map((c, i) => (
                 <Tr key={c.id} delay={i * 18} dimmed={!c.ativo}>
@@ -682,22 +654,37 @@ function PreviaDoModelo({ espiada }: { espiada: Espiada }) {
         left: espiada.x,
         top: espiada.y,
         zIndex: 500,
-        maxWidth: 300,
-        padding: "8px 11px",
-        // Os MESMOS tokens da bolha enviada no painel: raio grande com a ponta
-        // viva embaixo a direita, e elevacao no lugar de borda.
-        borderRadius:
-          "var(--radius-lg) var(--radius-lg) var(--radius-xs) var(--radius-lg)",
-        background: "var(--primary-subtle)",
-        boxShadow: "var(--shadow-md)",
-        fontSize: "var(--text-sm)",
-        color: "var(--text-primary)",
-        lineHeight: "var(--lh-normal)",
-        whiteSpace: "pre-wrap",
+        maxWidth: 320,
+        padding: 10,
+        /*
+         * O fundo de CONVERSA em volta da bolha.
+         *
+         * A bolha sozinha usa `primary-subtle`, que e translucido: solta sobre
+         * o branco da tela ela sumia. Aqui ela ganha o bege de fundo de chat
+         * por tras, que e o que a recorta e o que faz a previa parecer o
+         * WhatsApp em vez de um balao perdido.
+         */
+        borderRadius: "var(--radius-lg)",
+        background: "var(--fundo-conversa)",
+        boxShadow: "var(--shadow-lg)",
         pointerEvents: "none",
       }}
     >
-      {comFormatacaoDoWhatsapp(espiada.corpo)}
+      <div
+        style={{
+          padding: "7px 10px",
+          borderRadius:
+            "var(--radius-lg) var(--radius-lg) var(--radius-xs) var(--radius-lg)",
+          background: "var(--bolha-saida)",
+          boxShadow: "var(--shadow-xs)",
+          fontSize: "var(--text-sm)",
+          color: "var(--text-primary)",
+          lineHeight: "var(--lh-normal)",
+          whiteSpace: "pre-wrap",
+        }}
+      >
+        {comFormatacaoDoWhatsapp(espiada.corpo)}
+      </div>
     </div>
   );
 }
