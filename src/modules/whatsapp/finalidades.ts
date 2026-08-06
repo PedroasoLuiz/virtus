@@ -84,8 +84,9 @@ export const FINALIDADES: Finalidade[] = [
       {
         chave: "ticket",
         rotulo: "Tickets da conta",
-        descricao: "Os números dos tickets, separados por vírgula. Sem ticket, vai o número da conta.",
-        exemplo: "154, 155",
+        descricao:
+          "O número do ticket da conta. Quando ela tem mais de um, todos saem juntos. Sem ticket nenhum, vai o número da própria conta.",
+        exemplo: "154 ou 155",
       },
     ],
     botao: {
@@ -93,7 +94,7 @@ export const FINALIDADES: Finalidade[] = [
       rotulo: "Link da cobrança",
       descricao:
         "O trecho final da URL do botão. O começo do endereço já fica fixo no modelo aprovado, e é o mesmo link que vai no e-mail.",
-      exemplo: "a3f9c2e1b7",
+      exemplo: "a3f9c2e1b7…",
     },
     corpoSugerido:
       "Olá {{1}}, sua parcela de R$ {{2}} vence em {{3}}. Referente ao(s) ticket(s) {{4}}. Toque no botão para ver os detalhes e pagar.",

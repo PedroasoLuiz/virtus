@@ -632,8 +632,12 @@ function Dicionario({
                 display: "flex",
                 gap: 10,
                 padding: "10px 0",
-                borderTop: i === 0 ? "1px solid var(--border)" : "none",
-                borderBottom: "1px solid var(--border)",
+                /*
+                  Divisor só ENTRE os itens. O de cima e o de baixo fechavam a
+                  lista numa caixa, e ela não é um bloco: é a continuação da
+                  legenda da seção.
+                */
+                borderTop: i === 0 ? "none" : "1px solid var(--border)",
               }}
             >
               {/*
@@ -644,8 +648,7 @@ function Dicionario({
                 style={{
                   flexShrink: 0,
                   width: 62,
-                  paddingTop: 1,
-                  fontSize: "var(--text-xs)",
+                  fontSize: "var(--text-sm)",
                   fontFamily: "var(--font-mono, monospace)",
                   color: onde.usada ? "var(--primary)" : "var(--text-tertiary)",
                 }}
