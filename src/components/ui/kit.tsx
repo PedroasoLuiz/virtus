@@ -203,27 +203,6 @@ function Migalha({ rotulo, href }: { rotulo: string; href: string }) {
   );
 }
 
-/**
- * A moldura fina em volta de uma tabela dentro de drawer.
- *
- * Existe porque `TableFrame` desenha um CARTAO, e cartao branco sobre o branco
- * do drawer nao recorta nada. Aqui fica so a borda e o raio, que e o que
- * separa a tabela do texto acima dela.
- */
-export function MolduraDeTabela({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        border: "1px solid var(--border)",
-        borderRadius: "var(--radius-lg)",
-        overflow: "hidden",
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
 export function TableArea({
   children,
   minWidth = 760,
@@ -241,10 +220,16 @@ export function TableArea({
 export function TableHead({ children }: { children: React.ReactNode }) {
   return (
     <thead style={{ position: "sticky", top: 0, zIndex: 2 }}>
+      {/*
+        Cinza de VERDADE no cabecalho. `--surface-2` e quase branco (#fafafc) e
+        nao chegava a separar nada: a primeira linha de dado parecia o titulo da
+        coluna. O corpo continua sem fundo, e o que divide as linhas e so o
+        traco.
+      */}
       <tr
         style={{
           borderBottom: "1px solid var(--border)",
-          backgroundColor: "var(--surface-2)",
+          backgroundColor: "var(--table-head-bg)",
           height: "var(--h-th)",
         }}
       >
@@ -687,7 +672,9 @@ export function CabecalhoDeSecao({
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <span
           style={{
-            fontSize: "var(--text-lg)",
+            // Dois pixels acima do `--text-lg`: com 14 o titulo empatava com o
+            // corpo da tabela e a secao nao comecava em lugar nenhum.
+            fontSize: "calc(var(--text-lg) + 2px)",
             fontWeight: "var(--fw-semi)",
             color: "var(--text-primary)",
             letterSpacing: "var(--tracking-snug)",
@@ -702,7 +689,9 @@ export function CabecalhoDeSecao({
       <p
         style={{
           marginTop: 4,
-          fontSize: "var(--text-xs)",
+          // Um acima do `--text-xs`: a legenda e para ser LIDA, e 9px cobra
+          // esforco de quem chega numa tela que ja e de configuracao.
+          fontSize: "calc(var(--text-xs) + 1px)",
           color: "var(--text-tertiary)",
           lineHeight: "var(--lh-normal)",
           maxWidth: "62ch",

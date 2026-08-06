@@ -7,7 +7,10 @@ import { comFormatacaoDoWhatsapp } from "@/components/whatsapp/formatacao";
 import {
   AtendimentoAutomatico,
   Personas,
+  type Setor,
 } from "@/components/whatsapp/atendimento-automatico";
+import type { ConfigIA } from "@/modules/ia/ia.types";
+import type { Persona } from "@/modules/atendimento/personas.types";
 import {
   AcoesDaLinha,
   ActiveToggle,
@@ -16,7 +19,6 @@ import {
   EmptyRow,
   Field,
   CabecalhoDeSecao,
-  MolduraDeTabela,
   Pagination,
   SearchInput,
   TableArea,
@@ -136,6 +138,56 @@ export function ConfiguracaoDeContas({
   }, []);
 
   /*
+   * Provedores, personas e setores tambem moram AQUI.
+   *
+   * As abas montam e desmontam a cada troca de guia: com o estado dentro delas,
+   * voltar mostrava "carregando" e refazia a consulta de um dado ja lido. Aqui
+   * eles sobrevivem enquanto o painel estiver aberto, e so sao relidos quando
+   * alguem salva.
+   */
+  const [provedores, setProvedores] = useState<ConfigIA[] | null>(null);
+  const [erroIA, setErroIA] = useState<string | null>(null);
+  const [personas, setPersonas] = useState<Persona[] | null>(null);
+  const [setores, setSetores] = useState<Setor[]>([]);
+
+  const carregarProvedores = useCallback(async () => {
+    const r = await fetch("/api/v1/ia/config");
+    const corpo = await r.json().catch(() => null);
+
+    if (!r.ok) {
+      // Falha APARECE: silenciada, a lista vazia diria "não há provedor", que
+      // e outra coisa. Ja custou uma aba em branco sem explicacao nenhuma.
+      const detalhe = corpo?.error?.details?.[0];
+      setErroIA(
+        detalhe
+          ? `${detalhe.campo}: ${detalhe.mensagem}`
+          : (corpo?.error?.message ?? "Não foi possível carregar"),
+      );
+      setProvedores([]);
+      return;
+    }
+
+    setErroIA(null);
+    setProvedores(corpo.data ?? []);
+  }, []);
+
+  const carregarPersonas = useCallback(async () => {
+    const [rp, rs] = await Promise.all([
+      fetch("/api/v1/atendimento/personas"),
+      fetch("/api/v1/atendimento/setores"),
+    ]);
+
+    const cp = await rp.json().catch(() => null);
+    setPersonas(rp.ok ? (cp?.data ?? []) : []);
+
+    // Setor e opcional na persona, entao falhar aqui nao impede cadastrar: a
+    // lista fica vazia e a persona nasce geral.
+    const cs = await rs.json().catch(() => null);
+    setSetores(rs.ok ? (cs?.data ?? []) : []);
+  }, []);
+
+
+  /*
    * Abas, e nao uma secao no fim da lista.
    *
    * O atendimento automatico estava abaixo da tabela de numeros, entao so era
@@ -146,6 +198,19 @@ export function ConfiguracaoDeContas({
   const [aba, setAba] = useState<
     "Números" | "Modelos" | "Automação" | "Personas"
   >("Números");
+
+  // Carrega ao ENTRAR na aba, e so na primeira vez.
+  useEffect(() => {
+    if (aba === "Automação" && provedores == null) {
+      const t = setTimeout(() => void carregarProvedores(), 0);
+      return () => clearTimeout(t);
+    }
+
+    if (aba === "Personas" && personas == null) {
+      const t = setTimeout(() => void carregarPersonas(), 0);
+      return () => clearTimeout(t);
+    }
+  }, [aba, provedores, personas, carregarProvedores, carregarPersonas]);
 
   const filtradas = useMemo(() => {
     const termo = busca.trim().toLowerCase();
@@ -286,9 +351,18 @@ export function ConfiguracaoDeContas({
           onCarregou={guardarModelos}
         />
       ) : aba === "Automação" ? (
-        <AtendimentoAutomatico />
+        <AtendimentoAutomatico
+          provedores={provedores}
+          erro={erroIA}
+          onRecarregar={() => void carregarProvedores()}
+        />
       ) : aba === "Personas" ? (
-        <Personas contas={contas} />
+        <Personas
+          contas={contas}
+          personas={personas}
+          setores={setores}
+          onRecarregar={() => void carregarPersonas()}
+        />
       ) : (
         <>
       <CabecalhoDeSecao
@@ -313,7 +387,6 @@ export function ConfiguracaoDeContas({
         />
       </div>
 
-      <MolduraDeTabela>
         <TableArea minWidth={0}>
           <TableHead>
             <Th>Apelido</Th>
@@ -358,7 +431,6 @@ export function ConfiguracaoDeContas({
           pageSize={POR_PAGINA}
           onPage={setPagina}
         />
-      </MolduraDeTabela>
         </>
       )}
     </Drawer>
@@ -398,8 +470,17 @@ function ModelosAprovados({
   const [contaId, setContaId] = useState<number | null>(null);
   const [erro, setErro] = useState<string | null>(null);
 
+  const [pagina, setPagina] = useState(1);
+  /** O UNICO cartao de previa da tela. Nulo enquanto o mouse nao chega. */
+  const [espiando, setEspiando] = useState<Espiada | null>(null);
+
   const escolhida = contaId ?? ativas[0]?.id ?? null;
-  const modelos = escolhida == null ? null : (cache[escolhida] ?? null);
+  const todos = escolhida == null ? null : (cache[escolhida] ?? null);
+
+  const totalPaginas = Math.max(1, Math.ceil((todos?.length ?? 0) / POR_PAGINA));
+  const paginaAtual = Math.min(pagina, totalPaginas);
+  const modelos =
+    todos?.slice((paginaAtual - 1) * POR_PAGINA, paginaAtual * POR_PAGINA) ?? null;
 
   useEffect(() => {
     /*
@@ -484,7 +565,6 @@ function ModelosAprovados({
         </p>
       )}
 
-      <MolduraDeTabela>
         <TableArea minWidth={0}>
           <TableHead>
             <Th>Nome</Th>
@@ -502,41 +582,17 @@ function ModelosAprovados({
               modelos.map((m) => (
                 <Tr key={`${m.nome}-${m.idioma}`}>
                   <Td>
-                    <div style={{ fontWeight: "var(--fw-semi)", marginBottom: 6 }}>{m.nome}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontWeight: "var(--fw-semi)" }}>{m.nome}</span>
 
-                    {/*
-                      O corpo desenhado como a BOLHA que o cliente vai receber,
-                      com os `{{n}}` a mostra. Em linha corrida ele parecia
-                      configuracao; assim, quem le ja enxerga a mensagem.
-                    */}
-                    <div
-                      style={{
-                        display: "inline-block",
-                        maxWidth: 340,
-                        marginBottom: 8,
-                        padding: "7px 10px",
-                        // Ponta viva embaixo a DIREITA: e mensagem que sai
-                        // daqui, e no chat a saida tem a ponta desse lado.
-                        /*
-                         * Os MESMOS tokens da bolha de saida do painel: raio
-                         * grande com a ponta viva embaixo a direita, fundo
-                         * `primary-subtle` e elevacao no lugar de borda. Bolha
-                         * nao tem contorno em lugar nenhum do sistema; o que a
-                         * recorta e a sombra.
-                         */
-                        borderRadius:
-                          "var(--radius-lg) var(--radius-lg) var(--radius-xs) var(--radius-lg)",
-                        background: "var(--primary-subtle)",
-                        boxShadow: "var(--shadow-xs)",
-                        fontSize: "var(--text-xs)",
-                        color: "var(--text-primary)",
-                        lineHeight: "var(--lh-normal)",
-                        whiteSpace: "pre-wrap",
-                      }}
-                    >
-                      {/* Os `*assim*` viram negrito de verdade: crus, a tela
-                          mentiria sobre o que o cliente vai ver. */}
-                      {comFormatacaoDoWhatsapp(m.corpo)}
+                      {/*
+                        O corpo atras de um olho, e nao desenhado em toda linha.
+
+                        Vinte modelos eram vinte bolhas montadas de uma vez, com
+                        o negrito reprocessado em cada uma, para ler no maximo
+                        uma. Aqui existe UM cartao, montado quando o mouse chega.
+                      */}
+                      <BotaoDeEspiar corpo={m.corpo} nome={m.nome} onEspiar={setEspiando} />
                     </div>
                   </Td>
                   <Td>{m.categoria.toLowerCase()}</Td>
@@ -547,8 +603,102 @@ function ModelosAprovados({
             )}
           </tbody>
         </TableArea>
-      </MolduraDeTabela>
+
+        <Pagination
+          page={paginaAtual}
+          totalPages={totalPaginas}
+          total={todos?.length ?? 0}
+          pageSize={POR_PAGINA}
+          onPage={setPagina}
+        />
+
+        {espiando && <PreviaDoModelo espiada={espiando} />}
     </>
+  );
+}
+
+/** Onde e o que mostrar na previa. */
+type Espiada = { corpo: string; x: number; y: number };
+
+function BotaoDeEspiar({
+  corpo,
+  nome,
+  onEspiar,
+}: {
+  corpo: string;
+  nome: string;
+  onEspiar: (e: Espiada | null) => void;
+}) {
+  // A posicao sai do proprio botao no momento do gesto: guardada antes, ela
+  // apontaria para onde a linha estava antes de rolar a tabela.
+  const mostrar = (el: HTMLElement) => {
+    const r = el.getBoundingClientRect();
+    onEspiar({ corpo, x: r.right + 10, y: r.top });
+  };
+
+  return (
+    <button
+      type="button"
+      aria-label={`Ver a mensagem de ${nome}`}
+      title="Ver a mensagem"
+      onMouseEnter={(e) => mostrar(e.currentTarget)}
+      onMouseLeave={() => onEspiar(null)}
+      // Foco tambem abre: quem navega por teclado nao tem mouse para passar.
+      onFocus={(e) => mostrar(e.currentTarget)}
+      onBlur={() => onEspiar(null)}
+      style={{
+        flexShrink: 0,
+        width: 20,
+        height: 20,
+        display: "grid",
+        placeItems: "center",
+        border: "none",
+        borderRadius: "50%",
+        background: "var(--surface-hover)",
+        color: "var(--text-tertiary)",
+        cursor: "pointer",
+      }}
+    >
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M1.8 12S5.5 5.5 12 5.5 22.2 12 22.2 12 18.5 18.5 12 18.5 1.8 12 1.8 12z" />
+        <circle cx="12" cy="12" r="3" />
+      </svg>
+    </button>
+  );
+}
+
+/**
+ * A mensagem como o cliente vai receber.
+ *
+ * ⚠️ `position: fixed` e um so na tela. Dentro da celula ele seria recortado
+ * pelo `overflow` da area rolavel, e um por linha significaria montar vinte
+ * bolhas com o negrito reprocessado para ler no maximo uma.
+ */
+function PreviaDoModelo({ espiada }: { espiada: Espiada }) {
+  return (
+    <div
+      style={{
+        position: "fixed",
+        left: espiada.x,
+        top: espiada.y,
+        zIndex: 500,
+        maxWidth: 300,
+        padding: "8px 11px",
+        // Os MESMOS tokens da bolha enviada no painel: raio grande com a ponta
+        // viva embaixo a direita, e elevacao no lugar de borda.
+        borderRadius:
+          "var(--radius-lg) var(--radius-lg) var(--radius-xs) var(--radius-lg)",
+        background: "var(--primary-subtle)",
+        boxShadow: "var(--shadow-md)",
+        fontSize: "var(--text-sm)",
+        color: "var(--text-primary)",
+        lineHeight: "var(--lh-normal)",
+        whiteSpace: "pre-wrap",
+        pointerEvents: "none",
+      }}
+    >
+      {comFormatacaoDoWhatsapp(espiada.corpo)}
+    </div>
   );
 }
 

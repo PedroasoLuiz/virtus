@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { Drawer } from "@/components/ui/drawer";
 import { useAvisos } from "@/components/ui/avisos";
 import {
@@ -11,9 +11,9 @@ import {
   BotaoDeAcao,
   Button,
   EmptyRow,
+  Pagination,
   Field,
   CabecalhoDeSecao,
-  MolduraDeTabela,
   TableArea,
   TableHead,
   Td,
@@ -44,48 +44,29 @@ import { formatarTelefone, type ContaWhatsapp } from "@/modules/whatsapp/whatsap
  * uma rolagem so, e as tres pareciam a mesma coisa.
  */
 
-export function AtendimentoAutomatico() {
-  const { avisar } = useAvisos();
-  const [provedores, setProvedores] = useState<ConfigIA[] | null>(null);
-  const [erro, setErro] = useState<string | null>(null);
-  const [editando, setEditando] = useState<ConfigIA | null>(null);
+/** Mesmo tamanho de pagina da aba de numeros: as tres listas convivem. */
+const POR_PAGINA = 8;
 
-  const carregar = useCallback(async () => {
-    const r = await fetch("/api/v1/ia/config");
-    const corpo = await r.json().catch(() => null);
-
-    if (!r.ok) {
-      /*
-       * Falha APARECE. Silenciada, a tela vazia diria "não há provedor", que é
-       * outra coisa: já custou uma aba em branco sem explicação nenhuma.
-       */
-      const detalhe = corpo?.error?.details?.[0];
-      setErro(
-        detalhe
-          ? `${detalhe.campo}: ${detalhe.mensagem}`
-          : (corpo?.error?.message ?? "Não foi possível carregar"),
-      );
-      setProvedores([]);
-      return;
-    }
-
-    setErro(null);
-    setProvedores(corpo.data ?? []);
-  }, []);
-
-  /*
-   * ⚠️ Carrega UMA vez por abertura do painel, e nao a cada visita a aba.
+export function AtendimentoAutomatico({
+  provedores,
+  erro,
+  onRecarregar,
+}: {
+  /**
+   * ⚠️ Vem de FORA, e isso nao e detalhe.
    *
-   * O componente monta e desmonta ao trocar de aba, entao sem a guarda cada
-   * ida e volta era uma consulta nova. Num SaaS isso multiplica por usuario e
-   * por sessao, e o dado aqui muda quando ALGUEM SALVA, o que ja recarrega.
+   * A aba monta e desmonta a cada troca de guia. Com o estado aqui dentro, ele
+   * morria junto: voltar para a aba mostrava "carregando" e refazia a consulta
+   * de um dado que ja tinha sido lido. Guardado no drawer, ele sobrevive as
+   * trocas e so e relido quando alguem salva.
    */
-  useEffect(() => {
-    if (provedores != null) return;
-
-    const t = setTimeout(() => void carregar(), 0);
-    return () => clearTimeout(t);
-  }, [carregar, provedores]);
+  provedores: ConfigIA[] | null;
+  erro: string | null;
+  onRecarregar: () => void;
+}) {
+  const { avisar } = useAvisos();
+  const [editando, setEditando] = useState<ConfigIA | null>(null);
+  const [pagina, setPagina] = useState(1);
 
   async function remover(provedor: string) {
     const r = await fetch(`/api/v1/ia/provedores/${provedor}`, { method: "DELETE" });
@@ -97,7 +78,7 @@ export function AtendimentoAutomatico() {
     }
 
     avisar("sucesso", "Provedor removido.");
-    void carregar();
+    onRecarregar();
   }
 
   if (editando) {
@@ -108,13 +89,18 @@ export function AtendimentoAutomatico() {
         onFechar={() => setEditando(null)}
         onSalvou={() => {
           setEditando(null);
-          void carregar();
+          onRecarregar();
         }}
       />
     );
   }
 
   const ligados = (provedores ?? []).filter((p) => p.ativo && p.temChave);
+
+  const totalPaginas = Math.max(1, Math.ceil((provedores?.length ?? 0) / POR_PAGINA));
+  const paginaAtual = Math.min(pagina, totalPaginas);
+  const visiveis =
+    provedores?.slice((paginaAtual - 1) * POR_PAGINA, paginaAtual * POR_PAGINA) ?? null;
 
   return (
     <>
@@ -150,7 +136,6 @@ export function AtendimentoAutomatico() {
         rotuloIncluir="Adicionar provedor"
       />
 
-      <MolduraDeTabela>
         <TableArea minWidth={0}>
           <TableHead>
                 <Th>Provedor</Th>
@@ -161,13 +146,13 @@ export function AtendimentoAutomatico() {
             <tbody>
               {provedores == null ? (
                 <EmptyRow colSpan={3} message="Carregando…" />
-              ) : provedores.length === 0 ? (
+              ) : visiveis!.length === 0 ? (
                 <EmptyRow
                   colSpan={3}
                   message="Nenhum provedor. Sem chave, o bot não responde a ninguém."
                 />
               ) : (
-                provedores.map((p) => (
+                visiveis!.map((p) => (
                   <Tr key={p.provedor}>
                     {/*
                       Provedor e modelo na MESMA celula, um sob o outro: e a
@@ -222,8 +207,15 @@ export function AtendimentoAutomatico() {
               )}
           </tbody>
         </TableArea>
-      </MolduraDeTabela>
 
+
+      <Pagination
+        page={paginaAtual}
+        totalPages={totalPaginas}
+        total={provedores?.length ?? 0}
+        pageSize={POR_PAGINA}
+        onPage={setPagina}
+      />
     </>
   );
 }
@@ -379,7 +371,7 @@ function FormularioDoProvedor({
 
 // ── Personas ────────────────────────────────────────────────────
 
-type Setor = { id: number; nome: string };
+export type Setor = { id: number; nome: string };
 
 /**
  * O que a IA pode resolver sozinha, por setor.
@@ -388,34 +380,26 @@ type Setor = { id: number; nome: string };
  * Persona e autorizacao, nao obrigacao: quem nao cadastra nenhuma segue com o
  * bot que so tria e passa adiante.
  */
-export function Personas({ contas }: { contas: ContaWhatsapp[] }) {
+export function Personas({
+  contas,
+  personas,
+  setores,
+  onRecarregar,
+}: {
+  contas: ContaWhatsapp[];
+  /** ⚠️ De fora, pelo mesmo motivo dos provedores: a aba desmonta. */
+  personas: Persona[] | null;
+  setores: Setor[];
+  onRecarregar: () => void;
+}) {
   const { avisar } = useAvisos();
-  const [personas, setPersonas] = useState<Persona[] | null>(null);
-  const [setores, setSetores] = useState<Setor[]>([]);
   const [editando, setEditando] = useState<Persona | null>(null);
+  const [pagina, setPagina] = useState(1);
 
-  const carregar = useCallback(async () => {
-    const [rp, rs] = await Promise.all([
-      fetch("/api/v1/atendimento/personas"),
-      fetch("/api/v1/atendimento/setores"),
-    ]);
-
-    const cp = await rp.json().catch(() => null);
-    setPersonas(rp.ok ? (cp?.data ?? []) : []);
-
-    // Setor é opcional na persona, então falhar aqui não impede cadastrar: a
-    // lista fica vazia e a persona nasce geral.
-    const cs = await rs.json().catch(() => null);
-    setSetores(rs.ok ? (cs?.data ?? []) : []);
-  }, []);
-
-  // Mesma guarda dos provedores: trocar de aba nao vale uma consulta nova.
-  useEffect(() => {
-    if (personas != null) return;
-
-    const t = setTimeout(() => void carregar(), 0);
-    return () => clearTimeout(t);
-  }, [carregar, personas]);
+  const totalPaginas = Math.max(1, Math.ceil((personas?.length ?? 0) / POR_PAGINA));
+  const paginaAtual = Math.min(pagina, totalPaginas);
+  const visiveis =
+    personas?.slice((paginaAtual - 1) * POR_PAGINA, paginaAtual * POR_PAGINA) ?? null;
 
   async function excluir(id: number) {
     const r = await fetch(`/api/v1/atendimento/personas/${id}`, { method: "DELETE" });
@@ -427,7 +411,7 @@ export function Personas({ contas }: { contas: ContaWhatsapp[] }) {
     }
 
     avisar("sucesso", "Persona excluída.");
-    void carregar();
+    onRecarregar();
   }
 
   if (editando) {
@@ -439,7 +423,7 @@ export function Personas({ contas }: { contas: ContaWhatsapp[] }) {
         onFechar={() => setEditando(null)}
         onSalvou={() => {
           setEditando(null);
-          void carregar();
+          onRecarregar();
         }}
       />
     );
@@ -464,7 +448,6 @@ export function Personas({ contas }: { contas: ContaWhatsapp[] }) {
         rotuloIncluir="Adicionar persona"
       />
 
-      <MolduraDeTabela>
         <TableArea minWidth={0}>
           <TableHead>
                 <Th>Persona</Th>
@@ -475,13 +458,13 @@ export function Personas({ contas }: { contas: ContaWhatsapp[] }) {
             <tbody>
               {personas == null ? (
                 <EmptyRow colSpan={3} message="Carregando…" />
-              ) : personas.length === 0 ? (
+              ) : visiveis!.length === 0 ? (
                 <EmptyRow
                   colSpan={3}
                   message="Nenhuma persona. A IA vai triar e encaminhar tudo."
                 />
               ) : (
-                personas.map((p) => (
+                visiveis!.map((p) => (
                   <Tr key={p.id}>
                     <Td>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -539,7 +522,14 @@ export function Personas({ contas }: { contas: ContaWhatsapp[] }) {
               )}
           </tbody>
         </TableArea>
-      </MolduraDeTabela>
+
+      <Pagination
+        page={paginaAtual}
+        totalPages={totalPaginas}
+        total={personas?.length ?? 0}
+        pageSize={POR_PAGINA}
+        onPage={setPagina}
+      />
     </>
   );
 }

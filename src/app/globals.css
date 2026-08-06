@@ -88,6 +88,9 @@
   --surface-2: #fafafc;
   --surface-3: #f0f0f3;
   --surface-hover: rgba(0, 0, 0, 0.035);
+  /* Cabecalho de tabela. Mais escuro que `--surface-2` de proposito: aquele e
+     quase branco e nao separava o titulo da coluna do primeiro dado. */
+  --table-head-bg: #f1f2f5;
   --surface-active: rgba(0, 106, 40, 0.06);
 
   /* Hairline: a elevacao vem daqui, nao de sombra. */
@@ -244,6 +247,7 @@
   --surface-2: #141416;
   --surface-3: #2c2c2e;
   --surface-hover: rgba(255, 255, 255, 0.055);
+  --table-head-bg: #232326;
   --surface-active: rgba(0, 187, 71, 0.1);
 
   --border: rgba(255, 255, 255, 0.09);
