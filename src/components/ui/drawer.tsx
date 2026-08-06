@@ -45,13 +45,17 @@ export function Drawer({
    * ou seja, ATRAS do proprio painel. O fundo continuava clicavel e o drawer
    * parecia meio modal.
    *
-   * Nivel 2 sobe cem, o suficiente para passar por cima de qualquer sobreposto
-   * do sistema sem entrar na faixa dos avisos.
+   * Cada nivel sobe cem, o suficiente para passar por cima do anterior sem
+   * entrar na faixa dos avisos.
+   *
+   * ⚠️ O 3 existe para o drawer que abre de DENTRO de um de nivel 2 — o vinculo
+   * de modelo, que abre da configuracao do WhatsApp. Sem ele, o formulario
+   * nascia atras da tela que o abriu.
    */
-  nivel?: 1 | 2;
+  nivel?: 1 | 2 | 3;
   children: React.ReactNode;
 }) {
-  const base = nivel === 1 ? 400 : 500;
+  const base = 300 + nivel * 100;
   useEffect(() => {
     if (!open) return;
 

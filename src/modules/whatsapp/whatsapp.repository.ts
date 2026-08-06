@@ -8,6 +8,7 @@ import type {
   Mensagem,
   ResultadoDoEvento,
 } from "@/modules/whatsapp/whatsapp.types";
+import type { VinculoDeModelo } from "@/modules/whatsapp/finalidades";
 
 /** Unica porta de acesso aos dados do WhatsApp. */
 
@@ -166,6 +167,53 @@ export async function definirAtiva(contaId: number, ativo: boolean): Promise<voi
   const { error } = await supabase.rpc("whatsapp_desativar_conta", {
     p_id: contaId,
     p_ativo: ativo,
+  });
+
+  if (error) throw error;
+}
+
+/** Os vinculos de finalidade deste numero. Ver `finalidades.ts`. */
+export async function vinculosDaConta(contaId: number): Promise<VinculoDeModelo[]> {
+  const supabase = await serverClient();
+
+  const { data, error } = await supabase.rpc("whatsapp_vinculos_da_conta", {
+    p_conta: contaId,
+  });
+
+  if (error) throw error;
+
+  return (data ?? []).map((l) => ({
+    finalidade: l.finalidade as VinculoDeModelo["finalidade"],
+    modeloNome: l.modelo_nome,
+    idioma: l.idioma,
+    // `jsonb` chega como `unknown`: so array de string interessa, e lista vazia
+    // e o estado honesto para qualquer outra coisa.
+    parametros: Array.isArray(l.parametros) ? (l.parametros as string[]) : [],
+    botaoParam: l.botao_param ?? null,
+  }));
+}
+
+export async function salvarVinculo(contaId: number, v: VinculoDeModelo): Promise<void> {
+  const supabase = await serverClient();
+
+  const { error } = await supabase.rpc("whatsapp_salvar_vinculo", {
+    p_conta: contaId,
+    p_finalidade: v.finalidade,
+    p_modelo: v.modeloNome,
+    p_idioma: v.idioma,
+    p_parametros: v.parametros,
+    p_botao_param: v.botaoParam,
+  });
+
+  if (error) throw error;
+}
+
+export async function removerVinculo(contaId: number, finalidade: string): Promise<void> {
+  const supabase = await serverClient();
+
+  const { error } = await supabase.rpc("whatsapp_remover_vinculo", {
+    p_conta: contaId,
+    p_finalidade: finalidade,
   });
 
   if (error) throw error;

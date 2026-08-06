@@ -863,6 +863,31 @@ export type Database = {
        * referencia a segredo, entao fica fechada). A checagem de tenant mora
        * DENTRO da funcao, nao no parametro.
        */
+      whatsapp_vinculos_da_conta: {
+        Args: { p_conta: number };
+        Returns: {
+          finalidade: string;
+          modelo_nome: string;
+          idioma: string;
+          parametros: unknown;
+          botao_param: string | null;
+        }[];
+      };
+      whatsapp_salvar_vinculo: {
+        Args: {
+          p_conta: number;
+          p_finalidade: string;
+          p_modelo: string;
+          p_idioma: string;
+          p_parametros: string[];
+          p_botao_param: string | null;
+        };
+        Returns: undefined;
+      };
+      whatsapp_remover_vinculo: {
+        Args: { p_conta: number; p_finalidade: string };
+        Returns: undefined;
+      };
       /** Contexto do bot. A empresa sai da conversa, nunca do parametro. */
       /** Liga e desliga o aviso de "a IA esta respondendo" no painel. */
       whatsapp_bot_respondendo: {

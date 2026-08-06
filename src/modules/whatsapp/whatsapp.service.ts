@@ -18,6 +18,12 @@ import {
   type ResultadoDoEvento,
 } from "@/modules/whatsapp/whatsapp.types";
 import { testeInconclusivo, type ResultadoDoTeste } from "@/shared/domain/teste-conexao";
+import {
+  finalidadePorId,
+  problemasDoVinculo,
+  type ChaveDeFinalidade,
+  type VinculoDeModelo,
+} from "@/modules/whatsapp/finalidades";
 
 /** Regra de negocio do WhatsApp. */
 
@@ -68,6 +74,52 @@ export async function testarConta(
     apiVersao: entrada.apiVersao,
     token,
   });
+}
+
+/**
+ * Os vinculos de finalidade de um numero.
+ *
+ * A empresa nao entra: quem confere o tenant e a propria funcao no banco.
+ */
+export async function listarVinculos(contaId: number): Promise<VinculoDeModelo[]> {
+  return repo.vinculosDaConta(contaId);
+}
+
+/**
+ * Grava o vinculo depois de conferir contra o modelo REAL.
+ *
+ * ⚠️ A conferencia acontece contra a lista lida da Meta agora, e nao contra o
+ * que a tela mandou. O template pode ter voltado para revisao, ou ganhado mais
+ * um `{{n}}`, entre abrir a tela e clicar em salvar — e um vinculo com a
+ * contagem errada so falharia no envio, com um cliente esperando.
+ */
+export async function salvarVinculo(
+  empresaId: number,
+  contaId: number,
+  vinculo: VinculoDeModelo,
+): Promise<void> {
+  const cred = await repo.credenciais(contaId);
+
+  if (!cred) throw new BusinessRuleError("O numero escolhido esta sem token cadastrado.");
+
+  const modelos = await cloud.listarModelos(cred);
+  const modelo = modelos.find((m) => m.nome === vinculo.modeloNome) ?? null;
+
+  const erros = problemasDoVinculo(vinculo, modelo);
+  if (erros.length > 0) throw new BusinessRuleError(erros[0]);
+
+  await repo.salvarVinculo(contaId, {
+    ...vinculo,
+    // O idioma e do MODELO, e nao do formulario: mandar outro faz a Meta
+    // recusar o envio com um erro que ninguem liga a esta tela.
+    idioma: modelo!.idioma,
+  });
+
+  logger.info("vinculo de modelo gravado", { empresaId, contaId, finalidade: vinculo.finalidade });
+}
+
+export async function removerVinculo(contaId: number, finalidade: string): Promise<void> {
+  await repo.removerVinculo(contaId, finalidade);
 }
 
 /** A empresa nao entra: quem confere o tenant e a propria funcao no banco. */
@@ -431,14 +483,70 @@ export async function enviarModelo(
  * A conversa e criada de qualquer forma, para o disparo aparecer no painel e a
  * resposta do cliente cair no mesmo lugar.
  */
-export async function dispararModelo(
+/**
+ * Manda a mensagem de uma FINALIDADE, com o modelo que o cliente vinculou.
+ *
+ * ⚠️ Recebe os valores por NOME, e nao em ordem. A ordem e do modelo dele, nao
+ * nossa: quem sabe que o `{{3}}` daquele texto e o vencimento e o vinculo,
+ * gravado na tela de modelos. Passar array aqui traria de volta exatamente o
+ * acoplamento que o vinculo existe para desfazer.
+ *
+ * ⚠️ Sem vinculo, NAO cai em nenhum nome por convencao. Um `cobranca` chutado
+ * acertaria em quem seguiu a sugestao e mandaria para o modelo errado em quem
+ * nao seguiu, e o erro so apareceria no cliente.
+ */
+export async function dispararFinalidade(
   empresaId: number,
   usuarioId: string,
   destino: { telefone: string; nome: string | null },
-  nome: string,
-  parametros: string[],
-  urlDoBotao?: string,
+  finalidade: ChaveDeFinalidade,
+  valores: Record<string, string>,
 ): Promise<Mensagem> {
+  const conta = await contaParaDisparo(empresaId);
+  const vinculos = await repo.vinculosDaConta(conta.id);
+  const vinculo = vinculos.find((v) => v.finalidade === finalidade);
+
+  const rotulo = finalidadePorId(finalidade)?.rotulo ?? finalidade;
+
+  if (!vinculo) {
+    throw new BusinessRuleError(
+      `Nenhum modelo do WhatsApp está vinculado a "${rotulo}" neste número. Configure em Configuração do WhatsApp, aba Modelos.`,
+    );
+  }
+
+  const parametros = vinculo.parametros.map((chave) => {
+    const v = valores[chave];
+
+    /*
+     * Faltar valor e ERRO, e nao um espaco em branco.
+     *
+     * A Meta aceita string vazia e entrega a mensagem com um buraco no meio da
+     * frase. Melhor o envio falhar aqui, na tela de quem clicou, do que sair
+     * "sua parcela de R$ vence em" para o cliente.
+     */
+    if (v == null) {
+      throw new BusinessRuleError(
+        `O vínculo de "${rotulo}" pede "${chave}", que esta tela não tem para dar. Refaça o vínculo em Configuração do WhatsApp.`,
+      );
+    }
+
+    return v;
+  });
+
+  const urlDoBotao = vinculo.botaoParam ? valores[vinculo.botaoParam] : undefined;
+
+  return dispararModelo(
+    empresaId,
+    usuarioId,
+    destino,
+    vinculo.modeloNome,
+    parametros,
+    urlDoBotao,
+  );
+}
+
+/** O numero por onde o sistema fala quando ninguem escolheu um. */
+async function contaParaDisparo(empresaId: number): Promise<ContaWhatsapp> {
   const contas = await listarContas(empresaId);
   const conta = contas.find((c) => c.ativo && c.temToken);
 
@@ -448,6 +556,18 @@ export async function dispararModelo(
     );
   }
 
+  return conta;
+}
+
+export async function dispararModelo(
+  empresaId: number,
+  usuarioId: string,
+  destino: { telefone: string; nome: string | null },
+  nome: string,
+  parametros: string[],
+  urlDoBotao?: string,
+): Promise<Mensagem> {
+  const conta = await contaParaDisparo(empresaId);
   const cred = await repo.credenciais(conta.id);
 
   if (!cred) {

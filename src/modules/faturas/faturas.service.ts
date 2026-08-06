@@ -551,9 +551,6 @@ async function comCausaVisivel<T>(acao: () => Promise<T>): Promise<T> {
   }
 }
 
-/** O modelo aprovado na Meta. Trocar o nome aqui exige aprovar outro la. */
-const MODELO_DE_COBRANCA = "cobranca";
-
 /**
  * Manda a parcela pelo WhatsApp, com o modelo aprovado.
  *
@@ -599,22 +596,27 @@ export async function enviarParcelaPorWhatsapp(
   const tickets = fatura.tickets.map((t) => t.numero);
 
   const mensagem = await comCausaVisivel(() =>
-    whatsapp.dispararModelo(
+    /*
+     * Por NOME, e nao em ordem.
+     *
+     * ⚠️ A ordem era o contrato com um modelo chamado `cobranca`, o que obrigava
+     * todo cliente a aprovar um template com esse nome e aquela sequencia exata.
+     * Agora quem sabe que o `{{3}}` daquele texto e o vencimento e o vinculo que
+     * o proprio cliente gravou na aba Modelos. Aqui so dizemos o que temos.
+     */
+    whatsapp.dispararFinalidade(
       empresaId,
       usuarioId,
       { telefone: paraFormatoMeta(bruto), nome: destino.clienteNome },
-      MODELO_DE_COBRANCA,
-      [
-        // A ORDEM E O CONTRATO com o modelo aprovado: nome, valor, vencimento,
-        // ticket. Trocar duas de lugar passa na validacao de quantidade e chega
-        // errado no cliente.
-        destino.clienteNome ?? "cliente",
-        formatarSemSimbolo(parcela.total),
-        parcela.vencimento ? paraFormatoBR(parcela.vencimento) : "a combinar",
-        tickets.length > 0 ? tickets.join(", ") : String(fatura.id),
-      ],
-      // So o token: o comeco da URL ja esta fixo no modelo aprovado.
-      token,
+      "cobranca",
+      {
+        nome: destino.clienteNome ?? "cliente",
+        valor: formatarSemSimbolo(parcela.total),
+        vencimento: parcela.vencimento ? paraFormatoBR(parcela.vencimento) : "a combinar",
+        ticket: tickets.length > 0 ? tickets.join(", ") : String(fatura.id),
+        // So o token: o comeco da URL ja esta fixo no modelo aprovado.
+        link: token,
+      },
     ),
   );
 

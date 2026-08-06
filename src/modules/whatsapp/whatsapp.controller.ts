@@ -19,8 +19,11 @@ import {
   type ContaIdQuery,
   type ConversaIdQuery,
   type EnviarModeloBody,
+  type RemoverVinculoQuery,
   type SalvarContaBody,
+  type SalvarVinculoBody,
   type TestarContaBody,
+  type VinculosQuery,
   type VincularBody,
   type ConversaIdParam,
   type EnviarTextoBody,
@@ -49,6 +52,29 @@ export async function testarConta({ body, ctx }: Entrada<TestarContaBody, undefi
   empresaObrigatoria(ctx);
 
   return ok(await service.testarConta(body));
+}
+
+export async function listarVinculos({ query, ctx }: Entrada<undefined, VinculosQuery, unknown>) {
+  empresaObrigatoria(ctx);
+
+  return ok(await service.listarVinculos(query.contaId));
+}
+
+export async function salvarVinculo({ body, ctx }: Entrada<SalvarVinculoBody, undefined, unknown>) {
+  const { contaId, ...vinculo } = body;
+  await service.salvarVinculo(empresaObrigatoria(ctx), contaId, vinculo);
+
+  return ok(await service.listarVinculos(contaId));
+}
+
+export async function removerVinculo({
+  query,
+  ctx,
+}: Entrada<undefined, RemoverVinculoQuery, unknown>) {
+  empresaObrigatoria(ctx);
+  await service.removerVinculo(query.contaId, query.finalidade);
+
+  return ok(await service.listarVinculos(query.contaId));
 }
 
 export async function ativarConta({

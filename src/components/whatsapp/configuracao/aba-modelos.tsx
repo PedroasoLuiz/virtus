@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { PrecisaDeAjuda } from "@/components/ui/ajuda";
 import { comFormatacaoDoWhatsapp } from "@/components/whatsapp/formatacao";
 import {
@@ -16,6 +16,8 @@ import {
   selectStyle,
 } from "@/components/ui/kit";
 import { formatarTelefone, type ContaWhatsapp, type Modelo } from "@/modules/whatsapp/whatsapp.types";
+import type { VinculoDeModelo } from "@/modules/whatsapp/finalidades";
+import { Finalidades } from "./finalidades";
 
 /**
  * Os modelos que a Meta ja aprovou, por numero.
@@ -44,6 +46,7 @@ export function AbaDeModelos({
   const [pagina, setPagina] = useState(1);
   /** O UNICO cartao de previa da tela. Nulo enquanto o mouse nao chega. */
   const [espiando, setEspiando] = useState<Espiada | null>(null);
+  const [vinculos, setVinculos] = useState<VinculoDeModelo[] | null>(null);
 
   const escolhida = contaId ?? ativas[0]?.id ?? null;
   const todos = escolhida == null ? null : (cache[escolhida] ?? null);
@@ -98,6 +101,32 @@ export function AbaDeModelos({
      * desmonta com a aba, entao o cache vive um nivel acima, em `modelosPorConta`.
      */
   }, [escolhida, cache, onCarregou]);
+
+  /*
+   * Os vinculos saem do NOSSO banco, e por isso vem num efeito proprio.
+   *
+   * Junta-los a leitura dos modelos amarraria uma consulta barata ao cache da
+   * chamada externa: salvar um vinculo precisaria invalidar a lista da Meta
+   * junto, e ai cada gravacao gastaria uma ida ate la sem necessidade.
+   */
+  const carregarVinculos = useCallback(async (contaId: number, limpar = false) => {
+    // Limpa so na TROCA de numero: recarregar depois de salvar mantendo a lista
+    // evita a tabela piscar vazia por um quadro.
+    if (limpar) setVinculos(null);
+
+    const r = await fetch(`/api/v1/whatsapp/vinculos?contaId=${contaId}`);
+    const corpo = await r.json().catch(() => null);
+
+    setVinculos(r.ok ? (corpo?.data ?? []) : []);
+  }, []);
+
+  useEffect(() => {
+    if (escolhida == null) return;
+
+    const t = setTimeout(() => void carregarVinculos(escolhida, true), 0);
+
+    return () => clearTimeout(t);
+  }, [escolhida, carregarVinculos]);
 
   if (ativas.length === 0) {
     return (
@@ -216,8 +245,31 @@ export function AbaDeModelos({
 
         )}
 
+        {/*
+          ⚠️ DEPOIS da lista, e não antes.
+
+          A tabela de cima é o inventário: o que a Meta aprovou para este
+          número. Esta seção é a ligação com o sistema, e ela só faz sentido
+          depois de a pessoa ver o que tem para ligar. Invertida, a primeira
+          coisa da tela pediria para escolher entre modelos que ainda não
+          apareceram.
+        */}
+        {escolhida != null && (
+          <Finalidades
+            contaId={escolhida}
+            modelos={todos}
+            vinculos={vinculos}
+            onMudou={() => void carregarVinculos(escolhida)}
+          />
+        )}
+
         <PrecisaDeAjuda
           duvidas={[
+            {
+              pergunta: "Como ligo um modelo meu a uma cobrança?",
+              resposta:
+                "Em 'O que o sistema envia', logo acima. Você escolhe um modelo aprovado e diz qual campo dele recebe o quê. O nome do modelo pode ser o que você quiser: quem sabe o que vai em cada campo é esse vínculo.",
+            },
             {
               pergunta: "Como crio um modelo novo?",
               resposta:

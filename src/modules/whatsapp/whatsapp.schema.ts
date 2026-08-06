@@ -177,6 +177,30 @@ export const testarContaBodySchema = z.object({
   token: z.string().trim().min(20).nullable().default(null),
 });
 
+/**
+ * O vinculo de um modelo do cliente a uma finalidade do sistema.
+ *
+ * `parametros` e POSICIONAL: o indice 0 e o `{{1}}`. A conferencia contra o
+ * modelo real acontece no servico, que le a lista da Meta — aqui so a forma.
+ */
+export const salvarVinculoBodySchema = z.object({
+  contaId: z.number().int().positive(),
+  finalidade: z.enum(["cobranca", "ticket", "contapagar", "aniversario"]),
+  modeloNome: z.string().trim().min(1).max(120),
+  idioma: z.string().trim().min(2).max(20).default("pt_BR"),
+  parametros: z.array(z.string().trim().min(1).max(40)).max(20),
+  botaoParam: z.string().trim().min(1).max(40).nullable().default(null),
+});
+
+export const vinculosQuerySchema = z.object({
+  contaId: z.coerce.number().int().positive(),
+});
+
+export const removerVinculoQuerySchema = z.object({
+  contaId: z.coerce.number().int().positive(),
+  finalidade: z.string().trim().min(1).max(40),
+});
+
 export const vincularBodySchema = z.object({
   clienteId: z.number().int().positive(),
 });
@@ -189,6 +213,9 @@ export const ativarContaBodySchema = z.object({
 
 export type SalvarContaBody = z.infer<typeof salvarContaBodySchema>;
 export type TestarContaBody = z.infer<typeof testarContaBodySchema>;
+export type SalvarVinculoBody = z.infer<typeof salvarVinculoBodySchema>;
+export type VinculosQuery = z.infer<typeof vinculosQuerySchema>;
+export type RemoverVinculoQuery = z.infer<typeof removerVinculoQuerySchema>;
 export type AtivarContaBody = z.infer<typeof ativarContaBodySchema>;
 export type ContaIdQuery = z.infer<typeof contaIdQuerySchema>;
 
