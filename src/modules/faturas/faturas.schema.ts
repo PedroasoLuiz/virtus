@@ -86,6 +86,10 @@ export const enviarParcelaBodySchema = z.object({
   para: z.string().trim().email("E-mail invalido").nullish(),
 });
 
+export const alterarVencimentoBodySchema = z.object({
+  vencimento: dataISOSchema,
+});
+
 export const enviarParcelaWhatsappBodySchema = z.object({
   /** Telefone alternativo. Vazio usa o do cadastro. */
   telefone: z.string().trim().min(8).max(20).nullish(),
@@ -190,4 +194,5 @@ export type ParcelaParam = z.infer<typeof parcelaParamSchema>;
 export type TipoDocumentoQuery = z.infer<typeof tipoDocumentoQuerySchema>;
 export type EnviarParcelaBody = z.infer<typeof enviarParcelaBodySchema>;
 export type EnviarParcelaWhatsappBody = z.infer<typeof enviarParcelaWhatsappBodySchema>;
+export type AlterarVencimentoBody = z.infer<typeof alterarVencimentoBodySchema>;
 

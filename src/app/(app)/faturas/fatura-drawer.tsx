@@ -6,8 +6,10 @@ import { useAvisos } from "@/components/ui/avisos";
 import { NovoRecebimentoDrawer } from "../recebimentos/novo-recebimento-drawer";
 import { Icon } from "@/components/layout/icones";
 import {
+  Button,
   CampoBloqueado,
   Field,
+  inputStyle,
   PanelTabs,
 } from "@/components/ui/kit";
 import { TicketDrawer } from "../tickets/ticket-drawer";
@@ -125,6 +127,12 @@ function Conteudo({
   // Guarda QUAL parcela, e nao um booleano: a baixa acontece sobre uma parcela
   // escolhida na linha, e o drawer que abre mostra so ela.
   const [baixando, setBaixando] = useState<number | null>(null);
+  /*
+   * A parcela cujo vencimento esta sendo mudado. Mora aqui e nao no menu de
+   * acoes porque o menu se fecha no clique: o formulario precisa sobreviver a
+   * ele.
+   */
+  const [prorrogando, setProrrogando] = useState<Fatura["parcelas"][number] | null>(null);
   const { avisar, confirmar } = useAvisos();
 
   async function cancelarConta() {
@@ -527,6 +535,7 @@ function Conteudo({
                       proxima={proxima}
                       bloqueado={p.pagamentoId != null || fatura.situacao === "CANCELADA"}
                       aoMudar={recarregar}
+                      aoProrrogar={() => setProrrogando(p)}
                       fechar={fechar}
                     />
                   )}
@@ -562,7 +571,94 @@ function Conteudo({
         />
       )}
 
+      {prorrogando && (
+        <NovoVencimento
+          faturaId={fatura!.id}
+          parcela={prorrogando}
+          onClose={() => setProrrogando(null)}
+          aoSalvar={() => {
+            setProrrogando(null);
+            recarregar();
+          }}
+        />
+      )}
+
       <TicketDrawer ticketId={ticketAberto} somenteLeitura onClose={() => setTicketAberto(null)} />
+    </Drawer>
+  );
+}
+
+/**
+ * Muda so a data de uma parcela.
+ *
+ * Drawer proprio e nao edicao na linha: a mudanca sai imediatamente para o
+ * banco e mexe numa cobranca que pode ja estar com o cliente. Um campo que
+ * salva ao perder o foco tornaria isso um acidente de clique.
+ */
+function NovoVencimento({
+  faturaId,
+  parcela,
+  onClose,
+  aoSalvar,
+}: {
+  faturaId: number;
+  parcela: Fatura["parcelas"][number];
+  onClose: () => void;
+  aoSalvar: () => void;
+}) {
+  const { avisar } = useAvisos();
+  const [data, setData] = useState(parcela.vencimento ?? "");
+  const [salvando, setSalvando] = useState(false);
+
+  async function salvar() {
+    if (!data || salvando) return;
+
+    setSalvando(true);
+
+    const r = await fetch(`/api/v1/faturas/${faturaId}/parcelas/${parcela.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ vencimento: data }),
+    });
+
+    setSalvando(false);
+    const corpo = await r.json().catch(() => null);
+
+    if (!r.ok) {
+      avisar("atencao", corpo?.error?.message ?? "Não foi possível alterar o vencimento");
+      return;
+    }
+
+    avisar("sucesso", "Vencimento alterado.");
+    aoSalvar();
+  }
+
+  return (
+    <Drawer
+      open
+      onClose={onClose}
+      title={`Vencimento da parcela ${parcela.numero}`}
+      subtitle={parcela.vencimento ? `Hoje vence em ${curto(parcela.vencimento)}` : undefined}
+      width={420}
+      footer={
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <Button size="sm" variant="primary" onClick={() => void salvar()} disabled={!data || salvando}>
+            {salvando ? "Salvando…" : "Salvar"}
+          </Button>
+        </div>
+      }
+    >
+      <Field
+        label="Novo vencimento"
+        hint="Só a data muda. Valor, número da parcela e os documentos anexados ficam como estão."
+      >
+        <input
+          type="date"
+          style={inputStyle}
+          value={data}
+          onChange={(e) => setData(e.target.value)}
+        />
+      </Field>
     </Drawer>
   );
 }
@@ -1233,6 +1329,7 @@ function AcoesDaParcela({
   proxima,
   bloqueado,
   aoMudar,
+  aoProrrogar,
   fechar,
 }: {
   aoBaixar: () => void;
@@ -1243,6 +1340,8 @@ function AcoesDaParcela({
   proxima: Fatura["parcelas"][number] | null;
   bloqueado: boolean;
   aoMudar: () => void;
+  /** Abre o formulario de vencimento, que vive fora deste menu. */
+  aoProrrogar: () => void;
   fechar: () => void;
 }) {
   const { avisar, confirmar } = useAvisos();
@@ -1411,6 +1510,29 @@ function AcoesDaParcela({
       >
         <path d="M3.4 1.8h9.2v12.4l-2.3-1.4-2.3 1.4-2.3-1.4-2.3 1.4z" />
         <path d="M5.8 5.4h4.4M5.8 8h3" />
+      </ItemDoMenu>
+
+      {/* Prorrogar e o ajuste mais comum depois que a conta ja saiu, e ate
+          agora so dava para refazer o parcelamento inteiro, o que derrubava
+          nota, boleto e o link ja enviado ao cliente. */}
+      <ItemDoMenu
+        rotulo="Alterar vencimento"
+        desabilitado={bloqueado || parcela.pago}
+        motivo={
+          bloqueado
+            ? "Parcela conciliada ou conta cancelada"
+            : parcela.pago
+              ? "Parcela já baixada"
+              : undefined
+        }
+        onClick={() => {
+          fechar();
+          aoProrrogar();
+        }}
+      >
+        <path d="M3.4 3.6h9.2a1 1 0 0 1 1 1v8.2a1 1 0 0 1-1 1H3.4a1 1 0 0 1-1-1V4.6a1 1 0 0 1 1-1z" />
+        <path d="M2.4 6.8h11.2M5.4 2.2v2.6M10.6 2.2v2.6" />
+        <path d="M6 10.4h4M8 8.4v4" />
       </ItemDoMenu>
 
       <ItemDoMenu

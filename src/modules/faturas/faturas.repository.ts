@@ -729,6 +729,34 @@ export async function destinatarioDaFatura(
  * envio invalidaria o link anterior, e o cliente que guardou o primeiro e-mail
  * cairia num 404 sem entender por que.
  */
+/**
+ * Muda so o vencimento, sem tocar em valor nem em numero da parcela.
+ *
+ * ⚠️ Update pontual em vez de `substituirParcelas`: aquele apaga e recria a
+ * grade inteira, e com ela sumiriam o token do link, a nota e o boleto ja
+ * anexados. Prorrogar uma data nao pode invalidar a cobranca que ja esta na
+ * mao do cliente.
+ *
+ * `fkFatura` no filtro alem do id: sem ele, um id de parcela de outra conta
+ * passaria, e a RLS por si so nao separa parcela de fatura dentro do tenant.
+ */
+export async function alterarVencimentoDaParcela(
+  faturaId: number,
+  parcelaId: number,
+  usuarioId: string,
+  vencimento: string,
+): Promise<void> {
+  const supabase = await serverClient();
+
+  const { error } = await supabase
+    .from("faturasparcelas")
+    .update({ vencimento, updated_at: new Date().toISOString(), fkUserModificacao: usuarioId })
+    .eq("id", parcelaId)
+    .eq("fkFatura", faturaId);
+
+  if (error) throw error;
+}
+
 export async function tokenDaParcela(parcelaId: number): Promise<string> {
   const supabase = await serverClient();
 

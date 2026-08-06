@@ -281,6 +281,50 @@ export async function excluirParcelaDaFatura(
   await repo.substituirParcelas(faturaId, usuarioId, novasParcelas);
 }
 
+/**
+ * Prorroga ou antecipa uma parcela.
+ *
+ * ⚠️ So a data muda. Valor e numero ficam onde estao: renegociar prazo e uma
+ * coisa, mexer no que foi cobrado e outra, e juntar as duas num botao so faria
+ * o total da conta divergir do que o cliente ja recebeu.
+ *
+ * Parcela baixada nao entra. A data de vencimento de algo ja pago nao descreve
+ * mais nada, e mexer nela reescreveria o passado que a conciliacao usa.
+ */
+export async function alterarVencimentoDaParcela(
+  empresaId: number,
+  usuarioId: string,
+  faturaId: number,
+  parcelaId: number,
+  vencimento: DataISO,
+): Promise<void> {
+  const fatura = await obterFatura(empresaId, faturaId);
+  garantirEditavel(fatura);
+
+  const parcela = fatura.parcelas.find((p) => p.id === parcelaId);
+
+  if (!parcela) throw new NotFoundError("Parcela nao encontrada nesta conta");
+
+  if (parcela.pagamentoId) {
+    throw new BusinessRuleError(
+      "Parcela conciliada com o extrato nao tem o vencimento alterado",
+    );
+  }
+
+  if (parcela.pago) {
+    throw new BusinessRuleError("Parcela ja baixada nao tem o vencimento alterado");
+  }
+
+  await repo.alterarVencimentoDaParcela(faturaId, parcelaId, usuarioId, vencimento);
+
+  logger.info("vencimento de parcela alterado", {
+    faturaId,
+    parcelaId,
+    de: parcela.vencimento,
+    para: vencimento,
+  });
+}
+
 function garantirEditavel(fatura: Fatura): void {
   if (fatura.cancelada) {
     throw new BusinessRuleError("Fatura cancelada nao pode ter as parcelas alteradas");
