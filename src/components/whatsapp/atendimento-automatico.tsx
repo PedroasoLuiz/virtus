@@ -181,8 +181,8 @@ export function AtendimentoAutomatico({
 
         <TableArea minWidth={0}>
           <TableHead>
-            <Th minWidth={72}>Principal</Th>
             <Th>Provedor</Th>
+            <Th minWidth={72}>Principal</Th>
             <Th minWidth={90}>Situação</Th>
             <Th> </Th>
           </TableHead>
@@ -198,18 +198,6 @@ export function AtendimentoAutomatico({
               ) : (
                 visiveis!.map((p) => (
                   <Tr key={p.provedor}>
-                    {/*
-                      Escolha EXCLUSIVA, e por isso um alvo redondo e nao um
-                      interruptor: interruptor promete que dois podem estar
-                      ligados ao mesmo tempo, e aqui so existe um principal.
-                    */}
-                    <Td>
-                      <MarcaDePrincipal
-                        principal={p.ordem === 1}
-                        onEscolher={() => void definirPrincipal(p.provedor)}
-                      />
-                    </Td>
-
                     <Td>
                       <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
                         <IconeDoProvedor provedor={p.provedor} />
@@ -229,6 +217,18 @@ export function AtendimentoAutomatico({
                           </div>
                         </div>
                       </div>
+                    </Td>
+
+                    {/*
+                      Escolha EXCLUSIVA, e por isso um alvo redondo e nao um
+                      interruptor: interruptor promete que dois podem estar
+                      ligados ao mesmo tempo, e aqui so existe um principal.
+                    */}
+                    <Td>
+                      <MarcaDePrincipal
+                        principal={p.ordem === 1}
+                        onEscolher={() => void definirPrincipal(p.provedor)}
+                      />
                     </Td>
 
                     <Td>

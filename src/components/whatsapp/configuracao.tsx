@@ -678,13 +678,14 @@ function BotaoDeEspiar({
         display: "grid",
         placeItems: "center",
         border: "none",
-        borderRadius: "50%",
-        background: "var(--surface-hover)",
-        color: "var(--text-tertiary)",
+        // Sem fundo: e um icone ao lado do nome, nao um botao. A moldura
+        // redonda pedia um alvo que ali nao existe.
+        background: "transparent",
+        color: "var(--primary)",
         cursor: "pointer",
       }}
     >
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M1.8 12S5.5 5.5 12 5.5 22.2 12 22.2 12 18.5 18.5 12 18.5 1.8 12 1.8 12z" />
         <circle cx="12" cy="12" r="3" />
       </svg>
