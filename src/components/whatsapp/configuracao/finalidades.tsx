@@ -10,6 +10,7 @@ import {
   Button,
   CabecalhoDeSecao,
   Field,
+  PanelTabs,
   TableArea,
   TableHead,
   Td,
@@ -36,6 +37,8 @@ import type { Modelo } from "@/modules/whatsapp/whatsapp.types";
  * aceita parâmetros posicionais, e pedir a ordem em texto é exatamente o jeito
  * de trocar valor por vencimento sem nada acusar até chegar no cliente.
  */
+
+type Aba = "Parametrização" | "Exibição";
 
 export function Finalidades({
   contaId,
@@ -147,15 +150,94 @@ function SituacaoDoVinculo({
   modelo: Modelo | null;
   carregando: boolean;
 }) {
-  if (!vinculo) return <Badge tom="neutral">não configurado</Badge>;
-  if (carregando) return <span style={{ color: "var(--text-tertiary)" }}>conferindo…</span>;
-  if (!modelo) return <Badge tom="danger">modelo não aprovado</Badge>;
-
-  if (vinculo.parametros.length !== modelo.parametros) {
-    return <Badge tom="danger">o modelo mudou</Badge>;
+  if (!vinculo) {
+    return (
+      <Badge tom="neutral">
+        <Relogio />
+        não configurado
+      </Badge>
+    );
   }
 
-  return <Badge tom="success">pronto</Badge>;
+  if (carregando) {
+    return (
+      <Badge tom="neutral">
+        <Relogio />
+        conferindo
+      </Badge>
+    );
+  }
+
+  if (!modelo) {
+    return (
+      <Badge tom="danger">
+        <Atencao />
+        modelo não aprovado
+      </Badge>
+    );
+  }
+
+  if (vinculo.parametros.length !== modelo.parametros) {
+    return (
+      <Badge tom="danger">
+        <Atencao />
+        o modelo mudou
+      </Badge>
+    );
+  }
+
+  return (
+    <Badge tom="success">
+      <Certo />
+      pronto
+    </Badge>
+  );
+}
+
+/*
+ * Os símbolos da situação.
+ *
+ * ⚠️ Formas diferentes, e não a mesma bolinha em três cores: quem enxerga pouca
+ * diferença entre vermelho e cinza continua lendo o relógio como "falta fazer"
+ * e o certo como "feito". A cor é reforço, não o único sinal.
+ */
+const TRACO = {
+  width: 11,
+  height: 11,
+  viewBox: "0 0 20 20",
+  fill: "none" as const,
+  stroke: "currentColor",
+  strokeWidth: 2,
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+  style: { flexShrink: 0 },
+  "aria-hidden": true,
+};
+
+function Certo() {
+  return (
+    <svg {...TRACO}>
+      <path d="M3.6 10.6l4 4 8.8-9.2" />
+    </svg>
+  );
+}
+
+function Relogio() {
+  return (
+    <svg {...TRACO}>
+      <circle cx="10" cy="10" r="7.4" />
+      <path d="M10 5.8V10l2.8 1.8" />
+    </svg>
+  );
+}
+
+function Atencao() {
+  return (
+    <svg {...TRACO}>
+      <circle cx="10" cy="10" r="7.4" />
+      <path d="M10 6.2v4.4M10 13.4v.1" />
+    </svg>
+  );
 }
 
 function FormularioDoVinculo({
@@ -178,6 +260,7 @@ function FormularioDoVinculo({
   const [parametros, setParametros] = useState<string[]>(vinculo?.parametros ?? []);
   const [botao, setBotao] = useState<string | null>(vinculo?.botaoParam ?? null);
   const [salvando, setSalvando] = useState(false);
+  const [aba, setAba] = useState<Aba>("Parametrização");
 
   const modelo = modelos.find((m) => m.nome === nome) ?? null;
 
@@ -289,6 +372,21 @@ function FormularioDoVinculo({
         </div>
       }
     >
+      {/*
+        ⚠️ Duas abas, e não uma pilha só.
+
+        Parametrização é onde se DECIDE; Exibição é onde se CONFERE. Numa
+        coluna única, a prévia e o dicionário ficavam abaixo dos seletores, e
+        justamente quem estava mapeando precisava rolar para conferir e voltar
+        para corrigir. Separadas, cada aba responde a uma pergunta inteira.
+      */}
+      <PanelTabs
+        tabs={["Parametrização", "Exibição"]}
+        active={aba}
+        onChange={(t) => setAba(t as Aba)}
+      />
+
+      {aba === "Parametrização" && (
       <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
         <Secao
           primeiro
@@ -356,16 +454,35 @@ function FormularioDoVinculo({
                 </Field>
               )}
             </Secao>
+          </>
+        )}
 
-            <Secao
-              titulo="Como vai chegar"
-              legenda="O seu texto com os valores de exemplo no lugar. É assim que o cliente vê."
-            >
+        {vinculo && <Desfazer onRemover={remover} ocupado={salvando} />}
+      </div>
+      )}
+
+      {aba === "Exibição" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+          <Secao
+            primeiro
+            titulo="Como vai chegar"
+            legenda="O seu texto com os valores de exemplo no lugar. É assim que o cliente vê."
+          >
+            {modelo ? (
               <div
                 style={{
                   padding: "10px 12px",
                   borderRadius: "var(--radius-lg)",
-                  backgroundColor: "var(--kanban-coluna-bg)",
+                  /*
+                    ⚠️ Em camadas, e não `backgroundColor` direto.
+
+                    `--kanban-coluna-bg` é translúcido (alfa 0.35): sozinho, ele
+                    deixa passar o branco do drawer e some. Sobre uma base
+                    sólida, ele rende a mesma cor das colunas do quadro, que é
+                    onde essa cor já quer dizer "fundo de conteúdo".
+                  */
+                  background:
+                    "linear-gradient(var(--kanban-coluna-bg), var(--kanban-coluna-bg)), var(--sidebar-bg)",
                   fontSize: "var(--text-sm)",
                   lineHeight: "var(--lh-normal)",
                   whiteSpace: "pre-wrap",
@@ -373,72 +490,203 @@ function FormularioDoVinculo({
               >
                 {comFormatacaoDoWhatsapp(previaDoCorpo(modelo.corpo, exemplos))}
               </div>
-            </Secao>
-          </>
-        )}
+            ) : (
+              <p style={{ fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>
+                Escolha o modelo em Parametrização para ver como a mensagem fica.
+              </p>
+            )}
+          </Secao>
 
-        <Dicionario finalidade={finalidade} />
-
-        {vinculo && (
-          <div>
-            <button
-              type="button"
-              onClick={() => void remover()}
-              disabled={salvando}
-              style={{
-                border: "none",
-                background: "transparent",
-                padding: 0,
-                fontSize: "var(--text-base)",
-                color: "var(--danger-text)",
-                cursor: "pointer",
-              }}
-            >
-              Desfazer este vínculo
-            </button>
-            <p
-              style={{
-                marginTop: 4,
-                fontSize: "calc(var(--text-xs) + 1px)",
-                color: "var(--text-tertiary)",
-              }}
-            >
-              O modelo continua aprovado na Meta. O que para é o envio automático desta finalidade.
-            </p>
-          </div>
-        )}
-      </div>
+          <Dicionario finalidade={finalidade} parametros={parametros} botao={botao} />
+        </div>
+      )}
     </Drawer>
   );
 }
 
-/** O que cada variável significa, com exemplo. Vale para criar o modelo lá. */
-function Dicionario({ finalidade }: { finalidade: Finalidade }) {
+/**
+ * Desfazer o vínculo, atrás de uma sanfona.
+ *
+ * ⚠️ Fechada por padrão, pelo mesmo motivo do excluir chave: não é o que se vem
+ * fazer aqui, e aberta ficaria a um clique de distância de salvar.
+ */
+function Desfazer({ onRemover, ocupado }: { onRemover: () => void; ocupado: boolean }) {
+  const [aberta, setAberta] = useState(false);
+
+  return (
+    <section style={{ marginTop: 12 }}>
+      <button
+        type="button"
+        onClick={() => setAberta((v) => !v)}
+        aria-expanded={aberta}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          padding: 0,
+          border: "none",
+          background: "transparent",
+          cursor: "pointer",
+          fontSize: "calc(var(--text-lg) + 2px)",
+          fontWeight: "var(--fw-semi)",
+          color: "var(--text-primary)",
+          letterSpacing: "var(--tracking-snug)",
+        }}
+      >
+        Mais
+        <svg
+          width="13"
+          height="13"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.4"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{
+            color: "var(--text-tertiary)",
+            transform: aberta ? "rotate(180deg)" : "none",
+            transition: "transform 160ms var(--ease-out)",
+          }}
+        >
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+
+      {aberta && (
+        <div style={{ marginTop: 12 }}>
+          <button
+            type="button"
+            onClick={onRemover}
+            disabled={ocupado}
+            style={{
+              border: "none",
+              background: "transparent",
+              padding: 0,
+              fontSize: "var(--text-base)",
+              color: "var(--danger-text)",
+              cursor: "pointer",
+            }}
+          >
+            Desfazer este vínculo
+          </button>
+
+          <p
+            style={{
+              marginTop: 4,
+              fontSize: "calc(var(--text-xs) + 1px)",
+              color: "var(--text-tertiary)",
+              lineHeight: "var(--lh-normal)",
+            }}
+          >
+            O modelo continua aprovado na Meta. O que para é o envio desta finalidade, que passa a
+            falhar dizendo que falta configurar.
+          </p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/**
+ * O que cada variável significa, e onde ela caiu.
+ *
+ * ⚠️ Não é um glossário parado. A etiqueta da esquerda mostra em QUAL marcador
+ * a variável foi usada, ou que ela ficou de fora — o que transforma a lista num
+ * conferidor do mapeamento feito logo acima. Sem isso, descobrir que o valor
+ * ficou sem lugar exigia contar os seletores de novo.
+ */
+function Dicionario({
+  finalidade,
+  parametros,
+  botao,
+}: {
+  finalidade: Finalidade;
+  parametros: string[];
+  botao: string | null;
+}) {
   const todas = finalidade.botao
     ? [...finalidade.variaveis, finalidade.botao]
     : finalidade.variaveis;
 
+  function ondeEntra(chave: string): { rotulo: string; usada: boolean } {
+    const i = parametros.indexOf(chave);
+    if (i >= 0) return { rotulo: `{{${i + 1}}}`, usada: true };
+    if (botao === chave) return { rotulo: "botão", usada: true };
+    return { rotulo: "sem uso", usada: false };
+  }
+
   return (
     <Secao
       titulo="O que o sistema tem para dar"
-      legenda="Estes são os únicos valores que esta finalidade sabe preencher. O que não estiver aqui precisa ser texto fixo no modelo."
+      legenda="São os únicos valores que esta finalidade sabe preencher. O que não estiver aqui precisa ser texto fixo dentro do seu modelo."
     >
-      <dl style={{ display: "grid", gap: 10, margin: 0 }}>
-        {todas.map((v) => (
-          <div key={v.chave}>
-            <dt style={{ fontSize: "var(--text-sm)", fontWeight: "var(--fw-semi)" }}>{v.rotulo}</dt>
-            <dd
+      <dl style={{ display: "grid", gap: 0, margin: 0 }}>
+        {todas.map((v, i) => {
+          const onde = ondeEntra(v.chave);
+
+          return (
+            <div
+              key={v.chave}
               style={{
-                margin: "2px 0 0",
-                fontSize: "calc(var(--text-xs) + 1px)",
-                color: "var(--text-tertiary)",
-                lineHeight: "var(--lh-normal)",
+                display: "flex",
+                gap: 10,
+                padding: "10px 0",
+                borderTop: i === 0 ? "1px solid var(--border)" : "none",
+                borderBottom: "1px solid var(--border)",
               }}
             >
-              {v.descricao} Exemplo: <strong style={{ color: "var(--text-secondary)" }}>{v.exemplo}</strong>
-            </dd>
-          </div>
-        ))}
+              {/*
+                Largura fixa: as etiquetas empilham numa coluna só, e o olho
+                desce por elas procurando o "sem uso" sem ler o resto.
+              */}
+              <span
+                style={{
+                  flexShrink: 0,
+                  width: 62,
+                  paddingTop: 1,
+                  fontSize: "var(--text-xs)",
+                  fontFamily: "var(--font-mono, monospace)",
+                  color: onde.usada ? "var(--primary)" : "var(--text-tertiary)",
+                }}
+              >
+                {onde.rotulo}
+              </span>
+
+              <div style={{ minWidth: 0 }}>
+                <dt style={{ fontSize: "var(--text-sm)", fontWeight: "var(--fw-semi)" }}>
+                  {v.rotulo}
+                </dt>
+                <dd
+                  style={{
+                    margin: "3px 0 0",
+                    fontSize: "calc(var(--text-xs) + 1px)",
+                    color: "var(--text-tertiary)",
+                    lineHeight: "var(--lh-normal)",
+                  }}
+                >
+                  {v.descricao}
+                </dd>
+
+                {/* O exemplo com a cara de dado, e não de continuação da frase. */}
+                <dd
+                  style={{
+                    display: "inline-block",
+                    margin: "6px 0 0",
+                    padding: "2px 7px",
+                    borderRadius: "var(--radius-full)",
+                    background:
+                      "linear-gradient(var(--kanban-coluna-bg), var(--kanban-coluna-bg)), var(--sidebar-bg)",
+                    fontSize: "var(--text-xs)",
+                    color: "var(--text-secondary)",
+                  }}
+                >
+                  {v.exemplo}
+                </dd>
+              </div>
+            </div>
+          );
+        })}
       </dl>
     </Secao>
   );

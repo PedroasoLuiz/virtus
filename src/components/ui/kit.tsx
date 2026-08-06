@@ -1230,6 +1230,9 @@ export function Badge({ tom = "neutral", children }: { tom?: Tom; children: Reac
       style={{
         display: "inline-flex",
         alignItems: "center",
+        // Respiro para quando vier um ícone antes do texto. Sem ícone, não muda
+        // nada: o `gap` só existe entre dois filhos.
+        gap: 4,
         height: 20,
         padding: "0 8px",
         borderRadius: "var(--radius-full)",
