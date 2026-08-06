@@ -70,6 +70,8 @@ export type ContextoDoBot = {
    * Era da empresa e ninguem entendia o que era. Aqui ela pertence a quem
    * atende: uma linha de vendas pode ter o bot solto e a de suporte presa.
    */
+  /** ⚠️ Desligado, o numero nao usa IA: nem chega a consultar credencial. */
+  contaBotAtivo: boolean;
   contaRespondeTodos: boolean;
   /** Quando nao responde a todos, so estes. Vazio significa ninguem. */
   contaNumeros: string | null;

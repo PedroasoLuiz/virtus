@@ -541,6 +541,18 @@ async function executar(conversaId: number): Promise<void> {
   }
 
   /*
+   * O numero decide ANTES da empresa.
+   *
+   * ⚠️ Sem IA ligada neste numero, nem se consulta credencial: a empresa pode
+   * ter chave paga e uma linha que atende so a mao, e perguntar ao provedor
+   * seria gastar por uma resposta que nunca sairia.
+   */
+  if (!ctx.contaBotAtivo) {
+    logger.info("bot desligado neste numero", { conversaId });
+    return;
+  }
+
+  /*
    * As chaves e o interruptor sao da EMPRESA. Sem nenhuma ativa, nao ha bot.
    *
    * Vem em ordem de preferencia: a primeira responde, e as outras existem para

@@ -916,6 +916,7 @@ export type Database = {
           tentativas: number;
           humano_respondeu: boolean;
           primeiro_contato: boolean;
+          conta_bot_ativo: boolean;
           conta_responde_todos: boolean;
           conta_numeros: string | null;
         }[];
@@ -1130,6 +1131,7 @@ export type Database = {
           tem_token: boolean;
           tem_app_secret: boolean;
           verify_token: string | null;
+          bot_ativo: boolean;
           bot_responde_todos: boolean;
           bot_numeros: string | null;
         }[];
@@ -1158,6 +1160,7 @@ export type Database = {
           p_app_secret: string | null;
           p_bot_responde_todos: boolean;
           p_bot_numeros: string | null;
+          p_bot_ativo: boolean;
         };
         Returns: number;
       };

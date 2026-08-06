@@ -31,6 +31,8 @@ export type ContaWhatsapp = {
    * ⚠️ Desligado com a lista vazia, ele nao responde a NINGUEM. E o padrao de
    * conta nova: ligar o atendimento automatico passa a ser um ato.
    */
+  /** Este numero usa atendimento por IA. Desligado, os dois abaixo nao valem. */
+  botAtivo: boolean;
   botRespondeTodos: boolean;
   /** Quando nao responde a todos, so estes. Um por linha. */
   botNumeros: string | null;
@@ -308,19 +310,99 @@ export function digitosDoTelefone(bruto: string): string {
  * Ordenada por uso esperado, nao por alfabeto: o Brasil e o caso de quase todo
  * cadastro, e deixa-lo no meio da lista custaria uma rolagem por numero.
  */
-export const PAISES: { ddi: string; nome: string; bandeira: string }[] = [
-  { ddi: "55", nome: "Brasil", bandeira: "🇧🇷" },
-  { ddi: "351", nome: "Portugal", bandeira: "🇵🇹" },
-  { ddi: "1", nome: "Estados Unidos e Canadá", bandeira: "🇺🇸" },
-  { ddi: "54", nome: "Argentina", bandeira: "🇦🇷" },
-  { ddi: "595", nome: "Paraguai", bandeira: "🇵🇾" },
-  { ddi: "598", nome: "Uruguai", bandeira: "🇺🇾" },
-  { ddi: "56", nome: "Chile", bandeira: "🇨🇱" },
-  { ddi: "244", nome: "Angola", bandeira: "🇦🇴" },
-  { ddi: "258", nome: "Moçambique", bandeira: "🇲🇿" },
-  { ddi: "34", nome: "Espanha", bandeira: "🇪🇸" },
-  { ddi: "44", nome: "Reino Unido", bandeira: "🇬🇧" },
+export type Pais = {
+  ddi: string;
+  nome: string;
+  bandeira: string;
+  /**
+   * Quantos digitos o numero LOCAL tem, sem o DDI.
+   *
+   * ⚠️ Lista, e nao um numero: o Brasil convive com 10 e 11 por causa do nono
+   * digito, e validar so o maior recusaria fixo comercial que ainda existe.
+   */
+  tamanhos: number[];
+  /** Como agrupar na exibicao. `9` e um digito; o resto e literal. */
+  mascara: string;
+};
+
+export const PAISES: Pais[] = [
+  { ddi: "55", nome: "Brasil", bandeira: "🇧🇷", tamanhos: [10, 11], mascara: "(99) 99999-9999" },
+  { ddi: "351", nome: "Portugal", bandeira: "🇵🇹", tamanhos: [9], mascara: "999 999 999" },
+  { ddi: "1", nome: "Estados Unidos e Canadá", bandeira: "🇺🇸", tamanhos: [10], mascara: "(999) 999-9999" },
+  { ddi: "54", nome: "Argentina", bandeira: "🇦🇷", tamanhos: [10, 11], mascara: "(99) 9999-9999" },
+  { ddi: "595", nome: "Paraguai", bandeira: "🇵🇾", tamanhos: [9], mascara: "999 999 999" },
+  { ddi: "598", nome: "Uruguai", bandeira: "🇺🇾", tamanhos: [8, 9], mascara: "9 999 99 99" },
+  { ddi: "56", nome: "Chile", bandeira: "🇨🇱", tamanhos: [9], mascara: "9 9999 9999" },
+  { ddi: "244", nome: "Angola", bandeira: "🇦🇴", tamanhos: [9], mascara: "999 999 999" },
+  { ddi: "258", nome: "Moçambique", bandeira: "🇲🇿", tamanhos: [9], mascara: "99 999 9999" },
+  { ddi: "34", nome: "Espanha", bandeira: "🇪🇸", tamanhos: [9], mascara: "999 999 999" },
+  { ddi: "44", nome: "Reino Unido", bandeira: "🇬🇧", tamanhos: [10], mascara: "9999 999999" },
 ];
+
+export function paisDoDdi(ddi: string): Pais {
+  // Brasil como reserva: e o cadastro de quase todo mundo, e um pais
+  // desconhecido nao pode deixar o formulario sem mascara nenhuma.
+  return PAISES.find((p) => p.ddi === ddi) ?? PAISES[0];
+}
+
+/**
+ * Aplica a mascara do pais a um numero local.
+ *
+ * ⚠️ Para de consumir quando os digitos acabam, entao o campo nao mostra
+ * parenteses e tracos de posicoes que a pessoa ainda nao digitou.
+ */
+export function mascaraDoPais(ddi: string, bruto: string): string {
+  const pais = paisDoDdi(ddi);
+  const d = digitosDoTelefone(bruto).slice(0, Math.max(...pais.tamanhos));
+
+  if (!d) return "";
+
+  let saida = "";
+  let i = 0;
+
+  for (const c of pais.mascara) {
+    if (i >= d.length) break;
+
+    if (c === "9") {
+      saida += d[i];
+      i += 1;
+    } else {
+      saida += c;
+    }
+  }
+
+  // Sobrou digito depois da mascara: o Brasil com 11 nao cabe em 10 posicoes.
+  return saida + d.slice(i);
+}
+
+/**
+ * O numero local tem tamanho compativel com o pais?
+ *
+ * ⚠️ So o TAMANHO. Validar operadora e faixa exigiria uma base que muda toda
+ * semana, e recusar numero valido por causa de tabela velha e pior que aceitar
+ * um errado: aqui o erro aparece no primeiro envio, com a mensagem da Meta.
+ */
+export function telefoneValido(ddi: string, bruto: string): boolean {
+  const d = digitosDoTelefone(bruto);
+  return paisDoDdi(ddi).tamanhos.includes(d.length);
+}
+
+/** `v19.0`, `v23.0`. A Meta nomeia versao assim desde sempre. */
+export function versaoDaApiValida(texto: string): boolean {
+  return /^v\d{1,3}\.\d{1,2}$/.test(texto.trim());
+}
+
+/**
+ * Um texto novo para o verify token.
+ *
+ * ⚠️ Quem cria e o SISTEMA, nao a Meta. Ele e um segredo combinado: a gente
+ * inventa, cola no painel deles, e no handshake do webhook os dois comparam.
+ * Por isso ele nasce pronto aqui e nao e um campo para preencher.
+ */
+export function novoVerifyToken(): string {
+  const sorteio = () => Math.random().toString(36).slice(2, 10);
+  return `vpay-${sorteio()}${sorteio()}`.slice(0, 24);
+}
 
 /**
  * Separa o DDI do resto, a partir do numero ja guardado.

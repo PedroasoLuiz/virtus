@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { temPalavrao } from "@/shared/domain/linguagem";
 
 /**
  * Contratos de entrada e saida do modulo.
@@ -90,6 +91,7 @@ export const contaSchema = z.object({
   temAppSecret: z.boolean(),
   verifyToken: z.string().nullable(),
   // ⚠️ Faltar aqui APAGA o campo da resposta, mesmo com o banco preenchido.
+  botAtivo: z.boolean(),
   botRespondeTodos: z.boolean(),
   botNumeros: z.string().nullable(),
 });
@@ -103,15 +105,43 @@ export const contaSchema = z.object({
  */
 export const salvarContaBodySchema = z.object({
   id: z.number().int().positive().nullable().default(null),
-  apelido: z.string().trim().max(60).nullable().default(null),
-  numero: z.string().trim().max(20).nullable().default(null),
+  /*
+   * ⚠️ A validacao do apelido tambem vive AQUI, e nao so na tela.
+   *
+   * A tela e conveniencia; o schema e a regra. Um POST direto na API passaria
+   * por cima de qualquer checagem feita no formulario.
+   */
+  apelido: z
+    .string()
+    .trim()
+    .max(60)
+    .refine((v) => !temPalavrao(v), "Escolha outro apelido para este número")
+    .nullable()
+    .default(null),
+  /* E.164: nunca menos que 8 digitos nem mais que 15, com DDI incluso. */
+  numero: z
+    .string()
+    .trim()
+    .max(20)
+    .refine(
+      (v) => v.replace(/\D/g, "").length >= 8 && v.replace(/\D/g, "").length <= 15,
+      "Número de telefone inválido",
+    )
+    .nullable()
+    .default(null),
   phoneNumberId: z.string().trim().min(5).max(40),
   wabaId: z.string().trim().max(40).nullable().default(null),
-  apiVersao: z.string().trim().regex(/^v\d+\.\d+$/, "Use o formato vNN.N").default("v19.0"),
+  apiVersao: z
+    .string()
+    .trim()
+    .regex(/^v\d{1,3}\.\d{1,2}$/, "Use o formato da Meta, como v19.0")
+    .default("v19.0"),
   verifyToken: z.string().trim().min(6).max(120).nullable().default(null),
   token: z.string().trim().min(20).nullable().default(null),
   appSecret: z.string().trim().min(16).nullable().default(null),
   /** Ligado responde a qualquer contato; desligado, so aos numeros da lista. */
+  /** Sem isto, o numero nao usa IA e os dois campos abaixo nao valem nada. */
+  botAtivo: z.boolean().default(false),
   botRespondeTodos: z.boolean().default(false),
   botNumeros: z.string().trim().max(400).nullable().default(null),
 });

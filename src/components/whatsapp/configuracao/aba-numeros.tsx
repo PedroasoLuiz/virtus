@@ -25,12 +25,17 @@ import {
 import {
   digitosDoTelefone,
   formatarTelefone,
-  mascararTelefone,
+  mascaraDoPais,
+  novoVerifyToken,
   PAISES,
+  paisDoDdi,
   separarDdi,
+  telefoneValido,
+  versaoDaApiValida,
   type ContaWhatsapp,
 } from "@/modules/whatsapp/whatsapp.types";
 import { PASSOS_PARA_CONECTAR, UrlDeCallback } from "./webhook";
+import { temPalavrao } from "@/shared/domain/linguagem";
 
 /**
  * Os numeros de WhatsApp da empresa.
@@ -53,6 +58,7 @@ type Rascunho = {
   verifyToken: string;
   token: string;
   appSecret: string;
+  botAtivo: boolean;
   botRespondeTodos: boolean;
   botNumeros: string;
   /** ⚠️ Separado do numero: e ele que decide como a mascara agrupa os digitos. */
@@ -69,7 +75,7 @@ function vazio(): Rascunho {
     apiVersao: "v19.0",
     // Sugerido, nao imposto: e o texto que a pessoa vai colar no painel da Meta,
     // e ter um pronto evita a pergunta "o que eu ponho aqui?".
-    verifyToken: `vpay-${Math.random().toString(36).slice(2, 10)}`,
+    verifyToken: novoVerifyToken(),
     token: "",
     appSecret: "",
     /*
@@ -77,6 +83,7 @@ function vazio(): Rascunho {
      * faria o primeiro cliente real ser cobaia de uma configuracao que ninguem
      * conferiu ainda.
      */
+    botAtivo: false,
     botRespondeTodos: false,
     botNumeros: "",
     ddi: "55",
@@ -94,6 +101,7 @@ function daConta(c: ContaWhatsapp): Rascunho {
     verifyToken: c.verifyToken ?? "",
     token: "",
     appSecret: "",
+    botAtivo: c.botAtivo,
     botRespondeTodos: c.botRespondeTodos,
     botNumeros: c.botNumeros ?? "",
     // O numero vem inteiro do banco; aqui ele volta a ser pais + local.
@@ -147,6 +155,7 @@ export function AbaDeNumeros({
         // Em branco NAO apaga: o servidor le ausente como "mantem o do vault".
         token: rascunho.token.trim() || null,
         appSecret: rascunho.appSecret.trim() || null,
+        botAtivo: rascunho.botAtivo,
         botRespondeTodos: rascunho.botRespondeTodos,
         botNumeros: rascunho.botNumeros.trim() || null,
       }),
@@ -207,13 +216,8 @@ export function AbaDeNumeros({
               size="sm"
               variant="primary"
               onClick={() => void salvar()}
-              disabled={
-                salvando ||
-                rascunho.phoneNumberId.trim().length < 5 ||
-                // Fechado e sem lista, o bot nao falaria com ninguem: em vez de
-                // salvar um estado inutil, o botao explica pelo proprio bloqueio.
-                (!rascunho.botRespondeTodos && rascunho.botNumeros.trim().length === 0)
-              }
+              disabled={salvando || problemas(rascunho).length > 0}
+              title={problemas(rascunho)[0]}
             >
               {salvando ? "Salvando…" : "Salvar"}
             </Button>
@@ -319,6 +323,113 @@ export function AbaDeNumeros({
  * entre eles, nao uma caixa. Caixa dentro de drawer vira cartao sobre cartao, e
  * o formulario passa a parecer tres telas empilhadas.
  */
+/**
+ * Tudo que impede o salvar, em ordem de leitura do formulario.
+ *
+ * ⚠️ Uma funcao so, e nao condicoes espalhadas pelo botao: assim a MESMA lista
+ * vira o motivo mostrado no `title` do botao desabilitado. Botao cinza sem
+ * explicacao e o jeito mais rapido de fazer alguem desistir do cadastro.
+ */
+/**
+ * Campo de segredo com olho para revelar.
+ *
+ * ⚠️ Escondido por padrao, e revelado por gesto: estes valores sao colados de
+ * outra aba e conferidos uma vez, e ficam na tela enquanto o resto do
+ * formulario e preenchido. Visivel o tempo todo, um token de producao fica
+ * exposto a quem passar atras da cadeira.
+ */
+function CampoSecreto({
+  valor,
+  placeholder,
+  onMudar,
+}: {
+  valor: string;
+  placeholder: string;
+  onMudar: (v: string) => void;
+}) {
+  const [visivel, setVisivel] = useState(false);
+
+  return (
+    <div style={{ position: "relative" }}>
+      <input
+        // Espaco a direita para o olho, que fica DENTRO da caixa: fora dela,
+        // ele desalinharia este campo dos outros do formulario.
+        style={{ ...inputStyle, paddingRight: 30 }}
+        type={visivel ? "text" : "password"}
+        autoComplete="off"
+        placeholder={placeholder}
+        value={valor}
+        onChange={(e) => onMudar(e.target.value)}
+      />
+
+      <button
+        type="button"
+        onClick={() => setVisivel((v) => !v)}
+        title={visivel ? "Ocultar" : "Mostrar"}
+        aria-label={visivel ? "Ocultar o valor" : "Mostrar o valor"}
+        style={{
+          position: "absolute",
+          right: 6,
+          top: "50%",
+          transform: "translateY(-50%)",
+          width: 20,
+          height: 20,
+          display: "grid",
+          placeItems: "center",
+          border: "none",
+          background: "transparent",
+          color: "var(--text-tertiary)",
+          cursor: "pointer",
+        }}
+      >
+        {visivel ? (
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M2 2l20 20" />
+            <path d="M10.6 6.1A9.7 9.7 0 0 1 12 6c6.5 0 10.2 6 10.2 6a18 18 0 0 1-3.3 3.9" />
+            <path d="M6.3 6.9A17.6 17.6 0 0 0 1.8 12S5.5 18 12 18a9.9 9.9 0 0 0 4-.8" />
+            <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+          </svg>
+        ) : (
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M1.8 12S5.5 5.5 12 5.5 22.2 12 22.2 12 18.5 18.5 12 18.5 1.8 12 1.8 12z" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+        )}
+      </button>
+    </div>
+  );
+}
+
+function problemas(r: Rascunho): string[] {
+  const erros: string[] = [];
+
+  if (r.apelido.trim() && temPalavrao(r.apelido)) {
+    erros.push("Escolha outro apelido para este número");
+  }
+
+  if (r.numero.trim() && !telefoneValido(r.ddi, r.numero)) {
+    const tamanhos = paisDoDdi(r.ddi).tamanhos.join(" ou ");
+    erros.push(`Número de ${paisDoDdi(r.ddi).nome} tem ${tamanhos} dígitos`);
+  }
+
+  if (r.phoneNumberId.trim().length < 5) erros.push("Falta o Phone number ID");
+
+  if (!versaoDaApiValida(r.apiVersao)) {
+    erros.push("Versão da API no formato da Meta, como v19.0");
+  }
+
+  /*
+   * A lista de numeros so e exigida com a IA LIGADA e fechada. Desligada, ela
+   * nem aparece na tela, e cobrar preenchimento de um campo escondido travaria
+   * o cadastro sem nada visivel explicando.
+   */
+  if (r.botAtivo && !r.botRespondeTodos && !r.botNumeros.trim()) {
+    erros.push("Informe ao menos um número, ou ligue responder a todos");
+  }
+
+  return erros;
+}
+
 function Grupo({
   titulo,
   legenda,
@@ -455,17 +566,10 @@ function Formulario({
               // Zeros e nao um numero plausivel: assim a dica se le como FORMATO.
               // Um exemplo verossimil parece dado de verdade, e o que estava ali
               // era o proprio numero da empresa.
-              placeholder={rascunho.ddi === "55" ? "(00) 00000-0000" : "000000000"}
-              /*
-               * Mascara so onde ela e conhecida. Fora do Brasil, agrupar os
-               * digitos em DDD e sufixo inventaria um formato que nao existe no
-               * pais, e o campo passaria a mentir sobre o que e valido.
-               */
-              value={
-                rascunho.ddi === "55"
-                  ? mascararTelefone(`55${rascunho.numero}`).replace(/^\+55\s*/, "")
-                  : rascunho.numero
-              }
+              // Zeros e nao um numero plausivel: assim a dica se le como
+              // FORMATO. Exemplo verossimil parece dado de verdade.
+              placeholder={paisDoDdi(rascunho.ddi).mascara.replace(/9/g, "0")}
+              value={mascaraDoPais(rascunho.ddi, rascunho.numero)}
               onChange={(e) =>
                 onMudar({ ...rascunho, numero: digitosDoTelefone(e.target.value) })
               }
@@ -510,13 +614,10 @@ function Formulario({
           required={!editando}
           hint="Use um token de Usuário do sistema, no Business Manager. O do API Setup expira em 24 horas."
         >
-          <input
-            style={inputStyle}
-            type="password"
-            autoComplete="off"
+          <CampoSecreto
+            valor={rascunho.token}
             placeholder={marcador}
-            value={rascunho.token}
-            onChange={mudar("token")}
+            onMudar={(v) => onMudar({ ...rascunho, token: v })}
           />
         </Field>
 
@@ -525,25 +626,60 @@ function Formulario({
           required={!editando}
           hint="Meta, Configurações do app, aba Básico. É ele que prova que o webhook veio da Meta."
         >
-          <input
-            style={inputStyle}
-            type="password"
-            autoComplete="off"
+          <CampoSecreto
+            valor={rascunho.appSecret}
             placeholder={marcador}
-            value={rascunho.appSecret}
-            onChange={mudar("appSecret")}
+            onMudar={(v) => onMudar({ ...rascunho, appSecret: v })}
           />
         </Field>
 
+        {/*
+          Gerado por NOS, e nao digitado.
+
+          ⚠️ Ele nao vem da Meta: e um segredo combinado que a gente inventa e
+          cola no painel deles. A Meta so o usa no handshake, quando o webhook e
+          verificado — trocar depois nao derruba as mensagens na hora, mas
+          derruba na proxima reverificacao. Por isso ele fica travado, e trocar
+          exige um gesto explicito.
+        */}
         <Field
           label="Verify token"
-          hint="Você inventa este texto e cola o MESMO nos dois lados. Serve só para a Meta provar que o webhook é seu."
+          hint={
+            editando
+              ? "Trocar aqui obriga a trocar também no painel da Meta, senão a próxima verificação falha."
+              : "Cole este mesmo texto no webhook da Meta. Ele prova que o webhook é seu."
+          }
         >
-          <input
-            style={inputStyle}
-            value={rascunho.verifyToken}
-            onChange={mudar("verifyToken")}
-          />
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <input
+              style={{ ...inputStyle, flex: 1 }}
+              value={rascunho.verifyToken}
+              readOnly
+              onFocus={(e) => e.currentTarget.select()}
+            />
+            <button
+              type="button"
+              onClick={() => onMudar({ ...rascunho, verifyToken: novoVerifyToken() })}
+              title="Gerar outro"
+              aria-label="Gerar outro verify token"
+              style={{
+                flexShrink: 0,
+                width: 24,
+                height: 24,
+                display: "grid",
+                placeItems: "center",
+                border: "none",
+                background: "transparent",
+                color: "var(--primary)",
+                cursor: "pointer",
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 12a8 8 0 1 1-2.3-5.6" />
+                <path d="M20 3v4.5h-4.5" />
+              </svg>
+            </button>
+          </div>
         </Field>
 
         <Field
@@ -565,23 +701,42 @@ function Formulario({
         titulo="Atendimento automático"
         legenda="Decide quem recebe resposta da IA neste número. Ligar para todos é um ato: número novo nasce fechado."
       >
+        {/*
+          O interruptor mestre vem PRIMEIRO, e esconde o resto quando desligado.
+
+          Quem atende so a mao nao precisa decidir "para quem a IA responde": a
+          pergunta nao se aplica, e deixa-la na tela sugere que atender por IA e
+          obrigatorio.
+        */}
         <Field
-          label="Responde a todos"
-          hint={
-            rascunho.botRespondeTodos
-              ? "O atendimento automático fala com qualquer contato deste número."
-              : "Desligado, só os números listados abaixo recebem resposta automática."
-          }
+          label="Usar inteligência artificial"
+          hint="Desligado, este número é atendido só por pessoas."
         >
           <ActiveToggle
-            active={rascunho.botRespondeTodos}
-            onChange={() =>
-              onMudar({ ...rascunho, botRespondeTodos: !rascunho.botRespondeTodos })
-            }
+            active={rascunho.botAtivo}
+            onChange={() => onMudar({ ...rascunho, botAtivo: !rascunho.botAtivo })}
           />
         </Field>
 
-        {!rascunho.botRespondeTodos && (
+        {rascunho.botAtivo && (
+          <Field
+            label="Responde a todos"
+            hint={
+              rascunho.botRespondeTodos
+                ? "A IA fala com qualquer contato deste número."
+                : "Desligado, só os números listados abaixo recebem resposta automática."
+            }
+          >
+            <ActiveToggle
+              active={rascunho.botRespondeTodos}
+              onChange={() =>
+                onMudar({ ...rascunho, botRespondeTodos: !rascunho.botRespondeTodos })
+              }
+            />
+          </Field>
+        )}
+
+        {rascunho.botAtivo && !rascunho.botRespondeTodos && (
           <Field
             label="Só estes números"
             required
