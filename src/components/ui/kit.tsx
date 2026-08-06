@@ -1493,6 +1493,15 @@ export const textareaStyle: React.CSSProperties = {
 /** Alterna ativo/inativo. Mesmo desenho do SIC. */
 export function ActiveToggle({ active, onChange }: { active: boolean; onChange: () => void }) {
   return (
+    /*
+     * ⚠️ A caixa em volta e o que alinha.
+     *
+     * O interruptor tem 20px e o campo de texto tem 26, e o `Field` centra o
+     * rotulo pelo campo: solto, ele ficava tres pixels acima da propria label.
+     * Ocupando a altura de um campo, ele passa a se alinhar em qualquer lugar
+     * do sistema sem cada tela corrigir por conta.
+     */
+    <span style={{ display: "inline-flex", alignItems: "center", height: "var(--h-input)" }}>
     <button
       type="button"
       onClick={onChange}
@@ -1525,6 +1534,7 @@ export function ActiveToggle({ active, onChange }: { active: boolean; onChange: 
         }}
       />
     </button>
+    </span>
   );
 }
 

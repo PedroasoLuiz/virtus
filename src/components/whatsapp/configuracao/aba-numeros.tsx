@@ -368,6 +368,10 @@ function problemas(r: Rascunho): string[] {
    * nem aparece na tela, e cobrar preenchimento de um campo escondido travaria
    * o cadastro sem nada visivel explicando.
    */
+  if (r.botAtivo && r.iaCredencialId == null) {
+    erros.push("Escolha a chave de IA que este número usa");
+  }
+
   if (r.botAtivo && !r.botRespondeTodos && !r.botNumeros.trim()) {
     erros.push("Informe ao menos um número, ou ligue responder a todos");
   }
@@ -668,7 +672,8 @@ function Formulario({
         {rascunho.botAtivo && (
           <Field
             label="Chave de IA"
-            hint="Qual credencial este número usa. Assim o gasto de cada setor sai separado."
+            required
+            hint="Qual credencial este número usa. É por ela que o gasto é rastreado, então cada número aponta para uma."
           >
             <select
               style={selectStyle}
@@ -681,12 +686,16 @@ function Formulario({
               }
             >
               {/*
-                Vazio cai na fila da empresa, que e o comportamento de quem tem
-                uma chave so. Escolhida uma, o numero fala com ela e mais
-                nenhuma: cair na reserva de outro setor furaria justamente a
-                separacao de gasto que a escolha existe para garantir.
+                ⚠️ Sem opcao de "deixar o sistema escolher".
+                
+                Ela existia e ninguem entendia o que fazia — com razao: numero
+                sem chave definida gasta em alguma credencial que a fila
+                decidiu, e depois nao ha como dizer qual numero consumiu o que.
+                Rateio exige que a escolha seja explicita.
               */}
-              <option value="">Usar a fila da empresa</option>
+              <option value="" disabled>
+                Escolha uma chave
+              </option>
               {(credenciais ?? [])
                 .filter((c) => c.ativo && c.temChave)
                 .map((c) => (

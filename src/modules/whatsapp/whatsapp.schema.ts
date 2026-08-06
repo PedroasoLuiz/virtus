@@ -147,7 +147,17 @@ export const salvarContaBodySchema = z.object({
   iaCredencialId: z.number().int().positive().nullable().default(null),
   botRespondeTodos: z.boolean().default(false),
   botNumeros: z.string().trim().max(400).nullable().default(null),
-});
+}).refine(
+  /*
+   * ⚠️ Com IA ligada, a chave e obrigatoria.
+   *
+   * Sem ela o numero gastaria numa credencial escolhida pela fila, e depois nao
+   * haveria como dizer qual numero consumiu o que. Rateio exige escolha
+   * explicita, e a tela sozinha nao basta: um POST direto passaria por cima.
+   */
+  (v) => !v.botAtivo || v.iaCredencialId != null,
+  { message: "Escolha a chave de IA deste número", path: ["iaCredencialId"] },
+);
 
 export const vincularBodySchema = z.object({
   clienteId: z.number().int().positive(),
