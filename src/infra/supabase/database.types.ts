@@ -927,6 +927,11 @@ export type Database = {
           em_uso: number;
         }[];
       };
+      /** ⚠️ Devolve a chave em CLARO, do vault. So para a rota de teste. */
+      ia_chave_para_teste: {
+        Args: { p_id: number };
+        Returns: { provedor: string; modelo: string; chave: string }[];
+      };
       /** ⚠️ Devolve a chave em CLARO, do vault. Uma linha, ou nenhuma. */
       ia_credenciais_da_conversa: {
         Args: { p_segredo: string; p_conversa: number };

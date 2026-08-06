@@ -1,6 +1,13 @@
 import { AppError } from "@/shared/errors/app-error";
 import { logger } from "@/shared/utils/logger";
 import type { CredencialIA } from "@/modules/ia/ia.types";
+import {
+  testeDeErroDeRede,
+  testeFalhou,
+  testeInconclusivo,
+  testeOk,
+  type ResultadoDoTeste,
+} from "@/shared/domain/teste-conexao";
 
 /**
  * Porta de saida para o provedor de IA.
@@ -394,6 +401,130 @@ async function peloGemini<T>(
   } finally {
     clearTimeout(prazo);
   }
+}
+
+/**
+ * Bate na porta do provedor com a chave e o modelo que a pessoa acabou de
+ * digitar, antes de gravar.
+ *
+ * ⚠️ E uma geracao de verdade, minuscula, e nao um "listar modelos". Listar
+ * confirma a chave e nao diz nada sobre o nome do modelo — que e justamente o
+ * campo de texto livre, o que erra. Uma geracao de um token so valida os dois
+ * de uma vez, e custa fracao de centavo.
+ *
+ * O prazo e menor que o do atendimento: aqui tem gente olhando a tela esperando.
+ */
+const LIMITE_TESTE_MS = 12_000;
+
+export async function testarCredencial(cred: CredencialIA): Promise<ResultadoDoTeste> {
+  const controle = new AbortController();
+  const prazo = setTimeout(() => controle.abort(), LIMITE_TESTE_MS);
+
+  try {
+    const { status, detalhe } = await bater(cred, controle.signal);
+
+    if (status === 200) {
+      return testeOk("Chave e modelo confirmados. O provedor respondeu.");
+    }
+
+    /*
+     * 401 e 403: a chave nao serve. Nao ha o que salvar aqui.
+     *
+     * Alguns provedores respondem 400 para chave malformada, mas 400 tambem
+     * cobre corpo invalido nosso — por isso ele NAO entra como definitivo.
+     */
+    if (status === 401 || status === 403) {
+      return testeFalhou("O provedor recusou esta chave.", detalhe);
+    }
+
+    // 404: o nome do modelo nao existe nesse provedor. O erro mais comum, e o
+    // motivo de o teste existir.
+    if (status === 404 || (status === 400 && /model|not found/i.test(detalhe ?? ""))) {
+      return testeFalhou(
+        `O provedor não conhece o modelo "${cred.modelo}". Confira o nome exato.`,
+        detalhe,
+      );
+    }
+
+    /*
+     * 429 diz que a chave e VALIDA: ela foi reconhecida e barrada por cota.
+     * Barrar o cadastro aqui seria impedir de configurar quem estourou a cota
+     * do mes, que e exatamente quem precisa mexer na configuracao.
+     */
+    if (status === 429) {
+      return testeInconclusivo(
+        "A chave foi reconhecida, mas está sem cota agora. Dá para salvar; o atendimento volta quando a cota voltar.",
+        detalhe,
+      );
+    }
+
+    return testeInconclusivo(
+      "O provedor respondeu com um erro que não dá para interpretar. Dá para salvar assim mesmo.",
+      detalhe,
+    );
+  } catch (err) {
+    return testeDeErroDeRede(err);
+  } finally {
+    clearTimeout(prazo);
+  }
+}
+
+/** A menor chamada possivel em cada protocolo. So o status importa. */
+async function bater(
+  cred: CredencialIA,
+  signal: AbortSignal,
+): Promise<{ status: number; detalhe: string | null }> {
+  const comum = { method: "POST" as const, signal };
+
+  const resposta =
+    cred.provedor === "gemini"
+      ? await fetch(`${BASE}/models/${encodeURIComponent(cred.modelo)}:generateContent`, {
+          ...comum,
+          headers: { "Content-Type": "application/json", "x-goog-api-key": cred.chave },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: "ok" }] }],
+            generationConfig: { maxOutputTokens: 1 },
+          }),
+        })
+      : cred.provedor === "anthropic"
+        ? await fetch("https://api.anthropic.com/v1/messages", {
+            ...comum,
+            headers: {
+              "Content-Type": "application/json",
+              "x-api-key": cred.chave,
+              "anthropic-version": "2023-06-01",
+            },
+            body: JSON.stringify({
+              model: cred.modelo,
+              max_tokens: 1,
+              messages: [{ role: "user", content: "ok" }],
+            }),
+          })
+        : await fetch(`${BASE_COMPATIVEL[cred.provedor as "openai" | "deepseek"]}/chat/completions`, {
+            ...comum,
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${cred.chave}`,
+            },
+            body: JSON.stringify({
+              model: cred.modelo,
+              max_tokens: 1,
+              messages: [{ role: "user", content: "ok" }],
+            }),
+          });
+
+  if (resposta.ok) return { status: resposta.status, detalhe: null };
+
+  const corpo = (await resposta.json().catch(() => ({}))) as { error?: { message?: string } };
+
+  // A chave NAO entra no log, nem truncada.
+  logger.info("teste de credencial de IA recusado", {
+    provedor: cred.provedor,
+    modelo: cred.modelo,
+    status: resposta.status,
+  });
+
+  return { status: resposta.status, detalhe: corpo.error?.message ?? null };
 }
 
 export { AppError };

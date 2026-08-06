@@ -17,6 +17,7 @@ import {
   type Modelo,
   type ResultadoDoEvento,
 } from "@/modules/whatsapp/whatsapp.types";
+import { testeInconclusivo, type ResultadoDoTeste } from "@/shared/domain/teste-conexao";
 
 /** Regra de negocio do WhatsApp. */
 
@@ -34,6 +35,39 @@ export async function salvarConta(
 
   if (!conta) throw new NotFoundError("Conta nao encontrada apos gravar");
   return conta;
+}
+
+/**
+ * Confere as credenciais da Meta antes de gravar o numero.
+ *
+ * ⚠️ O token vazio com `id` preenchido cai no que ja esta no vault: e o caso de
+ * editar um numero, em que a tela nunca recebeu o token de volta para reenviar.
+ *
+ * ⚠️ Nao valida o App Secret nem o Verify token. Os dois so se provam quando a
+ * Meta chama a URL de callback, e nao ha como conferi-los daqui. A tela precisa
+ * dizer isso, senao "tudo certo" promete mais do que foi verificado.
+ */
+export async function testarConta(
+  entrada: { id: number | null; phoneNumberId: string; apiVersao: string; token: string | null },
+): Promise<ResultadoDoTeste> {
+  let token = entrada.token;
+
+  if (!token && entrada.id != null) {
+    // A funcao do banco ja confere o tenant.
+    const guardadas = await repo.credenciais(entrada.id);
+    token = guardadas?.token ?? null;
+  }
+
+  if (!token) {
+    return testeInconclusivo("Cole o token para testar: não há nenhum gravado para este número.");
+  }
+
+  return cloud.testarConta({
+    phoneNumberId: entrada.phoneNumberId,
+    wabaId: null,
+    apiVersao: entrada.apiVersao,
+    token,
+  });
 }
 
 /** A empresa nao entra: quem confere o tenant e a propria funcao no banco. */

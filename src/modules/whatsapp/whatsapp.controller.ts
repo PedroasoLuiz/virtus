@@ -20,6 +20,7 @@ import {
   type ConversaIdQuery,
   type EnviarModeloBody,
   type SalvarContaBody,
+  type TestarContaBody,
   type VincularBody,
   type ConversaIdParam,
   type EnviarTextoBody,
@@ -42,6 +43,12 @@ export async function salvarConta({ body, ctx }: Entrada<SalvarContaBody, undefi
 
 
   return created(contaSchema.parse(conta));
+}
+
+export async function testarConta({ body, ctx }: Entrada<TestarContaBody, undefined, unknown>) {
+  empresaObrigatoria(ctx);
+
+  return ok(await service.testarConta(body));
 }
 
 export async function ativarConta({

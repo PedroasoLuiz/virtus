@@ -36,6 +36,8 @@ import {
   type ContaWhatsapp,
 } from "@/modules/whatsapp/whatsapp.types";
 import { PASSOS_PARA_CONECTAR, UrlDeCallback } from "./webhook";
+import { TesteDeConexao } from "./teste-de-conexao";
+import type { ResultadoDoTeste } from "@/shared/domain/teste-conexao";
 import { temPalavrao } from "@/shared/domain/linguagem";
 import type { ConfigIA } from "@/modules/ia/ia.types";
 
@@ -134,6 +136,43 @@ export function AbaDeNumeros({
   const [rascunho, setRascunho] = useState<Rascunho | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [pagina, setPagina] = useState(1);
+  const [teste, setTeste] = useState<ResultadoDoTeste | null>(null);
+
+  async function testar(): Promise<ResultadoDoTeste> {
+    if (!rascunho) throw new Error("sem rascunho");
+
+    const r = await fetch("/api/v1/whatsapp/contas/teste", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: rascunho.id,
+        phoneNumberId: rascunho.phoneNumberId.trim(),
+        apiVersao: rascunho.apiVersao.trim() || "v19.0",
+        token: rascunho.token.trim() || null,
+      }),
+    });
+
+    const corpo = await r.json().catch(() => null);
+
+    if (!r.ok) {
+      /*
+       * Falha NOSSA nao vira reprovacao das credenciais. Sessao expirada e erro
+       * de rota nao dizem nada sobre o token que foi colado, e marcar como
+       * definitiva travaria o cadastro por um motivo alheio a Meta.
+       */
+      const detalhe = corpo?.error?.details?.[0];
+      return {
+        ok: false,
+        definitivo: false,
+        mensagem: detalhe
+          ? `${detalhe.campo}: ${detalhe.mensagem}`
+          : (corpo?.error?.message ?? "Não foi possível testar agora."),
+        detalhe: null,
+      };
+    }
+
+    return corpo.data as ResultadoDoTeste;
+  }
 
   const totalPaginas = Math.max(1, Math.ceil(contas.length / POR_PAGINA));
   const paginaAtual = Math.min(pagina, totalPaginas);
@@ -231,15 +270,21 @@ export function AbaDeNumeros({
               size="sm"
               variant="primary"
               onClick={() => void salvar()}
-              disabled={salvando || problemas(rascunho).length > 0}
-              title={problemas(rascunho)[0]}
+              disabled={salvando || problemas(rascunho, teste).length > 0}
+              title={problemas(rascunho, teste)[0]}
             >
               {salvando ? "Salvando…" : "Salvar"}
             </Button>
           </div>
         }
       >
-        <Formulario rascunho={rascunho} credenciais={credenciais} onMudar={setRascunho} />
+        <Formulario
+          rascunho={rascunho}
+          credenciais={credenciais}
+          onMudar={setRascunho}
+          aoTestar={testar}
+          onTeste={setTeste}
+        />
       </Drawer>
     );
   }
@@ -345,7 +390,7 @@ export function AbaDeNumeros({
  * vira o motivo mostrado no `title` do botao desabilitado. Botao cinza sem
  * explicacao e o jeito mais rapido de fazer alguem desistir do cadastro.
  */
-function problemas(r: Rascunho): string[] {
+function problemas(r: Rascunho, teste: ResultadoDoTeste | null): string[] {
   const erros: string[] = [];
 
   if (r.apelido.trim() && temPalavrao(r.apelido)) {
@@ -375,6 +420,17 @@ function problemas(r: Rascunho): string[] {
   if (r.botAtivo && !r.botRespondeTodos && !r.botNumeros.trim()) {
     erros.push("Informe ao menos um número, ou ligue responder a todos");
   }
+
+  /*
+   * ⚠️ So falha DEFINITIVA barra: token recusado e Phone number ID inexistente
+   * nao vao funcionar nunca. Meta instavel nao diz nada sobre o que foi
+   * digitado, e travar ali impediria de arrumar a configuracao no pior momento.
+   */
+  if (teste && !teste.ok && teste.definitivo) erros.push(teste.mensagem);
+
+  // Numero NOVO exige ter testado; editar, nao. Sem isso o teste vira enfeite,
+  // e o erro volta a aparecer so quando o primeiro cliente escrever.
+  if (r.id == null && teste == null) erros.push("Teste a conexão antes de salvar");
 
   return erros;
 }
@@ -446,10 +502,14 @@ function Formulario({
   rascunho,
   credenciais,
   onMudar,
+  aoTestar,
+  onTeste,
 }: {
   rascunho: Rascunho;
   credenciais: ConfigIA[] | null;
   onMudar: (r: Rascunho) => void;
+  aoTestar: () => Promise<ResultadoDoTeste>;
+  onTeste: (r: ResultadoDoTeste | null) => void;
 }) {
   const mudar =
     (campo: keyof Rascunho) => (e: React.ChangeEvent<HTMLInputElement>) =>
@@ -742,6 +802,28 @@ function Formulario({
       </Grupo>
 
       <UrlDeCallback />
+
+      {/*
+        O teste vem logo DEPOIS do callback, no fim do formulário.
+
+        É o último passo do que a pessoa acabou de fazer: pegou as credenciais na
+        Meta, colou aqui, e agora pergunta se elas servem. Colocado no meio, ele
+        pediria para testar campos que ainda não foram preenchidos.
+      */}
+      <TesteDeConexao
+        titulo="Confirmar antes de salvar"
+        legenda="Pergunta à Meta se o token e o Phone number ID servem, e mostra de qual número eles são. O App Secret e o Verify token não entram: os dois só se provam quando a Meta chama a URL acima."
+        assinatura={`${rascunho.id ?? 0}|${rascunho.phoneNumberId.trim()}|${rascunho.apiVersao.trim()}|${rascunho.token.trim().length}`}
+        bloqueio={
+          rascunho.phoneNumberId.trim().length < 5
+            ? "Preencha o Phone number ID primeiro"
+            : !editando && rascunho.token.trim().length < 20
+              ? "Cole o token primeiro"
+              : null
+        }
+        aoTestar={aoTestar}
+        onResultado={onTeste}
+      />
 
       {/*
         Uma sanfona so, com os passos e as duvidas juntos.

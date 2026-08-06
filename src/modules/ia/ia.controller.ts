@@ -7,6 +7,7 @@ import {
   type ProvedorParam,
   type SalvarNumeroTesteBody,
   type SalvarProvedorBody,
+  type TestarProvedorBody,
 } from "@/modules/ia/ia.schema";
 
 /** Traduz HTTP <-> servico. */
@@ -33,6 +34,12 @@ export async function salvarNumeroTeste({
   );
 
   return ok(provedores.map((p) => configIASchema.parse(p)));
+}
+
+export async function testar({ body, ctx }: Entrada<TestarProvedorBody, undefined, unknown>) {
+  const resultado = await service.testarProvedor(empresaObrigatoria(ctx), body);
+
+  return ok(resultado);
 }
 
 export async function remover({ params, ctx }: Entrada<undefined, undefined, ProvedorParam>) {

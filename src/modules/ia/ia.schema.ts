@@ -35,10 +35,25 @@ export const salvarNumeroTesteBodySchema = z.object({
   numeroTeste: z.string().trim().max(400).nullable().default(null),
 });
 
+/**
+ * O que testar antes de gravar.
+ *
+ * `chave` vazia com `id` preenchido significa "usa a que ja esta no vault" — o
+ * mesmo acordo do salvar, para nao exigir que a pessoa redigite um segredo que
+ * a tela nunca recebeu de volta.
+ */
+export const testarProvedorBodySchema = z.object({
+  id: z.number().int().positive().nullable().default(null),
+  provedor: provedorSchema,
+  modelo: z.string().trim().min(3).max(60),
+  chave: z.string().trim().min(20).nullable().default(null),
+});
+
 export const provedorParamSchema = z.object({
   id: z.coerce.number().int().positive(),
 });
 
 export type SalvarProvedorBody = z.infer<typeof salvarProvedorBodySchema>;
+export type TestarProvedorBody = z.infer<typeof testarProvedorBodySchema>;
 export type SalvarNumeroTesteBody = z.infer<typeof salvarNumeroTesteBodySchema>;
 export type ProvedorParam = z.infer<typeof provedorParamSchema>;

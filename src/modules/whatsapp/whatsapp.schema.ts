@@ -143,7 +143,7 @@ export const salvarContaBodySchema = z.object({
   /** Ligado responde a qualquer contato; desligado, so aos numeros da lista. */
   /** Sem isto, o numero nao usa IA e os dois campos abaixo nao valem nada. */
   botAtivo: z.boolean().default(false),
-  /** Nulo cai na fila da empresa; preenchido, so essa chave e tentada. */
+  /** A chave que ESTE numero usa. Sem ela, o numero nao responde sozinho. */
   iaCredencialId: z.number().int().positive().nullable().default(null),
   botRespondeTodos: z.boolean().default(false),
   botNumeros: z.string().trim().max(400).nullable().default(null),
@@ -159,6 +159,24 @@ export const salvarContaBodySchema = z.object({
   { message: "Escolha a chave de IA deste número", path: ["iaCredencialId"] },
 );
 
+/**
+ * O que testar antes de gravar o numero.
+ *
+ * `token` vazio com `id` preenchido usa o que ja esta no vault, o mesmo acordo
+ * do salvar. App Secret e Verify token nao entram: nenhum dos dois tem como ser
+ * conferido sem a Meta chamar a URL de callback.
+ */
+export const testarContaBodySchema = z.object({
+  id: z.number().int().positive().nullable().default(null),
+  phoneNumberId: z.string().trim().min(5).max(40),
+  apiVersao: z
+    .string()
+    .trim()
+    .regex(/^v\d{1,3}\.\d{1,2}$/, "Use o formato da Meta, como v19.0")
+    .default("v19.0"),
+  token: z.string().trim().min(20).nullable().default(null),
+});
+
 export const vincularBodySchema = z.object({
   clienteId: z.number().int().positive(),
 });
@@ -170,6 +188,7 @@ export const ativarContaBodySchema = z.object({
 });
 
 export type SalvarContaBody = z.infer<typeof salvarContaBodySchema>;
+export type TestarContaBody = z.infer<typeof testarContaBodySchema>;
 export type AtivarContaBody = z.infer<typeof ativarContaBodySchema>;
 export type ContaIdQuery = z.infer<typeof contaIdQuerySchema>;
 

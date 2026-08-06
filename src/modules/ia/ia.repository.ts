@@ -62,6 +62,27 @@ export async function salvarProvedor(
   if (error) throw error;
 }
 
+/**
+ * A chave gravada de uma credencial, para testar sem redigitar.
+ *
+ * ⚠️ Devolve a chave em CLARO. Existe so para a rota de teste fazer a chamada de
+ * saida: nunca pode voltar ao navegador nem entrar em log.
+ */
+export async function chaveParaTeste(
+  id: number,
+): Promise<{ provedor: string; modelo: string; chave: string } | null> {
+  const supabase = await serverClient();
+
+  const { data, error } = await supabase.rpc("ia_chave_para_teste", { p_id: id });
+
+  if (error) throw error;
+
+  const linha = data?.[0];
+  if (!linha) return null;
+
+  return { provedor: linha.provedor, modelo: linha.modelo, chave: linha.chave };
+}
+
 export async function salvarNumeroTeste(
   empresaId: number,
   numero: string | null,

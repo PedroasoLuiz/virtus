@@ -430,24 +430,59 @@ export function BotaoDeAcao({
   );
 }
 
-export function SkeletonRows({ cols, rows = 8 }: { cols: number; rows?: number }) {
+/**
+ * A tabela enquanto os dados nao chegaram.
+ *
+ * ⚠️ Cada bloco tem a largura do ROTULO da sua coluna, em `ch`. Larguras
+ * inventadas em porcentagem faziam o esqueleto desenhar uma tabela que nao era
+ * a que ia aparecer, e a linha inteira saltava quando os dados chegavam. Pelo
+ * rotulo, o esqueleto ja nasce nas colunas certas.
+ *
+ * Cantos totalmente arredondados e o verde do quadro, e nao um cinza proprio:
+ * assim a espera pertence a mesma paleta do resto e nao vira um estado com
+ * identidade visual so dele.
+ */
+export function SkeletonRows({
+  cols,
+  rows = 8,
+  labels,
+}: {
+  cols: number;
+  rows?: number;
+  /** Os titulos das colunas, na ordem. Cada bloco toma a largura do seu. */
+  labels?: string[];
+}) {
   return (
     <>
       {Array.from({ length: rows }, (_, i) => (
         <tr key={i} style={{ borderBottom: "1px solid var(--border)", height: "var(--h-row)" }}>
-          {Array.from({ length: cols }, (_, j) => (
-            <td key={j} style={{ padding: "0 16px" }}>
-              <div
-                className="sk"
-                style={{
-                  height: 12,
-                  width: j === 0 ? "50%" : j === 1 ? "80%" : "60%",
-                  borderRadius: "var(--radius-sm)",
-                  backgroundColor: "var(--surface-3)",
-                }}
-              />
-            </td>
-          ))}
+          {Array.from({ length: cols }, (_, j) => {
+            const rotulo = labels?.[j]?.trim() ?? "";
+
+            return (
+              <td key={j}>
+                {/* Coluna sem titulo (a das ações) fica vazia mesmo: nao ha
+                    conteudo previsivel para prometer ali. */}
+                {labels && rotulo.length === 0 ? null : (
+                  <div
+                    className="sk"
+                    style={{
+                      height: 13,
+                      width: labels
+                        ? `${Math.max(4, rotulo.length)}ch`
+                        : j === 0
+                          ? "50%"
+                          : j === 1
+                            ? "80%"
+                            : "60%",
+                      borderRadius: 999,
+                      backgroundColor: "var(--kanban-coluna-bg)",
+                    }}
+                  />
+                )}
+              </td>
+            );
+          })}
         </tr>
       ))}
     </>
@@ -1361,15 +1396,96 @@ export function Alert({
         border: `1px solid var(--${variant}-border)`,
       }}
     >
-      <div style={{ flex: 1, minWidth: 0, color: `var(--${variant}-text)` }}>
+      {/*
+        O TEXTO nao muda de cor, so o cartao.
+
+        Titulo colorido competia com o titulo da secao logo acima e vencia, o
+        que fazia um aviso de apoio parecer o assunto da tela. O fundo e a borda
+        ja dizem a gravidade; a cor do texto repetindo isso so tira legibilidade,
+        porque `--danger-text` sobre `--danger-bg` tem menos contraste que o
+        preto do resto da pagina.
+      */}
+      <div style={{ flex: 1, minWidth: 0 }}>
         {title && (
-          <div style={{ fontSize: "var(--text-md)", fontWeight: 600, marginBottom: children ? 2 : 0 }}>
-            {title}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: "var(--text-base)",
+              fontWeight: "var(--fw-semi)",
+              color: "var(--text-primary)",
+              marginBottom: children ? 2 : 0,
+            }}
+          >
+            {/*
+              O icone carrega a cor que o titulo deixou de carregar.
+
+              Com o texto todo neutro, sobrava so o fundo para dizer a gravidade,
+              e fundo tingido de leve se perde em tela clara. Um simbolo colorido
+              de 14px resolve sem gritar, e ainda diz a diferenca a quem nao
+              distingue as duas cores.
+            */}
+            <IconeDoAviso variant={variant} />
+            <span style={{ minWidth: 0 }}>{title}</span>
           </div>
         )}
-        {children && <div style={{ fontSize: "var(--text-base)", opacity: 0.9 }}>{children}</div>}
+        {children && (
+          <div style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>
+            {children}
+          </div>
+        )}
       </div>
     </div>
+  );
+}
+
+/**
+ * O simbolo do aviso, por tom.
+ *
+ * Formas DIFERENTES, e nao a mesma bolinha em quatro cores: quem enxerga pouca
+ * diferenca entre vermelho e ambar continua lendo triangulo como alerta e X como
+ * erro. A cor e reforco, nao o unico sinal.
+ */
+function IconeDoAviso({ variant }: { variant: Tom }) {
+  const comum = {
+    width: 14,
+    height: 14,
+    viewBox: "0 0 20 20",
+    fill: "none" as const,
+    stroke: "currentColor",
+    strokeWidth: 1.8,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+  };
+
+  return (
+    <span
+      style={{ flexShrink: 0, display: "inline-flex", color: `var(--${variant}-text)` }}
+      aria-hidden
+    >
+      {variant === "danger" ? (
+        <svg {...comum}>
+          <circle cx="10" cy="10" r="7.4" />
+          <path d="M7.6 7.6l4.8 4.8M12.4 7.6l-4.8 4.8" />
+        </svg>
+      ) : variant === "warning" ? (
+        <svg {...comum}>
+          <path d="M10 3.2l7 12.2H3z" />
+          <path d="M10 8v3.1M10 13.3v.1" />
+        </svg>
+      ) : variant === "success" ? (
+        <svg {...comum}>
+          <circle cx="10" cy="10" r="7.4" />
+          <path d="M6.6 10.2l2.3 2.3 4.5-4.8" />
+        </svg>
+      ) : (
+        <svg {...comum}>
+          <circle cx="10" cy="10" r="7.4" />
+          <path d="M10 9.2v4.2M10 6.6v.1" />
+        </svg>
+      )}
+    </span>
   );
 }
 

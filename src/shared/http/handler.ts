@@ -121,8 +121,20 @@ function tratarErro(err: unknown, requestId: string, req: Request): Response {
     erro: err instanceof Error ? { nome: err.name, mensagem: err.message, stack: err.stack } : err,
   });
 
-  // Stack nunca vaza para o cliente.
-  return fail(500, "INTERNAL", "Erro interno", requestId);
+  /*
+   * Stack nunca vaza para o cliente, mas o CODIGO vai junto.
+   *
+   * ⚠️ "Erro interno" sozinho nao serve para ninguem: quem le nao sabe o que
+   * fazer, e quem vai investigar nao tem por onde comecar. O requestId ja
+   * estava no envelope e ninguem mostrava; na frase, ele vira a unica coisa
+   * que liga o que a pessoa viu ao que ficou no log.
+   */
+  return fail(
+    500,
+    "INTERNAL",
+    `Algo falhou do nosso lado. Se continuar, informe o código ${requestId}.`,
+    requestId,
+  );
 }
 
 export { UnauthorizedError };

@@ -2,6 +2,13 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { AppError, BusinessRuleError } from "@/shared/errors/app-error";
 import { logger } from "@/shared/utils/logger";
 import type { Credenciais, Modelo, TipoDeEnvio } from "@/modules/whatsapp/whatsapp.types";
+import {
+  testeDeErroDeRede,
+  testeFalhou,
+  testeInconclusivo,
+  testeOk,
+  type ResultadoDoTeste,
+} from "@/shared/domain/teste-conexao";
 
 /**
  * Porta de saida para a Graph API da Meta.
@@ -248,6 +255,95 @@ export async function listarModelos(cred: Credenciais): Promise<Modelo[]> {
   return (corpo.data ?? [])
     .filter((t) => t.status === "APPROVED")
     .map(paraModelo);
+}
+
+/**
+ * Confere as credenciais da Meta antes de gravar o numero.
+ *
+ * ⚠️ Le o proprio numero (`GET /{phone_number_id}`) em vez de mandar mensagem.
+ * Uma leitura valida o token, o Phone number ID e a versao da API de uma vez so,
+ * sem gastar conversa e sem escrever para ninguem — testar enviando faria cada
+ * cadastro disparar uma mensagem de verdade para alguem.
+ *
+ * ⚠️ NAO valida tudo. O App Secret so se prova quando a Meta assina uma entrega,
+ * e o Verify token so quando ela chama a URL de callback: nenhum dos dois tem
+ * como ser conferido daqui, e a tela precisa dizer isso em vez de deixar o
+ * "tudo certo" parecer mais amplo do que e.
+ */
+export async function testarConta(cred: Credenciais): Promise<ResultadoDoTeste> {
+  const controle = new AbortController();
+  const prazo = setTimeout(() => controle.abort(), 12_000);
+
+  try {
+    const resposta = await fetch(
+      `${BASE}/${cred.apiVersao}/${encodeURIComponent(cred.phoneNumberId)}?fields=display_phone_number,verified_name`,
+      { signal: controle.signal, headers: { Authorization: `Bearer ${cred.token}` } },
+    );
+
+    const corpo = (await resposta.json().catch(() => ({}))) as {
+      display_phone_number?: string;
+      verified_name?: string;
+      error?: { message?: string; code?: number; type?: string };
+    };
+
+    if (resposta.ok) {
+      /*
+       * Devolve o numero que a Meta diz ser aquele ID.
+       *
+       * ⚠️ E a parte mais util do teste. Token certo com o Phone number ID de
+       * OUTRA linha passa em qualquer verificacao de formato e so aparece
+       * quando o cliente errado recebe a mensagem. Aqui a pessoa le o numero
+       * na tela e compara com o que digitou.
+       */
+      const nome = corpo.verified_name ? ` (${corpo.verified_name})` : "";
+      return testeOk(
+        corpo.display_phone_number
+          ? `Conectado ao número ${corpo.display_phone_number}${nome}. Confira se é este mesmo.`
+          : "A Meta aceitou o token e o Phone number ID.",
+      );
+    }
+
+    const detalhe = corpo.error?.message ?? null;
+    const codigo = corpo.error?.code;
+
+    // 190 e o codigo da Meta para token invalido ou expirado, e e o erro mais
+    // comum aqui: o token do API Setup dura 24 horas.
+    if (resposta.status === 401 || codigo === 190) {
+      return testeFalhou(
+        "A Meta recusou o token. Se ele veio do API Setup, dura só 24 horas: gere um permanente em Usuários do sistema.",
+        detalhe,
+      );
+    }
+
+    if (resposta.status === 404 || codigo === 803 || codigo === 100) {
+      return testeFalhou(
+        "A Meta não encontrou este Phone number ID, ou o token não tem acesso a ele.",
+        detalhe,
+      );
+    }
+
+    // Versao inexistente responde 400 dizendo isso no texto. Vale barrar: a
+    // versao errada quebra TODO envio depois, e em silencio.
+    if (/unsupported.*version|unknown version/i.test(detalhe ?? "")) {
+      return testeFalhou(`A Meta não reconhece a versão ${cred.apiVersao} da API.`, detalhe);
+    }
+
+    if (resposta.status === 429) {
+      return testeInconclusivo(
+        "A Meta está limitando as chamadas agora. Dá para salvar e conferir depois.",
+        detalhe,
+      );
+    }
+
+    return testeInconclusivo(
+      "A Meta respondeu com um erro que não dá para interpretar. Dá para salvar assim mesmo.",
+      detalhe,
+    );
+  } catch (err) {
+    return testeDeErroDeRede(err);
+  } finally {
+    clearTimeout(prazo);
+  }
 }
 
 type ModeloBruto = {

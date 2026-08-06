@@ -16,6 +16,7 @@ import {
   EmptyRow,
   Field,
   Pagination,
+  SkeletonRows,
   TableArea,
   TableHead,
   Td,
@@ -30,6 +31,8 @@ import {
   PROVEDORES,
   type ConfigIA,
 } from "@/modules/ia/ia.types";
+import type { ResultadoDoTeste } from "@/shared/domain/teste-conexao";
+import { TesteDeConexao } from "./teste-de-conexao";
 
 /**
  * As chaves que fazem o atendimento automatico funcionar.
@@ -121,35 +124,48 @@ export function AbaDeProvedores({
 
   return (
     <>
-      {erro && (
-        <div style={{ marginBottom: 16 }}>
-          <Alert variant="danger" title="Não foi possível carregar">
-            {erro}
-          </Alert>
-        </div>
-      )}
-
-      {/*
-        ⚠️ Aviso e EXCECAO, nao placar.
-        
-        Um `Alert` verde dizendo "esta tudo bem" a cada visita ensina a ignorar
-        a caixa, e ai o dia em que ela ficar ambar tambem passa batido. Estando
-        tudo certo, a tabela abaixo ja mostra quem esta ativo.
-      */}
-      {provedores != null && ligados.length === 0 && (
-        <div style={{ marginBottom: 16 }}>
-          <Alert variant="warning" title="Sem provedor ativo, o bot não responde">
-            Cadastre uma chave e deixe pelo menos um provedor ligado.
-          </Alert>
-        </div>
-      )}
-
       <CabecalhoDeSecao
         titulo="Provedores de IA"
         legenda="As chaves que fazem o atendimento automático funcionar. Cada número usa uma, escolhida na aba Números, e é assim que o gasto de cada setor sai separado."
         onIncluir={() => setEditando({ ...CONFIG_IA_PADRAO })}
         rotuloIncluir="Adicionar provedor"
       />
+
+      {/*
+        ⚠️ O aviso vem DEPOIS do titulo, colado na tabela que ele explica.
+
+        Acima do cabecalho ele era a primeira coisa da aba e roubava a abertura:
+        quem chegava lia o problema antes de saber em que tela estava. Aqui ele
+        le como uma nota sobre a lista logo abaixo, que e o que ele e.
+
+        ⚠️ E EXCECAO, nao placar. Uma caixa verde dizendo "esta tudo bem" a cada
+        visita ensina a ignorar o lugar, e ai o dia em que ela ficar ambar
+        tambem passa batido. Estando tudo certo, a tabela ja mostra quem esta
+        ativo.
+      */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
+        {erro && (
+          <Alert variant="danger" title="Não foi possível carregar">
+            {erro}
+          </Alert>
+        )}
+
+        {/*
+          ⚠️ So quando HA provedor e nenhum esta valendo.
+
+          Com a lista vazia, este aviso e a linha de tabela vazia diziam a mesma
+          frase com outras palavras, uma embaixo da outra. A lista vazia ja se
+          explica sozinha; o que ela nao cobre e o caso traicoeiro: tem provedor
+          cadastrado, parece configurado, e mesmo assim ninguem responde porque
+          todos estao desligados ou sem chave.
+        */}
+        {(provedores?.length ?? 0) > 0 && ligados.length === 0 && (
+          <Alert variant="warning" title="Nenhum provedor está valendo">
+            Há chave cadastrada, mas todas estão desligadas ou sem chave gravada. Enquanto isso, o
+            bot não responde.
+          </Alert>
+        )}
+      </div>
 
         <TableArea minWidth={0}>
           <TableHead>
@@ -161,7 +177,7 @@ export function AbaDeProvedores({
 
             <tbody>
               {provedores == null ? (
-                <EmptyRow colSpan={4} message="Carregando…" />
+                <SkeletonRows cols={4} rows={3} labels={["Provedor", "Em uso", "Situação", ""]} />
               ) : visiveis!.length === 0 ? (
                 <EmptyRow
                   colSpan={4}
@@ -368,9 +384,43 @@ function FormularioDoProvedor({
   const [rascunho, setRascunho] = useState(config);
   const [chave, setChave] = useState("");
   const [salvando, setSalvando] = useState(false);
+  const [teste, setTeste] = useState<ResultadoDoTeste | null>(null);
 
   // Já cadastrada significa que há chave no vault: em branco mantém, não apaga.
   const jaTemChave = existentes.some((p) => p.id === rascunho.id && p.temChave);
+
+  async function testar(): Promise<ResultadoDoTeste> {
+    const r = await fetch("/api/v1/ia/provedores/teste", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: rascunho.id || null,
+        provedor: rascunho.provedor,
+        modelo: rascunho.modelo.trim(),
+        chave: chave.trim() || null,
+      }),
+    });
+
+    const corpo = await r.json().catch(() => null);
+
+    if (!r.ok) {
+      /*
+       * Falha NOSSA nao vira reprovacao da chave.
+       *
+       * Sessao expirada e erro de rota dizem respeito ao nosso servidor, e nao
+       * ao que foi digitado. Marcada como definitiva, ela travaria o cadastro
+       * por um motivo que nao tem nada a ver com o provedor.
+       */
+      return {
+        ok: false,
+        definitivo: false,
+        mensagem: corpo?.error?.message ?? "Não foi possível testar agora.",
+        detalhe: null,
+      };
+    }
+
+    return corpo.data as ResultadoDoTeste;
+  }
 
   async function salvar() {
     if (salvando) return;
@@ -409,7 +459,7 @@ function FormularioDoProvedor({
 
   const sugestoes = MODELOS_POR_PROVEDOR[rascunho.provedor] ?? [];
 
-  const erros = problemas(rascunho, chave, jaTemChave);
+  const erros = problemas(rascunho, chave, jaTemChave, teste);
 
   return (
     <Drawer
@@ -512,6 +562,26 @@ function FormularioDoProvedor({
           </Field>
         </Grupo>
 
+        <TesteDeConexao
+          titulo="Confirmar antes de salvar"
+          legenda="Nem a chave nem o nome do modelo dão para conferir por formato, então o jeito de saber é perguntar ao provedor. É uma chamada mínima, de fração de centavo."
+          /*
+           * Trocou qualquer campo que o teste usa, o resultado antigo some.
+           * A chave entra pelo tamanho, e não pelo conteúdo: ela não precisa
+           * circular por aqui para dizer que mudou.
+           */
+          assinatura={`${rascunho.provedor}|${rascunho.modelo.trim()}|${chave.trim().length}`}
+          bloqueio={
+            rascunho.modelo.trim().length < 3
+              ? "Escolha o modelo primeiro"
+              : !jaTemChave && chave.trim().length < 20
+                ? "Cole a chave primeiro"
+                : null
+          }
+          aoTestar={testar}
+          onResultado={setTeste}
+        />
+
         <Grupo
           titulo="Quando usar"
           legenda="Quem responde com esta chave é decidido em cada número, na aba Números."
@@ -546,7 +616,12 @@ const CHAVES: Record<string, string> = {
  * motivo mostrado no botao desabilitado. Botao cinza sem explicacao e o jeito
  * mais rapido de fazer alguem desistir do cadastro.
  */
-function problemas(r: ConfigIA, chave: string, jaTemChave: boolean): string[] {
+function problemas(
+  r: ConfigIA,
+  chave: string,
+  jaTemChave: boolean,
+  teste: ResultadoDoTeste | null,
+): string[] {
   const erros: string[] = [];
 
   if (r.nome.trim().length < 2) erros.push("Dê um nome a esta chave");
@@ -560,6 +635,24 @@ function problemas(r: ConfigIA, chave: string, jaTemChave: boolean): string[] {
   if (!jaTemChave && chave.trim().length < 20) {
     erros.push("Cole a chave da API deste provedor");
   }
+
+  /*
+   * ⚠️ So falha DEFINITIVA barra. Chave recusada e modelo inexistente nao vao
+   * funcionar nunca, e deixar gravar cria um cadastro que so vai se revelar
+   * quebrado num cliente sem resposta. Ja provedor fora do ar nao diz nada
+   * sobre o que foi digitado, e barrar ali impediria a pessoa de arrumar a
+   * propria configuracao justamente no dia em que ela precisa.
+   */
+  if (teste && !teste.ok && teste.definitivo) erros.push(teste.mensagem);
+
+  /*
+   * Cadastro NOVO exige ter testado. Editar, nao.
+   *
+   * Sem isto o teste vira enfeite: quem esta com pressa ignora e o erro volta
+   * a aparecer so no primeiro atendimento. Na edicao a exigencia atrapalharia
+   * mais do que ajuda, porque trocar o apelido nao mexe na credencial.
+   */
+  if (!jaTemChave && teste == null) erros.push("Teste a conexão antes de salvar");
 
   return erros;
 }
