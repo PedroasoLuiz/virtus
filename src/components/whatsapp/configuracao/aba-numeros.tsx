@@ -18,6 +18,7 @@ import {
   Td,
   Th,
   Tr,
+  CampoSecreto,
   inputStyle,
   selectStyle,
   textareaStyle,
@@ -330,76 +331,6 @@ export function AbaDeNumeros({
  * vira o motivo mostrado no `title` do botao desabilitado. Botao cinza sem
  * explicacao e o jeito mais rapido de fazer alguem desistir do cadastro.
  */
-/**
- * Campo de segredo com olho para revelar.
- *
- * ⚠️ Escondido por padrao, e revelado por gesto: estes valores sao colados de
- * outra aba e conferidos uma vez, e ficam na tela enquanto o resto do
- * formulario e preenchido. Visivel o tempo todo, um token de producao fica
- * exposto a quem passar atras da cadeira.
- */
-function CampoSecreto({
-  valor,
-  placeholder,
-  onMudar,
-}: {
-  valor: string;
-  placeholder: string;
-  onMudar: (v: string) => void;
-}) {
-  const [visivel, setVisivel] = useState(false);
-
-  return (
-    <div style={{ position: "relative" }}>
-      <input
-        // Espaco a direita para o olho, que fica DENTRO da caixa: fora dela,
-        // ele desalinharia este campo dos outros do formulario.
-        style={{ ...inputStyle, paddingRight: 30 }}
-        type={visivel ? "text" : "password"}
-        autoComplete="off"
-        placeholder={placeholder}
-        value={valor}
-        onChange={(e) => onMudar(e.target.value)}
-      />
-
-      <button
-        type="button"
-        onClick={() => setVisivel((v) => !v)}
-        title={visivel ? "Ocultar" : "Mostrar"}
-        aria-label={visivel ? "Ocultar o valor" : "Mostrar o valor"}
-        style={{
-          position: "absolute",
-          right: 6,
-          top: "50%",
-          transform: "translateY(-50%)",
-          width: 20,
-          height: 20,
-          display: "grid",
-          placeItems: "center",
-          border: "none",
-          background: "transparent",
-          color: "var(--text-tertiary)",
-          cursor: "pointer",
-        }}
-      >
-        {visivel ? (
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M2 2l20 20" />
-            <path d="M10.6 6.1A9.7 9.7 0 0 1 12 6c6.5 0 10.2 6 10.2 6a18 18 0 0 1-3.3 3.9" />
-            <path d="M6.3 6.9A17.6 17.6 0 0 0 1.8 12S5.5 18 12 18a9.9 9.9 0 0 0 4-.8" />
-            <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
-          </svg>
-        ) : (
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M1.8 12S5.5 5.5 12 5.5 22.2 12 22.2 12 18.5 18.5 12 18.5 1.8 12 1.8 12z" />
-            <circle cx="12" cy="12" r="3" />
-          </svg>
-        )}
-      </button>
-    </div>
-  );
-}
-
 function problemas(r: Rascunho): string[] {
   const erros: string[] = [];
 

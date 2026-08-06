@@ -12,6 +12,7 @@ import {
   BotaoDeAcao,
   Button,
   CabecalhoDeSecao,
+  CampoSecreto,
   EmptyRow,
   Field,
   Pagination,
@@ -447,95 +448,173 @@ function FormularioDoProvedor({
 
   const sugestoes = MODELOS_POR_PROVEDOR[rascunho.provedor] ?? [];
 
+  const erros = problemas(rascunho, chave, jaTemChave);
+
   return (
     <Drawer
       open
       onClose={onFechar}
+      /*
+       * ⚠️ Sem `subtitle`.
+       *
+       * "A chave fica cifrada e nunca volta para a tela" e sobre UM campo, e no
+       * cabecalho ela se anunciava como se fosse sobre o drawer inteiro. Desceu
+       * para a legenda do grupo da credencial, ao lado do campo que ela explica.
+       */
       title={jaTemChave ? "Editar provedor" : "Adicionar provedor"}
-      subtitle="A chave fica cifrada e nunca volta para a tela"
       footer={
         <div style={{ display: "flex", justifyContent: "flex-end" }}>
           <Button
             size="sm"
             variant="primary"
             onClick={() => void salvar()}
-            disabled={salvando || (!jaTemChave && chave.trim().length < 20)}
+            disabled={salvando || erros.length > 0}
+            title={erros[0]}
           >
             {salvando ? "Salvando…" : "Salvar"}
           </Button>
         </div>
       }
     >
-      <Field label="Provedor">
-        <select
-          style={selectStyle}
-          value={rascunho.provedor}
-          onChange={(e) => {
-            const provedor = e.target.value as ConfigIA["provedor"];
-            const padrao = PROVEDORES.find((p) => p.valor === provedor)?.modeloPadrao ?? "";
-            /*
-             * Troca o modelo junto: `gpt-5-mini` não existe no Gemini, e manter
-             * o antigo produziria erro só no primeiro atendimento de verdade.
-             */
-            setRascunho({ ...rascunho, provedor, modelo: padrao });
-          }}
+      <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+        <Grupo
+          primeiro
+          titulo="O provedor"
+          legenda="Quem responde e com qual modelo. A lista de modelos é sugestão: a Meta dos provedores muda de nome com frequência, e um modelo novo pode ser digitado direto."
         >
-          {PROVEDORES.map((p) => (
-            <option key={p.valor} value={p.valor}>
-              {p.rotulo}
-            </option>
-          ))}
-        </select>
-      </Field>
+          <Field label="Provedor">
+            <select
+              style={selectStyle}
+              value={rascunho.provedor}
+              onChange={(e) => {
+                const provedor = e.target.value as ConfigIA["provedor"];
+                const padrao = PROVEDORES.find((p) => p.valor === provedor)?.modeloPadrao ?? "";
+                /*
+                 * Troca o modelo junto: `gpt-5-mini` não existe no Gemini, e
+                 * manter o antigo produziria erro só no primeiro atendimento
+                 * de verdade.
+                 */
+                setRascunho({ ...rascunho, provedor, modelo: padrao });
+              }}
+            >
+              {PROVEDORES.map((p) => (
+                <option key={p.valor} value={p.valor}>
+                  {p.rotulo}
+                </option>
+              ))}
+            </select>
+          </Field>
 
-      <Field label="Modelo" hint="A lista é sugestão: modelo novo pode ser digitado direto.">
-        <input
-          style={inputStyle}
-          list="modelos-sugeridos"
-          value={rascunho.modelo}
-          onChange={(e) => setRascunho({ ...rascunho, modelo: e.target.value })}
-        />
-        <datalist id="modelos-sugeridos">
-          {sugestoes.map((m) => (
-            <option key={m.valor} value={m.valor}>
-              {m.rotulo}
-            </option>
-          ))}
-        </datalist>
-      </Field>
+          <Field label="Modelo" hint="Escolha da lista ou digite o nome exato.">
+            <input
+              style={inputStyle}
+              list="modelos-sugeridos"
+              value={rascunho.modelo}
+              onChange={(e) => setRascunho({ ...rascunho, modelo: e.target.value })}
+            />
+            <datalist id="modelos-sugeridos">
+              {sugestoes.map((m) => (
+                <option key={m.valor} value={m.valor}>
+                  {m.rotulo}
+                </option>
+              ))}
+            </datalist>
+          </Field>
+        </Grupo>
 
-      <Field label="Ordem" hint="1 responde. Os demais são tentados quando ele falha.">
-        <input
-          style={inputStyle}
-          type="number"
-          min={1}
-          max={9}
-          value={rascunho.ordem}
-          onChange={(e) => setRascunho({ ...rascunho, ordem: Number(e.target.value) || 1 })}
-        />
-      </Field>
+        <Grupo
+          titulo="Credencial"
+          legenda="A chave fica cifrada e nunca volta para a tela: ao editar, o campo aparece vazio e em branco significa manter a que já está lá, não apagar."
+        >
+          <Field
+            label="Chave da API"
+            required={!jaTemChave}
+            hint={CHAVES[rascunho.provedor]}
+          >
+            <CampoSecreto
+              valor={chave}
+              placeholder={jaTemChave ? "Deixe em branco para manter" : "cole a chave"}
+              onMudar={setChave}
+            />
+          </Field>
+        </Grupo>
 
-      <Field
-        label="Chave da API"
-        required={!jaTemChave}
-        hint={jaTemChave ? "Em branco mantém a atual." : undefined}
-      >
-        <input
-          style={inputStyle}
-          type="password"
-          autoComplete="off"
-          placeholder={jaTemChave ? "Deixe em branco para manter" : "cole a chave"}
-          value={chave}
-          onChange={(e) => setChave(e.target.value)}
-        />
-      </Field>
+        <Grupo
+          titulo="Quando usar"
+          legenda="O de ordem 1 responde. Os outros existem para o dia em que ele estiver fora do ar ou sem cota, e são tentados na sequência."
+        >
+          <Field label="Ordem" hint="1 é o principal. Pode ser trocado depois, na lista.">
+            <input
+              style={inputStyle}
+              type="number"
+              min={1}
+              max={9}
+              value={rascunho.ordem}
+              onChange={(e) => setRascunho({ ...rascunho, ordem: Number(e.target.value) || 1 })}
+            />
+          </Field>
 
-      <Field label="Ativo" hint="Desligado, este provedor não é tentado.">
-        <ActiveToggle
-          active={rascunho.ativo}
-          onChange={() => setRascunho({ ...rascunho, ativo: !rascunho.ativo })}
-        />
-      </Field>
+          <Field label="Ativo" hint="Desligado, este provedor não é tentado.">
+            <ActiveToggle
+              active={rascunho.ativo}
+              onChange={() => setRascunho({ ...rascunho, ativo: !rascunho.ativo })}
+            />
+          </Field>
+        </Grupo>
+      </div>
     </Drawer>
+  );
+}
+
+/** Onde cada provedor entrega a chave. A duvida acontece com o campo na frente. */
+const CHAVES: Record<string, string> = {
+  gemini: "Google AI Studio, com a conta que vai pagar o uso.",
+  openai: "platform.openai.com, em API keys.",
+  anthropic: "console.anthropic.com, em API keys.",
+  deepseek: "platform.deepseek.com, em API keys.",
+};
+
+/**
+ * Tudo que impede o salvar, na ordem do formulario.
+ *
+ * ⚠️ Uma lista so, e nao condicoes espalhadas pelo botao: a MESMA lista vira o
+ * motivo mostrado no botao desabilitado. Botao cinza sem explicacao e o jeito
+ * mais rapido de fazer alguem desistir do cadastro.
+ */
+function problemas(r: ConfigIA, chave: string, jaTemChave: boolean): string[] {
+  const erros: string[] = [];
+
+  if (r.modelo.trim().length < 3) erros.push("Escolha ou digite o modelo");
+
+  /*
+   * Chave so e exigida no cadastro NOVO. Editando, vazio significa "mantem a
+   * que esta no vault" — e por isso a tela nunca a recebeu de volta.
+   */
+  if (!jaTemChave && chave.trim().length < 20) {
+    erros.push("Cole a chave da API deste provedor");
+  }
+
+  if (r.ordem < 1 || r.ordem > 9) erros.push("A ordem vai de 1 a 9");
+
+  return erros;
+}
+
+/** O mesmo agrupador da aba de números: título, legenda e os campos. */
+function Grupo({
+  titulo,
+  legenda,
+  primeiro,
+  children,
+}: {
+  titulo: string;
+  legenda: string;
+  primeiro?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <section>
+      <CabecalhoDeSecao titulo={titulo} legenda={legenda} primeiro={primeiro} />
+      <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>{children}</div>
+    </section>
   );
 }
