@@ -709,7 +709,7 @@ function Formulario({
           obrigatorio.
         */}
         <Field
-          label="Usar inteligência artificial"
+          label="Respostas de IA"
           hint="Desligado, este número é atendido só por pessoas."
         >
           <ActiveToggle
