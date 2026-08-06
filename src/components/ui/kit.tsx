@@ -703,11 +703,21 @@ export function CabecalhoDeSecao({
   onIncluir,
   rotuloIncluir = "Adicionar",
   primeiro = false,
+  colado = false,
 }: {
   titulo: string;
   legenda: string;
   onIncluir?: () => void;
   rotuloIncluir?: string;
+  /**
+   * O que vem logo abaixo PERTENCE ao cabecalho, e nao e o conteudo da secao.
+   *
+   * ⚠️ Existe para o caso do filtro. Um seletor que decide o que a tabela mostra
+   * e parte do cabecalho, e com o respiro cheio ele flutuava no meio do caminho,
+   * mais perto da tabela do que da legenda que o explica. Encurtando aqui, o
+   * respiro cheio vai para DEPOIS do filtro, que e onde a secao comeca de fato.
+   */
+  colado?: boolean;
   /**
    * Primeiro da tela: metade do respiro em cima.
    *
@@ -723,7 +733,7 @@ export function CabecalhoDeSecao({
      * e sem folga o titulo de uma cola no fim da anterior e as quatro viram uma
      * parede so.
      */
-    <div style={{ marginTop: primeiro ? 11 : 22, marginBottom: 26 }}>
+    <div style={{ marginTop: primeiro ? 11 : 22, marginBottom: colado ? 10 : 26 }}>
       {/*
         O mais fica COLADO no titulo, e nao na outra ponta da linha.
         

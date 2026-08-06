@@ -111,6 +111,7 @@ export function AbaDeModelos({
   return (
     <>
       <CabecalhoDeSecao
+        colado
         titulo="Modelos aprovados"
         legenda="Lidos da Meta agora, porque o status muda lá sem aviso. Só modelo aprovado pode ser enviado, e é ele que permite falar com quem não escreve há mais de 24 horas. Para criar ou editar, use o painel da Meta."
       />
@@ -127,7 +128,8 @@ export function AbaDeModelos({
         Estreito e à esquerda, colado na tabela: é um filtro do que vem a
         seguir, não um campo de formulário.
       */}
-      <div style={{ marginBottom: 10 }}>
+      {/* O respiro cheio da seção mora aqui embaixo, e não acima do seletor. */}
+      <div style={{ marginBottom: 26 }}>
         <select
           value={escolhida ?? ""}
           onChange={(e) => {
