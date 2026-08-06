@@ -193,11 +193,22 @@ export function PainelWhatsapp() {
    */
   const filtroAtual = useRef({ busca: "", contaId: null as number | null });
 
+  /*
+   * Qual conversa esta aberta, para o canal ler sem virar dependencia dele.
+   * Como `filtroAtual`: por o valor nas dependencias derrubaria e recriaria a
+   * assinatura a cada troca de conversa.
+   */
+  const selecionadaRef = useRef<number | null>(null);
+
   // Escrita em efeito, e nao no corpo: mexer em ref durante o render e leitura
   // de valor que pode nao ter sido comitado.
   useEffect(() => {
     filtroAtual.current = { busca: busca.trim(), contaId: contaAtual?.id ?? null };
   }, [busca, contaAtual?.id]);
+
+  useEffect(() => {
+    selecionadaRef.current = selecionada?.id ?? null;
+  }, [selecionada?.id]);
 
   /*
    * Realtime.
@@ -209,6 +220,48 @@ export function PainelWhatsapp() {
   useEffect(() => {
     const supabase = browserSupabase();
 
+    /*
+     * ⚠️ Os eventos sao AGRUPADOS antes de virar consulta.
+     *
+     * Antes, cada evento disparava duas chamadas na hora: a lista inteira e a
+     * thread aberta. Uma unica resposta do bot produz varios eventos seguidos
+     * (a marca de "IA respondendo" liga, a mensagem entra, a marca desliga), e
+     * este painel vive na casca do sistema: ele esta montado em TODA tela, para
+     * TODO usuario logado. Numa equipe de dez pessoas, uma mensagem recebida
+     * virava dezenas de requisicoes em menos de um segundo.
+     *
+     * Agora os eventos se acumulam por 400ms e viram no maximo uma recarga de
+     * lista e uma de thread.
+     */
+    let agendado: ReturnType<typeof setTimeout> | null = null;
+    let precisaDaThread = false;
+
+    const aoMudar = (conversaTocada: number | null) => {
+      /*
+       * A thread so recarrega quando o evento e DELA. Antes qualquer mensagem
+       * de qualquer conversa remontava a conversa aberta, com as 500 mensagens
+       * junto.
+       */
+      if (conversaTocada != null && conversaTocada === selecionadaRef.current) {
+        precisaDaThread = true;
+      }
+
+      if (agendado) return;
+
+      agendado = setTimeout(() => {
+        agendado = null;
+
+        const { busca: termo, contaId } = filtroAtual.current;
+        void carregarConversas(contaId, termo || undefined);
+
+        if (precisaDaThread) {
+          precisaDaThread = false;
+          const id = selecionadaRef.current;
+          if (id != null) void recarregarThread(id);
+        }
+      }, 400);
+    };
+
     const canal = supabase
       .channel("whatsapp-painel")
       .on(
@@ -217,25 +270,17 @@ export function PainelWhatsapp() {
         // respondendo", e sem escutar essa tabela o aviso so apareceria quando
         // a resposta ja tivesse saido.
         { event: "*", schema: "public", table: "whatsappconversas" },
-        () => {
-          const { busca: termo, contaId } = filtroAtual.current;
-          void carregarConversas(contaId, termo || undefined);
-          setSelecionada((atual) => {
-            if (atual) void recarregarThread(atual.id);
-            return atual;
-          });
+        (evento) => {
+          const linha = (evento.new ?? evento.old) as { id?: number } | null;
+          aoMudar(linha?.id ?? null);
         },
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "whatsappmensagens" },
-        () => {
-          const { busca: termo, contaId } = filtroAtual.current;
-          void carregarConversas(contaId, termo || undefined);
-          setSelecionada((atual) => {
-            if (atual) void recarregarThread(atual.id);
-            return atual;
-          });
+        (evento) => {
+          const linha = (evento.new ?? evento.old) as { fkConversa?: number } | null;
+          aoMudar(linha?.fkConversa ?? null);
         },
       )
       .subscribe();
@@ -249,6 +294,7 @@ export function PainelWhatsapp() {
     }
 
     return () => {
+      if (agendado) clearTimeout(agendado);
       void supabase.removeChannel(canal);
     };
     // Uma assinatura por montagem. O filtro vive em `filtroAtual`, nao aqui.

@@ -342,16 +342,30 @@ export async function listarMensagens(
 ): Promise<Mensagem[]> {
   const supabase = await serverClient();
 
+  /*
+   * ⚠️ As mais NOVAS, e nao as primeiras 500.
+   *
+   * Estava ascendente com limite: numa conversa que passasse de 500 mensagens,
+   * a tela mostrava as 500 mais ANTIGAS e nunca mais as recentes. A conversa
+   * congelava no passado sem erro nenhum, e o sintoma so apareceria depois de
+   * meses de uso com o mesmo cliente.
+   *
+   * Desce para pegar o fim e sobe de novo na memoria, porque a thread se le de
+   * cima para baixo.
+   */
   const { data, error } = await supabase
     .from("whatsappmensagens")
     .select(COLUNAS_MENSAGEM)
     .eq("fkEmpresa", empresaId)
     .eq("fkConversa", conversaId)
-    .order("enviada_em", { ascending: true })
+    .order("enviada_em", { ascending: false })
     .limit(500);
 
   if (error) throw error;
-  return (data ?? []).map((l) => paraMensagem(l as unknown as LinhaMensagem));
+
+  return (data ?? [])
+    .map((l) => paraMensagem(l as unknown as LinhaMensagem))
+    .reverse();
 }
 
 /**
