@@ -679,7 +679,7 @@ export function CabecalhoDeSecao({
      * e sem folga o titulo de uma cola no fim da anterior e as quatro viram uma
      * parede so.
      */
-    <div style={{ marginTop: 6, marginBottom: 18 }}>
+    <div style={{ marginTop: 22, marginBottom: 26 }}>
       {/*
         O mais fica COLADO no titulo, e nao na outra ponta da linha.
         

@@ -32,7 +32,11 @@ export function PrecisaDeAjuda({ duvidas }: { duvidas: Duvida[] }) {
   if (duvidas.length === 0) return null;
 
   return (
-    <section style={{ marginTop: 22 }}>
+    /*
+     * Respiro largo em cima: a ajuda nao pertence a tabela, ela vem DEPOIS de
+     * tudo. Colada, parecia mais uma linha do rodape da lista.
+     */
+    <section style={{ marginTop: 44 }}>
       <button
         type="button"
         onClick={() => setAberta((v) => !v)}
@@ -99,7 +103,6 @@ export function PrecisaDeAjuda({ duvidas }: { duvidas: Duvida[] }) {
                   cursor: "pointer",
                   textAlign: "left",
                   fontSize: "var(--text-sm)",
-                  fontWeight: "var(--fw-semi)",
                   color: "var(--text-primary)",
                 }}
               >
@@ -162,7 +165,6 @@ function Destino({ duvida }: { duvida: Duvida }) {
     background: "transparent",
     cursor: "pointer",
     fontSize: "var(--text-sm)",
-    fontWeight: "var(--fw-semi)",
     color: "var(--primary)",
     textDecoration: "none",
   } as const;

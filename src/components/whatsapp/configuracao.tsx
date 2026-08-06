@@ -54,7 +54,14 @@ import {
  */
 
 const URL_WEBHOOK = "/api/v1/whatsapp/webhook";
-const POR_PAGINA = 8;
+/*
+ * Dez por pagina, e a paginacao so aparece passando disso.
+ *
+ * Estas listas tem tres ou quatro itens na vida real. Um rodape de paginacao
+ * embaixo de quatro linhas anuncia um volume que nao existe e rouba a atencao
+ * do que importa, que e a propria lista.
+ */
+const POR_PAGINA = 10;
 
 type Rascunho = {
   id: number | null;
@@ -397,13 +404,23 @@ export function ConfiguracaoDeContas({
           </tbody>
         </TableArea>
 
-        <Pagination
-          page={paginaAtual}
-          totalPages={totalPaginas}
-          total={filtradas.length}
-          pageSize={POR_PAGINA}
-          onPage={setPagina}
-        />
+        {filtradas.length > POR_PAGINA && (
+
+          <Pagination
+
+            page={paginaAtual}
+
+            totalPages={totalPaginas}
+
+            total={filtradas.length}
+
+            pageSize={POR_PAGINA}
+
+            onPage={setPagina}
+
+          />
+
+        )}
         </>
       )}
     </Drawer>
@@ -577,13 +594,23 @@ function ModelosAprovados({
           </tbody>
         </TableArea>
 
-        <Pagination
-          page={paginaAtual}
-          totalPages={totalPaginas}
-          total={todos?.length ?? 0}
-          pageSize={POR_PAGINA}
-          onPage={setPagina}
-        />
+        {(todos?.length ?? 0) > POR_PAGINA && (
+
+          <Pagination
+
+            page={paginaAtual}
+
+            totalPages={totalPaginas}
+
+            total={todos?.length ?? 0}
+
+            pageSize={POR_PAGINA}
+
+            onPage={setPagina}
+
+          />
+
+        )}
 
         <PrecisaDeAjuda
           duvidas={[

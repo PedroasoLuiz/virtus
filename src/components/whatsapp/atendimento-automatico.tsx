@@ -46,7 +46,14 @@ import { formatarTelefone, type ContaWhatsapp } from "@/modules/whatsapp/whatsap
  */
 
 /** Mesmo tamanho de pagina da aba de numeros: as tres listas convivem. */
-const POR_PAGINA = 8;
+/*
+ * Dez por pagina, e a paginacao so aparece passando disso.
+ *
+ * Estas listas tem tres ou quatro itens na vida real. Um rodape de paginacao
+ * embaixo de quatro linhas anuncia um volume que nao existe e rouba a atencao
+ * do que importa, que e a propria lista.
+ */
+const POR_PAGINA = 10;
 
 export function AtendimentoAutomatico({
   provedores,
@@ -210,13 +217,31 @@ export function AtendimentoAutomatico({
         </TableArea>
 
 
-      <Pagination
-        page={paginaAtual}
-        totalPages={totalPaginas}
-        total={provedores?.length ?? 0}
-        pageSize={POR_PAGINA}
-        onPage={setPagina}
-      />
+      {(provedores?.length ?? 0) > POR_PAGINA && (
+
+
+        <Pagination
+
+
+          page={paginaAtual}
+
+
+          totalPages={totalPaginas}
+
+
+          total={provedores?.length ?? 0}
+
+
+          pageSize={POR_PAGINA}
+
+
+          onPage={setPagina}
+
+
+        />
+
+
+      )}
 
       <PrecisaDeAjuda
         duvidas={[
@@ -551,13 +576,23 @@ export function Personas({
           </tbody>
         </TableArea>
 
-      <Pagination
-        page={paginaAtual}
-        totalPages={totalPaginas}
-        total={personas?.length ?? 0}
-        pageSize={POR_PAGINA}
-        onPage={setPagina}
-      />
+      {(personas?.length ?? 0) > POR_PAGINA && (
+
+        <Pagination
+
+          page={paginaAtual}
+
+          totalPages={totalPaginas}
+
+          total={personas?.length ?? 0}
+
+          pageSize={POR_PAGINA}
+
+          onPage={setPagina}
+
+        />
+
+      )}
 
       <PrecisaDeAjuda
         duvidas={[
