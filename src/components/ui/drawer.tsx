@@ -27,6 +27,7 @@ export function Drawer({
   width = LARGURA_PADRAO,
   footer,
   headerExtra,
+  nivel = 1,
   children,
 }: {
   open: boolean;
@@ -36,8 +37,21 @@ export function Drawer({
   width?: number;
   footer?: React.ReactNode;
   headerExtra?: React.ReactNode;
+  /**
+   * Em que andar este drawer abre.
+   *
+   * ⚠️ Existe por causa de um caso real: o painel do WhatsApp e um `aside` fixo
+   * em 401, e a configuracao aberta de dentro dele ficava com o veu em 400 —
+   * ou seja, ATRAS do proprio painel. O fundo continuava clicavel e o drawer
+   * parecia meio modal.
+   *
+   * Nivel 2 sobe cem, o suficiente para passar por cima de qualquer sobreposto
+   * do sistema sem entrar na faixa dos avisos.
+   */
+  nivel?: 1 | 2;
   children: React.ReactNode;
 }) {
+  const base = nivel === 1 ? 400 : 500;
   useEffect(() => {
     if (!open) return;
 
@@ -68,7 +82,7 @@ export function Drawer({
           inset: 0,
           background: "rgba(0,0,0,0.32)",
           backdropFilter: "blur(2px)",
-          zIndex: 400,
+          zIndex: base,
           animation: "fade-in 160ms var(--ease-out)",
         }}
       />
@@ -83,7 +97,7 @@ export function Drawer({
           right: 8,
           bottom: 8,
           width: `min(${width}px, calc(100vw - 16px))`,
-          zIndex: 401,
+          zIndex: base + 1,
           display: "flex",
           flexDirection: "column",
           background: "var(--surface)",

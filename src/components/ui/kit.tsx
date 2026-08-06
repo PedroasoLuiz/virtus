@@ -747,7 +747,15 @@ export function BotaoMais({ rotulo, onClick }: { rotulo: string; onClick?: () =>
          * metade dele o deixaria com cara de quadrado amassado.
          */
         borderRadius: "50%",
-        background: "var(--success)",
+        /*
+         * ⚠️ `--primary`, e nao `--success`.
+         *
+         * Sao dois verdes diferentes: `success` significa "deu certo" e muda
+         * junto com os outros estados, entao o botao de incluir mudaria de cor
+         * no dia em que alguem calibrasse a cor de confirmacao. Aqui e a cor da
+         * marca, que e o que uma acao primaria usa.
+         */
+        background: "var(--primary)",
         color: "#fff",
         cursor: "pointer",
       }}

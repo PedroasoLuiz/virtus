@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { browserSupabase } from "@/infra/supabase/browser";
 import { useAvisos } from "@/components/ui/avisos";
-import { ConfiguracaoDeContas } from "@/components/whatsapp/configuracao";
+import { ConfiguracaoDeContas } from "@/components/whatsapp/configuracao/drawer";
 import { comFormatacaoDoWhatsapp } from "@/components/whatsapp/formatacao";
 import {
   botRespondendo,
