@@ -15,7 +15,6 @@ export async function salvarProvedor(
     provedor: string;
     modelo: string;
     ativo: boolean;
-    ordem: number;
     chave: string | null;
   },
 ): Promise<ConfigIA[]> {
@@ -27,8 +26,8 @@ export async function salvarProvedor(
  * O numero de teste e da EMPRESA, nao do provedor.
  *
  * E trava de seguranca para ligar em producao, e ficaria absurda valendo para
- * uma chave e nao para outra: o cliente que escrevesse quando a principal
- * estivesse fora receberia resposta que a trava deveria impedir.
+ * uma chave e nao para outra: bastaria escrever para um numero de outro setor
+ * para receber a resposta que a trava deveria impedir.
  */
 export async function salvarNumeroTeste(
   empresaId: number,
@@ -43,20 +42,5 @@ export async function removerProvedor(
   id: number,
 ): Promise<ConfigIA[]> {
   await repo.removerProvedor(empresaId, id);
-  return repo.listarProvedores(empresaId);
-}
-
-/**
- * Elege o principal.
- *
- * ⚠️ Nao e "editar a ordem de um": mexer num numero deixaria dois provedores
- * empatados em 1, e a preferencia passaria a depender do id. A renumeracao dos
- * outros acontece junto, no banco.
- */
-export async function definirPrincipal(
-  empresaId: number,
-  id: number,
-): Promise<ConfigIA[]> {
-  await repo.definirPrincipal(empresaId, id);
   return repo.listarProvedores(empresaId);
 }

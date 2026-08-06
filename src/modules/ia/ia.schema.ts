@@ -12,7 +12,7 @@ export const configIASchema = z.object({
   modelo: z.string(),
   ativo: z.boolean(),
   temChave: z.boolean(),
-  ordem: z.number(),
+  emUso: z.number(),
   numeroTeste: z.string().nullable(),
 });
 
@@ -27,8 +27,6 @@ export const salvarProvedorBodySchema = z.object({
   provedor: provedorSchema,
   modelo: z.string().trim().min(3).max(60),
   ativo: z.boolean(),
-  /** 1 responde; os demais existem para o dia em que ele nao responder. */
-  ordem: z.number().int().min(1).max(9).default(1),
   chave: z.string().trim().min(20).nullable().default(null),
 });
 

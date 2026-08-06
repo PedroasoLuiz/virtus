@@ -61,12 +61,17 @@ export type ImagemParaOModelo = {
 };
 
 /**
- * Tenta cada credencial na ordem ate uma responder.
+ * Fala com a credencial do numero.
  *
- * ⚠️ E o motivo de existir mais de uma. Provedor cai, estoura cota e recusa
- * conteudo, e nesses tres casos a resposta certa nao e desistir do atendimento:
- * e perguntar ao proximo da fila. Todas falharem devolve `null`, que o servico
- * ja trata como "sem resposta automatica".
+ * ⚠️ A lista tem ZERO ou UMA credencial, e nao uma fila. Desde que cada numero
+ * aponta para a sua chave, por causa do rateio, nao ha reserva para cair:
+ * provedor fora do ar deixa aquele numero sem resposta automatica ate voltar.
+ * E deliberado — gasto atribuido ao setor errado e pior que resposta que nao
+ * saiu.
+ *
+ * Continua recebendo lista porque o servico nao precisa saber disso: vazio ja
+ * significa "nao ha o que tentar", e devolver `null` cai no mesmo caminho de
+ * "sem resposta automatica" que ja existia.
  */
 export async function responderComReserva<T>(
   credenciais: CredencialIA[],
@@ -79,10 +84,9 @@ export async function responderComReserva<T>(
     const r = await responderEmJson<T>(cred, instrucao, conversa, esquema, imagens);
     if (r != null) return r;
 
-    logger.warn("provedor de IA nao respondeu, tentando o proximo", {
+    logger.warn("provedor de IA nao respondeu", {
       provedor: cred.provedor,
       modelo: cred.modelo,
-      ordem: cred.ordem,
     });
   }
 

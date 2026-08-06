@@ -31,7 +31,7 @@ export async function listarProvedores(empresaId: number): Promise<ConfigIA[]> {
     modelo: l.modelo ?? CONFIG_IA_PADRAO.modelo,
     ativo: l.ativo ?? false,
     temChave: l.tem_chave ?? false,
-    ordem: l.ordem ?? 1,
+    emUso: l.em_uso ?? 0,
     numeroTeste: (teste.data as string | null) ?? null,
   }));
 }
@@ -44,7 +44,6 @@ export async function salvarProvedor(
     provedor: string;
     modelo: string;
     ativo: boolean;
-    ordem: number;
     chave: string | null;
   },
 ): Promise<void> {
@@ -57,7 +56,6 @@ export async function salvarProvedor(
     p_provedor: entrada.provedor,
     p_modelo: entrada.modelo,
     p_ativo: entrada.ativo,
-    p_ordem: entrada.ordem,
     p_chave: entrada.chave,
   });
 
@@ -78,18 +76,6 @@ export async function salvarNumeroTeste(
   if (error) throw error;
 }
 
-/** Marca o principal e renumera os demais, tudo dentro do banco. */
-export async function definirPrincipal(empresaId: number, id: number): Promise<void> {
-  const supabase = await serverClient();
-
-  const { error } = await supabase.rpc("ia_definir_principal", {
-    p_empresa: empresaId,
-    p_id: id,
-  });
-
-  if (error) throw error;
-}
-
 export async function removerProvedor(empresaId: number, id: number): Promise<void> {
   const supabase = await serverClient();
 
@@ -102,19 +88,14 @@ export async function removerProvedor(empresaId: number, id: number): Promise<vo
 }
 
 /**
- * Credencial em claro, para o servidor falar com o provedor.
+ * A credencial em claro desta CONVERSA. Uma, ou nenhuma.
  *
- * ⚠️ Roda no webhook, que nao tem sessao — por isso o portao e o segredo global,
- * o mesmo que protege a ingestao. Devolve `null` quando a empresa nao tem chave
- * ou desligou o bot, e nesse caso ninguem responde nada.
- */
-/**
- * As credenciais que valem para esta CONVERSA, ja na ordem de tentativa.
+ * ⚠️ Roda no webhook, que nao tem sessao: por isso o portao e o segredo global,
+ * o mesmo que protege a ingestao.
  *
- * ⚠️ Parte da conversa, e nao da empresa: o numero pode apontar para uma chave
- * especifica, e nesse caso so ela e tentada. E o que permite a conta de cada
- * setor sair separada — cair na reserva de outro setor furaria justamente a
- * separacao que a escolha existe para garantir.
+ * ⚠️ Parte da conversa, e nao da empresa, porque a chave e do NUMERO. Lista
+ * vazia significa numero sem chave, e ai ninguem responde sozinho: cair na chave
+ * de outro setor furaria o rateio, que e o motivo de a escolha existir.
  */
 export async function credenciaisDaConversa(
   segredo: string,
@@ -133,6 +114,5 @@ export async function credenciaisDaConversa(
     provedor: l.provedor as CredencialIA["provedor"],
     modelo: l.modelo,
     chave: l.chave,
-    ordem: l.ordem ?? 1,
   }));
 }

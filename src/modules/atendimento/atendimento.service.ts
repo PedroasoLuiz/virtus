@@ -553,10 +553,9 @@ async function executar(conversaId: number): Promise<void> {
   }
 
   /*
-   * As chaves e o interruptor sao da EMPRESA. Sem nenhuma ativa, nao ha bot.
-   *
-   * Vem em ordem de preferencia: a primeira responde, e as outras existem para
-   * o dia em que ela nao responder.
+   * A chave e do NUMERO, e nao da empresa: e assim que o gasto de cada setor
+   * sai separado. Vem uma, ou nenhuma — numero sem chave escolhida nao responde
+   * sozinho, porque cair na chave de outro setor furaria o rateio.
    */
   const credenciaisIA = await iaRepo.credenciaisDaConversa(segredo, conversaId);
   const credencialIA = credenciaisIA[0] ?? null;

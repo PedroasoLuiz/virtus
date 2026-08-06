@@ -61,18 +61,6 @@ export function AbaDeProvedores({
   const [editando, setEditando] = useState<ConfigIA | null>(null);
   const [pagina, setPagina] = useState(1);
 
-  async function definirPrincipal(id: number) {
-    const r = await fetch(`/api/v1/ia/provedores/${id}/principal`, { method: "PUT" });
-
-    if (!r.ok) {
-      const corpo = await r.json().catch(() => null);
-      avisar("atencao", corpo?.error?.message ?? "Não foi possível trocar o principal");
-      return;
-    }
-
-    onRecarregar();
-  }
-
   async function alternarAtivo(p: ConfigIA) {
     const r = await fetch("/api/v1/ia/config", {
       method: "PUT",
@@ -83,7 +71,6 @@ export function AbaDeProvedores({
         provedor: p.provedor,
         modelo: p.modelo,
         ativo: !p.ativo,
-        ordem: p.ordem,
         // Nula MANTEM a que esta no vault: o interruptor nao mexe em chave.
         chave: null,
       }),
@@ -159,17 +146,15 @@ export function AbaDeProvedores({
 
       <CabecalhoDeSecao
         titulo="Provedores de IA"
-        legenda="A chave que faz o atendimento automático funcionar. O de ordem 1 responde; os outros existem para o dia em que ele estiver fora do ar ou sem cota, e são tentados na sequência. Quem recebe resposta é decidido em cada número, na aba Números."
-        onIncluir={() =>
-          setEditando({ ...CONFIG_IA_PADRAO, ordem: (provedores?.length ?? 0) + 1 })
-        }
+        legenda="As chaves que fazem o atendimento automático funcionar. Cada número usa uma, escolhida na aba Números, e é assim que o gasto de cada setor sai separado."
+        onIncluir={() => setEditando({ ...CONFIG_IA_PADRAO })}
         rotuloIncluir="Adicionar provedor"
       />
 
         <TableArea minWidth={0}>
           <TableHead>
             <Th>Provedor</Th>
-            <Th minWidth={72}>Principal</Th>
+            <Th minWidth={72}>Em uso</Th>
             <Th minWidth={90}>Situação</Th>
             <Th> </Th>
           </TableHead>
@@ -218,15 +203,19 @@ export function AbaDeProvedores({
                     </Td>
 
                     {/*
-                      Escolha EXCLUSIVA, e por isso um alvo redondo e nao um
-                      interruptor: interruptor promete que dois podem estar
-                      ligados ao mesmo tempo, e aqui so existe um principal.
+                      Quantos numeros dependem desta chave.
+
+                      ⚠️ Vale mais que a antiga marca de principal: desligar ou
+                      remover uma chave em uso deixa aqueles numeros sem
+                      atendimento automatico, e nao ha reserva para assumir.
+                      Zero avisa o contrario, que e chave cadastrada e parada.
                     */}
                     <Td>
-                      <MarcaDePrincipal
-                        principal={p.ordem === 1}
-                        onEscolher={() => void definirPrincipal(p.id)}
-                      />
+                      {p.emUso === 0 ? (
+                        <span style={{ color: "var(--text-tertiary)" }}>nenhum</span>
+                      ) : (
+                        `${p.emUso} ${p.emUso === 1 ? "número" : "números"}`
+                      )}
                     </Td>
 
                     <Td>
@@ -288,9 +277,9 @@ export function AbaDeProvedores({
               "São três coisas, nesta ordem: existe provedor ativo com chave? O número que recebeu a mensagem está com responder a todos ligado, ou com aquele contato na lista? E alguém da equipe respondeu à mão nas últimas duas horas, o que cala o bot de propósito?",
           },
           {
-            pergunta: "Para que serve mais de um provedor?",
+            pergunta: "Para que serve mais de uma chave?",
             resposta:
-              "Provedor cai, estoura cota e recusa conteúdo. Com uma chave só, qualquer um dos três para o atendimento inteiro. O de ordem 1 responde, e os outros são tentados na sequência quando ele falha.",
+              "Para separar a conta. Cada número usa a chave que você escolher, então o setor que mais atende aparece como o que mais gasta. Como não há troca automática, um número só responde enquanto a chave dele estiver ativa e com cota.",
           },
           {
             pergunta: "Onde pego a chave do Gemini?",
@@ -307,48 +296,6 @@ export function AbaDeProvedores({
         ]}
       />
     </>
-  );
-}
-
-/**
- * O alvo de escolha do principal.
- *
- * Circulo cheio no escolhido, contorno vazio nos outros: e a forma que o
- * sistema inteiro usa para "um entre varios", e ela ja diz sozinha que marcar
- * um desmarca o resto.
- */
-function MarcaDePrincipal({
-  principal,
-  onEscolher,
-}: {
-  principal: boolean;
-  onEscolher: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onEscolher}
-      disabled={principal}
-      title={principal ? "Este é o principal" : "Tornar principal"}
-      aria-label={principal ? "Principal" : "Tornar principal"}
-      aria-pressed={principal}
-      style={{
-        display: "grid",
-        placeItems: "center",
-        width: 20,
-        height: 20,
-        padding: 0,
-        border: "none",
-        background: "transparent",
-        cursor: principal ? "default" : "pointer",
-        color: principal ? "var(--primary)" : "var(--border-strong)",
-      }}
-    >
-      <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6">
-        <circle cx="10" cy="10" r="7.2" />
-        {principal && <circle cx="10" cy="10" r="3.6" fill="currentColor" stroke="none" />}
-      </svg>
-    </button>
   );
 }
 
@@ -438,7 +385,6 @@ function FormularioDoProvedor({
         provedor: rascunho.provedor,
         modelo: rascunho.modelo.trim(),
         ativo: rascunho.ativo,
-        ordem: rascunho.ordem,
         chave: chave.trim() || null,
       }),
     });
@@ -568,20 +514,12 @@ function FormularioDoProvedor({
 
         <Grupo
           titulo="Quando usar"
-          legenda="O de ordem 1 responde. Os outros existem para o dia em que ele estiver fora do ar ou sem cota, e são tentados na sequência."
+          legenda="Quem responde com esta chave é decidido em cada número, na aba Números."
         >
-          <Field label="Ordem" hint="1 é o principal. Pode ser trocado depois, na lista.">
-            <input
-              style={inputStyle}
-              type="number"
-              min={1}
-              max={9}
-              value={rascunho.ordem}
-              onChange={(e) => setRascunho({ ...rascunho, ordem: Number(e.target.value) || 1 })}
-            />
-          </Field>
-
-          <Field label="Ativo" hint="Desligado, este provedor não é tentado.">
+          <Field
+            label="Ativo"
+            hint="Desligada, os números que usam esta chave param de responder sozinhos."
+          >
             <ActiveToggle
               active={rascunho.ativo}
               onChange={() => setRascunho({ ...rascunho, ativo: !rascunho.ativo })}
@@ -622,8 +560,6 @@ function problemas(r: ConfigIA, chave: string, jaTemChave: boolean): string[] {
   if (!jaTemChave && chave.trim().length < 20) {
     erros.push("Cole a chave da API deste provedor");
   }
-
-  if (r.ordem < 1 || r.ordem > 9) erros.push("A ordem vai de 1 a 9");
 
   return erros;
 }

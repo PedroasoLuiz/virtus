@@ -52,12 +52,14 @@ export type ConfigIA = {
   ativo: boolean;
   temChave: boolean;
   /**
-   * Ordem de tentativa. 1 e o principal.
+   * Quantos numeros usam esta chave.
    *
-   * ⚠️ Existe porque provedor cai, estoura cota e muda de preco. Com uma chave
-   * so, qualquer um desses tres para o atendimento inteiro.
+   * ⚠️ Ocupa o lugar da ordem de tentativa. Ela existia para escolher entre as
+   * chaves da EMPRESA quando a primeira falhasse; agora cada numero aponta para
+   * a sua, por causa do rateio, e nao ha escolha a fazer. O que importa saber
+   * passou a ser quem depende desta chave antes de desligar ou apagar ela.
    */
-  ordem: number;
+  emUso: number;
   /**
    * Modo de teste: o bot atende SO estes numeros.
    *
@@ -76,7 +78,6 @@ export type CredencialIA = {
   provedor: ProvedorDeIA;
   modelo: string;
   chave: string;
-  ordem: number;
 };
 
 /**
@@ -106,7 +107,7 @@ export const CONFIG_IA_PADRAO: ConfigIA = {
   modelo: "gemini-3.5-flash-lite",
   ativo: false,
   temChave: false,
-  ordem: 1,
+  emUso: 0,
   numeroTeste: null,
 };
 

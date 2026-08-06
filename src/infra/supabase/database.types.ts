@@ -863,37 +863,6 @@ export type Database = {
        * referencia a segredo, entao fica fechada). A checagem de tenant mora
        * DENTRO da funcao, nao no parametro.
        */
-      /** Configuracao de IA da empresa. NUNCA devolve a chave. */
-      ia_config_da_empresa: {
-        Args: { p_empresa: number };
-        Returns: {
-          provedor: string;
-          modelo: string;
-          ativo: boolean;
-          tem_chave: boolean;
-          numero_teste: string | null;
-        }[];
-      };
-      ia_salvar_config: {
-        Args: {
-          p_empresa: number;
-          p_modelo: string;
-          p_ativo: boolean;
-          p_chave: string | null;
-          p_numero_teste: string | null;
-        };
-        Returns: undefined;
-      };
-      /** ⚠️ Devolve a chave em CLARO, do vault. Nunca sai do servidor. */
-      ia_credencial: {
-        Args: { p_segredo: string; p_empresa: number };
-        Returns: {
-          provedor: string;
-          modelo: string;
-          chave: string;
-          numero_teste: string | null;
-        }[];
-      };
       /** Contexto do bot. A empresa sai da conversa, nunca do parametro. */
       /** Liga e desliga o aviso de "a IA esta respondendo" no painel. */
       whatsapp_bot_respondendo: {
@@ -955,12 +924,13 @@ export type Database = {
           ativo: boolean;
           tem_chave: boolean;
           chave_final: string | null;
-          ordem: number;
+          em_uso: number;
         }[];
       };
+      /** ⚠️ Devolve a chave em CLARO, do vault. Uma linha, ou nenhuma. */
       ia_credenciais_da_conversa: {
         Args: { p_segredo: string; p_conversa: number };
-        Returns: { provedor: string; modelo: string; chave: string; ordem: number }[];
+        Returns: { provedor: string; modelo: string; chave: string }[];
       };
       ia_numero_teste: {
         Args: { p_empresa: number };
@@ -974,7 +944,6 @@ export type Database = {
           p_provedor: string;
           p_modelo: string;
           p_ativo: boolean;
-          p_ordem: number;
           p_chave: string | null;
         };
         Returns: number;
@@ -983,23 +952,9 @@ export type Database = {
         Args: { p_empresa: number; p_numero: string | null };
         Returns: undefined;
       };
-      ia_definir_principal: {
-        Args: { p_empresa: number; p_id: number };
-        Returns: undefined;
-      };
       ia_remover_provedor: {
         Args: { p_empresa: number; p_id: number };
         Returns: undefined;
-      };
-      ia_credenciais: {
-        Args: { p_segredo: string; p_empresa: number };
-        Returns: {
-          provedor: string;
-          modelo: string;
-          chave: string;
-          numero_teste: string | null;
-          ordem: number;
-        }[];
       };
       personas_do_bot: {
         Args: { p_segredo: string; p_conversa: number };
