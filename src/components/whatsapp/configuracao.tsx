@@ -675,7 +675,9 @@ function PreviaDoModelo({ espiada }: { espiada: Espiada }) {
           padding: "7px 10px",
           borderRadius:
             "var(--radius-lg) var(--radius-lg) var(--radius-xs) var(--radius-lg)",
-          background: "var(--bolha-saida)",
+          // O MESMO da bolha enviada no painel. O verde de WhatsApp que eu
+          // tinha posto nao existe em lugar nenhum do sistema.
+          background: "var(--primary-subtle)",
           boxShadow: "var(--shadow-xs)",
           fontSize: "var(--text-sm)",
           color: "var(--text-primary)",

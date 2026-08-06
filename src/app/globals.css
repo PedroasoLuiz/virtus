@@ -88,12 +88,8 @@
   --surface-2: #fafafc;
   --surface-3: #f0f0f3;
   --surface-hover: rgba(0, 0, 0, 0.035);
-  /* Cabecalho de tabela. Mais escuro que `--surface-2` de proposito: aquele e
-     quase branco e nao separava o titulo da coluna do primeiro dado. */
-  --table-head-bg: #f1f2f5;
-  /* Fundo de conversa e bolha enviada, para as previas fora do painel. */
+  /* Fundo de conversa, para as previas de mensagem fora do painel. */
   --fundo-conversa: #efe7dd;
-  --bolha-saida: #d9fdd3;
   --surface-active: rgba(0, 106, 40, 0.06);
 
   /* Hairline: a elevacao vem daqui, nao de sombra. */
@@ -250,9 +246,7 @@
   --surface-2: #141416;
   --surface-3: #2c2c2e;
   --surface-hover: rgba(255, 255, 255, 0.055);
-  --table-head-bg: #232326;
   --fundo-conversa: #0f1417;
-  --bolha-saida: #12503c;
   --surface-active: rgba(0, 187, 71, 0.1);
 
   --border: rgba(255, 255, 255, 0.09);
@@ -554,15 +548,22 @@ h1, h2, h3, h4 {
 }
 
 /*
- * A primeira e a ultima coluna encostam na borda da tabela.
+ * O recuo lateral das celulas mora AQUI, e nao no estilo em linha do `Th` e do
+ * `Td`.
  *
- * O padding lateral serve para separar UMA coluna da outra; nas pontas ele so
- * recua o conteudo para dentro, e a tabela deixa de alinhar com o titulo e com
- * a legenda que estao logo acima dela.
+ * ⚠️ Estilo em linha VENCE seletor. Enquanto o valor estava cravado no
+ * componente, a regra de primeira e ultima celula era ignorada em silencio, e a
+ * tabela continuava recuada sem nada no CSS explicando por que.
  *
- * Em CSS e nao no `Td`: estilo em linha nao alcanca `:first-child`, e passar
- * "sou a primeira" por prop obrigaria toda tabela do sistema a se contar.
+ * Nas pontas o recuo sai: ele existe para separar UMA coluna da outra, e na
+ * borda so empurra o conteudo para dentro, desalinhando a tabela do titulo e da
+ * legenda logo acima dela.
  */
+table th,
+table td {
+  padding: 0 16px;
+}
+
 table th:first-child,
 table td:first-child {
   padding-left: 0;

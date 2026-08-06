@@ -221,15 +221,13 @@ export function TableHead({ children }: { children: React.ReactNode }) {
   return (
     <thead style={{ position: "sticky", top: 0, zIndex: 2 }}>
       {/*
-        Cinza de VERDADE no cabecalho. `--surface-2` e quase branco (#fafafc) e
-        nao chegava a separar nada: a primeira linha de dado parecia o titulo da
-        coluna. O corpo continua sem fundo, e o que divide as linhas e so o
-        traco.
+        Cabecalho TRANSPARENTE, como o resto da tabela. O que separa o titulo da
+        coluna do primeiro dado e o traco embaixo dele e o peso do texto, nao
+        uma faixa cinza atravessando a tela.
       */}
       <tr
         style={{
           borderBottom: "1px solid var(--border)",
-          backgroundColor: "var(--table-head-bg)",
           height: "var(--h-th)",
         }}
       >
@@ -250,8 +248,8 @@ export function Th({
 }) {
   return (
     <th
+      // Sem `padding`: ele vem do CSS, pelo mesmo motivo do `Td`.
       style={{
-        padding: "0 16px",
         textAlign: align,
         fontSize: "var(--text-sm)",
         fontWeight: "var(--fw-semi)",
@@ -315,8 +313,14 @@ export function Td({
   return (
     <td
       colSpan={colSpan}
+      /*
+       * ⚠️ Sem `padding` aqui: ele mora no CSS.
+       *
+       * Estilo em linha VENCE seletor, entao a regra que tira o recuo da
+       * primeira e da ultima celula nunca chegava a valer enquanto o valor
+       * estivesse cravado neste objeto.
+       */
       style={{
-        padding: "0 16px",
         fontSize: "var(--text-sm)",
         fontWeight: 400,
         color: "var(--text-primary)",
