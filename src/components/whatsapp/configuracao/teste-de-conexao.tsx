@@ -101,25 +101,36 @@ export function TesteDeConexao({
 
   return (
     <section>
-      <div style={{ marginBottom: 10 }}>
+      {/*
+        A MESMA anatomia de `CabecalhoDeSecao`, e nao um cabecalho proprio.
+
+        Esta secao vive ao lado da URL de callback, no mesmo nivel, e antes ela
+        tinha titulo menor e legenda maior que a vizinha — duas secoes irmas com
+        duas escalas diferentes. Os tamanhos vem de la; o que muda e so o respiro
+        embaixo, porque ali o cabecalho abre uma tabela e aqui abre um botao
+        logo em seguida.
+      */}
+      <div style={{ marginBottom: 12 }}>
         <div
           style={{
-            fontSize: "var(--text-md)",
+            fontSize: "calc(var(--text-lg) + 2px)",
             fontWeight: "var(--fw-semi)",
             color: "var(--text-primary)",
+            letterSpacing: "var(--tracking-snug)",
           }}
         >
           {titulo}
         </div>
-        <div
+        <p
           style={{
-            marginTop: 2,
-            fontSize: "var(--text-sm)",
+            marginTop: 6,
+            fontSize: "calc(var(--text-xs) + 1px)",
             color: "var(--text-tertiary)",
+            lineHeight: "var(--lh-normal)",
           }}
         >
           {legenda}
-        </div>
+        </p>
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -168,8 +179,12 @@ export function TesteDeConexao({
         </div>
       )}
 
+      {/*
+        Respiro maior que o do resto: colado no botao, o veredito parecia parte
+        dele, e nao a resposta que veio depois de uma ida ate o provedor.
+      */}
       {resultado && !testando && (
-        <div style={{ marginTop: 10 }}>
+        <div style={{ marginTop: 18 }}>
           <Veredito resultado={resultado} demonstracao={demonstracao} />
         </div>
       )}
@@ -252,10 +267,20 @@ function Veredito({
   resultado: ResultadoDoTeste;
   demonstracao: boolean;
 }) {
-  const tom = resultado.ok ? "success" : resultado.definitivo ? "danger" : "warning";
+  /*
+   * ⚠️ O verde do acerto e o `--primary`, o verde da marca, e nao o
+   * `--success-text`. Este e o mesmo lugar onde a URL de callback aparece em
+   * verde logo acima: dois verdes diferentes na mesma tela leem como dois
+   * significados diferentes, quando os dois querem dizer a mesma coisa.
+   */
+  const cor = resultado.ok
+    ? "var(--primary)"
+    : resultado.definitivo
+      ? "var(--danger-text)"
+      : "var(--warning-text)";
 
   return (
-    <div style={{ display: "flex", gap: 8, color: `var(--${tom}-text)` }}>
+    <div style={{ display: "flex", gap: 8, color: cor }}>
       <span style={{ flexShrink: 0, marginTop: 1 }}>
         <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
           <circle cx="10" cy="10" r="7.4" />
