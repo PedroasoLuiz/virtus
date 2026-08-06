@@ -48,7 +48,6 @@ export function TesteDeConexao({
 }) {
   const [testando, setTestando] = useState(false);
   const [resultado, setResultado] = useState<ResultadoDoTeste | null>(null);
-  const [demonstracao, setDemonstracao] = useState(false);
 
   const anterior = useRef(assinatura);
 
@@ -57,7 +56,6 @@ export function TesteDeConexao({
 
     anterior.current = assinatura;
     setResultado(null);
-    setDemonstracao(false);
     onResultado(null);
   }, [assinatura, onResultado]);
 
@@ -65,7 +63,6 @@ export function TesteDeConexao({
     if (testando) return;
 
     setTestando(true);
-    setDemonstracao(false);
     setResultado(null);
     onResultado(null);
 
@@ -74,29 +71,6 @@ export function TesteDeConexao({
     setTestando(false);
     setResultado(r);
     onResultado(r);
-  }
-
-  /*
-   * A demonstração percorre os três desfechos, um por clique.
-   *
-   * ⚠️ O resultado sai marcado como demonstração, e não conta para o salvar:
-   * um "tudo certo" de mentira que liberasse o cadastro seria pior que não ter
-   * botão nenhum.
-   */
-  async function demonstrar() {
-    if (testando) return;
-
-    const proximo = (DEMONSTRACOES.findIndex((d) => d.mensagem === resultado?.mensagem) + 1) %
-      DEMONSTRACOES.length;
-
-    setTestando(true);
-    setResultado(null);
-    setDemonstracao(true);
-
-    await new Promise((r) => setTimeout(r, 2200));
-
-    setTestando(false);
-    setResultado(DEMONSTRACOES[proximo]);
   }
 
   return (
@@ -144,28 +118,6 @@ export function TesteDeConexao({
           {testando ? "Testando…" : "Testar conexão"}
         </Button>
 
-        {/*
-          Escapa a demonstração para quem não tem credencial em mãos.
-          Deliberadamente discreta: é uma amostra da interface, não uma ação da
-          tela. Uma linha para remover quando não fizer mais falta.
-        */}
-        <button
-          type="button"
-          onClick={() => void demonstrar()}
-          disabled={testando}
-          style={{
-            border: "none",
-            background: "transparent",
-            padding: 0,
-            fontSize: "var(--text-xs)",
-            color: "var(--text-tertiary)",
-            textDecoration: "underline",
-            cursor: testando ? "default" : "pointer",
-          }}
-        >
-          ver demonstração
-        </button>
-
         {bloqueio != null && !testando && resultado == null && (
           <span style={{ fontSize: "var(--text-xs)", color: "var(--text-tertiary)" }}>
             {bloqueio}
@@ -185,7 +137,7 @@ export function TesteDeConexao({
       */}
       {resultado && !testando && (
         <div style={{ marginTop: 18 }}>
-          <Veredito resultado={resultado} demonstracao={demonstracao} />
+          <Veredito resultado={resultado} />
         </div>
       )}
     </section>
@@ -260,13 +212,7 @@ function Barra() {
  * Aqui a cor VAI para o texto, e não para o fundo: sem a caixa, o ícone sozinho
  * ficaria pequeno demais para dizer o desfecho a quem só bate o olho.
  */
-function Veredito({
-  resultado,
-  demonstracao,
-}: {
-  resultado: ResultadoDoTeste;
-  demonstracao: boolean;
-}) {
+function Veredito({ resultado }: { resultado: ResultadoDoTeste }) {
   /*
    * ⚠️ O verde do acerto e o `--primary`, o verde da marca, e nao o
    * `--success-text`. Este e o mesmo lugar onde a URL de callback aparece em
@@ -340,49 +286,7 @@ function Veredito({
             {resultado.detalhe}
           </div>
         )}
-
-        {demonstracao && (
-          <div style={{ marginTop: 6, fontSize: "var(--text-xs)", color: "var(--text-tertiary)" }}>
-            Demonstração: nenhuma chamada foi feita. Clique de novo para ver o próximo caso.
-          </div>
-        )}
       </div>
     </div>
   );
 }
-
-/** Os três desfechos possíveis, para a demonstração percorrer. */
-const DEMONSTRACOES: ResultadoDoTeste[] = [
-  {
-    ok: true,
-    definitivo: true,
-    mensagem: "Chave e modelo confirmados. O provedor respondeu.",
-    detalhe: null,
-    infos: [
-      { rotulo: "Provedor", valor: "gemini" },
-      { rotulo: "Modelo", valor: "gemini-3.5-flash-lite" },
-      { rotulo: "Resposta", valor: "HTTP 200" },
-      { rotulo: "Tempo", valor: "412 ms" },
-    ],
-  },
-  {
-    ok: false,
-    definitivo: true,
-    mensagem: 'O provedor não conhece o modelo "gemini-3.5-flash-lte". Confira o nome exato.',
-    detalhe: "models/gemini-3.5-flash-lte is not found for API version v1beta",
-    infos: [
-      { rotulo: "Provedor", valor: "gemini" },
-      { rotulo: "Modelo", valor: "gemini-3.5-flash-lte" },
-      { rotulo: "Resposta", valor: "HTTP 404" },
-      { rotulo: "Tempo", valor: "287 ms" },
-    ],
-  },
-  {
-    ok: false,
-    definitivo: false,
-    mensagem:
-      "Não foi possível falar com o serviço agora. Dá para salvar assim mesmo e tentar de novo depois.",
-    detalhe: null,
-    infos: [{ rotulo: "Tempo", valor: "12.0 s" }],
-  },
-];
