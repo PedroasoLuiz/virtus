@@ -76,6 +76,10 @@ export async function salvarVinculo({ body, ctx }: Entrada<SalvarVinculoBody, un
     validadoEm: null,
     erro: null,
     erroEm: null,
+    solicitacaoNome: null,
+    solicitacaoStatus: null,
+    solicitacaoMotivo: null,
+    solicitacaoEm: null,
   });
 
   return ok(await service.listarVinculos(contaId));
@@ -83,10 +87,26 @@ export async function salvarVinculo({ body, ctx }: Entrada<SalvarVinculoBody, un
 
 export async function criarModelo({ body, ctx }: Entrada<CriarModeloBody, undefined, unknown>) {
   empresaObrigatoria(ctx);
+  await service.criarModeloDaFinalidade(body.contaId, body.finalidade);
 
-  return ok(
-    await service.criarModeloDaFinalidade(body.contaId, body.finalidade, body.nome, body.idioma),
-  );
+  return ok(await service.listarVinculos(body.contaId));
+}
+
+/**
+ * Consulta o pedido em analise.
+ *
+ * ⚠️ Devolve a lista INTEIRA de vinculos, e nao so o consultado: a tela usa esta
+ * resposta para se redesenhar, e devolver uma linha faria o componente juntar
+ * dois formatos para a mesma coisa.
+ */
+export async function conferirSolicitacao({
+  query,
+  ctx,
+}: Entrada<undefined, RemoverVinculoQuery, unknown>) {
+  empresaObrigatoria(ctx);
+  await service.conferirSolicitacao(query.contaId, query.finalidade);
+
+  return ok(await service.listarVinculos(query.contaId));
 }
 
 export async function removerVinculo({

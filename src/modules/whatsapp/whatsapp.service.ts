@@ -146,8 +146,6 @@ export async function salvarVinculo(
 export async function criarModeloDaFinalidade(
   contaId: number,
   finalidadeId: string,
-  nome: string,
-  idioma: string,
 ): Promise<{ nome: string; status: string }> {
   const finalidade = finalidadePorId(finalidadeId);
   if (!finalidade) throw new BusinessRuleError("Finalidade desconhecida");
@@ -155,27 +153,30 @@ export async function criarModeloDaFinalidade(
   const cred = await repo.credenciais(contaId);
   if (!cred) throw new BusinessRuleError("O numero escolhido esta sem token cadastrado.");
 
-  const limpo = nome
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-z0-9_]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-    .slice(0, 512);
+  /*
+   * ⚠️ Um pedido de cada vez por finalidade. Sem esta trava, dois cliques no
+   * botao viram dois modelos na Meta com nomes proximos, e o teto de modelos da
+   * conta e do cliente.
+   */
+  const vinculos = await repo.vinculosDaConta(contaId);
+  const atual = vinculos.find((v) => v.finalidade === finalidadeId);
 
-  if (limpo.length < 3) throw new BusinessRuleError("Dê um nome com ao menos 3 letras ao modelo.");
+  if (atual?.solicitacaoStatus === "PENDING") {
+    throw new BusinessRuleError("Já há um modelo desta finalidade em análise na Meta.");
+  }
 
   /*
-   * Os exemplos saem na ORDEM dos marcadores do corpo sugerido, e nao na ordem
-   * do catalogo: a Meta confere posicao por posicao contra os `{{n}}`.
+   * Os exemplos saem na ordem dos MARCADORES do corpo sugerido, e nao na ordem
+   * do catalogo: a Meta confere posicao por posicao contra os `{{n}}`, e o texto
+   * sugerido de cobranca cita o ticket antes do valor.
    */
-  const marcadores = new Set(finalidade.corpoSugerido.match(/\{\{\s*\d+\s*\}\}/g) ?? []);
-  const exemplos = finalidade.variaveis.slice(0, marcadores.size).map((v) => v.exemplo);
+  const exemplos = finalidade.parametrosSugeridos.map(
+    (chave) => finalidade.variaveis.find((v) => v.chave === chave)?.exemplo ?? "exemplo",
+  );
 
   const resultado = await cloud.criarModelo(cred, {
-    nome: limpo,
-    idioma,
+    nome: finalidade.nomeSugerido,
+    idioma: IDIOMA_PADRAO,
     categoria: finalidade.categoria,
     corpo: finalidade.corpoSugerido,
     exemplos,
@@ -194,10 +195,58 @@ export async function criarModeloDaFinalidade(
       : null,
   });
 
-  logger.info("modelo criado na Meta", { contaId, finalidade: finalidadeId, nome: limpo });
+  /*
+   * Grava o pedido JA com o mapeamento. Ele e nosso e conhecido antes da
+   * resposta: e o que permite o vinculo se completar sozinho na aprovacao.
+   */
+  await repo.solicitarModelo(contaId, {
+    finalidade: finalidadeId,
+    nome: finalidade.nomeSugerido,
+    idioma: IDIOMA_PADRAO,
+    parametros: finalidade.parametrosSugeridos,
+    botaoParam: finalidade.botao?.chave ?? null,
+    corpo: finalidade.corpoSugerido,
+    campos: finalidade.parametrosSugeridos.length,
+  });
 
-  return { nome: limpo, status: resultado.status };
+  logger.info("modelo pedido a Meta", { contaId, finalidade: finalidadeId });
+
+  return { nome: finalidade.nomeSugerido, status: resultado.status };
 }
+
+/**
+ * Pergunta a Meta se o modelo pedido ja foi decidido.
+ *
+ * ⚠️ So faz sentido enquanto ha pedido PENDENTE, e quem para de perguntar e a
+ * tela: aqui, um pedido ja resolvido devolve o que esta gravado sem sair para a
+ * rede. E a trava que impede o laco de consulta virar chamada eterna a Meta.
+ */
+export async function conferirSolicitacao(
+  contaId: number,
+  finalidadeId: string,
+): Promise<VinculoDeModelo | null> {
+  const vinculos = await repo.vinculosDaConta(contaId);
+  const atual = vinculos.find((v) => v.finalidade === finalidadeId) ?? null;
+
+  if (!atual || atual.solicitacaoStatus !== "PENDING" || !atual.solicitacaoNome) return atual;
+
+  const cred = await repo.credenciais(contaId);
+  if (!cred) return atual;
+
+  const resposta = await cloud.consultarModelo(cred, atual.solicitacaoNome);
+
+  // Sem resposta, ou ainda pendente: nada mudou, e gravar por gravar so
+  // acrescentaria escrita a cada checagem.
+  if (!resposta || resposta.status === "PENDING") return atual;
+
+  await repo.resolverSolicitacao(contaId, finalidadeId, resposta.status, resposta.motivo);
+
+  const atualizados = await repo.vinculosDaConta(contaId);
+  return atualizados.find((v) => v.finalidade === finalidadeId) ?? null;
+}
+
+/** O idioma dos modelos que o sistema cria. */
+const IDIOMA_PADRAO = "pt_BR";
 
 export async function removerVinculo(contaId: number, finalidade: string): Promise<void> {
   await repo.removerVinculo(contaId, finalidade);
@@ -604,6 +653,23 @@ export async function dispararFinalidade(
     );
   }
 
+  /*
+   * ⚠️ Linha existente NAO significa vinculo pronto.
+   *
+   * Enquanto o modelo padrao esta em analise, a linha ja existe com o
+   * mapeamento gravado, mas sem `modeloNome`: a Meta ainda nao aprovou. Enviar
+   * ali seria pedir a ela um template que nao esta no catalogo dela.
+   */
+  const modeloVinculado = vinculo.modeloNome;
+
+  if (!modeloVinculado) {
+    throw new BusinessRuleError(
+      vinculo.solicitacaoStatus === "PENDING"
+        ? `O modelo de "${rotulo}" ainda está em análise na Meta. Assim que ela aprovar, o envio libera sozinho.`
+        : `Nenhum modelo do WhatsApp está vinculado a "${rotulo}" neste número. Configure em Configuração do WhatsApp, aba Modelos.`,
+    );
+  }
+
   const parametros = vinculo.parametros.map((chave) => {
     const v = valores[chave];
 
@@ -651,7 +717,7 @@ export async function dispararFinalidade(
     wamid = await cloud.enviarModelo(
       cred,
       destino.telefone,
-      vinculo.modeloNome,
+      modeloVinculado,
       vinculo.idioma,
       parametros,
       urlDoBotao,

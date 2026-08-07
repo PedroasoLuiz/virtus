@@ -201,13 +201,16 @@ export const salvarVinculoBodySchema = z.object({
   botaoParam: z.string().trim().min(1).max(40).nullable().default(null),
 });
 
-/** Cria na Meta o modelo sugerido de uma finalidade. */
+/**
+ * Pede a Meta o modelo padrao de uma finalidade.
+ *
+ * ⚠️ Sem nome, sem texto, sem categoria. Tudo isso e do catalogo de finalidades
+ * e nao viaja pela rede: aceitar do cliente deixaria qualquer um criar na conta
+ * da empresa um modelo com o texto que quisesse.
+ */
 export const criarModeloBodySchema = z.object({
   contaId: z.number().int().positive(),
   finalidade: z.enum(["cobranca", "ticket", "contapagar", "aniversario"]),
-  /** A limpeza para o formato da Meta acontece no servico. */
-  nome: z.string().trim().min(3).max(120),
-  idioma: z.string().trim().min(2).max(20).default("pt_BR"),
 });
 
 export const vinculosQuerySchema = z.object({

@@ -370,6 +370,7 @@ export function BotaoDeAcao({
   onClick,
   desabilitado,
   perigo,
+  destaque,
   children,
 }: {
   /** Vai no `title` e no `aria-label`: icone sozinho nao se le. */
@@ -377,6 +378,14 @@ export function BotaoDeAcao({
   onClick: () => void;
   desabilitado?: boolean;
   perigo?: boolean;
+  /**
+   * Tinge SO o icone com o verde da marca.
+   *
+   * ⚠️ A moldura continua a mesma dos outros. Colorir o botao inteiro o
+   * transformaria em botao primario no meio de uma linha de acoes de apoio, e
+   * ele passaria a chamar mais atencao que a propria linha da tabela.
+   */
+  destaque?: boolean;
   /** Os tracos do icone, na grade de 16. */
   children: React.ReactNode;
 }) {
@@ -409,7 +418,9 @@ export function BotaoDeAcao({
           ? "var(--text-disabled)"
           : perigo
             ? "var(--danger)"
-            : "var(--text-secondary)",
+            : destaque
+              ? "var(--primary)"
+              : "var(--text-secondary)",
         cursor: desabilitado ? "not-allowed" : "pointer",
         transition: "background var(--dur) var(--ease)",
       }}

@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAvisos } from "@/components/ui/avisos";
 import { Drawer } from "@/components/ui/drawer";
 import { comFormatacaoDoWhatsapp } from "@/components/whatsapp/formatacao";
 import {
+  AcoesDaLinha,
   Badge,
   BotaoDeAcao,
   Button,
@@ -12,7 +13,6 @@ import {
   Field,
   PanelTabs,
   TableArea,
-  inputStyle,
   TableHead,
   Td,
   Th,
@@ -53,7 +53,70 @@ export function Finalidades({
   vinculos: VinculoDeModelo[] | null;
   onMudou: () => void;
 }) {
+  const { avisar, confirmar } = useAvisos();
   const [editando, setEditando] = useState<Finalidade | null>(null);
+  const [pedindo, setPedindo] = useState<string | null>(null);
+
+  const emAnalise = (vinculos ?? []).filter((v) => v.solicitacaoStatus === "PENDING");
+
+  /*
+   * ⚠️ O laço existe SÓ enquanto há modelo em análise, e some quando o último
+   * é decidido — é a dependência do efeito que garante isso, não um `if` lá
+   * dentro. A Meta costuma responder em minutos; meio minuto entre perguntas é
+   * rápido o bastante para parecer instantâneo e raro o bastante para não virar
+   * uma chamada externa a cada instante, multiplicada por empresa.
+   */
+  const chaves = emAnalise.map((v) => v.finalidade).join(",");
+
+  useEffect(() => {
+    if (!chaves) return;
+
+    const id = setInterval(() => {
+      for (const finalidade of chaves.split(",")) {
+        void fetch(
+          `/api/v1/whatsapp/modelos/solicitacao?contaId=${contaId}&finalidade=${finalidade}`,
+        ).then((r) => {
+          if (r.ok) onMudou();
+        });
+      }
+    }, 30_000);
+
+    return () => clearInterval(id);
+  }, [chaves, contaId, onMudou]);
+
+  function pedirModelo(f: Finalidade) {
+    confirmar(
+      `Criar o modelo padrão de "${f.rotulo}"?`,
+      "Criar na Meta",
+      () => void enviarPedido(f),
+      `O sistema vai pedir à Meta um modelo chamado "${f.nomeSugerido}", com o texto sugerido e os campos já mapeados. Ele passa pela revisão dela antes de poder enviar, e quando for aprovado o vínculo acontece sozinho.`,
+    );
+  }
+
+  async function enviarPedido(f: Finalidade) {
+    setPedindo(f.id);
+
+    const r = await fetch("/api/v1/whatsapp/modelos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contaId, finalidade: f.id }),
+    });
+
+    setPedindo(null);
+    const corpo = await r.json().catch(() => null);
+
+    if (!r.ok) {
+      avisar("atencao", corpo?.error?.message ?? "A Meta recusou a criação do modelo");
+      return;
+    }
+
+    avisar(
+      "sucesso",
+      "Modelo enviado para revisão",
+      "A Meta costuma responder em minutos. A situação aqui muda sozinha.",
+    );
+    onMudou();
+  }
 
   return (
     <>
@@ -97,7 +160,37 @@ export function Finalidades({
                 </Td>
 
                 <Td>
-                  {v ? (
+                  {v?.solicitacaoStatus === "PENDING" ? (
+                    <>
+                      <span style={{ fontFamily: "var(--font-mono, monospace)" }}>
+                        {v.solicitacaoNome}
+                      </span>
+                      <div
+                        style={{
+                          marginTop: 2,
+                          fontSize: "var(--text-xs)",
+                          color: "var(--text-tertiary)",
+                        }}
+                      >
+                        pedido à Meta, aguardando revisão
+                      </div>
+                    </>
+                  ) : v?.solicitacaoStatus === "REJECTED" && !v.modeloNome ? (
+                    <>
+                      <span style={{ fontFamily: "var(--font-mono, monospace)" }}>
+                        {v.solicitacaoNome}
+                      </span>
+                      <div
+                        style={{
+                          marginTop: 2,
+                          fontSize: "var(--text-xs)",
+                          color: "var(--text-tertiary)",
+                        }}
+                      >
+                        {v.solicitacaoMotivo ?? "A Meta recusou. Vincule um modelo seu."}
+                      </div>
+                    </>
+                  ) : v?.modeloNome ? (
                     <>
                       <span style={{ fontFamily: "var(--font-mono, monospace)" }}>
                         {v.modeloNome}
@@ -127,9 +220,42 @@ export function Finalidades({
                 </Td>
 
                 <Td>
-                  <BotaoDeAcao rotulo="Configurar" onClick={() => setEditando(f)}>
-                    <path d="M11.6 2.6a1.6 1.6 0 0 1 2.3 2.3L5.6 13.2l-3 .7.7-3z" />
-                  </BotaoDeAcao>
+                  <AcoesDaLinha>
+                    {/*
+                      ⚠️ Some quando já há vínculo pronto ou pedido em análise.
+
+                      Pedir de novo criaria um segundo modelo na conta da
+                      empresa, contra o teto dela, para a mesma finalidade — e é
+                      exatamente o laço que a trava do serviço recusa.
+                    */}
+                    {!v?.modeloNome && v?.solicitacaoStatus !== "PENDING" && (
+                      <BotaoDeAcao
+                        rotulo="Criar o modelo padrão na Meta"
+                        onClick={() => pedirModelo(f)}
+                        desabilitado={pedindo === f.id}
+                        destaque
+                      >
+                        <MarcaDaMeta />
+                      </BotaoDeAcao>
+                    )}
+
+                    {/*
+                      Em análise, configurar fica travado: mexer no vínculo
+                      enquanto a Meta decide sobre o modelo que o sistema pediu
+                      deixaria os dois brigando pela mesma linha.
+                    */}
+                    <BotaoDeAcao
+                      rotulo={
+                        v?.solicitacaoStatus === "PENDING"
+                          ? "Aguardando a revisão da Meta"
+                          : "Configurar"
+                      }
+                      onClick={() => setEditando(f)}
+                      desabilitado={v?.solicitacaoStatus === "PENDING"}
+                    >
+                      <path d="M11.6 2.6a1.6 1.6 0 0 1 2.3 2.3L5.6 13.2l-3 .7.7-3z" />
+                    </BotaoDeAcao>
+                  </AcoesDaLinha>
                 </Td>
               </Tr>
             );
@@ -169,6 +295,42 @@ function SituacaoDoVinculo({ vinculo }: { vinculo: VinculoDeModelo | null }) {
     );
   }
 
+  /*
+   * ⚠️ A análise vence tudo. Enquanto ela corre, nada mais é verdade sobre esta
+   * linha: não há modelo vinculado, e o que existe é uma espera.
+   */
+  if (vinculo.solicitacaoStatus === "PENDING") {
+    return (
+      <Badge tom="info">
+        <Relogio />
+        modelo em análise
+      </Badge>
+    );
+  }
+
+  /*
+   * Recusado só continua na tela ENQUANTO não há vínculo. Depois de a pessoa
+   * ligar um modelo dela, a recusa antiga vira história e ficar mostrando ela
+   * acusaria um problema que já foi resolvido por outro caminho.
+   */
+  if (vinculo.solicitacaoStatus === "REJECTED" && !vinculo.modeloNome) {
+    return (
+      <Badge tom="danger">
+        <Atencao />
+        modelo recusado
+      </Badge>
+    );
+  }
+
+  if (!vinculo.modeloNome) {
+    return (
+      <Badge tom="neutral">
+        <Relogio />
+        não configurado
+      </Badge>
+    );
+  }
+
   // ⚠️ O erro vence o "pronto": ele é mais novo que a validação, e é o único
   // sinal de que algo mudou na Meta depois do vínculo.
   if (vinculo.erro) {
@@ -185,6 +347,25 @@ function SituacaoDoVinculo({ vinculo }: { vinculo: VinculoDeModelo | null }) {
       <Certo />
       pronto
     </Badge>
+  );
+}
+
+/**
+ * A marca da Meta, no infinito de dois laços.
+ *
+ * ⚠️ Monocromática, em `currentColor`, como todos os ícones da tabela. O logo
+ * colorido deles exigiria hospedar o arquivo, acompanhar quando trocam, e
+ * quebraria no tema escuro — e aqui o que importa é o olho reconhecer que a
+ * ação sai daqui para lá.
+ */
+function MarcaDaMeta() {
+  return (
+    <>
+      <path d="M2 10.2c0-2.4 1.2-4.4 3-4.4 1.5 0 2.4 1.1 3.4 2.8.9 1.5 1.5 2.6 1.6 2.8" />
+      <path d="M14 10.2c0-2.4-1.2-4.4-3-4.4-1.5 0-2.4 1.1-3.4 2.8-.9 1.5-1.5 2.6-1.6 2.8" />
+      <path d="M5 5.8c-1.8 0-3 2-3 4.4 0 1.6.7 2.6 1.9 2.6 1.3 0 2.1-1 3.1-2.6" />
+      <path d="M11 5.8c1.8 0 3 2 3 4.4 0 1.6-.7 2.6-1.9 2.6-1.3 0-2.1-1-3.1-2.6" />
+    </>
   );
 }
 
@@ -389,7 +570,7 @@ function FormularioDoVinculo({
           ocupando o topo, mas continua a um clique para comparar o próprio
           texto com um que já sabe onde cada campo entra.
         */}
-        <Sugestao finalidade={finalidade} contaId={contaId} recolher={Boolean(nome)} />
+        <Sugestao finalidade={finalidade} recolher={Boolean(nome)} />
 
         <Secao
           primeiro
@@ -723,56 +904,9 @@ function Dicionario({
  * escolha muda. Recolher por baixo de quem acabou de abrir seria a tela
  * discutindo com o usuário.
  */
-function Sugestao({
-  finalidade,
-  contaId,
-  recolher,
-}: {
-  finalidade: Finalidade;
-  contaId: number;
-  recolher: boolean;
-}) {
-  const { avisar } = useAvisos();
+function Sugestao({ finalidade, recolher }: { finalidade: Finalidade; recolher: boolean }) {
   const [aberta, setAberta] = useState<boolean | null>(null);
   const [anterior, setAnterior] = useState(recolher);
-  const [nome, setNome] = useState<string>(finalidade.id);
-  const [criando, setCriando] = useState(false);
-
-  async function criar() {
-    if (criando) return;
-    setCriando(true);
-
-    const r = await fetch("/api/v1/whatsapp/modelos", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contaId, finalidade: finalidade.id, nome, idioma: "pt_BR" }),
-    });
-
-    setCriando(false);
-    const corpo = await r.json().catch(() => null);
-
-    if (!r.ok) {
-      const detalhe = corpo?.error?.details?.[0];
-      avisar(
-        "atencao",
-        detalhe
-          ? `${detalhe.campo}: ${detalhe.mensagem}`
-          : (corpo?.error?.message ?? "A Meta recusou a criação do modelo"),
-      );
-      return;
-    }
-
-    /*
-     * ⚠️ "Enviado para revisão", e não "criado". O modelo nasce PENDENTE: dizer
-     * que está pronto faria a pessoa procurá-lo no seletor logo abaixo, onde ele
-     * ainda não está — a lista só mostra aprovados.
-     */
-    avisar(
-      "sucesso",
-      `Modelo "${corpo.data.nome}" enviado para revisão`,
-      "A Meta costuma responder em minutos. Quando aprovar, feche e abra o painel para ele aparecer no seletor abaixo.",
-    );
-  }
 
   // Estado derivado durante o render, e não num efeito: assim a sanfona já sai
   // no estado certo no mesmo quadro em que o modelo é escolhido.
@@ -844,66 +978,6 @@ function Sugestao({
           </CartaoDeTexto>
 
           {finalidade.botao && <CartaoDeBotao texto="Acessar fatura" />}
-
-          {/*
-            ⚠️ Criar direto, sem passar pelo painel da Meta.
-
-            É o passo onde mais se erra: o corpo precisa de exemplos para cada
-            `{{n}}`, e o botão precisa da URL terminando na barra com o marcador
-            no fim. Pela API isso vai montado certo, e o que sobra para a pessoa
-            é escolher o nome.
-          */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "flex-end",
-              gap: 8,
-              marginTop: 14,
-              flexWrap: "wrap",
-            }}
-          >
-            <div>
-              <label
-                htmlFor={`nome-${finalidade.id}`}
-                style={{
-                  display: "block",
-                  marginBottom: 4,
-                  fontSize: "var(--text-xs)",
-                  color: "var(--text-tertiary)",
-                }}
-              >
-                Nome do modelo na Meta
-              </label>
-              <input
-                id={`nome-${finalidade.id}`}
-                style={{ ...inputStyle, width: 220 }}
-                value={nome}
-                onChange={(e) => setNome(e.target.value)}
-              />
-            </div>
-
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => void criar()}
-              disabled={criando || nome.trim().length < 3}
-            >
-              {criando ? "Enviando…" : "Criar na Meta"}
-            </Button>
-          </div>
-
-          <p
-            style={{
-              marginTop: 6,
-              fontSize: "var(--text-xs)",
-              color: "var(--text-tertiary)",
-              lineHeight: "var(--lh-normal)",
-            }}
-          >
-            Só letras minúsculas, números e sublinhado. O modelo entra como{" "}
-            {finalidade.categoria === "UTILITY" ? "utilitário" : "marketing"} e passa pela revisão
-            da Meta antes de poder ser vinculado.
-          </p>
         </>
       )}
     </section>

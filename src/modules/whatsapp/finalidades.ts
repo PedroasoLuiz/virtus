@@ -53,6 +53,22 @@ export type Finalidade = {
    * modelo recusado.
    */
   categoria: "UTILITY" | "MARKETING";
+  /**
+   * O nome com que o modelo do sistema nasce na Meta.
+   *
+   * ⚠️ So minusculas, numeros e sublinhado: e o formato que ela aceita. Curto e
+   * sem acento de proposito, porque este nome aparece no painel dela para
+   * sempre e nao da para renomear depois.
+   */
+  nomeSugerido: string;
+  /**
+   * O que entra em cada `{{n}}` do `corpoSugerido`, em ORDEM.
+   *
+   * ⚠️ Nao e a mesma ordem de `variaveis`. O texto sugerido cita o ticket antes
+   * do valor, e e esta lista que diz isso — ela vira o vinculo pronto quando a
+   * Meta aprova, e vira o `example` que ela exige na criacao.
+   */
+  parametrosSugeridos: string[];
   variaveis: VariavelDeFinalidade[];
   /**
    * A variavel do BOTAO de URL, quando o modelo tiver um.
@@ -77,6 +93,8 @@ export const FINALIDADES: Finalidade[] = [
       "A cobrança de uma parcela de contas a receber. Quase sempre vai para quem não escreveu naquele dia, e por isso precisa de modelo aprovado.",
     origem: "Contas a receber, no botão de enviar por WhatsApp",
     categoria: "UTILITY",
+    nomeSugerido: "contareceber",
+    parametrosSugeridos: ["nome", "ticket", "valor", "vencimento"],
     variaveis: [
       {
         chave: "nome",
@@ -131,6 +149,8 @@ export const FINALIDADES: Finalidade[] = [
       "Avisa o cliente sobre uma ordem de serviço: que abriu, que andou, que fechou. O texto do modelo é que decide qual desses é.",
     origem: null,
     categoria: "UTILITY",
+    nomeSugerido: "disparoticket",
+    parametrosSugeridos: ["cliente", "numero", "titulo", "status", "abertura"],
     variaveis: [
       {
         chave: "cliente",
@@ -174,6 +194,8 @@ export const FINALIDADES: Finalidade[] = [
       "Uma parcela do contas a pagar, para o fornecedor. O destinatário aqui não é o seu cliente: é quem você paga.",
     origem: null,
     categoria: "UTILITY",
+    nomeSugerido: "contapagar",
+    parametrosSugeridos: ["fornecedor", "valor", "vencimento", "documento"],
     variaveis: [
       {
         chave: "fornecedor",
@@ -211,6 +233,8 @@ export const FINALIDADES: Finalidade[] = [
       "A mensagem de parabéns. Sai sozinha, sem ninguém clicar, e por isso o texto do modelo precisa valer para qualquer cliente.",
     origem: null,
     categoria: "MARKETING",
+    nomeSugerido: "aniversario",
+    parametrosSugeridos: ["nome", "empresa"],
     variaveis: [
       {
         chave: "nome",
@@ -243,7 +267,8 @@ export function finalidadePorId(id: string): Finalidade | null {
  */
 export type VinculoDeModelo = {
   finalidade: ChaveDeFinalidade;
-  modeloNome: string;
+  /** Nulo enquanto so ha pedido: modelo em analise ainda nao vincula nada. */
+  modeloNome: string | null;
   idioma: string;
   parametros: string[];
   /** A chave que preenche a URL do botao. Nulo quando o modelo nao tem botao. */
@@ -269,6 +294,18 @@ export type VinculoDeModelo = {
    */
   erro: string | null;
   erroEm: string | null;
+  /**
+   * O pedido de criacao do modelo padrao, quando houve um.
+   *
+   * ⚠️ `PENDING` significa que a Meta ainda esta revisando: nesse estado a linha
+   * existe mas NAO e um vinculo, `modeloNome` continua nulo e o envio nao
+   * acontece. Aprovado, ela vira vinculo sozinha; recusado, o motivo fica na
+   * tela e a pessoa pode vincular um modelo dela.
+   */
+  solicitacaoNome: string | null;
+  solicitacaoStatus: "PENDING" | "APPROVED" | "REJECTED" | null;
+  solicitacaoMotivo: string | null;
+  solicitacaoEm: string | null;
 };
 
 /**

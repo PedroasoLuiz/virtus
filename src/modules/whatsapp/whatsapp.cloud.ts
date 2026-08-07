@@ -355,6 +355,51 @@ export async function criarModelo(
 }
 
 /**
+ * Em que pe esta um modelo, pelo nome.
+ *
+ * ⚠️ Diferente de `listarModelos`, que so devolve os APROVADOS. Aqui interessa
+ * justamente o que ainda nao foi: pendente, recusado, e o motivo da recusa.
+ *
+ * Filtra por `name` na propria Meta em vez de baixar o catalogo e procurar: a
+ * consulta roda em laco enquanto o modelo esta em analise, e trazer cem modelos
+ * a cada checagem seria pagar o catalogo inteiro para ler uma palavra.
+ */
+export async function consultarModelo(
+  cred: Credenciais,
+  nome: string,
+): Promise<{ status: string; motivo: string | null } | null> {
+  if (!cred.wabaId) return null;
+
+  const resposta = await fetch(
+    `${BASE}/${cred.apiVersao}/${cred.wabaId}/message_templates?name=${encodeURIComponent(nome)}&fields=name,status,rejected_reason&limit=5`,
+    { headers: { Authorization: `Bearer ${cred.token}` } },
+  );
+
+  if (!resposta.ok) {
+    logger.warn("nao foi possivel consultar o modelo na Meta", { status: resposta.status, nome });
+    return null;
+  }
+
+  const corpo = (await resposta.json().catch(() => ({}))) as {
+    data?: { name?: string; status?: string; rejected_reason?: string }[];
+  };
+
+  // `name` na Meta e filtro por PREFIXO, entao a igualdade e conferida aqui:
+  // `contareceber` traria `contareceber_v2` junto.
+  const achado = (corpo.data ?? []).find((t) => t.name === nome);
+  if (!achado) return null;
+
+  const motivo = achado.rejected_reason;
+
+  return {
+    status: achado.status ?? "PENDING",
+    // A Meta manda `NONE` quando nao houve recusa; virar texto na tela seria
+    // mostrar "NONE" como motivo.
+    motivo: motivo && motivo !== "NONE" ? motivo : null,
+  };
+}
+
+/**
  * Confere as credenciais da Meta antes de gravar o numero.
  *
  * ⚠️ Le o proprio numero (`GET /{phone_number_id}`) em vez de mandar mensagem.

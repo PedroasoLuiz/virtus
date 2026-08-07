@@ -876,7 +876,33 @@ export type Database = {
           validado_em: string | null;
           erro: string | null;
           erro_em: string | null;
+          solicitacao_nome: string | null;
+          solicitacao_status: string | null;
+          solicitacao_motivo: string | null;
+          solicitacao_em: string | null;
         }[];
+      };
+      whatsapp_solicitar_modelo: {
+        Args: {
+          p_conta: number;
+          p_finalidade: string;
+          p_nome: string;
+          p_idioma: string;
+          p_parametros: string[];
+          p_botao_param: string | null;
+          p_corpo: string;
+          p_campos: number;
+        };
+        Returns: undefined;
+      };
+      whatsapp_resolver_solicitacao: {
+        Args: {
+          p_conta: number;
+          p_finalidade: string;
+          p_status: string;
+          p_motivo: string | null;
+        };
+        Returns: undefined;
       };
       whatsapp_salvar_vinculo: {
         Args: {

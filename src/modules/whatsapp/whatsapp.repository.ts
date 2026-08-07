@@ -196,7 +196,58 @@ export async function vinculosDaConta(contaId: number): Promise<VinculoDeModelo[
     validadoEm: l.validado_em ?? null,
     erro: l.erro ?? null,
     erroEm: l.erro_em ?? null,
+    solicitacaoNome: l.solicitacao_nome ?? null,
+    solicitacaoStatus: (l.solicitacao_status ?? null) as VinculoDeModelo["solicitacaoStatus"],
+    solicitacaoMotivo: l.solicitacao_motivo ?? null,
+    solicitacaoEm: l.solicitacao_em ?? null,
   }));
+}
+
+/** Abre o pedido de criacao do modelo padrao. Ver `whatsapp_solicitar_modelo`. */
+export async function solicitarModelo(
+  contaId: number,
+  entrada: {
+    finalidade: string;
+    nome: string;
+    idioma: string;
+    parametros: string[];
+    botaoParam: string | null;
+    corpo: string;
+    campos: number;
+  },
+): Promise<void> {
+  const supabase = await serverClient();
+
+  const { error } = await supabase.rpc("whatsapp_solicitar_modelo", {
+    p_conta: contaId,
+    p_finalidade: entrada.finalidade,
+    p_nome: entrada.nome,
+    p_idioma: entrada.idioma,
+    p_parametros: entrada.parametros,
+    p_botao_param: entrada.botaoParam,
+    p_corpo: entrada.corpo,
+    p_campos: entrada.campos,
+  });
+
+  if (error) throw error;
+}
+
+export async function resolverSolicitacao(
+  contaId: number,
+  finalidade: string,
+  status: string,
+  motivo: string | null,
+): Promise<void> {
+  const supabase = await serverClient();
+
+  const { error } = await supabase.rpc("whatsapp_resolver_solicitacao", {
+    p_conta: contaId,
+    p_finalidade: finalidade,
+    p_status: status,
+    p_motivo: motivo,
+  });
+
+  if (error) throw error;
 }
 
 export async function salvarVinculo(contaId: number, v: VinculoDeModelo): Promise<void> {
@@ -205,7 +256,9 @@ export async function salvarVinculo(contaId: number, v: VinculoDeModelo): Promis
   const { error } = await supabase.rpc("whatsapp_salvar_vinculo", {
     p_conta: contaId,
     p_finalidade: v.finalidade,
-    p_modelo: v.modeloNome,
+    // Vazio nunca chega aqui: salvar a mao exige o modelo, e a checagem esta no
+    // servico. O `??` existe so porque o tipo cobre o estado "em analise".
+    p_modelo: v.modeloNome ?? "",
     p_idioma: v.idioma,
     p_parametros: v.parametros,
     p_botao_param: v.botaoParam,
