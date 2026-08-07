@@ -2045,11 +2045,11 @@ function Thread({
           <Composicao
             onEnviar={onResponder}
             onEnviarAnexo={onEnviarAnexo}
-            contaId={conversa.contaId}
+            conversaId={conversa.id}
             onEnviarModelo={onEnviarModelo}
           />
         ) : (
-          <EnvioPorModelo contaId={conversa.contaId} onEnviar={onEnviarModelo} />
+          <EnvioPorModelo conversaId={conversa.id} onEnviar={onEnviarModelo} />
         )}
       </div>
     </div>

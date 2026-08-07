@@ -21,11 +21,19 @@ import type { Modelo } from "@/modules/whatsapp/whatsapp.types";
  * por mensagem. Por isso o rodape avisa antes, e nao depois.
  */
 export function EnvioPorModelo({
-  contaId,
+  conversaId,
   onEnviar,
   onFechar,
 }: {
-  contaId: number;
+  /**
+   * A conversa, e não a conta.
+   *
+   * ⚠️ O painel mandava o id da CONTA, que ele tirava do objeto da conversa. Um
+   * campo esquecido no schema da resposta fazia esse id chegar `undefined`, a
+   * rota recusava e a tela dizia "nenhum modelo aprovado" — culpando a Meta por
+   * um erro nosso. Quem sabe de que número é uma conversa é o servidor.
+   */
+  conversaId: number;
   onEnviar: (nome: string, parametros: string[]) => Promise<void>;
   /**
    * Volta para a escrita livre. `undefined` com a janela fechada, onde nao ha
@@ -49,7 +57,7 @@ export function EnvioPorModelo({
     if (!abertoParaEnvio) return;
     const controle = new AbortController();
 
-    fetch(`/api/v1/whatsapp/modelos?contaId=${contaId}`, { signal: controle.signal })
+    fetch(`/api/v1/whatsapp/conversas/${conversaId}/modelo`, { signal: controle.signal })
       .then(async (r) => {
         const corpo = await r.json().catch(() => null);
 
@@ -81,7 +89,7 @@ export function EnvioPorModelo({
       });
 
     return () => controle.abort();
-  }, [abertoParaEnvio, contaId]);
+  }, [abertoParaEnvio, conversaId]);
 
   const modelo = modelos?.find((m) => m.nome === escolhido) ?? null;
   const faltaPreencher = modelo != null && valores.filter((v) => v?.trim()).length < modelo.parametros;
@@ -144,17 +152,233 @@ export function EnvioPorModelo({
     );
   }
 
+  /*
+   * Escolhido, a barra vira a CAIXA DE ENVIO daquele modelo.
+   *
+   * ⚠️ Não é uma tela de configuração com um botão "enviar" no fim. É a mesma
+   * barra de escrita de sempre, com o texto já pronto no lugar do campo e o
+   * mesmo botão redondo à direita: quem chegou aqui ia mandar uma mensagem, e
+   * um formulário no meio do caminho faz parecer que virou outra tarefa.
+   */
+  if (modelo) {
+    return (
+      <footer
+        style={{
+          flexShrink: 0,
+          maxHeight: 340,
+          overflowY: "auto",
+          padding: "8px 14px 12px",
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <button
+            type="button"
+            onClick={() => {
+              setEscolhido("");
+              setValores([]);
+            }}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+              padding: 0,
+              border: "none",
+              background: "transparent",
+              cursor: "pointer",
+              fontFamily: "var(--font)",
+              fontSize: "var(--text-xs)",
+              fontWeight: "var(--fw-semi)",
+              color: "var(--text-tertiary)",
+            }}
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M15 18l-6-6 6-6" />
+            </svg>
+            Outro modelo
+          </button>
+
+          <span style={{ flex: 1 }} />
+
+          <span
+            style={{
+              fontSize: "var(--text-xs)",
+              color: "var(--text-tertiary)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {modelo.nome}
+          </span>
+        </div>
+
+        {/*
+          A prévia com a cara de BOLHA ENVIADA, e não de caixa de formulário.
+          É literalmente o que o cliente vai ver daqui a um segundo, e desenhar
+          isso como campo de configuração pede uma tradução mental que ninguém
+          precisa fazer.
+        */}
+        <div
+          style={{
+            alignSelf: "flex-end",
+            maxWidth: "88%",
+            padding: "8px 11px",
+            borderRadius: "var(--radius-lg)",
+            borderBottomRightRadius: "var(--radius-xs)",
+            background: "var(--surface)",
+            border: "1px solid var(--border)",
+            boxShadow: "var(--shadow-sm)",
+            fontSize: "var(--text-sm)",
+            lineHeight: "var(--lh-normal)",
+            whiteSpace: "pre-wrap",
+            color: "var(--text-primary)",
+          }}
+        >
+          {modelo.cabecalho && (
+            <div style={{ fontWeight: "var(--fw-semi)", marginBottom: 3 }}>
+              {modelo.cabecalho}
+            </div>
+          )}
+
+          {preencher(modelo.corpo, valores)}
+
+          {modelo.rodape && (
+            <div style={{ marginTop: 5, fontSize: "var(--text-xs)", color: "var(--text-tertiary)" }}>
+              {modelo.rodape}
+            </div>
+          )}
+
+          {modelo.botao && (
+            <div
+              style={{
+                marginTop: 7,
+                paddingTop: 6,
+                borderTop: "1px solid var(--border)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 5,
+                fontSize: "var(--text-sm)",
+                fontWeight: "var(--fw-semi)",
+                color: "var(--info-text)",
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
+              </svg>
+              {modelo.botao.texto}
+            </div>
+          )}
+        </div>
+
+        {/*
+          ⚠️ Cada campo mostra ONDE ele cai no texto.
+
+          "Campo 1", "Campo 2" não dizem nada, e a ordem dos marcadores no corpo
+          não é a ordem em que se lê: num modelo de cobrança o `{{2}}` é o ticket
+          e aparece depois do nome. Já saiu para um cliente uma mensagem com o
+          valor no lugar do nome por causa disso. O trecho em volta do marcador
+          resolve sem depender de cadastro nenhum.
+        */}
+        {Array.from({ length: modelo.parametros }, (_, i) => (
+          <div key={i}>
+            <div
+              style={{
+                marginBottom: 3,
+                fontSize: "var(--text-xs)",
+                color: "var(--text-tertiary)",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {ondeEntra(modelo.corpo, i + 1)}
+            </div>
+
+            <input
+              value={valores[i] ?? ""}
+              onChange={(e) =>
+                setValores((atuais) => {
+                  const copia = [...atuais];
+                  copia[i] = e.target.value;
+                  return copia;
+                })
+              }
+              placeholder={`Campo ${i + 1}`}
+              style={{
+                width: "100%",
+                height: 32,
+                padding: "0 10px",
+                fontSize: "var(--text-sm)",
+                fontFamily: "var(--font)",
+                border: "1px solid var(--input-border)",
+                borderRadius: "var(--radius-md)",
+                background: "var(--surface)",
+                color: "var(--text-primary)",
+                outline: "none",
+              }}
+            />
+          </div>
+        ))}
+
+        {/* A mesma linha de sempre: o que sai à esquerda, o botão redondo à
+            direita. É o gesto que a mão já conhece deste rodapé. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 2 }}>
+          <p
+            style={{
+              flex: 1,
+              minWidth: 0,
+              fontSize: "var(--text-xs)",
+              color: "var(--text-tertiary)",
+              lineHeight: "var(--lh-snug)",
+            }}
+          >
+            {faltaPreencher
+              ? "Preencha os campos acima para enviar."
+              : "O cliente recebe exatamente o texto acima."}
+          </p>
+
+          <button
+            type="button"
+            onClick={() => void enviar()}
+            disabled={faltaPreencher || enviando}
+            aria-label="Enviar"
+            title="Enviar"
+            className="redondo"
+            style={{
+              width: 36,
+              height: 36,
+              flexShrink: 0,
+              display: "grid",
+              placeItems: "center",
+              border: "none",
+              borderRadius: "var(--radius-full)",
+              background: faltaPreencher || enviando ? "var(--surface-3)" : "var(--primary)",
+              color: faltaPreencher || enviando ? "var(--text-disabled)" : "var(--primary-fg)",
+              cursor: faltaPreencher || enviando ? "not-allowed" : "pointer",
+              transition: "background 120ms var(--ease)",
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M2 21l21-9L2 3v7l15 2-15 2z" />
+            </svg>
+          </button>
+        </div>
+      </footer>
+    );
+  }
+
   return (
     <footer
       style={{
         flexShrink: 0,
-        maxHeight: 300,
-        overflowY: "auto",
-        padding: "10px 14px 12px",
-        background: "transparent",
+        padding: "8px 14px 12px",
         display: "flex",
         flexDirection: "column",
-        gap: 10,
+        gap: 8,
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -173,6 +397,7 @@ export function EnvioPorModelo({
             border: "none",
             background: "transparent",
             color: "var(--text-tertiary)",
+            fontFamily: "var(--font)",
             fontSize: "var(--text-sm)",
             cursor: "pointer",
           }}
@@ -195,138 +420,114 @@ export function EnvioPorModelo({
           enviado. Confira o status no painel da Meta.
         </p>
       ) : (
-        <>
-          <select
-            value={escolhido}
-            onChange={(e) => {
-              setEscolhido(e.target.value);
-              setValores([]);
-            }}
-            style={{
-              height: 32,
-              padding: "0 8px",
-              fontSize: "var(--text-sm)",
-              border: "1px solid var(--input-border)",
-              borderRadius: "var(--radius-md)",
-              background: "var(--surface)",
-              color: "var(--text-primary)",
-            }}
-          >
-            <option value="">Escolha um modelo…</option>
-            {modelos.map((m) => (
-              <option key={`${m.nome}-${m.idioma}`} value={m.nome}>
-                {m.nome} · {m.categoria.toLowerCase()}
-              </option>
-            ))}
-          </select>
+        /*
+          Os modelos correm NUMA LINHA, como bolhas de mensagem.
 
-          {modelo && (
-            <>
-              {/*
-                Previa com os valores JA aplicados: os `{{1}}` crus nao dizem
-                nada, e quem envia precisa ler a frase que o cliente vai receber
-                antes de gastar uma mensagem cobrada.
-              */}
-              <div
+          ⚠️ Empilhados numa coluna, três modelos já tomavam metade da conversa,
+          e o rodapé nunca pode crescer tanto: é ali embaixo que está a última
+          mensagem que a pessoa acabou de ler. Deitados, eles ocupam uma faixa
+          só e a fileira rola quando não cabem.
+        */
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            overflowX: "auto",
+            paddingBottom: 2,
+            scrollbarWidth: "none",
+          }}
+        >
+          {modelos.map((m) => (
+            <button
+              key={`${m.nome}-${m.idioma}`}
+              type="button"
+              onClick={() => {
+                setEscolhido(m.nome);
+                setValores([]);
+              }}
+              style={{
+                flexShrink: 0,
+                width: 208,
+                display: "flex",
+                flexDirection: "column",
+                gap: 3,
+                padding: "8px 11px",
+                borderRadius: "var(--radius-lg)",
+                borderBottomLeftRadius: "var(--radius-xs)",
+                border: "1px solid var(--border)",
+                background: "var(--surface)",
+                cursor: "pointer",
+                textAlign: "left",
+                fontFamily: "var(--font)",
+                transition: "border-color var(--dur-fast) var(--ease)",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = "var(--primary-border)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = "var(--border)";
+              }}
+            >
+              <span
                 style={{
-                  padding: "8px 10px",
-                  borderRadius: "var(--radius-sm)",
-                  background: "var(--surface-2)",
-                  border: "1px solid var(--border)",
-                  fontSize: "var(--text-sm)",
-                  lineHeight: "var(--lh-snug)",
-                  whiteSpace: "pre-wrap",
-                  color: "var(--text-secondary)",
-                }}
-              >
-                {modelo.cabecalho && (
-                  <div style={{ fontWeight: "var(--fw-semi)", color: "var(--text-primary)" }}>
-                    {modelo.cabecalho}
-                  </div>
-                )}
-                {preencher(modelo.corpo, valores)}
-                {modelo.rodape && (
-                  <div style={{ marginTop: 4, color: "var(--text-tertiary)" }}>
-                    {modelo.rodape}
-                  </div>
-                )}
-              </div>
-
-              {/*
-                ⚠️ Cada campo mostra ONDE ele cai no texto.
-
-                "Campo 1", "Campo 2" não dizem nada, e a ordem dos marcadores no
-                corpo não é a ordem em que se lê: neste modelo o `{{2}}` é o
-                ticket e aparece depois do nome. Já saiu para um cliente uma
-                mensagem com o valor no lugar do nome por causa disso. O trecho
-                em volta do marcador resolve sem depender de cadastro nenhum.
-              */}
-              {Array.from({ length: modelo.parametros }, (_, i) => (
-                <div key={i}>
-                  <div
-                    style={{
-                      marginBottom: 3,
-                      fontSize: "var(--text-xs)",
-                      color: "var(--text-tertiary)",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {ondeEntra(modelo.corpo, i + 1)}
-                  </div>
-
-                  <input
-                    value={valores[i] ?? ""}
-                    onChange={(e) =>
-                      setValores((atuais) => {
-                        const copia = [...atuais];
-                        copia[i] = e.target.value;
-                        return copia;
-                      })
-                    }
-                    placeholder={`Campo ${i + 1}`}
-                    style={{
-                      width: "100%",
-                      height: 32,
-                      padding: "0 10px",
-                      fontSize: "var(--text-sm)",
-                      border: "1px solid var(--input-border)",
-                      borderRadius: "var(--radius-md)",
-                      background: "var(--surface)",
-                      color: "var(--text-primary)",
-                      outline: "none",
-                    }}
-                  />
-                </div>
-              ))}
-
-              <button
-                type="button"
-                onClick={() => void enviar()}
-                disabled={faltaPreencher || enviando}
-                style={{
-                  height: 32,
-                  border: "none",
-                  borderRadius: "var(--radius-md)",
-                  background:
-                    faltaPreencher || enviando ? "var(--surface-3)" : "var(--primary)",
-                  color:
-                    faltaPreencher || enviando ? "var(--text-disabled)" : "var(--primary-fg)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 5,
                   fontSize: "var(--text-sm)",
                   fontWeight: "var(--fw-semi)",
-                  cursor: faltaPreencher || enviando ? "not-allowed" : "pointer",
+                  color: "var(--text-primary)",
                 }}
               >
-                {enviando ? "Enviando…" : "Enviar"}
-              </button>
-            </>
-          )}
-        </>
+                <span
+                  style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                >
+                  {m.nome}
+                </span>
+
+                {/* Marketing e utility custam DIFERENTE, e até 30/09/2026 o
+                    utility dentro da janela é gratuito. Quem escolhe precisa
+                    ver isso antes de clicar, não na fatura. */}
+                <span
+                  style={{
+                    flexShrink: 0,
+                    padding: "1px 6px",
+                    borderRadius: "var(--radius-full)",
+                    background: "var(--neutral-bg)",
+                    color: "var(--text-tertiary)",
+                    fontSize: "var(--text-2xs)",
+                    fontWeight: "var(--fw-semi)",
+                  }}
+                >
+                  {m.categoria.toLowerCase()}
+                </span>
+              </span>
+
+              {/*
+                O começo do TEXTO, e não só o nome. Nome de modelo é
+                `disparoticket_2`: sozinho, ele obriga a abrir um por um até
+                achar o certo, e cada abertura é uma chance de mandar o errado.
+              */}
+              <span
+                style={{
+                  fontSize: "var(--text-xs)",
+                  color: "var(--text-tertiary)",
+                  lineHeight: "var(--lh-snug)",
+                  display: "-webkit-box",
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: "vertical",
+                  overflow: "hidden",
+                }}
+              >
+                {m.corpo.replace(/\s*\n\s*/g, " ") || "Sem corpo de texto"}
+              </span>
+            </button>
+          ))}
+        </div>
       )}
     </footer>
   );
 }
+
 /**
  * O trecho do texto em volta de um marcador.
  *

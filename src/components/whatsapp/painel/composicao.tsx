@@ -491,12 +491,13 @@ function formatoDeGravacao(): { mime: string; extensao: string } | null {
 export function Composicao({
   onEnviar,
   onEnviarAnexo,
-  contaId,
+  conversaId,
   onEnviarModelo,
 }: {
   onEnviar: (texto: string) => Promise<void>;
   onEnviarAnexo: (arquivo: File, legenda: string) => Promise<void>;
-  contaId: number;
+  /** A conversa. Quem resolve de que numero ela e, e o servidor. */
+  conversaId: number;
   onEnviarModelo: (nome: string, parametros: string[]) => Promise<void>;
 }) {
   const [modeloAberto, setModeloAberto] = useState(false);
@@ -571,7 +572,7 @@ export function Composicao({
   if (modeloAberto) {
     return (
       <EnvioPorModelo
-        contaId={contaId}
+        conversaId={conversaId}
         onEnviar={onEnviarModelo}
         onFechar={() => setModeloAberto(false)}
       />

@@ -13,6 +13,20 @@ import {
  * `if` no corpo para saber qual validacao aplicar.
  */
 
+/**
+ * Os modelos que podem sair NESTA conversa.
+ *
+ * ⚠️ Pela conversa, e nao por `?contaId=`. O painel sabia o id da conta e o
+ * mandava na consulta; um campo esquecido no schema da resposta fazia esse id
+ * chegar `undefined`, a rota recusava e a tela concluia "nenhum modelo
+ * aprovado" — culpando a Meta por um erro nosso. Quem conhece a conta de uma
+ * conversa e o servidor, e agora e ele quem resolve.
+ */
+export const GET = handler(
+  { params: conversaIdParamSchema, requerModulo: "financeiro" },
+  controller.modelosDaConversa,
+);
+
 export const POST = handler(
   {
     body: enviarModeloBodySchema,

@@ -120,7 +120,6 @@ export function ResumoDoAtendimento({
   onFechar: () => void;
 }) {
   const situacao = rotuloDaSituacao(atendimento);
-  const tom = situacao.alerta ? "var(--warning)" : "var(--primary)";
 
   const lead = [
     atendimento.leadNome && { rotulo: "Nome", valor: atendimento.leadNome },
@@ -151,11 +150,7 @@ export function ResumoDoAtendimento({
         background: "color-mix(in srgb, var(--surface) 78%, transparent)",
         backdropFilter: "blur(20px) saturate(180%)",
         WebkitBackdropFilter: "blur(20px) saturate(180%)",
-        border: `1px solid ${
-          situacao.alerta
-            ? "var(--warning-border)"
-            : "color-mix(in srgb, var(--border) 70%, transparent)"
-        }`,
+        border: "1px solid color-mix(in srgb, var(--border) 70%, transparent)",
         borderRadius: "var(--radius-lg)",
         // Duas sombras: a larga descola do fundo, a fina de cima desenha o
         // brilho da quina que o vidro tem quando pega luz.
@@ -163,44 +158,45 @@ export function ResumoDoAtendimento({
         animation: "fade-in 160ms var(--ease-out)",
       }}
     >
-      {/*
-        Faixa da cor do estado, na lateral esquerda.
-
-        ⚠️ É o que separa "encaminhado, tudo certo" de "a IA não entendeu" num
-        relance. Antes a diferença era a borda do cartão inteiro mudar de cor, e
-        um contorno fino em volta de trezentos pixels não se vê.
-      */}
-      <div
-        aria-hidden
-        style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: tom }}
-      />
-
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "11px 12px 11px 15px" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "11px 12px" }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div
+          {/*
+            O estado vira PASTILHA.
+
+            ⚠️ A cor precisa aparecer em algum lugar, e nem a moldura do cartão
+            nem uma faixa na lateral servem: contorno fino em volta de trezentos
+            pixels não se vê, e a faixa vira enfeite grudado na borda. Numa
+            pastilha ela pinta uma área pequena que o olho encontra sozinha.
+          */}
+          <span
             style={{
-              display: "flex",
+              display: "inline-flex",
               alignItems: "center",
-              gap: 6,
+              gap: 5,
+              height: 19,
+              padding: "0 8px",
+              borderRadius: "var(--radius-full)",
+              background: situacao.alerta
+                ? "var(--warning-bg)"
+                : "color-mix(in srgb, var(--primary-subtle) 100%, transparent)",
+              color: situacao.alerta ? "var(--warning-text)" : "var(--primary)",
               fontSize: "var(--text-xs)",
               fontWeight: "var(--fw-semi)",
-              color: situacao.alerta ? "var(--warning-text)" : "var(--text-tertiary)",
-              textTransform: "uppercase",
-              letterSpacing: "0.04em",
+              lineHeight: 1,
             }}
           >
             {/* Faísca: é o que o sistema entendeu sozinho, e o ícone diz isso
                 sem gastar a palavra "IA" numa linha de trinta caracteres. */}
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0, opacity: 0.85 }} aria-hidden>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }} aria-hidden>
               <path d="M12 2c.5 4.6 3.4 7.5 8 8-4.6.5-7.5 3.4-8 8-.5-4.6-3.4-7.5-8-8 4.6-.5 7.5-3.4 8-8z" />
             </svg>
             {situacao.texto}
-          </div>
+          </span>
 
           {atendimento.intencao && (
             <div
               style={{
-                marginTop: 5,
+                marginTop: 7,
                 fontSize: "var(--text-md)",
                 fontWeight: "var(--fw-semi)",
                 lineHeight: "var(--lh-snug)",

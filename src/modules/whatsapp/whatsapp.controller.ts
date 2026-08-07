@@ -267,6 +267,16 @@ export async function listarModelos({ query, ctx }: Entrada<undefined, ContaIdQu
   return ok(modelos.map((m) => modeloSchema.parse(m)));
 }
 
+export async function modelosDaConversa({
+  params,
+  ctx,
+}: Entrada<undefined, undefined, ConversaIdParam>) {
+  const empresaId = empresaObrigatoria(ctx);
+  const modelos = await service.modelosDaConversa(empresaId, params.id);
+
+  return ok(modelos.map((m) => modeloSchema.parse(m)));
+}
+
 export async function enviarModelo({
   body,
   params,

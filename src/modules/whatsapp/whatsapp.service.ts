@@ -609,6 +609,22 @@ async function paraFormatoQueAMetaAceita(arquivo: {
   }
 }
 
+/**
+ * Os modelos aprovados do numero DESTA conversa.
+ *
+ * ⚠️ Existe para o painel nao precisar saber o id da conta. Ele sabia, e por um
+ * campo esquecido no schema da resposta o valor chegava `undefined` — a tela
+ * pedia `contaId=NaN` e concluia "nenhum modelo aprovado", culpando a Meta por
+ * um erro nosso. Quem conhece a conta de uma conversa e o servidor.
+ */
+export async function modelosDaConversa(
+  empresaId: number,
+  conversaId: number,
+): Promise<Modelo[]> {
+  const conversa = await obterConversa(empresaId, conversaId);
+  return listarModelos(conversa.contaId);
+}
+
 export async function listarModelos(contaId: number): Promise<Modelo[]> {
   // `credenciais` ja recusa conta de outra empresa: a checagem de tenant esta
   // dentro da funcao do banco, nao aqui.
