@@ -9,7 +9,7 @@ import type { Persona } from "@/modules/atendimento/personas.types";
  * do lado do bot, que roda sem sessao.
  */
 
-const COLUNAS = 'id, "fkConta", "fkSetor", nome, descricao, pode_resolver, ativo';
+const COLUNAS = 'id, "fkConta", "fkSetor", nome, descricao, pode_resolver, permissoes, ativo';
 
 type Linha = {
   id: number;
@@ -18,6 +18,7 @@ type Linha = {
   nome: string;
   descricao: string | null;
   pode_resolver: string | null;
+  permissoes: unknown;
   ativo: boolean;
 };
 
@@ -29,6 +30,9 @@ function paraPersona(l: Linha): Persona {
     nome: l.nome,
     descricao: l.descricao,
     podeResolver: l.pode_resolver,
+    // `jsonb` chega como `unknown`: so lista de texto interessa, e vazio e o
+    // estado honesto para qualquer outra coisa.
+    permissoes: Array.isArray(l.permissoes) ? (l.permissoes as string[]) : [],
     ativo: l.ativo,
   };
 }
@@ -56,6 +60,7 @@ export async function salvar(
     nome: string;
     descricao: string | null;
     podeResolver: string | null;
+    permissoes: string[];
     ativo: boolean;
   },
 ): Promise<Persona> {
@@ -68,6 +73,7 @@ export async function salvar(
     nome: entrada.nome,
     descricao: entrada.descricao,
     pode_resolver: entrada.podeResolver,
+    permissoes: entrada.permissoes,
     ativo: entrada.ativo,
   };
 

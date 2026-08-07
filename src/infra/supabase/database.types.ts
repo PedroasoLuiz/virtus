@@ -25,6 +25,8 @@ export type PersonaRow = {
   nome: string;
   descricao: string | null;
   pode_resolver: string | null;
+  /** Os ids das consultas que ela pode fazer. Ver `atendimento/permissoes.ts`. */
+  permissoes: string[];
   ativo: boolean;
   fkUserCriacao: string | null;
   fkUserModificacao: string | null;

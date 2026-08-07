@@ -144,6 +144,7 @@ export function ConfiguracaoDeContas({
       {aba === "Personas" && (
         <AbaDePersonas
           contas={contas}
+          credenciais={provedores}
           personas={personas}
           setores={setores}
           onRecarregar={() => void carregarPersonas()}

@@ -10,6 +10,7 @@ export const personaSchema = z.object({
   nome: z.string(),
   descricao: z.string().nullable(),
   podeResolver: z.string().nullable(),
+  permissoes: z.array(z.string()),
   ativo: z.boolean(),
 });
 
@@ -31,7 +32,21 @@ export const salvarPersonaBodySchema = z.object({
     .refine((v) => !temPalavrao(v), "Escolha outro nome para esta persona"),
   descricao: z.string().trim().max(2000).nullable().default(null),
   podeResolver: z.string().trim().max(4000).nullable().default(null),
+  permissoes: z.array(z.string().trim().min(1).max(40)).max(20).default([]),
   ativo: z.boolean().default(true),
+});
+
+/**
+ * O pedido de rascunho a IA.
+ *
+ * ⚠️ `setorNome` e so CONTEXTO para o texto sair no tom certo, e nao amarra
+ * nada: quem decide o setor da persona e o formulario. Nulo diz ao modelo que a
+ * persona e a geral, que nao pode consultar dado de cliente.
+ */
+export const sugestaoDePersonaBodySchema = z.object({
+  credencialId: z.number().int().positive(),
+  setorNome: z.string().trim().max(60).nullable().default(null),
+  contexto: z.string().trim().min(10).max(2000),
 });
 
 export const personaParamSchema = z.object({
@@ -39,4 +54,5 @@ export const personaParamSchema = z.object({
 });
 
 export type SalvarPersonaBody = z.infer<typeof salvarPersonaBodySchema>;
+export type SugestaoDePersonaBody = z.infer<typeof sugestaoDePersonaBodySchema>;
 export type PersonaParam = z.infer<typeof personaParamSchema>;

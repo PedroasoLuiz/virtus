@@ -513,6 +513,33 @@ h1, h2, h3, h4 {
   to { transform: translateX(100%); }
 }
 
+/*
+ * Borda que pulsa, para o que a IA oferece.
+ *
+ * ⚠️ O halo e SOMBRA, e nao borda animada: animar a espessura da borda move o
+ * conteudo um pixel a cada ciclo, e o texto do botao treme. A sombra cresce para
+ * fora e nao ocupa espaco no layout.
+ *
+ * Reservada ao convite de sugestao. Espalhada por outros botoes, ela deixa de
+ * dizer "isto e diferente" e vira ruido.
+ */
+.brilha {
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 45%, transparent);
+  animation: brilha 2.4s ease-in-out infinite;
+  transition: background var(--dur) var(--ease);
+}
+.brilha:hover {
+  background: var(--primary-subtle);
+}
+@keyframes brilha {
+  0%, 100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 40%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 12px 2px color-mix(in srgb, var(--primary) 34%, transparent);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

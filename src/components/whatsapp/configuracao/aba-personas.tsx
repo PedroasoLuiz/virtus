@@ -14,6 +14,7 @@ import {
   EmptyRow,
   Field,
   Pagination,
+  PanelTabs,
   SkeletonRows,
   TableArea,
   TableHead,
@@ -25,8 +26,10 @@ import {
   textareaStyle,
 } from "@/components/ui/kit";
 import { temPalavrao } from "@/shared/domain/linguagem";
+import { AREAS, PERMISSOES } from "@/modules/atendimento/permissoes";
 import type { Persona } from "@/modules/atendimento/personas.types";
 import { formatarTelefone, type ContaWhatsapp } from "@/modules/whatsapp/whatsapp.types";
+import type { ConfigIA } from "@/modules/ia/ia.types";
 
 /**
  * O que a IA pode resolver sozinha, por setor.
@@ -38,15 +41,28 @@ import { formatarTelefone, type ContaWhatsapp } from "@/modules/whatsapp/whatsap
 
 const POR_PAGINA = 10;
 
+const ABA_PARAMETRIZACAO = "Parametrização";
+const ABA_PERMISSOES = "Permissões";
+type AbaDoFormulario = typeof ABA_PARAMETRIZACAO | typeof ABA_PERMISSOES;
+
 export type Setor = { id: number; nome: string };
 
 export function AbaDePersonas({
   contas,
+  credenciais,
   personas,
   setores,
   onRecarregar,
 }: {
   contas: ContaWhatsapp[];
+  /**
+   * As chaves de IA da empresa, para o rascunho automático.
+   *
+   * ⚠️ Vem de FORA, do drawer, e não de uma consulta daqui: a mesma lista já é
+   * lida pela aba de automação, e buscar de novo seria a segunda consulta do
+   * mesmo dado na mesma abertura.
+   */
+  credenciais: ConfigIA[] | null;
   /** ⚠️ De fora, pelo mesmo motivo dos provedores: a aba desmonta. */
   personas: Persona[] | null;
   setores: Setor[];
@@ -66,6 +82,7 @@ export function AbaDePersonas({
         persona={editando}
         setores={setores}
         contas={contas}
+        credenciais={credenciais}
         onFechar={() => setEditando(null)}
         onSalvou={() => {
           setEditando(null);
@@ -213,6 +230,7 @@ const PERSONA_VAZIA: Persona = {
   nome: "",
   descricao: null,
   podeResolver: null,
+  permissoes: [],
   ativo: true,
 };
 
@@ -229,12 +247,14 @@ function FormularioDaPersona({
   persona,
   setores,
   contas,
+  credenciais,
   onFechar,
   onSalvou,
 }: {
   persona: Persona;
   setores: Setor[];
   contas: ContaWhatsapp[];
+  credenciais: ConfigIA[] | null;
   onFechar: () => void;
   onSalvou: () => void;
 }) {
@@ -242,8 +262,20 @@ function FormularioDaPersona({
   const [rascunho, setRascunho] = useState(persona);
   const [salvando, setSalvando] = useState(false);
   const [excluindo, setExcluindo] = useState(false);
+  const [aba, setAba] = useState<AbaDoFormulario>(ABA_PARAMETRIZACAO);
+  const [sugerindo, setSugerindo] = useState(false);
 
   const erros = problemas(rascunho);
+  const geral = rascunho.setorId == null;
+
+  function marcar(id: string, ligada: boolean) {
+    setRascunho((r) => ({
+      ...r,
+      permissoes: ligada
+        ? [...new Set([...r.permissoes, id])]
+        : r.permissoes.filter((x) => x !== id),
+    }));
+  }
 
   async function salvar() {
     if (salvando) return;
@@ -259,6 +291,7 @@ function FormularioDaPersona({
         nome: rascunho.nome.trim(),
         descricao: rascunho.descricao?.trim() || null,
         podeResolver: rascunho.podeResolver?.trim() || null,
+        permissoes: rascunho.permissoes,
         ativo: rascunho.ativo,
       }),
     });
@@ -317,6 +350,21 @@ function FormularioDaPersona({
         </Button>
       }
     >
+      {/*
+        ⚠️ Duas abas, e não uma pilha só.
+
+        Parametrização é quem ela É; Permissões é o que ela PODE. São perguntas
+        de natureza diferente — uma é redação, a outra é autorização — e ler as
+        duas na mesma coluna fazia a lista de consultas parecer mais um campo de
+        texto do formulário.
+      */}
+      <PanelTabs
+        tabs={[ABA_PARAMETRIZACAO, ABA_PERMISSOES]}
+        active={aba}
+        onChange={(t) => setAba(t as AbaDoFormulario)}
+      />
+
+      {aba === ABA_PARAMETRIZACAO && (
       <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
         <Grupo
           primeiro
@@ -340,6 +388,17 @@ function FormularioDaPersona({
               value={rascunho.descricao ?? ""}
               onChange={(e) => setRascunho({ ...rascunho, descricao: e.target.value })}
             />
+
+            {/*
+              ⚠️ Só aparece com chave de IA cadastrada.
+
+              Sem chave o botão não teria com que escrever, e um botão que abre
+              para dizer "não dá" é pior que botão nenhum: quem não usa IA nem
+              precisa saber que isto existe.
+            */}
+            {(credenciais ?? []).some((c) => c.ativo && c.temChave) && (
+              <BotaoDeSugestao onClick={() => setSugerindo(true)} />
+            )}
           </Field>
         </Grupo>
 
@@ -410,6 +469,41 @@ function FormularioDaPersona({
             />
           </Field>
         </Grupo>
+
+      </div>
+      )}
+
+      {aba === ABA_PERMISSOES && (
+        <Permissoes
+          geral={geral}
+          escolhidas={rascunho.permissoes}
+          onMarcar={marcar}
+        />
+      )}
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+        {sugerindo && (
+          <PedirSugestao
+            credenciais={(credenciais ?? []).filter((c) => c.ativo && c.temChave)}
+            setorNome={setores.find((x) => x.id === rascunho.setorId)?.nome ?? null}
+            onFechar={() => setSugerindo(false)}
+            onPronto={(r) => {
+              /*
+               * ⚠️ Cai nos CAMPOS, e não no banco. O rascunho é revisado antes
+               * de salvar: modelo escrevendo direto seria autorizar a IA a
+               * definir o que ela mesma pode fazer.
+               */
+              setRascunho((atual) => ({
+                ...atual,
+                descricao: r.descricao,
+                podeResolver: r.podeResolver,
+                permissoes: r.permissoes,
+              }));
+              setSugerindo(false);
+              avisar("sucesso", "Rascunho pronto", "Revise antes de salvar.");
+            }}
+          />
+        )}
 
         {/* Persona nunca gravada não tem o que excluir: basta fechar. */}
         {rascunho.id > 0 && (
@@ -608,5 +702,314 @@ function Grupo({
 
       <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>{children}</div>
     </section>
+  );
+}
+
+/**
+ * O que a persona pode fazer, agrupado por área.
+ *
+ * ⚠️ A geral só enxerga o que NÃO toca dado de cliente. Ela é quem atende quem
+ * acabou de chegar, antes de qualquer identificação: mostrar a consulta de saldo
+ * ali seria oferecer uma opção que o servidor recusa, e a pessoa só descobriria
+ * ao salvar.
+ */
+function Permissoes({
+  geral,
+  escolhidas,
+  onMarcar,
+}: {
+  geral: boolean;
+  escolhidas: string[];
+  onMarcar: (id: string, ligada: boolean) => void;
+}) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+      {geral && (
+        <p
+          style={{
+            fontSize: "calc(var(--text-xs) + 1px)",
+            color: "var(--text-tertiary)",
+            lineHeight: "var(--lh-normal)",
+          }}
+        >
+          Esta é a persona geral: ela atende antes de o cliente se identificar, e por isso não
+          consulta nada do cadastro. Dê um setor a ela, em Parametrização, para liberar as
+          consultas.
+        </p>
+      )}
+
+      {AREAS.map((area) => {
+        const itens = PERMISSOES.filter(
+          (p) => p.area === area.id && (!geral || !p.exigeIdentificacao),
+        );
+
+        if (itens.length === 0) return null;
+
+        return (
+          <section key={area.id}>
+            <div
+              style={{
+                fontSize: "calc(var(--text-lg) + 2px)",
+                fontWeight: "var(--fw-semi)",
+                color: "var(--text-primary)",
+                letterSpacing: "var(--tracking-snug)",
+              }}
+            >
+              {area.rotulo}
+            </div>
+            <p
+              style={{
+                marginTop: 6,
+                marginBottom: 10,
+                fontSize: "calc(var(--text-xs) + 1px)",
+                color: "var(--text-tertiary)",
+                lineHeight: "var(--lh-normal)",
+              }}
+            >
+              {area.legenda}
+            </p>
+
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              {itens.map((p, i) => (
+                <label
+                  key={p.id}
+                  style={{
+                    display: "flex",
+                    gap: 10,
+                    padding: "10px 0",
+                    borderTop: i === 0 ? "none" : "1px solid var(--border)",
+                    cursor: "pointer",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={escolhidas.includes(p.id)}
+                    onChange={(e) => onMarcar(p.id, e.target.checked)}
+                    style={{ marginTop: 3, accentColor: "var(--primary)" }}
+                  />
+
+                  <div style={{ minWidth: 0 }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        fontSize: "var(--text-sm)",
+                        fontWeight: "var(--fw-semi)",
+                      }}
+                    >
+                      {p.rotulo}
+
+                      {/*
+                        ⚠️ "em breve" aparece MARCÁVEL, e não escondido.
+
+                        Deixar pronto antes de a tela existir é útil, mas quem
+                        marca e não vê a IA responder aquilo concluiria que
+                        quebrou.
+                      */}
+                      {p.emBreve && <Badge tom="neutral">em breve</Badge>}
+                    </div>
+
+                    <div
+                      style={{
+                        marginTop: 2,
+                        fontSize: "calc(var(--text-xs) + 1px)",
+                        color: "var(--text-tertiary)",
+                        lineHeight: "var(--lh-normal)",
+                      }}
+                    >
+                      {p.descricao}
+                    </div>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * O convite para a IA escrever a persona.
+ *
+ * ⚠️ Fundo branco, texto e borda no verde da marca, com um halo que pulsa. É a
+ * única coisa da tela que brilha, e de propósito: ela não é um campo a mais do
+ * formulário, é um atalho que só existe para quem tem IA ligada. Sem o brilho
+ * ela virava mais um botão secundário e ninguém descobria.
+ */
+function BotaoDeSugestao({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="brilha"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 7,
+        marginTop: 8,
+        height: "var(--h-btn-sm)",
+        padding: "0 14px",
+        borderRadius: "var(--radius-full)",
+        border: "1px solid var(--primary)",
+        background: "var(--surface)",
+        color: "var(--primary)",
+        fontSize: "var(--text-sm)",
+        fontWeight: "var(--fw-semi)",
+        fontFamily: "var(--font)",
+        cursor: "pointer",
+      }}
+    >
+      {/* Estrelas: o desenho que o sistema usa para "escrito por IA". */}
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="M12 3l1.9 4.7L18.6 9.6l-4.7 1.9L12 16.2l-1.9-4.7L5.4 9.6l4.7-1.9z" />
+        <path d="M18 15.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z" />
+      </svg>
+      Pedir sugestão
+    </button>
+  );
+}
+
+/**
+ * O contexto que a IA precisa para escrever a persona.
+ *
+ * ⚠️ Pede CONTEXTO, e não "gere uma persona". Sem saber o que a empresa faz e
+ * como ela atende, o modelo devolve um texto que serve para qualquer negócio e
+ * não descreve nenhum — e a pessoa apagaria tudo e escreveria à mão do mesmo
+ * jeito, tendo gastado uma chamada paga no caminho.
+ */
+function PedirSugestao({
+  credenciais,
+  setorNome,
+  onFechar,
+  onPronto,
+}: {
+  credenciais: ConfigIA[];
+  setorNome: string | null;
+  onFechar: () => void;
+  onPronto: (r: { descricao: string; podeResolver: string; permissoes: string[] }) => void;
+}) {
+  const { avisar } = useAvisos();
+  const [credencialId, setCredencialId] = useState(credenciais[0]?.id ?? 0);
+  const [contexto, setContexto] = useState("");
+  const [pedindo, setPedindo] = useState(false);
+
+  async function pedir() {
+    if (pedindo) return;
+    setPedindo(true);
+
+    const r = await fetch("/api/v1/atendimento/personas/sugestao", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ credencialId, setorNome, contexto: contexto.trim() }),
+    });
+
+    setPedindo(false);
+    const corpo = await r.json().catch(() => null);
+
+    if (!r.ok) {
+      const detalhe = corpo?.error?.details?.[0];
+      avisar(
+        "atencao",
+        detalhe
+          ? `${detalhe.campo}: ${detalhe.mensagem}`
+          : (corpo?.error?.message ?? "Não foi possível gerar o rascunho"),
+      );
+      return;
+    }
+
+    onPronto(corpo.data);
+  }
+
+  return (
+    <Drawer
+      open
+      onClose={onFechar}
+      nivel={3}
+      title="Pedir sugestão"
+      subtitle={setorNome ? `Persona do setor ${setorNome}` : "Persona geral"}
+      acoes={
+        <Button
+          size="xs"
+          variant="primary"
+          onClick={() => void pedir()}
+          disabled={pedindo || contexto.trim().length < 10 || !credencialId}
+          title={contexto.trim().length < 10 ? "Conte um pouco do contexto" : undefined}
+        >
+          {pedindo ? "Escrevendo…" : "Gerar rascunho"}
+        </Button>
+      }
+    >
+      <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+        <Field
+          label="Chave de IA"
+          hint="A chamada é cobrada nesta chave, como qualquer resposta do atendimento."
+        >
+          <select
+            style={selectStyle}
+            value={credencialId}
+            onChange={(e) => setCredencialId(Number(e.target.value))}
+          >
+            {credenciais.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.nome} · {c.modelo}
+              </option>
+            ))}
+          </select>
+        </Field>
+      </div>
+
+      <div style={{ marginTop: 18 }}>
+        <label
+          htmlFor="contexto"
+          style={{
+            display: "block",
+            marginBottom: 4,
+            fontSize: "var(--text-sm)",
+            fontWeight: "var(--fw-semi)",
+          }}
+        >
+          O que a IA precisa saber
+        </label>
+
+        <p
+          style={{
+            marginBottom: 8,
+            fontSize: "calc(var(--text-xs) + 1px)",
+            color: "var(--text-tertiary)",
+            lineHeight: "var(--lh-normal)",
+          }}
+        >
+          O que a empresa faz, quem escreve para este número e como você quer que ela soe. Quanto
+          mais concreto, menos genérico volta.
+        </p>
+
+        <textarea
+          id="contexto"
+          rows={7}
+          style={{ ...textareaStyle, minHeight: 130, width: "100%" }}
+          placeholder={
+            "Somos uma manutenção industrial em Poços de Caldas. Quem escreve aqui é o financeiro do cliente, quase sempre para saber de parcela ou pedir segunda via. Queremos um tom direto, educado e sem jargão."
+          }
+          value={contexto}
+          onChange={(e) => setContexto(e.target.value)}
+        />
+      </div>
+
+      <p
+        style={{
+          marginTop: 16,
+          fontSize: "calc(var(--text-xs) + 1px)",
+          color: "var(--text-tertiary)",
+          lineHeight: "var(--lh-normal)",
+        }}
+      >
+        O que voltar cai nos campos para você revisar. Nada é salvo até você clicar em Salvar, e a
+        IA nunca é autorizada a falar de valor, vencimento ou boleto fora das consultas marcadas em
+        Permissões.
+      </p>
+    </Drawer>
   );
 }

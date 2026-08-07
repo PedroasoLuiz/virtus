@@ -14,5 +14,13 @@ export type Persona = {
   nome: string;
   descricao: string | null;
   podeResolver: string | null;
+  /**
+   * O que ela pode CONSULTAR no sistema. Ver `permissoes.ts`.
+   *
+   * ⚠️ Marcar aqui nao dispensa a identificacao: consulta que toca dado de
+   * cliente continua exigindo CPF ou CNPJ e o codigo do e-mail. A permissao diz
+   * o que a persona pode oferecer, e nao a quem.
+   */
+  permissoes: string[];
   ativo: boolean;
 };
