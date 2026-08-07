@@ -36,6 +36,22 @@ export type ClienteNovo = {
   centroCustoId?: number | null;
 };
 
+/**
+ * Um telefone ou e-mail da pessoa.
+ *
+ * ⚠️ Tabela propria, e nao mais campos em `clientes`. Uma empresa tem o e-mail do
+ * financeiro, o do comercial e o telefone de cada um: guardar UM de cada obrigava
+ * a escolher qual perder. Os campos `contato` e `email` de `clientes` continuam
+ * existindo e passam a significar o PRINCIPAL — o que a cobranca usa.
+ */
+export type ContatoDaPessoa = {
+  id: number;
+  tipo: "telefone" | "email";
+  valor: string;
+  /** "Financeiro", "Comercial"… O que este contato e dentro da empresa. */
+  rotulo: string | null;
+};
+
 /** Por onde a tabela de pessoas pode ordenar. */
 export type CampoDeOrdem =
   | "id"

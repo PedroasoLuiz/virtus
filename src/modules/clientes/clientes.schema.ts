@@ -61,6 +61,35 @@ export const criarClienteBodySchema = z.object({
 
 export const idParamSchema = z.object({ id: idSchema });
 
+export const contatoIdParamSchema = z.object({ id: idSchema, contatoId: idSchema });
+
+export const contatoSchema = z.object({
+  id: z.number(),
+  tipo: z.enum(["telefone", "email"]),
+  valor: z.string(),
+  rotulo: z.string().nullable(),
+});
+
+/**
+ * ⚠️ O e-mail e validado como e-mail; o telefone, so pelo tamanho.
+ *
+ * Formato de telefone no Brasil e uma bagunca honesta — com DDI, sem DDI, com o
+ * nono digito, ramal no fim —, e recusar o que a pessoa tem escrito na agenda
+ * dela seria inventar uma regra que o cadastro nunca teve.
+ */
+export const criarContatoBodySchema = z.discriminatedUnion("tipo", [
+  z.object({
+    tipo: z.literal("email"),
+    valor: emailSchema,
+    rotulo: z.string().trim().max(40).nullish(),
+  }),
+  z.object({
+    tipo: z.literal("telefone"),
+    valor: z.string().trim().min(8).max(30),
+    rotulo: z.string().trim().max(40).nullish(),
+  }),
+]);
+
 export const clienteSchema = z.object({
   id: z.number(),
   razao: z.string(),
@@ -78,6 +107,8 @@ export const clienteSchema = z.object({
 
 export type ListarQuery = z.infer<typeof listarQuerySchema>;
 export type ContagemQuery = z.infer<typeof contagemQuerySchema>;
+export type ContatoIdParam = z.infer<typeof contatoIdParamSchema>;
+export type CriarContatoBody = z.infer<typeof criarContatoBodySchema>;
 export type CriarClienteBody = z.infer<typeof criarClienteBodySchema>;
 export type IdParam = z.infer<typeof idParamSchema>;
 

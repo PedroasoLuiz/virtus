@@ -1,29 +1,30 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FormDrawer } from "@/components/ui/form-drawer";
-import { Avatar } from "@/components/ui/avatar";
 import {
   ActiveToggle,
   CabecalhoDeSecao,
   Field,
+  PanelTabs,
   inputStyle,
   selectStyle,
 } from "@/components/ui/kit";
-import type { Cliente, PapelPessoa } from "@/modules/clientes/clientes.types";
+import type { Cliente, ContatoDaPessoa, PapelPessoa } from "@/modules/clientes/clientes.types";
+import { AbaDeContatos } from "./aba-contatos";
 
 /**
- * Cadastro de pessoa: cliente, fornecedor ou colaborador.
+ * Detalhes de uma pessoa: cliente, fornecedor ou colaborador.
  *
  * ⚠️ Os três papéis moram na mesma tabela com colunas booleanas — por isso a tela
  * pede papel em vez de existirem três cadastros separados. Uma transportadora que
  * também compra é UMA pessoa com dois papéis, e não duas fichas para manter em
  * sincronia.
  *
- * ⚠️ Em seções com legenda, como o drawer de configuração do WhatsApp. Uma pilha
- * de dez campos sem divisão obriga a ler tudo para achar um; agrupados, o olho
- * pula direto para o bloco certo. E a legenda responde a pergunta que o rótulo
- * sozinho não responde ("papéis de quê?").
+ * ⚠️ Em ABAS, e não numa pilha. Contato, endereço e acesso são assuntos que se
+ * consultam separados: quem abre para conferir um telefone não quer rolar por
+ * centro de custo no caminho. E cada aba tem seu próprio ritmo de mudança — o
+ * nome quase nunca muda, o telefone muda toda hora.
  */
 
 const PAPEIS: { valor: PapelPessoa; rotulo: string; explica: string }[] = [
@@ -31,6 +32,9 @@ const PAPEIS: { valor: PapelPessoa; rotulo: string; explica: string }[] = [
   { valor: "fornecedor", rotulo: "Fornecedor", explica: "aparece em contas a pagar" },
   { valor: "colaborador", rotulo: "Colaborador", explica: "aparece em despesas de equipe" },
 ];
+
+const ABA_INFO = "Informações";
+const ABA_CONTATOS = "Contatos";
 
 type Form = {
   razao: string;
@@ -76,29 +80,60 @@ export function PessoaDrawer({
   // `key` no uso remonta o drawer a cada registro, entao o estado inicial ja
   // vem da pessoa certa e nao precisa de efeito para sincronizar.
   const [form, setForm] = useState<Form>(() => inicial(cliente));
+  const [aba, setAba] = useState<string>(ABA_INFO);
+  const [contatos, setContatos] = useState<ContatoDaPessoa[] | null>(null);
 
   const editando = cliente !== null;
   const set = <K extends keyof Form>(campo: K, valor: Form[K]) =>
     setForm((f) => ({ ...f, [campo]: valor }));
 
-  const titulo = form.razao.trim() || (editando ? "Sem nome" : "Nova pessoa");
+  /*
+   * ⚠️ Fisica ou juridica sai do DOCUMENTO, e nao de uma escolha a mais.
+   *
+   * O cadastro guarda os dois na mesma coluna, e a quantidade de digitos ja
+   * responde: onze e CPF, catorze e CNPJ. Um seletor "tipo de pessoa" seria um
+   * campo pedindo o que o outro campo ao lado ja disse, e um jeito a mais de os
+   * dois discordarem.
+   */
+  const digitos = form.cnpj.replace(/\D/g, "");
+  const fisica = digitos.length > 0 && digitos.length <= 11;
+
+  const carregarContatos = useCallback(async () => {
+    if (!cliente) return;
+
+    const r = await fetch(`/api/v1/clientes/${cliente.id}/contatos`);
+    if (!r.ok) return;
+
+    const corpo = await r.json();
+    setContatos(corpo.data ?? []);
+  }, [cliente]);
+
+  useEffect(() => {
+    const t = setTimeout(() => void carregarContatos(), 0);
+    return () => clearTimeout(t);
+  }, [carregarContatos]);
+
+  const telefones = (contatos ?? []).filter((c) => c.tipo === "telefone");
+  const emails = (contatos ?? []).filter((c) => c.tipo === "email");
 
   return (
     <FormDrawer
       aberto={aberto}
       onClose={onClose}
-      titulo={editando ? titulo : "Nova pessoa"}
-      subtitulo={editando ? `#${cliente.id}` : undefined}
-      larguraDrawer={600}
+      titulo="Detalhes"
+      subtitulo={editando ? form.razao.trim() || `#${cliente.id}` : "Nova pessoa"}
+      larguraDrawer={620}
       url={editando ? `/api/v1/clientes/${cliente.id}` : "/api/v1/clientes"}
       metodo={editando ? "PATCH" : "POST"}
       podeSalvar={form.razao.trim().length > 0 && form.papeis.length > 0}
       valores={() => ({
         razao: form.razao.trim(),
-        nomeFantasia: form.nomeFantasia.trim() || null,
+        // Pessoa fisica nao tem fantasia: o campo nem aparece, e mandar o que
+        // sobrou de um cadastro que era juridico gravaria lixo.
+        nomeFantasia: fisica ? null : form.nomeFantasia.trim() || null,
         // Campo opcional vazio vai como null: string vazia falharia na
-        // validacao de CNPJ e no formato de e-mail.
-        cnpj: form.cnpj.replace(/\D/g, "") || null,
+        // validacao de documento e no formato de e-mail.
+        cnpj: digitos || null,
         email: form.email.trim() || null,
         contato: form.contato.trim() || null,
         responsavel: form.responsavel.trim() || null,
@@ -108,171 +143,293 @@ export function PessoaDrawer({
       })}
     >
       {/*
-        A identidade em cima, com a bolinha.
-
-        ⚠️ A mesma cor da lista. Quem clicou numa linha precisa reconhecer que
-        abriu a que queria, e o título do drawer sozinho não faz isso: nomes de
-        empresa em caixa alta se parecem todos, e a cor é o que diferencia sem
-        ler.
+        Um filho só: o `FormDrawer` separa os filhos dele com um vão fixo, e com
+        seções, campos e abas misturados esse vão brigava com a margem de cada
+        um — o respiro ficava diferente em cada trecho da mesma tela.
       */}
-      {editando && (
-        <header
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            paddingBottom: 4,
-          }}
-        >
-          <Avatar nome={titulo} semente={String(cliente.id)} tamanho={44} />
+      <div style={{ display: "flex", flexDirection: "column" }}>
+        {/* Sem cadastro salvo não há o que anexar: contato precisa de dono. */}
+        {editando && (
+          <PanelTabs tabs={[ABA_INFO, ABA_CONTATOS]} active={aba} onChange={setAba} />
+        )}
 
-          <div style={{ minWidth: 0 }}>
-            <div
-              style={{
-                fontSize: "var(--text-lg)",
-                fontWeight: "var(--fw-semi)",
-                letterSpacing: "var(--tracking-snug)",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {titulo}
-            </div>
-
-            <div style={{ marginTop: 2, fontSize: "var(--text-xs)", color: "var(--text-tertiary)" }}>
-              {form.papeis.length > 0
-                ? form.papeis
-                    .map((p) => PAPEIS.find((x) => x.valor === p)?.rotulo ?? p)
-                    .join(" · ")
-                : "Sem papel"}
-              {!form.ativo && " · Inativo"}
-            </div>
-          </div>
-        </header>
-      )}
-
-      <CabecalhoDeSecao
-        primeiro
-        colado
-        titulo="Identificação"
-        legenda="A razão social é o nome que sai nos documentos. O fantasia é o que a equipe usa para achar a pessoa, e é ele que aparece na listagem."
-      />
-
-      <Field label="Razão social" required>
-        <input
-          style={inputStyle}
-          value={form.razao}
-          onChange={(e) => set("razao", e.target.value)}
-          placeholder="Nome completo ou razão social"
-          autoFocus={!editando}
-        />
-      </Field>
-
-      <Field label="Nome fantasia">
-        <input
-          style={inputStyle}
-          value={form.nomeFantasia}
-          onChange={(e) => set("nomeFantasia", e.target.value)}
-          placeholder="Como a pessoa é conhecida"
-        />
-      </Field>
-
-      <Field label="CNPJ / CPF" hint="Somente números; deixe vazio se não tiver">
-        <input
-          style={inputStyle}
-          value={form.cnpj}
-          onChange={(e) => set("cnpj", e.target.value)}
-          placeholder="00.000.000/0000-00"
-        />
-      </Field>
-
-      <CabecalhoDeSecao
-        colado
-        titulo="Contato"
-        legenda="É por aqui que o sistema fala com a pessoa: a cobrança vai para o e-mail, e o telefone é o que casa esta pessoa com a conversa no WhatsApp."
-      />
-
-      <Field label="Responsável">
-        <input
-          style={inputStyle}
-          value={form.responsavel}
-          onChange={(e) => set("responsavel", e.target.value)}
-          placeholder="Pessoa de contato"
-        />
-      </Field>
-
-      <Field label="Telefone" hint="Com DDD. É por ele que a conversa do WhatsApp encontra este cadastro.">
-        <input
-          style={inputStyle}
-          value={form.contato}
-          onChange={(e) => set("contato", e.target.value)}
-          placeholder="(00) 00000-0000"
-        />
-      </Field>
-
-      <Field label="E-mail">
-        <input
-          style={inputStyle}
-          type="email"
-          value={form.email}
-          onChange={(e) => set("email", e.target.value)}
-          placeholder="financeiro@empresa.com.br"
-        />
-      </Field>
-
-      <CabecalhoDeSecao
-        colado
-        titulo="No sistema"
-        legenda="Os papéis decidem em que telas esta pessoa aparece. Uma transportadora que também compra é um cadastro só, com dois papéis marcados."
-      />
-
-      <Field label="Papéis" required>
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          {PAPEIS.map((p) => (
-            <Papel
-              key={p.valor}
-              papel={p}
-              marcado={form.papeis.includes(p.valor)}
-              onAlternar={() =>
-                setForm((f) => ({
-                  ...f,
-                  papeis: f.papeis.includes(p.valor)
-                    ? f.papeis.filter((x) => x !== p.valor)
-                    : [...f.papeis, p.valor],
-                }))
+        {aba === ABA_CONTATOS && editando ? (
+          <AbaDeContatos
+            clienteId={cliente.id}
+            contatos={contatos}
+            onMudou={() => void carregarContatos()}
+          />
+        ) : (
+          <>
+            <CabecalhoDeSecao
+              primeiro
+              colado
+              titulo="Identificação"
+              legenda={
+                fisica
+                  ? "O documento decide o resto do formulário: com onze dígitos, a pessoa é física e o cadastro pede só o nome."
+                  : "O documento decide o resto do formulário. A razão social é o nome que sai nos documentos; o fantasia é o que a equipe usa para achar, e é ele que aparece na listagem."
               }
             />
-          ))}
-        </div>
-      </Field>
 
-      <Field label="Centro de custo" hint="Padrão: Geral">
-        <select
-          value={form.centroCustoId}
-          onChange={(e) => set("centroCustoId", e.target.value)}
-          style={{ ...selectStyle, width: "100%" }}
-        >
-          <option value="">Geral (padrão)</option>
-          {centros.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.descricao}
-            </option>
-          ))}
-        </select>
-      </Field>
+            <Campos>
+              {editando && (
+                /*
+                 * ⚠️ O número é LEITURA, e mesmo assim tem cara de campo.
+                 *
+                 * Ele é o que se dita ao telefone e o que aparece na fatura —
+                 * precisa poder ser lido e copiado. Como texto solto no
+                 * cabeçalho, ninguém o encontrava; como campo desabilitado, ele
+                 * fica onde a mão procura um dado do cadastro.
+                 */
+                <Field label="Número">
+                  <input
+                    value={cliente.id}
+                    readOnly
+                    style={{
+                      ...inputStyle,
+                      background: "var(--input-disabled-bg)",
+                      color: "var(--text-secondary)",
+                      cursor: "default",
+                    }}
+                  />
+                </Field>
+              )}
 
-      {editando && (
-        <Field label="Situação" hint="Inativo some da listagem e das buscas, mas o histórico continua inteiro.">
-          <div style={{ display: "flex", alignItems: "center", gap: 8, height: "var(--h-input)" }}>
-            <ActiveToggle active={form.ativo} onChange={() => set("ativo", !form.ativo)} />
-            <span style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>
-              {form.ativo ? "Ativo" : "Inativo"}
-            </span>
-          </div>
-        </Field>
-      )}
+              <Field label="CNPJ / CPF" hint="Somente números; deixe vazio se não tiver">
+                <input
+                  style={inputStyle}
+                  value={form.cnpj}
+                  onChange={(e) => set("cnpj", e.target.value)}
+                  placeholder="00.000.000/0000-00"
+                />
+              </Field>
+
+              <Field label={fisica ? "Nome completo" : "Razão social"} required>
+                <input
+                  style={inputStyle}
+                  value={form.razao}
+                  onChange={(e) => set("razao", e.target.value)}
+                  placeholder={fisica ? "Nome completo" : "Razão social"}
+                  autoFocus={!editando}
+                />
+              </Field>
+
+              {/*
+                ⚠️ Fantasia some na pessoa física. Gente não tem nome fantasia, e
+                o campo ali era um convite a preencher com apelido — que depois
+                aparecia na listagem no lugar do nome de verdade.
+              */}
+              {!fisica && (
+                <Field label="Nome fantasia">
+                  <input
+                    style={inputStyle}
+                    value={form.nomeFantasia}
+                    onChange={(e) => set("nomeFantasia", e.target.value)}
+                    placeholder="Como a pessoa é conhecida"
+                  />
+                </Field>
+              )}
+            </Campos>
+
+            <CabecalhoDeSecao
+              colado
+              titulo="Contato principal"
+              legenda={
+                editando
+                  ? "É para onde a cobrança vai, e é o telefone que casa esta pessoa com a conversa no WhatsApp. Os demais ficam na aba Contatos."
+                  : "É para onde a cobrança vai. Depois de salvar, a aba Contatos guarda os outros telefones e e-mails."
+              }
+            />
+
+            <Campos>
+              <Field label="Responsável">
+                <input
+                  style={inputStyle}
+                  value={form.responsavel}
+                  onChange={(e) => set("responsavel", e.target.value)}
+                  placeholder="Pessoa de contato"
+                />
+              </Field>
+
+              {/*
+                ⚠️ Com cadastro salvo, o principal é ESCOLHIDO entre os
+                cadastrados; sem, é digitado.
+
+                Digitar aqui um telefone que não está na lista criaria um número
+                que existe na cobrança e não existe na agenda — e ninguém
+                descobriria até a mensagem não chegar.
+              */}
+              <Field label="Telefone">
+                <Principal
+                  valor={form.contato}
+                  opcoes={telefones}
+                  editando={editando}
+                  onMudar={(v) => set("contato", v)}
+                  vazio="Nenhum telefone cadastrado"
+                  placeholder="(00) 00000-0000"
+                />
+              </Field>
+
+              <Field label="E-mail">
+                <Principal
+                  valor={form.email}
+                  opcoes={emails}
+                  editando={editando}
+                  onMudar={(v) => set("email", v)}
+                  vazio="Nenhum e-mail cadastrado"
+                  placeholder="financeiro@empresa.com.br"
+                  tipo="email"
+                />
+              </Field>
+            </Campos>
+
+            <CabecalhoDeSecao
+              colado
+              titulo="No sistema"
+              legenda="Os papéis decidem em que telas esta pessoa aparece. Uma transportadora que também compra é um cadastro só, com dois papéis marcados."
+            />
+
+            <Campos>
+              <Field label="Papéis" required>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {PAPEIS.map((p) => (
+                    <Papel
+                      key={p.valor}
+                      papel={p}
+                      marcado={form.papeis.includes(p.valor)}
+                      onAlternar={() =>
+                        setForm((f) => ({
+                          ...f,
+                          papeis: f.papeis.includes(p.valor)
+                            ? f.papeis.filter((x) => x !== p.valor)
+                            : [...f.papeis, p.valor],
+                        }))
+                      }
+                    />
+                  ))}
+                </div>
+              </Field>
+
+              <Field label="Centro de custo" hint="Padrão: Geral">
+                <select
+                  value={form.centroCustoId}
+                  onChange={(e) => set("centroCustoId", e.target.value)}
+                  style={{ ...selectStyle, width: "100%" }}
+                >
+                  <option value="">Geral (padrão)</option>
+                  {centros.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.descricao}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
+              {editando && (
+                <Field
+                  label="Situação"
+                  hint="Inativo some da listagem e das buscas, mas o histórico continua inteiro."
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      height: "var(--h-input)",
+                    }}
+                  >
+                    <ActiveToggle active={form.ativo} onChange={() => set("ativo", !form.ativo)} />
+                    <span style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>
+                      {form.ativo ? "Ativo" : "Inativo"}
+                    </span>
+                  </div>
+                </Field>
+              )}
+            </Campos>
+          </>
+        )}
+      </div>
     </FormDrawer>
+  );
+}
+
+/**
+ * O bloco de campos de uma seção.
+ *
+ * ⚠️ O vão entre campos mora AQUI, e não no `FormDrawer`. Lá ele valia para
+ * qualquer filho, e com seções e abas no meio o mesmo vão separava um campo do
+ * outro e um título do campo abaixo — coisas que precisam de distâncias
+ * diferentes.
+ */
+function Campos({ children }: { children: React.ReactNode }) {
+  return <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>{children}</div>;
+}
+
+/**
+ * O contato principal: escolhido entre os cadastrados, ou digitado.
+ *
+ * ⚠️ Vira seleção só depois de salvo, porque antes disso não existe lista de onde
+ * escolher. E quando a lista existe, digitar deixa de ser opção: um telefone
+ * escrito aqui e ausente da agenda é um número que existe na cobrança e não
+ * existe em lugar nenhum — descoberto quando a mensagem não chega.
+ */
+function Principal({
+  valor,
+  opcoes,
+  editando,
+  onMudar,
+  vazio,
+  placeholder,
+  tipo = "text",
+}: {
+  valor: string;
+  opcoes: ContatoDaPessoa[];
+  editando: boolean;
+  onMudar: (v: string) => void;
+  vazio: string;
+  placeholder: string;
+  tipo?: "text" | "email";
+}) {
+  if (!editando) {
+    return (
+      <input
+        style={inputStyle}
+        type={tipo}
+        value={valor}
+        onChange={(e) => onMudar(e.target.value)}
+        placeholder={placeholder}
+      />
+    );
+  }
+
+  return (
+    <select
+      value={valor}
+      onChange={(e) => onMudar(e.target.value)}
+      style={{ ...selectStyle, width: "100%" }}
+    >
+      <option value="">Nenhum</option>
+
+      {/*
+        ⚠️ O valor atual entra na lista mesmo quando não está entre os
+        cadastrados. Toda pessoa que já existia tem um telefone gravado e nenhum
+        contato na tabela nova: sem esta linha, abrir o cadastro apagaria o
+        número em silêncio no primeiro salvar.
+      */}
+      {valor && !opcoes.some((o) => o.valor === valor) && (
+        <option value={valor}>{valor} (não está na lista)</option>
+      )}
+
+      {opcoes.map((o) => (
+        <option key={o.id} value={o.valor}>
+          {o.valor}
+          {o.rotulo ? ` · ${o.rotulo}` : ""}
+        </option>
+      ))}
+
+      {opcoes.length === 0 && <option disabled>{vazio}</option>}
+    </select>
   );
 }
 

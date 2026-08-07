@@ -6,9 +6,12 @@ import * as service from "@/modules/clientes/clientes.service";
 import {
   clienteSchema,
   contagemSchema,
+  contatoSchema,
   type AtualizarClienteBody,
   type ContagemQuery,
+  type ContatoIdParam,
   type CriarClienteBody,
+  type CriarContatoBody,
   type IdParam,
   type ListarQuery,
 } from "@/modules/clientes/clientes.schema";
@@ -32,6 +35,42 @@ export async function contagem({ query, ctx }: Entrada<undefined, ContagemQuery,
   const total = await service.contagemPorPapel(empresaId, query.inativos);
 
   return ok(contagemSchema.parse(total));
+}
+
+export async function listarContatos({
+  params,
+  ctx,
+}: Entrada<undefined, undefined, IdParam>) {
+  const empresaId = empresaObrigatoria(ctx);
+  const contatos = await service.contatosDaPessoa(empresaId, params.id);
+
+  return ok(contatos.map((c) => contatoSchema.parse(c)));
+}
+
+export async function criarContato({
+  body,
+  params,
+  ctx,
+}: Entrada<CriarContatoBody, undefined, IdParam>) {
+  const empresaId = empresaObrigatoria(ctx);
+
+  const contato = await service.criarContato(empresaId, ctx.usuarioId, params.id, {
+    tipo: body.tipo,
+    valor: body.valor,
+    rotulo: body.rotulo?.trim() || null,
+  });
+
+  return created(contatoSchema.parse(contato));
+}
+
+export async function excluirContato({
+  params,
+  ctx,
+}: Entrada<undefined, undefined, ContatoIdParam>) {
+  const empresaId = empresaObrigatoria(ctx);
+  await service.excluirContato(empresaId, params.id, params.contatoId);
+
+  return ok({ id: params.contatoId });
 }
 
 export async function obter({ params, ctx }: Entrada<undefined, undefined, IdParam>) {

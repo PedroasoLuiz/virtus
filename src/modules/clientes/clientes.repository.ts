@@ -5,6 +5,7 @@ import { intervalo, type Paginacao, type Pagina } from "@/shared/utils/paginacao
 import type {
   CampoDeOrdem,
   Cliente,
+  ContatoDaPessoa,
   ClienteNovo,
   ContagemPorPapel,
   FiltroClientes,
@@ -126,6 +127,83 @@ export async function contagemPorPapel(
     fornecedor: Number(l?.fornecedor ?? 0),
     colaborador: Number(l?.colaborador ?? 0),
   };
+}
+
+/**
+ * Os telefones e e-mails de uma pessoa.
+ *
+ * ⚠️ A RLS de `clientescontatos` casa pela pessoa dona, entao ela ja recusa
+ * cadastro de outra empresa. O `empresaId` nao entra na consulta por isso: ele
+ * seria uma segunda regra de isolamento para manter em dia com a policy.
+ */
+export async function contatosDaPessoa(clienteId: number): Promise<ContatoDaPessoa[]> {
+  const supabase = await serverClient();
+
+  const { data, error } = await supabase
+    .from("clientescontatos")
+    .select("id, tipo, valor, rotulo")
+    .eq("fkCliente", clienteId)
+    .eq("ativo", true)
+    .order("tipo")
+    .order("id");
+
+  if (error) throw error;
+
+  return (data ?? []).map((l) => ({
+    id: l.id as number,
+    tipo: l.tipo as ContatoDaPessoa["tipo"],
+    valor: l.valor as string,
+    rotulo: (l.rotulo as string | null) || null,
+  }));
+}
+
+export async function criarContato(
+  clienteId: number,
+  usuarioId: string,
+  entrada: { tipo: "telefone" | "email"; valor: string; rotulo: string | null },
+): Promise<ContatoDaPessoa> {
+  const supabase = await serverClient();
+
+  const { data, error } = await supabase
+    .from("clientescontatos")
+    .insert({
+      fkCliente: clienteId,
+      fkUserCriacao: usuarioId,
+      tipo: entrada.tipo,
+      valor: entrada.valor,
+      rotulo: entrada.rotulo,
+      ativo: true,
+    })
+    .select("id, tipo, valor, rotulo")
+    .single();
+
+  if (error) throw error;
+
+  return {
+    id: data.id as number,
+    tipo: data.tipo as ContatoDaPessoa["tipo"],
+    valor: data.valor as string,
+    rotulo: (data.rotulo as string | null) || null,
+  };
+}
+
+/**
+ * ⚠️ Desativa, e nao apaga.
+ *
+ * O telefone que saiu do cadastro e o mesmo que aparece numa conversa antiga do
+ * WhatsApp e num envio de cobranca de tres meses atras. Apagando, aquele
+ * historico perde a referencia de quem era.
+ */
+export async function desativarContato(clienteId: number, contatoId: number): Promise<void> {
+  const supabase = await serverClient();
+
+  const { error } = await supabase
+    .from("clientescontatos")
+    .update({ ativo: false })
+    .eq("fkCliente", clienteId)
+    .eq("id", contatoId);
+
+  if (error) throw error;
 }
 
 export async function buscarPorId(empresaId: number, id: number): Promise<Cliente | null> {
