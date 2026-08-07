@@ -377,7 +377,12 @@ type ModeloBruto = {
   status: string;
   category?: string;
   language?: string;
-  components?: { type: string; text?: string; format?: string }[];
+  components?: {
+    type: string;
+    text?: string;
+    format?: string;
+    buttons?: { type: string; text?: string; url?: string }[];
+  }[];
 };
 
 function paraModelo(t: ModeloBruto): Modelo {
@@ -391,6 +396,17 @@ function paraModelo(t: ModeloBruto): Modelo {
    */
   const marcadores = new Set(corpo.match(/\{\{\s*\d+\s*\}\}/g) ?? []);
 
+  /*
+   * O botao de URL, quando existe.
+   *
+   * ⚠️ So o de URL interessa: `QUICK_REPLY` nao leva parametro nenhum, e
+   * oferecer um lugar para preencher nele levaria a Meta a recusar o envio.
+   *
+   * ⚠️ `temVariavel` olha se a URL termina em `{{1}}`. Botao de link fixo nao
+   * espera valor, e pedir um faria a tela cobrar algo que a Meta ignora.
+   */
+  const url = parte("BUTTONS")?.buttons?.find((b) => b.type === "URL") ?? null;
+
   return {
     nome: t.name,
     idioma: t.language ?? "pt_BR",
@@ -399,6 +415,9 @@ function paraModelo(t: ModeloBruto): Modelo {
     cabecalho: parte("HEADER")?.text ?? null,
     rodape: parte("FOOTER")?.text ?? null,
     parametros: marcadores.size,
+    botao: url
+      ? { texto: url.text ?? "Abrir", temVariavel: /\{\{\s*\d+\s*\}\}/.test(url.url ?? "") }
+      : null,
   };
 }
 

@@ -438,11 +438,17 @@ function FormularioDoVinculo({
                 </Field>
               ))}
 
+              {/*
+                ⚠️ Aparece sempre que a finalidade tem um link para dar, e NÃO
+                só quando a URL do modelo termina em `{{1}}`.
+
+                A Meta guarda o `{{1}}` da URL codificado, e por isso o botão
+                que funciona aqui é o de URL fixa terminando em `/p/` — o valor
+                vai como sufixo no envio. Amarrar o campo à presença do
+                marcador escondia a opção justamente na configuração correta.
+              */}
               {finalidade.botao && (
-                <Field
-                  label="Botão do modelo"
-                  hint={finalidade.botao.descricao}
-                >
+                <Field label="Botão do modelo" hint={finalidade.botao.descricao}>
                   <select
                     style={selectStyle}
                     value={botao ?? ""}
@@ -454,6 +460,35 @@ function FormularioDoVinculo({
                 </Field>
               )}
             </Secao>
+
+            {/*
+              ⚠️ A prévia fica AQUI, colada nos seletores, e não na outra aba.
+
+              Ela é a resposta imediata a cada escolha: escolheu "valor" no
+              campo 1, o texto passa a mostrar o valor ali. Numa aba separada, o
+              retorno só chegava depois de um clique, e conferir exigia ir e
+              voltar a cada seletor mexido — que é justamente quando o erro de
+              ordem acontece.
+            */}
+            <Secao
+              titulo="Como vai chegar"
+              legenda="O seu texto com os valores de exemplo no lugar, atualizando conforme você escolhe. É assim que o cliente vê."
+            >
+              {/*
+                ⚠️ O copiar leva o texto do MODELO, com os {{ }}, e não a prévia
+                com os exemplos. É o que serve para duplicar o modelo no painel
+                da Meta, que é a razão de alguém querer copiar daqui. O título do
+                botão diz isso, senão o que vai para a área de transferência não
+                bate com o que está desenhado ao lado.
+              */}
+              <CartaoDeTexto
+                copiar={modelo.corpo}
+                tituloDoCopiar="Copiar o texto do modelo, com os {{ }}"
+                botao={modelo.botao}
+              >
+                {comFormatacaoDoWhatsapp(previaDoCorpo(modelo.corpo, exemplos))}
+              </CartaoDeTexto>
+            </Secao>
           </>
         )}
 
@@ -463,33 +498,12 @@ function FormularioDoVinculo({
 
       {aba === "Exibição" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
-          <Secao
+          <Dicionario
             primeiro
-            titulo="Como vai chegar"
-            legenda="O seu texto com os valores de exemplo no lugar. É assim que o cliente vê."
-          >
-            {modelo ? (
-              /*
-               * ⚠️ O copiar leva o texto do MODELO, com os {{ }}, e não a prévia
-               * com os exemplos. É o que serve para duplicar o modelo no painel
-               * da Meta, que é a razão de alguém querer copiar daqui. O título
-               * do botão diz isso, senão o que vai para a área de transferência
-               * não bate com o que está desenhado ao lado.
-               */
-              <CartaoDeTexto
-                copiar={modelo.corpo}
-                tituloDoCopiar="Copiar o texto do modelo, com os {{ }}"
-              >
-                {comFormatacaoDoWhatsapp(previaDoCorpo(modelo.corpo, exemplos))}
-              </CartaoDeTexto>
-            ) : (
-              <p style={{ fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>
-                Escolha o modelo em Parametrização para ver como a mensagem fica.
-              </p>
-            )}
-          </Secao>
-
-          <Dicionario finalidade={finalidade} parametros={parametros} botao={botao} />
+            finalidade={finalidade}
+            parametros={parametros}
+            botao={botao}
+          />
         </div>
       )}
     </Drawer>
@@ -592,10 +606,12 @@ function Dicionario({
   finalidade,
   parametros,
   botao,
+  primeiro,
 }: {
   finalidade: Finalidade;
   parametros: string[];
   botao: string | null;
+  primeiro?: boolean;
 }) {
   const todas = finalidade.botao
     ? [...finalidade.variaveis, finalidade.botao]
@@ -610,8 +626,9 @@ function Dicionario({
 
   return (
     <Secao
+      primeiro={primeiro}
       titulo="O que o sistema tem para dar"
-      legenda="São os únicos valores que esta finalidade sabe preencher. O que não estiver aqui precisa ser texto fixo dentro do seu modelo."
+      legenda="São os únicos valores que esta finalidade sabe preencher. A etiqueta à esquerda mostra em qual campo do seu modelo cada um caiu. O que não estiver aqui precisa ser texto fixo dentro do modelo."
     >
       <dl style={{ display: "grid", gap: 0, margin: 0 }}>
         {todas.map((v, i) => {
@@ -720,10 +737,13 @@ function Sugestao({ finalidade }: { finalidade: Finalidade }) {
 function CartaoDeTexto({
   copiar,
   tituloDoCopiar,
+  botao,
   children,
 }: {
   copiar: string;
   tituloDoCopiar: string;
+  /** O botão do modelo, desenhado embaixo como o WhatsApp faz. */
+  botao?: { texto: string; temVariavel: boolean } | null;
   children: React.ReactNode;
 }) {
   return (
@@ -741,6 +761,37 @@ function CartaoDeTexto({
       }}
     >
       {children}
+
+      {/*
+        O botão como o WhatsApp desenha: separado do texto por uma linha, no
+        verde da marca, ocupando a largura inteira do balão.
+
+        ⚠️ Não é clicável. É a prévia de algo que só existe no aparelho do
+        cliente, e um botão que responde ao clique aqui prometeria uma ação que
+        esta tela não tem.
+      */}
+      {botao && (
+        <div
+          style={{
+            marginTop: 10,
+            paddingTop: 8,
+            borderTop: "1px solid var(--border)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 6,
+            color: "var(--primary)",
+            fontSize: "var(--text-sm)",
+            fontWeight: "var(--fw-semi)",
+          }}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7" />
+            <path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" />
+          </svg>
+          {botao.texto}
+        </div>
+      )}
 
       <div style={{ position: "absolute", top: 6, right: 6 }}>
         <Copiar texto={copiar} titulo={tituloDoCopiar} />

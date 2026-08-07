@@ -20,6 +20,7 @@ import {
 import { testeInconclusivo, type ResultadoDoTeste } from "@/shared/domain/teste-conexao";
 import {
   finalidadePorId,
+  previaDoCorpo,
   problemasDoVinculo,
   type ChaveDeFinalidade,
   type VinculoDeModelo,
@@ -469,22 +470,18 @@ export async function enviarModelo(
   return gravarOuAvisar(empresaId, conversaId, usuarioId, {
     wamid,
     tipo: "template",
-    texto: preencherModelo(modelo.corpo, parametros),
+    texto: previaDoCorpo(modelo.corpo, parametros),
   });
 }
 
 /**
- * Dispara um modelo para um TELEFONE, sem depender de conversa existente.
- *
- * ⚠️ Diferente de `enviarModelo`, que parte de uma conversa aberta no painel.
- * Aqui quem chama e a cobranca: o cliente pode nunca ter escrito, e modelo
- * aprovado e justamente o que a Meta deixa enviar nesse caso.
- *
- * A conversa e criada de qualquer forma, para o disparo aparecer no painel e a
- * resposta do cliente cair no mesmo lugar.
- */
-/**
  * Manda a mensagem de uma FINALIDADE, com o modelo que o cliente vinculou.
+ *
+ * Dispara para um TELEFONE, sem depender de conversa existente — diferente de
+ * `enviarModelo`, que parte de uma conversa aberta no painel. Aqui quem chama e
+ * a cobranca: o cliente pode nunca ter escrito, e modelo aprovado e justamente
+ * o que a Meta deixa enviar nesse caso. A conversa e criada de qualquer forma,
+ * para o disparo aparecer no painel e a resposta cair no mesmo lugar.
  *
  * ⚠️ Recebe os valores por NOME, e nao em ordem. A ordem e do modelo dele, nao
  * nossa: quem sabe que o `{{3}}` daquele texto e o vencimento e o vinculo,
@@ -503,9 +500,22 @@ export async function dispararFinalidade(
   valores: Record<string, string>,
 ): Promise<Mensagem> {
   const conta = await contaParaDisparo(empresaId);
-  const vinculos = await repo.vinculosDaConta(conta.id);
-  const vinculo = vinculos.find((v) => v.finalidade === finalidade);
 
+  /*
+   * As credenciais e os vinculos saem JUNTOS, e a conta e resolvida uma vez so.
+   *
+   * ⚠️ Antes isto passava por `dispararModelo`, que resolvia a conta de novo
+   * por dentro: dois `listarContas` por mensagem enviada. Num disparo de
+   * cobranca em lote, isso e uma consulta desperdicada por parcela.
+   */
+  const [cred, vinculos] = await Promise.all([
+    repo.credenciais(conta.id),
+    repo.vinculosDaConta(conta.id),
+  ]);
+
+  if (!cred) throw new BusinessRuleError("O numero escolhido esta sem token cadastrado.");
+
+  const vinculo = vinculos.find((v) => v.finalidade === finalidade);
   const rotulo = finalidadePorId(finalidade)?.rotulo ?? finalidade;
 
   if (!vinculo) {
@@ -535,57 +545,25 @@ export async function dispararFinalidade(
 
   const urlDoBotao = vinculo.botaoParam ? valores[vinculo.botaoParam] : undefined;
 
-  return dispararModelo(
-    empresaId,
-    usuarioId,
-    destino,
-    vinculo.modeloNome,
-    parametros,
-    urlDoBotao,
-  );
-}
-
-/** O numero por onde o sistema fala quando ninguem escolheu um. */
-async function contaParaDisparo(empresaId: number): Promise<ContaWhatsapp> {
-  const contas = await listarContas(empresaId);
-  const conta = contas.find((c) => c.ativo && c.temToken);
-
-  if (!conta) {
-    throw new BusinessRuleError(
-      "Nenhum numero de WhatsApp ativo com token. Confira em Configuracao de contas.",
-    );
-  }
-
-  return conta;
-}
-
-export async function dispararModelo(
-  empresaId: number,
-  usuarioId: string,
-  destino: { telefone: string; nome: string | null },
-  nome: string,
-  parametros: string[],
-  urlDoBotao?: string,
-): Promise<Mensagem> {
-  const conta = await contaParaDisparo(empresaId);
-  const cred = await repo.credenciais(conta.id);
-
-  if (!cred) {
-    throw new BusinessRuleError("O numero escolhido esta sem token cadastrado.");
-  }
-
   const modelos = await cloud.listarModelos(cred);
-  const modelo = modelos.find((m) => m.nome === nome);
+  const modelo = modelos.find((m) => m.nome === vinculo.modeloNome);
 
+  /*
+   * ⚠️ Confere contra a lista da META, e nao contra o vinculo.
+   *
+   * O template sai de APPROVED sozinho quando alguem o edita no painel, e pode
+   * ganhar um `{{n}}` a mais depois de vinculado. Sem esta leitura, o envio
+   * falharia com o erro cru da Meta no meio de um disparo.
+   */
   if (!modelo) {
     throw new BusinessRuleError(
-      `O modelo "${nome}" nao esta aprovado. Confira o status no painel da Meta.`,
+      `O modelo "${vinculo.modeloNome}", vinculado a "${rotulo}", não está aprovado. Confira o status no painel da Meta.`,
     );
   }
 
   if (parametros.length !== modelo.parametros) {
     throw new BusinessRuleError(
-      `O modelo "${nome}" espera ${modelo.parametros} parametro(s), recebeu ${parametros.length}.`,
+      `O modelo "${modelo.nome}" mudou: ele espera ${modelo.parametros} campo(s) e o vínculo preenche ${parametros.length}. Refaça o vínculo em Configuração do WhatsApp.`,
     );
   }
 
@@ -608,16 +586,24 @@ export async function dispararModelo(
   return gravarOuAvisar(empresaId, conversa.id, usuarioId, {
     wamid,
     tipo: "template",
-    texto: preencherModelo(modelo.corpo, parametros),
+    // Grava o corpo JA PREENCHIDO: o modelo cru deixaria o historico com
+    // `{{1}}` no lugar do valor, e ninguem saberia quanto foi cobrado de quem.
+    texto: previaDoCorpo(modelo.corpo, parametros),
   });
 }
 
-/** Troca `{{1}}`, `{{2}}`… pelos valores, na ordem. */
-export function preencherModelo(corpo: string, parametros: string[]): string {
-  return corpo.replace(/\{\{\s*(\d+)\s*\}\}/g, (marcador, n: string) => {
-    const valor = parametros[Number(n) - 1];
-    return valor ?? marcador;
-  });
+/** O numero por onde o sistema fala quando ninguem escolheu um. */
+async function contaParaDisparo(empresaId: number): Promise<ContaWhatsapp> {
+  const contas = await listarContas(empresaId);
+  const conta = contas.find((c) => c.ativo && c.temToken);
+
+  if (!conta) {
+    throw new BusinessRuleError(
+      "Nenhum numero de WhatsApp ativo com token. Confira em Configuracao de contas.",
+    );
+  }
+
+  return conta;
 }
 
 /**

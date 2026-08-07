@@ -167,6 +167,18 @@ export type Modelo = {
   rodape: string | null;
   /** Quantos `{{n}}` o corpo espera. */
   parametros: number;
+  /**
+   * O botao de URL, quando o modelo tem um.
+   *
+   * ⚠️ Nao entra na contagem de `parametros`: na Meta ele e outro componente, e
+   * o `{{1}}` da URL e independente dos `{{n}}` do corpo. Contar junto faria a
+   * validacao de quantidade recusar um envio correto.
+   *
+   * `temVariavel` diz se a URL termina em `{{1}}`, ou seja, se ela ESPERA que o
+   * sistema complete o endereco. Sem isso, um botao de link fixo pediria um
+   * valor que a Meta ignoraria.
+   */
+  botao: { texto: string; temVariavel: boolean } | null;
 };
 
 /**
