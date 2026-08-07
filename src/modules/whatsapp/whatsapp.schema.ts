@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { temPalavrao } from "@/shared/domain/linguagem";
+import { paraFormatoMeta } from "@/modules/whatsapp/whatsapp.types";
 
 /**
  * Contratos de entrada e saida do modulo.
@@ -128,6 +129,14 @@ export const salvarContaBodySchema = z.object({
       (v) => v.replace(/\D/g, "").length >= 8 && v.replace(/\D/g, "").length <= 15,
       "Número de telefone inválido",
     )
+    /*
+     * ⚠️ O nono digito e resolvido AQUI, e nao so na tela.
+     *
+     * A tela e conveniencia; o schema e a regra. Um POST direto gravaria o
+     * celular brasileiro de 10 digitos, e a partir dai o mesmo telefone
+     * existiria em duas formas no banco. Ver `comNonoDigito`.
+     */
+    .transform((v) => (v ? paraFormatoMeta(v) : v))
     .nullable()
     .default(null),
   phoneNumberId: z.string().trim().min(5).max(40),

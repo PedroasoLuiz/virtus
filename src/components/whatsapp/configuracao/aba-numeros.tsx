@@ -24,6 +24,7 @@ import {
   textareaStyle,
 } from "@/components/ui/kit";
 import {
+  comNonoDigito,
   digitosDoTelefone,
   formatarTelefone,
   mascaraDoPais,
@@ -216,7 +217,14 @@ export function AbaDeNumeros({
          * tem nove, ou um dos Estados Unidos, que tem dez — e ai o numero sai
          * com o pais errado sem nada acusar.
          */
-        numero: rascunho.numero ? `${rascunho.ddi}${digitosDoTelefone(rascunho.numero)}` : null,
+        /*
+         * ⚠️ O nono dígito entra aqui, e não é invenção: no Brasil o mesmo
+         * celular circula com 10 e com 11 dígitos, e gravar a forma curta faria
+         * este número existir em duas versões no banco. Ver `comNonoDigito`.
+         */
+        numero: rascunho.numero
+          ? `${rascunho.ddi}${comNonoDigito(rascunho.ddi, rascunho.numero)}`
+          : null,
         phoneNumberId: rascunho.phoneNumberId.trim(),
         wabaId: rascunho.wabaId.trim() || null,
         apiVersao: rascunho.apiVersao.trim() || "v19.0",

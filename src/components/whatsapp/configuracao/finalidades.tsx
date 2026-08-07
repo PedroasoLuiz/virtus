@@ -72,7 +72,6 @@ export function Finalidades({
         <tbody>
           {FINALIDADES.map((f) => {
             const v = vinculos?.find((x) => x.finalidade === f.id) ?? null;
-            const modelo = v ? (modelos?.find((m) => m.nome === v.modeloNome) ?? null) : null;
 
             return (
               <Tr key={f.id}>
@@ -98,14 +97,32 @@ export function Finalidades({
 
                 <Td>
                   {v ? (
-                    <span style={{ fontFamily: "var(--font-mono, monospace)" }}>{v.modeloNome}</span>
+                    <>
+                      <span style={{ fontFamily: "var(--font-mono, monospace)" }}>
+                        {v.modeloNome}
+                      </span>
+
+                      {/* O motivo da falha, para não exigir abrir o formulário
+                          só para descobrir o que a Meta recusou. */}
+                      {v.erro && (
+                        <div
+                          style={{
+                            marginTop: 2,
+                            fontSize: "var(--text-xs)",
+                            color: "var(--text-tertiary)",
+                          }}
+                        >
+                          {v.erro}
+                        </div>
+                      )}
+                    </>
                   ) : (
                     <span style={{ color: "var(--text-tertiary)" }}>nenhum</span>
                   )}
                 </Td>
 
                 <Td>
-                  <SituacaoDoVinculo vinculo={v} modelo={modelo} carregando={modelos == null} />
+                  <SituacaoDoVinculo vinculo={v} />
                 </Td>
 
                 <Td>
@@ -141,15 +158,7 @@ export function Finalidades({
  * mais um campo, depois do vínculo. Quem só olha a tela precisa ver isso antes
  * de descobrir por um envio que falhou.
  */
-function SituacaoDoVinculo({
-  vinculo,
-  modelo,
-  carregando,
-}: {
-  vinculo: VinculoDeModelo | null;
-  modelo: Modelo | null;
-  carregando: boolean;
-}) {
+function SituacaoDoVinculo({ vinculo }: { vinculo: VinculoDeModelo | null }) {
   if (!vinculo) {
     return (
       <Badge tom="neutral">
@@ -159,29 +168,13 @@ function SituacaoDoVinculo({
     );
   }
 
-  if (carregando) {
-    return (
-      <Badge tom="neutral">
-        <Relogio />
-        conferindo
-      </Badge>
-    );
-  }
-
-  if (!modelo) {
+  // ⚠️ O erro vence o "pronto": ele é mais novo que a validação, e é o único
+  // sinal de que algo mudou na Meta depois do vínculo.
+  if (vinculo.erro) {
     return (
       <Badge tom="danger">
         <Atencao />
-        modelo não aprovado
-      </Badge>
-    );
-  }
-
-  if (vinculo.parametros.length !== modelo.parametros) {
-    return (
-      <Badge tom="danger">
-        <Atencao />
-        o modelo mudou
+        o envio falhou
       </Badge>
     );
   }
@@ -386,6 +379,17 @@ function FormularioDoVinculo({
 
       {aba === "Parametrização" && (
       <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+        {/*
+          ⚠️ ANTES do seletor, e recolhida assim que um modelo é escolhido.
+
+          Quem chega sem modelo precisa dela primeiro: é o texto que vai criar o
+          template na Meta, e embaixo do seletor ela só apareceria depois de a
+          pessoa procurar o que não tem. Quem já escolheu não precisa mais dela
+          ocupando o topo, mas continua a um clique para comparar o próprio
+          texto com um que já sabe onde cada campo entra.
+        */}
+        <Sugestao finalidade={finalidade} recolher={Boolean(nome)} />
+
         <Secao
           primeiro
           titulo="O modelo"
@@ -403,9 +407,6 @@ function FormularioDoVinculo({
           </Field>
         </Secao>
 
-        {!nome && (
-          <Sugestao finalidade={finalidade} />
-        )}
 
         {modelo && (
           <>
@@ -475,16 +476,11 @@ function FormularioDoVinculo({
               legenda="O seu texto com os valores de exemplo no lugar, atualizando conforme você escolhe. É assim que o cliente vê."
             >
               {/*
-                ⚠️ O copiar leva o texto do MODELO, com os {{ }}, e não a prévia
-                com os exemplos. É o que serve para duplicar o modelo no painel
-                da Meta, que é a razão de alguém querer copiar daqui. O título do
-                botão diz isso, senão o que vai para a área de transferência não
-                bate com o que está desenhado ao lado.
+                ⚠️ SEM copiar. O texto aqui é o modelo que o próprio usuário
+                escreveu e já tem aprovado na Meta: copiá-lo não leva a lugar
+                nenhum. O que vale copiar é a sugestão, que fica logo abaixo.
               */}
-              <CartaoDeTexto
-                copiar={modelo.corpo}
-                tituloDoCopiar="Copiar o texto do modelo, com os {{ }}"
-              >
+              <CartaoDeTexto>
                 {comFormatacaoDoWhatsapp(previaDoCorpo(modelo.corpo, exemplos))}
               </CartaoDeTexto>
 
@@ -718,20 +714,89 @@ function Dicionario({
   );
 }
 
-/** Um corpo pronto para copiar no painel da Meta, para quem ainda não tem. */
-function Sugestao({ finalidade }: { finalidade: Finalidade }) {
+/**
+ * Um corpo pronto para copiar no painel da Meta.
+ *
+ * ⚠️ Recolhe sozinha quando um modelo é escolhido, mas o clique manual vence:
+ * `aberta` guarda a vontade da pessoa e só volta a seguir a regra quando a
+ * escolha muda. Recolher por baixo de quem acabou de abrir seria a tela
+ * discutindo com o usuário.
+ */
+function Sugestao({ finalidade, recolher }: { finalidade: Finalidade; recolher: boolean }) {
+  const [aberta, setAberta] = useState<boolean | null>(null);
+  const [anterior, setAnterior] = useState(recolher);
+
+  // Estado derivado durante o render, e não num efeito: assim a sanfona já sai
+  // no estado certo no mesmo quadro em que o modelo é escolhido.
+  if (anterior !== recolher) {
+    setAnterior(recolher);
+    setAberta(null);
+  }
+
+  const visivel = aberta ?? !recolher;
+
   return (
-    <Secao
-      titulo="Não tem um modelo para isto?"
-      legenda="Crie no painel da Meta com o texto abaixo, ou escreva o seu. Depois que a Meta aprovar, ele aparece na lista acima."
-    >
-      <CartaoDeTexto
-        copiar={finalidade.corpoSugerido}
-        tituloDoCopiar="Copiar o texto sugerido"
+    <section>
+      <button
+        type="button"
+        onClick={() => setAberta(!visivel)}
+        aria-expanded={visivel}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          padding: 0,
+          border: "none",
+          background: "transparent",
+          cursor: "pointer",
+          fontSize: "calc(var(--text-lg) + 2px)",
+          fontWeight: "var(--fw-semi)",
+          color: "var(--text-primary)",
+          letterSpacing: "var(--tracking-snug)",
+        }}
       >
-        {finalidade.corpoSugerido}
-      </CartaoDeTexto>
-    </Secao>
+        Modelo sugerido
+        <svg
+          width="13"
+          height="13"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.4"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{
+            color: "var(--text-tertiary)",
+            transform: visivel ? "rotate(180deg)" : "none",
+            transition: "transform 160ms var(--ease-out)",
+          }}
+        >
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+
+      {visivel && (
+        <>
+          <p
+            style={{
+              marginTop: 6,
+              marginBottom: 12,
+              fontSize: "calc(var(--text-xs) + 1px)",
+              color: "var(--text-tertiary)",
+              lineHeight: "var(--lh-normal)",
+            }}
+          >
+            Um texto pronto para esta finalidade, com os campos na ordem em que o sistema entrega.
+            Copie, crie no painel da Meta e ajuste as palavras: depois de aprovado, ele aparece no
+            seletor abaixo.
+          </p>
+
+          <CartaoDeTexto copiar={finalidade.corpoSugerido} tituloDoCopiar="Copiar o texto sugerido">
+            {finalidade.corpoSugerido}
+          </CartaoDeTexto>
+        </>
+      )}
+    </section>
   );
 }
 
@@ -753,8 +818,9 @@ function CartaoDeTexto({
   tituloDoCopiar,
   children,
 }: {
-  copiar: string;
-  tituloDoCopiar: string;
+  /** Sem isto o cartão não ganha botão: nem todo texto vale copiar. */
+  copiar?: string;
+  tituloDoCopiar?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -773,9 +839,11 @@ function CartaoDeTexto({
     >
       {children}
 
-      <div style={{ position: "absolute", top: 6, right: 6 }}>
-        <Copiar texto={copiar} titulo={tituloDoCopiar} />
-      </div>
+      {copiar && (
+        <div style={{ position: "absolute", top: 6, right: 6 }}>
+          <Copiar texto={copiar} titulo={tituloDoCopiar ?? "Copiar"} />
+        </div>
+      )}
     </div>
   );
 }

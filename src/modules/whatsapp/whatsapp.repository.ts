@@ -1,4 +1,5 @@
 import { anonClient, serverClient } from "@/infra/supabase/client";
+import { logger } from "@/shared/utils/logger";
 import type {
   AtendimentoDaConversa,
   ClienteCandidato,
@@ -190,6 +191,11 @@ export async function vinculosDaConta(contaId: number): Promise<VinculoDeModelo[
     // e o estado honesto para qualquer outra coisa.
     parametros: Array.isArray(l.parametros) ? (l.parametros as string[]) : [],
     botaoParam: l.botao_param ?? null,
+    corpo: l.corpo ?? null,
+    campos: l.campos ?? 0,
+    validadoEm: l.validado_em ?? null,
+    erro: l.erro ?? null,
+    erroEm: l.erro_em ?? null,
   }));
 }
 
@@ -203,9 +209,33 @@ export async function salvarVinculo(contaId: number, v: VinculoDeModelo): Promis
     p_idioma: v.idioma,
     p_parametros: v.parametros,
     p_botao_param: v.botaoParam,
+    p_corpo: v.corpo,
+    p_campos: v.campos,
   });
 
   if (error) throw error;
+}
+
+/**
+ * Anota que a Meta recusou este vinculo.
+ *
+ * ⚠️ Nunca propaga a falha: quem chama ja esta tratando um erro de envio, e
+ * quebrar aqui trocaria a mensagem util por outra sobre a anotacao.
+ */
+export async function marcarVinculoComErro(
+  contaId: number,
+  finalidade: string,
+  erro: string,
+): Promise<void> {
+  const supabase = await serverClient();
+
+  const { error } = await supabase.rpc("whatsapp_vinculo_falhou", {
+    p_conta: contaId,
+    p_finalidade: finalidade,
+    p_erro: erro,
+  });
+
+  if (error) logger.error("nao foi possivel anotar a falha do vinculo", { contaId, finalidade });
 }
 
 export async function removerVinculo(contaId: number, finalidade: string): Promise<void> {

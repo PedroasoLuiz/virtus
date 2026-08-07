@@ -308,6 +308,55 @@ export function digitosDoTelefone(bruto: string): string {
 }
 
 /**
+ * O nono digito do celular brasileiro, resolvido.
+ *
+ * ⚠️ O Brasil tem DOIS jeitos de escrever o mesmo celular. Desde 2016 o numero
+ * tem 11 digitos com DDD (o 9 na frente), mas cadastro antigo, base importada e
+ * o proprio `wa_id` da Meta ainda aparecem com 10. Os dois sao o mesmo telefone,
+ * e sem resolver isso o cliente entra duas vezes na lista de conversas e a busca
+ * pelo cadastro nao acha.
+ *
+ * A decisao e DECIDIVEL, e nao um chute: num numero local de 10 digitos, o
+ * primeiro digito depois do DDD diz o que ele e. De 6 a 9 e celular, e ali falta
+ * o nono; de 2 a 5 e fixo, e ali o 9 nao existe e inventa-lo criaria um numero
+ * que nao toca em lugar nenhum.
+ *
+ * ⚠️ So vale para o DDI 55. Argentina tem regra propria (o 9 vem ANTES do DDD,
+ * depois do pais), e aplicar esta aqui quebraria os numeros de la.
+ */
+export function comNonoDigito(ddi: string, local: string): string {
+  const d = digitosDoTelefone(local);
+
+  if (ddi !== "55" || d.length !== 10) return d;
+
+  const primeiro = d[2];
+  if (primeiro < "6" || primeiro > "9") return d;
+
+  return `${d.slice(0, 2)}9${d.slice(2)}`;
+}
+
+/**
+ * A chave que identifica um telefone, tolerante ao nono digito.
+ *
+ * ⚠️ DDD mais os OITO ultimos digitos, e nao os oito ultimos sozinhos. Com oito,
+ * `(11) 99999-1234` e `(35) 99999-1234` casam entre si — dois clientes
+ * diferentes, em estados diferentes, tratados como o mesmo. Com o DDD junto, a
+ * chave continua imune ao 9 (que fica fora dos oito finais) e para de confundir
+ * cidades.
+ *
+ * Numero sem DDI reconhecido cai nos oito finais, que e o que da para afirmar.
+ */
+export function chaveDoTelefone(bruto: string): string {
+  const { ddi, local } = separarDdi(bruto);
+  const d = digitosDoTelefone(local);
+
+  if (d.length < 8) return d;
+  if (ddi !== "55" || d.length < 10) return d.slice(-8);
+
+  return `${d.slice(0, 2)}${d.slice(-8)}`;
+}
+
+/**
  * Telefone como a Meta espera: so digitos, com DDI.
  *
  * ⚠️ A decisao de "ja tem DDI?" e por COMPRIMENTO, e nao por comecar com 55.
@@ -445,9 +494,29 @@ export function separarDdi(bruto: string): { ddi: string; local: string } {
   return { ddi: encontrado.ddi, local: d.slice(encontrado.ddi.length) };
 }
 
+/**
+ * Telefone como a Meta espera: so digitos, com DDI.
+ *
+ * ⚠️ A decisao de "ja tem DDI?" e por COMPRIMENTO, e nao por comecar com 55.
+ * Pelo prefixo, um fixo do DDD 55 (Rio Grande do Sul) como `5533334444` seria
+ * lido como um numero de 8 digitos com DDI, e o 55 do DDD viraria o pais.
+ *
+ *   10 ou 11 digitos = DDD + numero, falta o DDI
+ *   12 ou 13 digitos = ja veio completo
+ *
+ * ⚠️ O nono digito entra AQUI, no caminho de saida, e so em celular brasileiro.
+ * O cadastro do cliente e digitado por gente e chega dos dois jeitos; a Meta
+ * aceita os dois na entrega, mas o `wa_id` que ela devolve e sempre um so — e e
+ * ele que vai casar com a conversa depois. Mandar sempre a forma de 11 deixa o
+ * envio e a resposta no mesmo lugar.
+ */
 export function paraFormatoMeta(bruto: string): string {
   const d = digitosDoTelefone(bruto);
-  return d.length === 10 || d.length === 11 ? `55${d}` : d;
+
+  if (d.length === 10 || d.length === 11) return `55${comNonoDigito("55", d)}`;
+  if (d.length === 12 && d.startsWith("55")) return `55${comNonoDigito("55", d.slice(2))}`;
+
+  return d;
 }
 
 /** Exibicao: +55 (35) 99119-2508 */

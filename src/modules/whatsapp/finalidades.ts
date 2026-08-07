@@ -224,6 +224,27 @@ export type VinculoDeModelo = {
   parametros: string[];
   /** A chave que preenche a URL do botao. Nulo quando o modelo nao tem botao. */
   botaoParam: string | null;
+  /**
+   * O texto do modelo no momento do vinculo, e quantos `{{n}}` ele tinha.
+   *
+   * ⚠️ Guardados para o envio NAO precisar perguntar a Meta. Ler a lista de
+   * modelos a cada mensagem multiplica por empresa, por usuario e por parcela
+   * disparada, e a Meta limita chamadas: um lote de 200 cobrancas gastava 200
+   * leituras so para reconferir o que ja fora conferido ao salvar.
+   */
+  corpo: string | null;
+  campos: number;
+  /** Quando a conferencia contra a Meta aconteceu. Nulo em vinculo antigo. */
+  validadoEm: string | null;
+  /**
+   * O que a Meta respondeu na ultima recusa. Nulo enquanto vai bem.
+   *
+   * ⚠️ E o que substitui a reconferencia constante: em vez de perguntar sempre,
+   * o sistema confia no que validou e so muda de ideia quando um envio de
+   * verdade falha. Salvar de novo limpa isto.
+   */
+  erro: string | null;
+  erroEm: string | null;
 };
 
 /**

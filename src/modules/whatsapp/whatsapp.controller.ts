@@ -61,8 +61,21 @@ export async function listarVinculos({ query, ctx }: Entrada<undefined, Vinculos
 }
 
 export async function salvarVinculo({ body, ctx }: Entrada<SalvarVinculoBody, undefined, unknown>) {
-  const { contaId, ...vinculo } = body;
-  await service.salvarVinculo(empresaObrigatoria(ctx), contaId, vinculo);
+  const { contaId, ...escolha } = body;
+
+  /*
+   * Corpo, campos e o estado de validacao NAO vem da tela: quem os preenche e o
+   * servico, com o que leu da Meta. Aceita-los do cliente deixaria qualquer um
+   * gravar "validado" sem validacao nenhuma.
+   */
+  await service.salvarVinculo(empresaObrigatoria(ctx), contaId, {
+    ...escolha,
+    corpo: null,
+    campos: 0,
+    validadoEm: null,
+    erro: null,
+    erroEm: null,
+  });
 
   return ok(await service.listarVinculos(contaId));
 }

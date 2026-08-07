@@ -109,11 +109,24 @@ export async function salvarVinculo(
   const erros = problemasDoVinculo(vinculo, modelo);
   if (erros.length > 0) throw new BusinessRuleError(erros[0]);
 
+  /*
+   * ⚠️ Guarda o que foi conferido, e nao so a escolha.
+   *
+   * Corpo e quantidade de campos ficam gravados para o ENVIO nao precisar
+   * perguntar a Meta de novo. Esta e a unica leitura da lista de modelos no
+   * caminho todo, e ela acontece uma vez por vinculo salvo, com gente olhando a
+   * tela — nao uma vez por mensagem disparada.
+   */
   await repo.salvarVinculo(contaId, {
     ...vinculo,
     // O idioma e do MODELO, e nao do formulario: mandar outro faz a Meta
     // recusar o envio com um erro que ninguem liga a esta tela.
     idioma: modelo!.idioma,
+    corpo: modelo!.corpo,
+    campos: modelo!.parametros,
+    validadoEm: null,
+    erro: null,
+    erroEm: null,
   });
 
   logger.info("vinculo de modelo gravado", { empresaId, contaId, finalidade: vinculo.finalidade });
@@ -545,28 +558,6 @@ export async function dispararFinalidade(
 
   const urlDoBotao = vinculo.botaoParam ? valores[vinculo.botaoParam] : undefined;
 
-  const modelos = await cloud.listarModelos(cred);
-  const modelo = modelos.find((m) => m.nome === vinculo.modeloNome);
-
-  /*
-   * ⚠️ Confere contra a lista da META, e nao contra o vinculo.
-   *
-   * O template sai de APPROVED sozinho quando alguem o edita no painel, e pode
-   * ganhar um `{{n}}` a mais depois de vinculado. Sem esta leitura, o envio
-   * falharia com o erro cru da Meta no meio de um disparo.
-   */
-  if (!modelo) {
-    throw new BusinessRuleError(
-      `O modelo "${vinculo.modeloNome}", vinculado a "${rotulo}", não está aprovado. Confira o status no painel da Meta.`,
-    );
-  }
-
-  if (parametros.length !== modelo.parametros) {
-    throw new BusinessRuleError(
-      `O modelo "${modelo.nome}" mudou: ele espera ${modelo.parametros} campo(s) e o vínculo preenche ${parametros.length}. Refaça o vínculo em Configuração do WhatsApp.`,
-    );
-  }
-
   const conversa = await repo.garantirConversa(
     empresaId,
     conta.id,
@@ -574,21 +565,49 @@ export async function dispararFinalidade(
     destino.nome,
   );
 
-  const wamid = await cloud.enviarModelo(
-    cred,
-    destino.telefone,
-    modelo.nome,
-    modelo.idioma,
-    parametros,
-    urlDoBotao,
-  );
+  /*
+   * ⚠️ Vai DIRETO, sem reler a lista de modelos na Meta.
+   *
+   * O vinculo ja foi conferido contra ela quando foi salvo, e o resultado ficou
+   * gravado. Reconferir a cada mensagem multiplicava por empresa, por usuario e
+   * por parcela: um lote de 200 cobrancas gastava 200 leituras para descobrir o
+   * que ja se sabia, e a Meta limita chamadas.
+   *
+   * O preco e que um modelo que saiu de aprovado depois do vinculo so aparece
+   * na primeira falha. Por isso a recusa e ANOTADA no vinculo logo abaixo: a
+   * tela de configuracao passa a mostrar o problema, em vez de continuar
+   * dizendo "pronto" ate alguem reabrir e salvar por acaso.
+   */
+  let wamid: string;
+
+  try {
+    wamid = await cloud.enviarModelo(
+      cred,
+      destino.telefone,
+      vinculo.modeloNome,
+      vinculo.idioma,
+      parametros,
+      urlDoBotao,
+    );
+  } catch (err) {
+    const causa = err instanceof Error ? err.message : String(err);
+
+    await repo.marcarVinculoComErro(conta.id, finalidade, causa);
+    throw err;
+  }
 
   return gravarOuAvisar(empresaId, conversa.id, usuarioId, {
     wamid,
     tipo: "template",
-    // Grava o corpo JA PREENCHIDO: o modelo cru deixaria o historico com
-    // `{{1}}` no lugar do valor, e ninguem saberia quanto foi cobrado de quem.
-    texto: previaDoCorpo(modelo.corpo, parametros),
+    /*
+     * Grava o corpo JA PREENCHIDO: o modelo cru deixaria o historico com
+     * `{{1}}` no lugar do valor, e ninguem saberia quanto foi cobrado de quem.
+     *
+     * O corpo vem do VINCULO. Ele e uma copia do texto no momento em que foi
+     * conferido: se o cliente reescreveu o modelo na Meta e nao revalidou aqui,
+     * o historico guarda a versao antiga — que ainda diz o que foi cobrado.
+     */
+    texto: previaDoCorpo(vinculo.corpo ?? "", parametros),
   });
 }
 

@@ -871,6 +871,11 @@ export type Database = {
           idioma: string;
           parametros: unknown;
           botao_param: string | null;
+          corpo: string | null;
+          campos: number;
+          validado_em: string | null;
+          erro: string | null;
+          erro_em: string | null;
         }[];
       };
       whatsapp_salvar_vinculo: {
@@ -881,7 +886,13 @@ export type Database = {
           p_idioma: string;
           p_parametros: string[];
           p_botao_param: string | null;
+          p_corpo: string | null;
+          p_campos: number;
         };
+        Returns: undefined;
+      };
+      whatsapp_vinculo_falhou: {
+        Args: { p_conta: number; p_finalidade: string; p_erro: string };
         Returns: undefined;
       };
       whatsapp_remover_vinculo: {
