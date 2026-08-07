@@ -484,10 +484,11 @@ function FormularioDoVinculo({
               <CartaoDeTexto
                 copiar={modelo.corpo}
                 tituloDoCopiar="Copiar o texto do modelo, com os {{ }}"
-                botao={modelo.botao}
               >
                 {comFormatacaoDoWhatsapp(previaDoCorpo(modelo.corpo, exemplos))}
               </CartaoDeTexto>
+
+              {modelo.botao && <CartaoDeBotao texto={modelo.botao.texto} />}
             </Secao>
           </>
         )}
@@ -737,13 +738,10 @@ function Sugestao({ finalidade }: { finalidade: Finalidade }) {
 function CartaoDeTexto({
   copiar,
   tituloDoCopiar,
-  botao,
   children,
 }: {
   copiar: string;
   tituloDoCopiar: string;
-  /** O botão do modelo, desenhado embaixo como o WhatsApp faz. */
-  botao?: { texto: string; temVariavel: boolean } | null;
   children: React.ReactNode;
 }) {
   return (
@@ -762,40 +760,58 @@ function CartaoDeTexto({
     >
       {children}
 
-      {/*
-        O botão como o WhatsApp desenha: separado do texto por uma linha, no
-        verde da marca, ocupando a largura inteira do balão.
-
-        ⚠️ Não é clicável. É a prévia de algo que só existe no aparelho do
-        cliente, e um botão que responde ao clique aqui prometeria uma ação que
-        esta tela não tem.
-      */}
-      {botao && (
-        <div
-          style={{
-            marginTop: 10,
-            paddingTop: 8,
-            borderTop: "1px solid var(--border)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 6,
-            color: "var(--primary)",
-            fontSize: "var(--text-sm)",
-            fontWeight: "var(--fw-semi)",
-          }}
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7" />
-            <path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" />
-          </svg>
-          {botao.texto}
-        </div>
-      )}
-
       <div style={{ position: "absolute", top: 6, right: 6 }}>
         <Copiar texto={copiar} titulo={tituloDoCopiar} />
       </div>
+    </div>
+  );
+}
+
+/**
+ * O botão do modelo, num cartão próprio embaixo da mensagem.
+ *
+ * ⚠️ Cartão SEPARADO, e não um rodapé do balão, porque é assim que o WhatsApp
+ * entrega: a mensagem é uma bolha e o botão é outra, colada embaixo. Desenhado
+ * dentro da primeira, a prévia mentiria sobre a forma do que chega.
+ *
+ * ⚠️ Não é clicável. É a prévia de algo que só existe no aparelho do cliente, e
+ * um botão que responde ao clique aqui prometeria uma ação que a tela não tem.
+ */
+function CartaoDeBotao({ texto }: { texto: string }) {
+  return (
+    <div
+      style={{
+        marginTop: 4,
+        padding: "9px 12px",
+        borderRadius: "var(--radius-lg)",
+        background:
+          "linear-gradient(var(--kanban-coluna-bg), var(--kanban-coluna-bg)), var(--sidebar-bg)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 7,
+        color: "var(--primary)",
+        fontSize: "var(--text-sm)",
+        fontWeight: "var(--fw-semi)",
+      }}
+    >
+      {/* Seta saindo da caixa: o gesto é sair do WhatsApp e abrir outra coisa. */}
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+      >
+        <path d="M14 4h6v6" />
+        <path d="M20 4l-8.5 8.5" />
+        <path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" />
+      </svg>
+      {texto}
     </div>
   );
 }
