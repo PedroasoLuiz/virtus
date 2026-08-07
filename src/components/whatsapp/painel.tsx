@@ -1256,7 +1256,9 @@ function ItemDaLista({
             style={{
               position: "absolute",
               right: -1,
-              bottom: -1,
+              /* Em CIMA, porque a quina de baixo passou a ser da etiqueta. As
+                 duas ali embaixo se encostavam e viravam uma mancha so. */
+              top: -1,
               width: 10,
               height: 10,
               borderRadius: "var(--radius-full)",
@@ -1267,7 +1269,7 @@ function ItemDaLista({
         )}
 
         {/*
-          A etiqueta tambem e uma bolinha no avatar, na quina de cima.
+          A etiqueta tambem e uma bolinha no avatar, na quina de BAIXO.
 
           ⚠️ Ela ja foi uma faixa embaixo da previa e custou caro: reservar a
           altura daquela faixa em TODAS as conversas, inclusive nas sem
@@ -1278,7 +1280,7 @@ function ItemDaLista({
         {marcadas.length > 0 && (
           <span
             title={marcadas.map((e) => e.nome).join(", ")}
-            style={{ position: "absolute", right: -2, top: -2, display: "flex" }}
+            style={{ position: "absolute", right: -2, bottom: -2, display: "flex" }}
           >
             {marcadas.slice(0, 3).map((e, i) => (
               <span
@@ -1932,16 +1934,35 @@ function Thread({
         />
 
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div
-            style={{
-              fontSize: "var(--text-md)",
-              fontWeight: "var(--fw-semi)",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {titulo}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+            <span
+              style={{
+                fontSize: "var(--text-md)",
+                fontWeight: "var(--fw-semi)",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {titulo}
+            </span>
+
+            {/*
+              As etiquetas correm NA LINHA DO NOME, e nao numa faixa embaixo.
+
+              ⚠️ A faixa propria empurrava a conversa inteira para baixo por
+              causa de um chip de dezoito pixels. Aqui elas ocupam o vao que ja
+              sobrava a direita do nome, e o X de cada uma tira a marca sem
+              precisar reabrir o menu.
+            */}
+            {marcadas.map((e) => (
+              <ChipDeEtiqueta
+                key={e.id}
+                etiqueta={e}
+                miudo
+                onRemover={() => onAlternarEtiqueta(e.id)}
+              />
+            ))}
           </div>
           {/*
             Embaixo, o telefone e a empresa. Sao o contexto de quem esta falando,
@@ -2008,25 +2029,7 @@ function Thread({
         />
       </header>
 
-      {/*
-        As etiquetas da conversa, logo abaixo do nome. O X em cada uma tira a
-        marca sem abrir o menu: desmarcar e o gesto mais comum depois que o
-        assunto se resolve.
-      */}
-      {marcadas.length > 0 && (
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: 5,
-            padding: "0 48px 8px 16px",
-          }}
-        >
-          {marcadas.map((e) => (
-            <ChipDeEtiqueta key={e.id} etiqueta={e} onRemover={() => onAlternarEtiqueta(e.id)} />
-          ))}
-        </div>
-      )}
+
 
       {detalhesAbertos && (
         <DetalhesDoContato conversa={conversa} onSair={onSair} onVinculou={onVinculou} />

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Button, inputStyle } from "@/components/ui/kit";
 import { CORES_DE_ETIQUETA } from "@/modules/whatsapp/whatsapp.schema";
 import type { CorDeEtiqueta, Etiqueta } from "@/modules/whatsapp/whatsapp.types";
 
@@ -201,6 +202,14 @@ export function BotaoDeEtiquetas({
   );
 }
 
+/**
+ * O menu de marcar, no desenho do resto do sistema.
+ *
+ * ⚠️ Mesma anatomia do seletor de número logo acima dele: `--border-strong`,
+ * `--shadow-md`, itens de 7 por 9 e o visto em verde à direita. Um menu com
+ * regras próprias, a dois centímetros de um que já existe, faz a tela parecer
+ * montada por duas pessoas que não conversaram.
+ */
 function MenuDeEtiquetas({
   etiquetas,
   marcadas,
@@ -237,28 +246,30 @@ function MenuDeEtiquetas({
     if (id) onAlternar(id);
   };
 
+  const divisor = <div style={{ height: 1, background: "var(--border)", margin: "4px 0" }} />;
+
   return (
     <div
       role="menu"
       style={{
         position: "absolute",
-        top: 34,
+        top: "calc(100% + 6px)",
         right: 0,
-        width: 232,
+        width: 236,
         zIndex: 5,
-        padding: 6,
+        padding: 4,
         background: "var(--surface)",
-        border: "1px solid var(--border)",
+        border: "1px solid var(--border-strong)",
         borderRadius: "var(--radius-lg)",
-        boxShadow: "var(--shadow-lg)",
+        boxShadow: "var(--shadow-md)",
         animation: "pop-in 140ms var(--ease-out)",
       }}
     >
       {etiquetas.length === 0 && !criando && (
         <p
           style={{
-            padding: "10px 8px",
-            fontSize: "var(--text-xs)",
+            padding: "10px 9px",
+            fontSize: "var(--text-sm)",
             color: "var(--text-tertiary)",
             lineHeight: "var(--lh-snug)",
           }}
@@ -267,187 +278,170 @@ function MenuDeEtiquetas({
         </p>
       )}
 
-      <div style={{ maxHeight: 220, overflowY: "auto" }}>
-        {etiquetas.map((e) => {
-          const marcada = marcadas.includes(e.id);
-          const paleta = PALETA[e.cor] ?? PALETA.cinza;
+      {etiquetas.length > 0 && (
+        <div style={{ maxHeight: 232, overflowY: "auto" }}>
+          {etiquetas.map((e) => {
+            const marcada = marcadas.includes(e.id);
+            const paleta = PALETA[e.cor] ?? PALETA.cinza;
 
-          return (
-            <button
-              key={e.id}
-              type="button"
-              role="menuitemcheckbox"
-              aria-checked={marcada}
-              onClick={() => onAlternar(e.id)}
-              style={{
-                width: "100%",
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                padding: "7px 8px",
-                border: "none",
-                background: "transparent",
-                borderRadius: "var(--radius-sm)",
-                cursor: "pointer",
-                fontFamily: "var(--font)",
-                fontSize: "var(--text-sm)",
-                color: "var(--text-primary)",
-                textAlign: "left",
-              }}
-            >
-              <span
-                aria-hidden
+            return (
+              <button
+                key={e.id}
+                type="button"
+                role="menuitemcheckbox"
+                aria-checked={marcada}
+                onClick={() => onAlternar(e.id)}
                 style={{
-                  width: 15,
-                  height: 15,
-                  flexShrink: 0,
-                  display: "grid",
-                  placeItems: "center",
-                  borderRadius: 4,
-                  border: `1px solid ${marcada ? paleta.borda : "var(--border)"}`,
-                  background: marcada ? paleta.fundo : "transparent",
-                  color: paleta.texto,
+                  width: "100%",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "7px 9px",
+                  border: "none",
+                  borderRadius: "var(--radius-sm)",
+                  background: marcada ? "var(--surface-active)" : "transparent",
+                  cursor: "pointer",
+                  fontFamily: "var(--font)",
+                  fontSize: "var(--text-md)",
+                  fontWeight: "var(--fw-semi)",
+                  color: "var(--text-primary)",
+                  textAlign: "left",
                 }}
               >
+                <span
+                  aria-hidden
+                  style={{
+                    width: 8,
+                    height: 8,
+                    flexShrink: 0,
+                    borderRadius: "var(--radius-full)",
+                    background: paleta.texto,
+                  }}
+                />
+
+                <span
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {e.nome}
+                </span>
+
+                {/*
+                  O visto entra no lugar da caixa de seleção: é o que o seletor
+                  de número faz, e uma caixa aqui somaria uma terceira forma de
+                  dizer "escolhido" na mesma coluna da tela.
+                */}
                 {marcada && (
-                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M4 12.5l5.5 5.5L20 6.5" />
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                    <path d="m4 12.5 5 5L20 6.5" />
                   </svg>
                 )}
-              </span>
-
-              <span
-                aria-hidden
-                style={{
-                  width: 7,
-                  height: 7,
-                  flexShrink: 0,
-                  borderRadius: "var(--radius-full)",
-                  background: paleta.texto,
-                }}
-              />
-
-              <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {e.nome}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {criando ? (
-        <div style={{ padding: "8px 8px 4px", borderTop: "1px solid var(--border)", marginTop: 4 }}>
-          <input
-            autoFocus
-            value={nome}
-            onChange={(ev) => setNome(ev.target.value)}
-            onKeyDown={(ev) => {
-              if (ev.key === "Enter") void criar();
-              if (ev.key === "Escape") setCriando(false);
-            }}
-            placeholder="Nome da etiqueta"
-            maxLength={24}
+        <>
+          {etiquetas.length > 0 && divisor}
+
+          <div style={{ padding: "5px 5px 4px" }}>
+            <input
+              autoFocus
+              value={nome}
+              onChange={(ev) => setNome(ev.target.value)}
+              onKeyDown={(ev) => {
+                if (ev.key === "Enter") void criar();
+                if (ev.key === "Escape") setCriando(false);
+              }}
+              placeholder="Nome da etiqueta"
+              maxLength={24}
+              style={inputStyle}
+            />
+
+            {/*
+              As cores em bolinha e não em quadrado: é a mesma marca que vai
+              aparecer no avatar da conversa, e mostrar um quadrado aqui para
+              virar círculo lá é uma promessa que a tela não cumpre.
+            */}
+            <div style={{ display: "flex", gap: 7, marginTop: 9, paddingLeft: 1 }}>
+              {CORES_DE_ETIQUETA.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setCor(c)}
+                  aria-label={NOME_DA_COR[c]}
+                  aria-pressed={cor === c}
+                  title={NOME_DA_COR[c]}
+                  style={{
+                    width: 16,
+                    height: 16,
+                    padding: 0,
+                    borderRadius: "var(--radius-full)",
+                    border: "none",
+                    background: PALETA[c].texto,
+                    cursor: "pointer",
+                    /* Anel por FORA, e nao borda por dentro: borda comeria a
+                       propria cor que a pessoa esta tentando comparar. */
+                    boxShadow:
+                      cor === c
+                        ? "0 0 0 2px var(--surface), 0 0 0 3.5px var(--text-primary)"
+                        : "none",
+                  }}
+                />
+              ))}
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 11 }}>
+              <Button size="sm" variant="ghost" onClick={() => setCriando(false)}>
+                Cancelar
+              </Button>
+              <Button
+                size="sm"
+                variant="primary"
+                disabled={!nome.trim() || salvando}
+                onClick={() => void criar()}
+              >
+                Criar
+              </Button>
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
+          {etiquetas.length > 0 && divisor}
+
+          <button
+            type="button"
+            onClick={() => setCriando(true)}
             style={{
               width: "100%",
-              height: 30,
-              padding: "0 9px",
-              fontSize: "var(--text-sm)",
-              fontFamily: "var(--font)",
-              border: "1px solid var(--border)",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "7px 9px",
+              border: "none",
               borderRadius: "var(--radius-sm)",
-              background: "var(--surface)",
-              color: "var(--text-primary)",
-              outline: "none",
+              background: "transparent",
+              cursor: "pointer",
+              fontFamily: "var(--font)",
+              fontSize: "var(--text-md)",
+              color: "var(--text-secondary)",
+              textAlign: "left",
             }}
-          />
-
-          <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-            {CORES_DE_ETIQUETA.map((c) => (
-              <button
-                key={c}
-                type="button"
-                onClick={() => setCor(c)}
-                aria-label={NOME_DA_COR[c]}
-                title={NOME_DA_COR[c]}
-                style={{
-                  width: 18,
-                  height: 18,
-                  padding: 0,
-                  borderRadius: "var(--radius-full)",
-                  border: cor === c ? "2px solid var(--text-primary)" : "1px solid var(--border)",
-                  background: PALETA[c].texto,
-                  cursor: "pointer",
-                }}
-              />
-            ))}
-          </div>
-
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginTop: 10 }}>
-            <button
-              type="button"
-              onClick={() => setCriando(false)}
-              style={{
-                height: 26,
-                padding: "0 10px",
-                border: "none",
-                background: "transparent",
-                borderRadius: "var(--radius-sm)",
-                cursor: "pointer",
-                fontFamily: "var(--font)",
-                fontSize: "var(--text-xs)",
-                color: "var(--text-secondary)",
-              }}
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              onClick={() => void criar()}
-              disabled={!nome.trim() || salvando}
-              style={{
-                height: 26,
-                padding: "0 12px",
-                border: "none",
-                background: nome.trim() ? "var(--primary)" : "var(--neutral-bg)",
-                color: nome.trim() ? "var(--primary-fg)" : "var(--text-disabled)",
-                borderRadius: "var(--radius-sm)",
-                cursor: nome.trim() ? "pointer" : "default",
-                fontFamily: "var(--font)",
-                fontSize: "var(--text-xs)",
-                fontWeight: "var(--fw-semi)",
-              }}
-            >
-              Criar
-            </button>
-          </div>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setCriando(true)}
-          style={{
-            width: "100%",
-            display: "flex",
-            alignItems: "center",
-            gap: 7,
-            marginTop: 4,
-            padding: "8px",
-            border: "none",
-            borderTop: "1px solid var(--border)",
-            background: "transparent",
-            borderRadius: 0,
-            cursor: "pointer",
-            fontFamily: "var(--font)",
-            fontSize: "var(--text-sm)",
-            color: "var(--text-secondary)",
-            textAlign: "left",
-          }}
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-            <path d="M12 5v14M5 12h14" />
-          </svg>
-          Nova etiqueta
-        </button>
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" style={{ flexShrink: 0 }}>
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            Nova etiqueta
+          </button>
+        </>
       )}
     </div>
   );
