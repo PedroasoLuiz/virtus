@@ -54,7 +54,14 @@ export function ChipDeEtiqueta({
 }: {
   etiqueta: Etiqueta;
   ativa?: boolean;
-  /** Versao da LISTA de conversas: menor, sem ponto, so o nome tingido. */
+  /**
+   * Versao MARCA: menor, fundo neutro e a cor so na bolinha da esquerda.
+   *
+   * ⚠️ E o que aparece grudado num nome de cliente e dentro do menu de escolha.
+   * Ali o chip nao esta dizendo "isto esta ligado" — esta dizendo "esta conversa
+   * e isto". Pintar o balao inteiro dava a mesma voz de um estado de alerta, e
+   * duas etiquetas coloridas ao lado de um nome roubavam o proprio nome.
+   */
   miudo?: boolean;
   onClick?: () => void;
   onRemover?: () => void;
@@ -63,23 +70,16 @@ export function ChipDeEtiqueta({
 
   const conteudo = (
     <>
-      {/*
-        O ponto some na versao miuda. Ali o chip inteiro ja e da cor da
-        etiqueta, e um ponto da mesma cor dentro dele so gastaria largura numa
-        linha que precisa caber ao lado da previa.
-      */}
-      {!miudo && (
-        <span
-          aria-hidden
-          style={{
-            width: 6,
-            height: 6,
-            flexShrink: 0,
-            borderRadius: "var(--radius-full)",
-            background: ativa ? cor.texto : "var(--text-disabled)",
-          }}
-        />
-      )}
+      <span
+        aria-hidden
+        style={{
+          width: 6,
+          height: 6,
+          flexShrink: 0,
+          borderRadius: "var(--radius-full)",
+          background: ativa || miudo ? cor.texto : "var(--text-disabled)",
+        }}
+      />
       {etiqueta.nome}
       {onRemover && (
         <span
@@ -103,16 +103,28 @@ export function ChipDeEtiqueta({
     </>
   );
 
+  /*
+   * Marca: cinza esverdeado da casa, SEM borda. Filtro: tingido da cor, COM
+   * borda.
+   *
+   * ⚠️ A cor translucida da coluna do kanban foi feita para assentar sobre um
+   * cinza, e nao sobre branco. Empilhada com `--surface-2` ela chega ao mesmo
+   * tom em qualquer um dos dois temas.
+   */
   const estilo = {
     display: "inline-flex",
     alignItems: "center",
     gap: 5,
-    height: miudo ? 17 : 22,
-    padding: miudo ? "0 7px" : "0 9px",
+    height: miudo ? 18 : 22,
+    padding: miudo ? "0 8px" : "0 9px",
     borderRadius: "var(--radius-full)",
-    border: `1px solid ${ativa ? cor.borda : "var(--border)"}`,
-    background: ativa ? cor.fundo : "var(--surface)",
-    color: ativa ? cor.texto : "var(--text-secondary)",
+    border: miudo ? "1px solid transparent" : `1px solid ${ativa ? cor.borda : "var(--border)"}`,
+    background: miudo
+      ? "linear-gradient(var(--kanban-coluna-bg), var(--kanban-coluna-bg)), var(--surface-2)"
+      : ativa
+        ? cor.fundo
+        : "var(--surface)",
+    color: miudo ? "var(--text-secondary)" : ativa ? cor.texto : "var(--text-secondary)",
     fontSize: miudo ? "var(--text-2xs)" : "var(--text-xs)",
     fontWeight: "var(--fw-semi)" as const,
     fontFamily: "var(--font)",
@@ -282,7 +294,6 @@ function MenuDeEtiquetas({
         <div style={{ maxHeight: 232, overflowY: "auto" }}>
           {etiquetas.map((e) => {
             const marcada = marcadas.includes(e.id);
-            const paleta = PALETA[e.cor] ?? PALETA.cinza;
 
             return (
               <button
@@ -308,27 +319,15 @@ function MenuDeEtiquetas({
                   textAlign: "left",
                 }}
               >
-                <span
-                  aria-hidden
-                  style={{
-                    width: 8,
-                    height: 8,
-                    flexShrink: 0,
-                    borderRadius: "var(--radius-full)",
-                    background: paleta.texto,
-                  }}
-                />
-
-                <span
-                  style={{
-                    flex: 1,
-                    minWidth: 0,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {e.nome}
+                {/*
+                  A escolha mostra a MARCA, e nao o nome solto.
+                  
+                  ⚠️ Quem escolhe aqui precisa reconhecer depois o que vai
+                  aparecer grudado no nome do cliente. Nome cru na lista e balao
+                  cinza na conversa sao dois desenhos para a mesma coisa.
+                */}
+                <span style={{ flex: 1, minWidth: 0, display: "flex" }}>
+                  <ChipDeEtiqueta etiqueta={e} miudo />
                 </span>
 
                 {/*
