@@ -237,12 +237,21 @@ export function ResumoDoAtendimento({
             um parágrafo até encontrar.
           */}
           {lead.length > 0 && (
+            /*
+              ⚠️ Uma LINHA por item, e sem pastilha.
+
+              Em pastilhas lado a lado, o ícone da segunda nascia no meio da
+              linha: ele marcava a categoria mas não começava em lugar nenhum. A
+              pastilha ainda somava oito pixels de respiro à esquerda, então nem
+              o primeiro ícone batia com o texto acima. Empilhados, os três
+              ícones fazem uma coluna que começa exatamente onde o resumo começa.
+            */
             <div
               style={{
                 marginTop: 9,
                 display: "flex",
-                flexWrap: "wrap",
-                gap: "5px 6px",
+                flexDirection: "column",
+                gap: 3,
               }}
             >
               {lead.map((l) => (
@@ -250,15 +259,12 @@ export function ResumoDoAtendimento({
                   key={l.rotulo}
                   title={l.rotulo}
                   style={{
-                    display: "inline-flex",
+                    display: "flex",
                     // `center` e nao `baseline`: um SVG nao tem linha de base, e
                     // no baseline ele descia dois pixels abaixo do texto.
                     alignItems: "center",
-                    gap: 5,
-                    maxWidth: "100%",
-                    padding: "3px 8px",
-                    borderRadius: "var(--radius-full)",
-                    background: "color-mix(in srgb, var(--surface-2) 70%, transparent)",
+                    gap: 6,
+                    minWidth: 0,
                     fontSize: "var(--text-xs)",
                   }}
                 >
@@ -279,6 +285,7 @@ export function ResumoDoAtendimento({
 
                   <span
                     style={{
+                      minWidth: 0,
                       color: "var(--text-primary)",
                       fontWeight: "var(--fw-semi)",
                       overflow: "hidden",
