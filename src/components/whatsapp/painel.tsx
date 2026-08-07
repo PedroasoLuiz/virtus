@@ -12,7 +12,11 @@ import { Midia } from "@/components/whatsapp/painel/midia";
 import { EnvioPorModelo } from "@/components/whatsapp/painel/modelo";
 import { ResumoDoAtendimento } from "@/components/whatsapp/painel/resumo";
 import { Composicao } from "@/components/whatsapp/painel/composicao";
-import { BotaoDeEtiquetas, ChipDeEtiqueta } from "@/components/whatsapp/painel/etiquetas";
+import {
+  BotaoDeEtiquetas,
+  ChipDeEtiqueta,
+  PALETA,
+} from "@/components/whatsapp/painel/etiquetas";
 import {
   botRespondendo,
   formatarTelefone,
@@ -54,13 +58,13 @@ const LARGURA = 1180;
 const LARGURA_LISTA = 384;
 
 /*
- * Onde comeca o NOME, medido da borda esquerda do cartao: o avatar mais o vao.
+ * A coluna dos avatares.
  *
- * Vale como constante porque tres coisas precisam bater nesta mesma coluna — o
- * nome, o divisor entre conversas e o texto do "ver arquivadas". Numero solto em
- * cada lugar so ficaria alinhado ate alguem mexer no tamanho do avatar.
+ * Vale como constante porque o "ver arquivadas" mora acima da lista e precisa
+ * cair nessa mesma coluna: numero solto la ficaria alinhado so ate alguem mexer
+ * no tamanho do avatar.
  */
-const RECUO_DO_NOME = 46;
+const LARGURA_DO_AVATAR = 36;
 
 /*
  * O respiro lateral do cartao, agora que ele vai de ponta a ponta.
@@ -73,17 +77,14 @@ const RECUO_DO_NOME = 46;
 const RESPIRO_DO_CARTAO = 16;
 
 /*
- * As tres faixas da linha, em altura FIXA: nome, previa de duas linhas e
- * etiqueta.
+ * As duas faixas da linha, em altura FIXA: nome e previa de duas linhas.
  *
- * ⚠️ Fixa mesmo quando nao ha etiqueta ou quando a previa tem uma linha so.
- * Altura variavel fazia cada conversa ter um tamanho, e a lista virava uma
- * escada: o olho perde a cadencia e passa a procurar cada nome em vez de
- * varrer a coluna.
+ * ⚠️ Fixa mesmo quando a previa tem uma linha so. Altura variavel fazia cada
+ * conversa ter um tamanho, e a lista virava uma escada: o olho perde a cadencia
+ * e passa a procurar cada nome em vez de varrer a coluna.
  */
 const ALTURA_DO_NOME = 18;
 const ALTURA_DA_PREVIA = 29;
-const ALTURA_DA_ETIQUETA = 17;
 
 /** Mensagens do mesmo lado dentro desta janela viram um bloco so. */
 const AGRUPA_ATE_MS = 5 * 60 * 1000;
@@ -1091,7 +1092,14 @@ function ListaDeConversas({
             textAlign: "left",
           }}
         >
-          <span style={{ width: 36, flexShrink: 0, display: "grid", placeItems: "center" }}>
+          <span
+            style={{
+              width: LARGURA_DO_AVATAR,
+              flexShrink: 0,
+              display: "grid",
+              placeItems: "center",
+            }}
+          >
             <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="4" width="18" height="4.5" rx="1.4" />
               <path d="M5 8.5V19a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19V8.5M10 12.5h4" />
@@ -1123,7 +1131,7 @@ function ListaDeConversas({
                 : "Nenhuma conversa ainda. A primeira aparece assim que alguém escrever para o número."}
           </p>
         ) : (
-          listadas.map((c, i) => (
+          listadas.map((c) => (
             <ItemDaLista
               key={c.id}
               conversa={c}
@@ -1132,7 +1140,6 @@ function ListaDeConversas({
               marcadas={c.etiquetas
                 .map((id) => etiquetas.find((e) => e.id === id))
                 .filter((e): e is Etiqueta => Boolean(e))}
-              ultimo={i === listadas.length - 1}
               onClick={() => onEscolher(c)}
             />
           ))
@@ -1165,7 +1172,6 @@ function ItemDaLista({
   ativo,
   esperando,
   marcadas,
-  ultimo,
   onClick,
 }: {
   conversa: Conversa;
@@ -1174,8 +1180,6 @@ function ItemDaLista({
   esperando: boolean;
   /** As etiquetas desta conversa, ja resolvidas pela lista. */
   marcadas: Etiqueta[];
-  /** Ultimo da lista: sem divisor embaixo, que sobraria solto no fim. */
-  ultimo: boolean;
   onClick: () => void;
 }) {
   const titulo = tituloDa(conversa);
@@ -1241,6 +1245,39 @@ function ItemDaLista({
               border: "2px solid var(--surface)",
             }}
           />
+        )}
+
+        {/*
+          A etiqueta tambem e uma bolinha no avatar, na quina de cima.
+
+          ⚠️ Ela ja foi uma faixa embaixo da previa e custou caro: reservar a
+          altura daquela faixa em TODAS as conversas, inclusive nas sem
+          etiqueta, esticava a lista inteira por causa de um caso raro. Aqui ela
+          nao ocupa linha nenhuma, e o nome da etiqueta continua a um passo de
+          distancia, na conversa aberta.
+        */}
+        {marcadas.length > 0 && (
+          <span
+            title={marcadas.map((e) => e.nome).join(", ")}
+            style={{ position: "absolute", right: -2, top: -2, display: "flex" }}
+          >
+            {marcadas.slice(0, 3).map((e, i) => (
+              <span
+                key={e.id}
+                aria-hidden
+                style={{
+                  width: 10,
+                  height: 10,
+                  // Sobrepostas: tres bolinhas lado a lado passariam da largura
+                  // do avatar e virariam uma fileira solta no ar.
+                  marginLeft: i === 0 ? 0 : -4,
+                  borderRadius: "var(--radius-full)",
+                  background: (PALETA[e.cor] ?? PALETA.cinza).texto,
+                  border: "2px solid var(--surface)",
+                }}
+              />
+            ))}
+          </span>
         )}
       </div>
 
@@ -1333,38 +1370,9 @@ function ItemDaLista({
           faixa que estava vazia e ainda le como o que e: uma marca colada na
           conversa, e nao parte do titulo.
         */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 4,
-            marginTop: 4,
-            height: ALTURA_DA_ETIQUETA,
-            overflow: "hidden",
-          }}
-        >
-          {marcadas.map((e) => (
-            <ChipDeEtiqueta key={e.id} etiqueta={e} miudo />
-          ))}
-        </div>
       </div>
     </button>
 
-    {/*
-      O divisor comeca onde comeca o NOME. Passando por baixo do avatar ele
-      cortaria a foto ao meio e a lista viraria uma tabela; recuado, ele separa
-      as conversas e deixa a coluna dos avatares correndo inteira.
-    */}
-    {!ultimo && (
-      <div
-        aria-hidden
-        style={{
-          height: 1,
-          marginLeft: RESPIRO_DO_CARTAO + RECUO_DO_NOME,
-          background: "var(--border)",
-        }}
-      />
-    )}
     </div>
   );
 }
