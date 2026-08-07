@@ -1,29 +1,35 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Avatar } from "@/components/ui/avatar";
-import { PageLayout, Panel, selectStyle } from "@/components/ui/kit";
+import {
+  EmptyRow,
+  IncluirButton,
+  PageHeader,
+  PageLayout,
+  Pagination,
+  Panel,
+  SearchInput,
+  TableArea,
+  TableFrame,
+  TableHead,
+  Td,
+  Th,
+  Tr,
+} from "@/components/ui/kit";
 import type { Cliente, PapelPessoa } from "@/modules/clientes/clientes.types";
-import { FichaDaPessoa } from "./ficha-da-pessoa";
+import { PessoaDrawer } from "./pessoa-drawer";
 
 /**
- * Pessoas: lista à esquerda, ficha à direita.
+ * Pessoas: clientes, fornecedores e colaboradores no mesmo cadastro.
  *
- * ⚠️ Duas colunas, e não tabela mais drawer. Cadastro é coisa que se CONSULTA:
- * ver um telefone custava abrir o drawer, ler e fechar, e comparar dois
- * cadastros era impossível. Ao lado da lista, trocar de pessoa é um clique.
+ * ⚠️ A tabela continua sendo a tabela do sistema. O que faltava não era outro
+ * componente, era CONTEXTO: quem abria via cinco colunas de dados sem nada
+ * dizendo o que aquela tela é nem por que fornecedor e cliente moram juntos.
  *
- * ⚠️ A tabela larga também dizia pouco. "Razão social, CNPJ, responsável,
- * contato, papéis" em cinco colunas obriga a ler na horizontal para montar uma
- * pessoa na cabeça — e das cinco, só o nome serve para ACHAR alguém. As outras
- * são o que se lê depois de achar, que é exatamente o que a ficha mostra.
- *
- * ⚠️ Sem o cartão branco sobre o cinza. Esta tela é a página inteira, e não uma
- * tabela dentro dela: o branco vai de ponta a ponta e quem separa a lista da
- * ficha é uma régua de um pixel. O cartão dentro do cinza é a moldura das telas
- * de LISTAGEM, e usar as duas coisas juntas somava uma borda que não separava
- * nada.
+ * ⚠️ Os contadores por papel são FILTRO, e não enfeite. Eles respondem a
+ * pergunta que a tela levanta ("são todos clientes?") e, no mesmo gesto,
+ * recortam a lista — um número que não faz nada seria só mais coisa para ler.
  */
 
 const PAPEIS: { valor: PapelPessoa; rotulo: string }[] = [
@@ -31,6 +37,8 @@ const PAPEIS: { valor: PapelPessoa; rotulo: string }[] = [
   { valor: "fornecedor", rotulo: "Fornecedores" },
   { valor: "colaborador", rotulo: "Colaboradores" },
 ];
+
+const POR_PAGINA = 25;
 
 export function PessoasTela({
   pessoas,
@@ -47,363 +55,320 @@ export function PessoasTela({
   pessoas: Cliente[];
   centros: { id: number; descricao: string }[];
 }) {
-  const router = useRouter();
-
   const [busca, setBusca] = useState("");
-  const [papel, setPapel] = useState("");
+  const [papel, setPapel] = useState<PapelPessoa | "">("");
   const [inativos, setInativos] = useState(false);
-  const [escolhida, setEscolhida] = useState<number | null>(pessoas[0]?.id ?? null);
-  const [criando, setCriando] = useState(false);
+  const [pagina, setPagina] = useState(1);
+  // null = fechado; { pessoa: null } = cadastro novo.
+  const [edicao, setEdicao] = useState<{ pessoa: Cliente | null } | null>(null);
+
+  /*
+   * A contagem sai da lista JÁ sem os inativos, e não do total bruto.
+   *
+   * ⚠️ Senão o chip diz 128 clientes, o filtro mostra 119 e a diferença fica sem
+   * explicação na tela — quem confere vai procurar o erro no lugar errado.
+   */
+  const ativas = useMemo(
+    () => pessoas.filter((p) => inativos || p.ativo),
+    [pessoas, inativos],
+  );
+
+  const contagem = useMemo(
+    () => ({
+      cliente: ativas.filter((p) => p.papeis.includes("cliente")).length,
+      fornecedor: ativas.filter((p) => p.papeis.includes("fornecedor")).length,
+      colaborador: ativas.filter((p) => p.papeis.includes("colaborador")).length,
+    }),
+    [ativas],
+  );
 
   const filtradas = useMemo(() => {
     const termo = busca.trim().toLowerCase();
     const digitos = termo.replace(/\D/g, "");
 
-    return pessoas.filter((p) => {
-      if (!inativos && !p.ativo) return false;
-      if (papel && !p.papeis.includes(papel as PapelPessoa)) return false;
+    return ativas.filter((p) => {
+      if (papel && !p.papeis.includes(papel)) return false;
       if (!termo) return true;
 
       return (
         p.razao.toLowerCase().includes(termo) ||
         (p.nomeFantasia ?? "").toLowerCase().includes(termo) ||
+        (p.responsavel ?? "").toLowerCase().includes(termo) ||
         (digitos.length > 0 && (p.cnpj ?? "").includes(digitos)) ||
         (digitos.length > 0 && (p.contato ?? "").replace(/\D/g, "").includes(digitos))
       );
     });
-  }, [pessoas, busca, papel, inativos]);
+  }, [ativas, busca, papel]);
 
-  const pessoa = criando ? null : (pessoas.find((p) => p.id === escolhida) ?? null);
+  const totalPaginas = Math.max(1, Math.ceil(filtradas.length / POR_PAGINA));
+  const paginaAtual = Math.min(pagina, totalPaginas);
+  const visiveis = filtradas.slice((paginaAtual - 1) * POR_PAGINA, paginaAtual * POR_PAGINA);
 
   return (
     <PageLayout>
       <Panel>
+        <PageHeader
+          title="Pessoas"
+          description="Clientes, fornecedores e colaboradores no mesmo cadastro. Os papéis dizem em que cada um entra."
+        >
+          <SearchInput
+            value={busca}
+            onSearch={(v) => {
+              setBusca(v);
+              setPagina(1);
+            }}
+          />
+          <IncluirButton onClick={() => setEdicao({ pessoa: null })} />
+        </PageHeader>
+
+        {/*
+          A fileira de papéis: filtro e panorama no mesmo elemento.
+
+          ⚠️ Fora do `FilterButton` de propósito. Escondido atrás do botão de
+          filtro, o papel virava uma opção que ninguém abre — e é justamente o
+          recorte que a tela pede toda hora ("quero ver só os fornecedores").
+        */}
         <div
           style={{
-            flex: 1,
-            minHeight: 0,
+            flexShrink: 0,
             display: "flex",
-            backgroundColor: "var(--surface)",
-            overflow: "hidden",
+            alignItems: "center",
+            gap: 6,
+            padding: "0 16px 12px",
+            flexWrap: "wrap",
           }}
         >
-          {/* ── Coluna da lista ───────────────────────────────── */}
-          <div
-            style={{
-              width: 320,
-              flexShrink: 0,
-              display: "flex",
-              flexDirection: "column",
-              minHeight: 0,
-              borderRight: "1px solid var(--border)",
+          <Chip
+            rotulo="Todas"
+            total={ativas.length}
+            ativo={papel === ""}
+            onClick={() => {
+              setPapel("");
+              setPagina(1);
             }}
-          >
-            <div
-              style={{
-                flexShrink: 0,
-                padding: "16px 16px 12px",
-                display: "flex",
-                flexDirection: "column",
-                gap: 10,
+          />
+
+          {PAPEIS.map((p) => (
+            <Chip
+              key={p.valor}
+              rotulo={p.rotulo}
+              total={contagem[p.valor]}
+              ativo={papel === p.valor}
+              onClick={() => {
+                setPapel(papel === p.valor ? "" : p.valor);
+                setPagina(1);
               }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span
-                  style={{
-                    flex: 1,
-                    fontSize: "var(--text-2xl)",
-                    fontWeight: "var(--fw-bold)",
-                    letterSpacing: "var(--tracking-tight)",
-                  }}
-                >
-                  Pessoas
-                </span>
+            />
+          ))}
 
-                {/*
-                  O mais REDONDO e cheio, colado no título — o gesto do App Store
-                  Connect. Um quadrado de borda cinza ao lado de um título em
-                  negrito lê como mais um campo do formulário de busca logo
-                  abaixo, e some no meio dele.
-                */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCriando(true);
-                    setEscolhida(null);
-                  }}
-                  aria-label="Novo cadastro"
-                  title="Novo cadastro"
-                  className="redondo"
-                  style={{
-                    width: 22,
-                    height: 22,
-                    flexShrink: 0,
-                    display: "grid",
-                    placeItems: "center",
-                    border: "none",
-                    background: "var(--primary)",
-                    color: "var(--primary-fg)",
-                    borderRadius: "var(--radius-full)",
-                    cursor: "pointer",
-                  }}
-                >
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
-                    <path d="M12 5v14M5 12h14" />
-                  </svg>
-                </button>
-              </div>
+          <span style={{ flex: 1 }} />
 
-              <div style={{ position: "relative", display: "flex" }}>
-                <svg
-                  width="13"
-                  height="13"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  style={{
-                    position: "absolute",
-                    left: 10,
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    color: "var(--text-tertiary)",
-                    pointerEvents: "none",
-                  }}
-                >
-                  <circle cx="11" cy="11" r="7" />
-                  <path d="M20 20l-3.5-3.5" />
-                </svg>
+          {/*
+            ⚠️ Inativo fica FORA por padrão, e a chave diz isso.
 
-                <input
-                  value={busca}
-                  onChange={(e) => setBusca(e.target.value)}
-                  placeholder="Buscar nome, documento ou telefone"
-                  style={{
-                    flex: 1,
-                    height: 32,
-                    padding: "0 10px 0 28px",
-                    fontSize: "var(--text-sm)",
-                    fontFamily: "var(--font)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "var(--radius-full)",
-                    background: "var(--surface)",
-                    color: "var(--text-primary)",
-                    outline: "none",
-                  }}
-                />
-              </div>
-
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <select
-                  value={papel}
-                  onChange={(e) => setPapel(e.target.value)}
-                  aria-label="Papel"
-                  style={{ ...selectStyle, flex: 1, minWidth: 0 }}
-                >
-                  <option value="">Todos os papéis</option>
-                  {PAPEIS.map((p) => (
-                    <option key={p.valor} value={p.valor}>
-                      {p.rotulo}
-                    </option>
-                  ))}
-                </select>
-
-                {/*
-                  ⚠️ Inativo fica FORA por padrão, e a chave diz isso.
-
-                  Antes eles vinham na lista em cinza claro, misturados: quem
-                  procurava um fornecedor achava o cadastro velho e mandava
-                  cobrança para ele. Escondido por padrão, e a um clique de
-                  aparecer quando o assunto é justamente o cadastro antigo.
-                */}
-                <button
-                  type="button"
-                  onClick={() => setInativos((v) => !v)}
-                  aria-pressed={inativos}
-                  title="Mostrar também os cadastros inativos"
-                  style={{
-                    flexShrink: 0,
-                    height: "var(--h-input)",
-                    padding: "0 10px",
-                    border: `1px solid ${inativos ? "var(--primary-border)" : "var(--border-strong)"}`,
-                    borderRadius: "var(--radius-md)",
-                    background: inativos ? "var(--primary-subtle)" : "var(--surface)",
-                    color: inativos ? "var(--primary)" : "var(--text-secondary)",
-                    fontSize: "var(--text-sm)",
-                    fontFamily: "var(--font)",
-                    cursor: "pointer",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  Inativos
-                </button>
-              </div>
-            </div>
-
-            <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "0 8px 12px" }}>
-              {filtradas.length === 0 ? (
-                <p
-                  style={{
-                    padding: "24px 8px",
-                    fontSize: "var(--text-sm)",
-                    color: "var(--text-tertiary)",
-                    textAlign: "center",
-                    lineHeight: "var(--lh-snug)",
-                  }}
-                >
-                  {busca.trim() || papel
-                    ? "Nenhuma pessoa com esse filtro."
-                    : "Nenhuma pessoa cadastrada ainda."}
-                </p>
-              ) : (
-                filtradas.map((p) => (
-                  <LinhaDaPessoa
-                    key={p.id}
-                    pessoa={p}
-                    ativa={!criando && p.id === escolhida}
-                    onClick={() => {
-                      setCriando(false);
-                      setEscolhida(p.id);
-                    }}
-                  />
-                ))
-              )}
-            </div>
-
-            <div
-              style={{
-                flexShrink: 0,
-                padding: "9px 16px",
-                borderTop: "1px solid var(--border)",
-                fontSize: "var(--text-xs)",
-                color: "var(--text-tertiary)",
-              }}
-            >
-              {filtradas.length} de {pessoas.length}
-            </div>
-          </div>
-
-          {/* ── Coluna da ficha ───────────────────────────────── */}
-          <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", padding: 20 }}>
-            {criando || pessoa ? (
-              <FichaDaPessoa
-                // `key` pela pessoa: trocar de cadastro remonta a ficha, e o que
-                // estava digitado no anterior morre junto em vez de vazar.
-                key={criando ? "novo" : pessoa!.id}
-                pessoa={pessoa}
-                centros={centros}
-                onCancelarNovo={() => {
-                  setCriando(false);
-                  setEscolhida(pessoas[0]?.id ?? null);
-                }}
-                onSalvou={() => {
-                  setCriando(false);
-                  // A página é servidor: o `refresh` traz a lista nova sem
-                  // recarregar a aba inteira nem duplicar a consulta aqui.
-                  router.refresh();
-                }}
-              />
-            ) : (
-              <SemPessoa />
-            )}
-          </div>
+            Antes eles vinham na lista em cinza claro, misturados: quem procurava
+            um fornecedor achava o cadastro velho e mandava cobrança para ele.
+            Escondido por padrão, e a um clique de aparecer quando o assunto é
+            justamente o cadastro antigo.
+          */}
+          <Chip
+            rotulo="Mostrar inativos"
+            ativo={inativos}
+            onClick={() => {
+              setInativos((v) => !v);
+              setPagina(1);
+            }}
+          />
         </div>
+
+        <TableFrame>
+          <TableArea minWidth={720}>
+            <TableHead>
+              {/* Sem título: a bolinha é reconhecimento, não um dado a ler. */}
+              <Th className="col-avatar" minWidth={30}>
+                {" "}
+              </Th>
+              <Th>Nome</Th>
+              <Th minWidth={160}>Documento</Th>
+              <Th minWidth={150}>Contato</Th>
+              <Th minWidth={150}>Responsável</Th>
+            </TableHead>
+
+            <tbody>
+              {visiveis.length === 0 && (
+                <EmptyRow
+                  colSpan={5}
+                  message={
+                    busca.trim() || papel
+                      ? "Nenhuma pessoa com esse filtro."
+                      : "Nenhuma pessoa cadastrada ainda."
+                  }
+                />
+              )}
+
+              {visiveis.map((p, i) => (
+                <Tr
+                  key={p.id}
+                  delay={Math.min(i * 20, 150)}
+                  dimmed={!p.ativo}
+                  onClick={() => setEdicao({ pessoa: p })}
+                >
+                  {/*
+                    ⚠️ A bolinha das iniciais, a mesma do chat e das personas.
+
+                    Nome de empresa em caixa alta é um bloco de texto todo igual;
+                    a cor estável faz reconhecer a linha certa sem ler, e é o
+                    mesmo reconhecimento em toda tela do sistema que lista gente.
+                  */}
+                  <Td className="col-avatar">
+                    <Avatar
+                      nome={p.nomeFantasia?.trim() || p.razao}
+                      semente={String(p.id)}
+                      tamanho={28}
+                    />
+                  </Td>
+
+                  <Td style={{ maxWidth: 320 }}>
+                    <div
+                      style={{
+                        fontWeight: "var(--fw-medium)",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {p.nomeFantasia?.trim() || p.razao}
+                    </div>
+
+                    {/*
+                      A linha de apoio carrega os PAPÉIS, e a razão social quando
+                      ela difere do fantasia.
+
+                      ⚠️ Os papéis saíram da coluna própria. Ali eram três
+                      etiquetas ocupando cento e sessenta pixels para dizer, na
+                      esmagadora maioria das linhas, a mesma palavra: "cliente".
+                      Embaixo do nome eles custam zero largura.
+                    */}
+                    <div
+                      style={{
+                        marginTop: 1,
+                        fontSize: "var(--text-sm)",
+                        color: "var(--text-tertiary)",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {apoio(p)}
+                    </div>
+                  </Td>
+
+                  <Td>{p.cnpj ? formatarDocumento(p.cnpj) : <Vazio />}</Td>
+                  <Td>{p.contato || <Vazio />}</Td>
+                  <Td>{p.responsavel || <Vazio />}</Td>
+                </Tr>
+              ))}
+            </tbody>
+          </TableArea>
+
+          {filtradas.length > POR_PAGINA && (
+            <Pagination
+              page={paginaAtual}
+              totalPages={totalPaginas}
+              total={filtradas.length}
+              pageSize={POR_PAGINA}
+              onPage={setPagina}
+            />
+          )}
+        </TableFrame>
       </Panel>
+
+      {edicao && (
+        <PessoaDrawer
+          // `key` pelo registro: trocar de pessoa remonta o drawer, e o estado
+          // inicial já vem da certa sem precisar de efeito para sincronizar.
+          key={edicao.pessoa?.id ?? "novo"}
+          cliente={edicao.pessoa}
+          centros={centros}
+          aberto
+          onClose={() => setEdicao(null)}
+        />
+      )}
     </PageLayout>
   );
 }
 
-function LinhaDaPessoa({
-  pessoa,
-  ativa,
+/**
+ * Chip de papel: rótulo e contagem.
+ *
+ * ⚠️ A contagem entra DENTRO do chip, e não numa legenda ao lado. Ela é o que
+ * faz o chip valer a pena existir: sem o número, "Fornecedores" é só mais um
+ * botão de filtro; com ele, a fileira inteira vira o resumo do cadastro.
+ */
+function Chip({
+  rotulo,
+  total,
+  ativo,
   onClick,
 }: {
-  pessoa: Cliente;
-  ativa: boolean;
+  rotulo: string;
+  total?: number;
+  ativo: boolean;
   onClick: () => void;
 }) {
-  const titulo = pessoa.nomeFantasia?.trim() || pessoa.razao;
-
   return (
     <button
       type="button"
       onClick={onClick}
-      aria-pressed={ativa}
+      aria-pressed={ativo}
       style={{
-        width: "100%",
-        display: "flex",
+        display: "inline-flex",
         alignItems: "center",
-        gap: 10,
-        padding: "8px 8px",
-        border: "none",
-        borderRadius: "var(--radius-md)",
-        /*
-         * Cinza NEUTRO no escolhido, e não o verde da marca.
-         *
-         * ⚠️ Aqui o realce diz "é este que está aberto ao lado", e não "isto
-         * está ligado". O verde é a cor de ação do sistema; gasto numa seleção
-         * de lista, ele deixa de significar ação em qualquer outro lugar.
-         */
-        background: ativa ? "var(--surface-3)" : "transparent",
+        gap: 6,
+        height: 26,
+        padding: "0 11px",
+        borderRadius: "var(--radius-full)",
+        border: `1px solid ${ativo ? "var(--primary-border)" : "var(--border-strong)"}`,
+        background: ativo ? "var(--primary-subtle)" : "var(--surface)",
+        color: ativo ? "var(--primary)" : "var(--text-secondary)",
+        fontSize: "var(--text-sm)",
+        fontWeight: ativo ? "var(--fw-semi)" : "var(--fw-normal)",
+        fontFamily: "var(--font)",
         cursor: "pointer",
-        textAlign: "left",
-        opacity: pessoa.ativo ? 1 : 0.55,
-        transition: "background 120ms var(--ease)",
-      }}
-      onMouseEnter={(e) => {
-        if (!ativa) e.currentTarget.style.background = "var(--surface-hover)";
-      }}
-      onMouseLeave={(e) => {
-        if (!ativa) e.currentTarget.style.background = "transparent";
+        whiteSpace: "nowrap",
+        transition: "background var(--dur-fast) var(--ease)",
       }}
     >
-      <Avatar nome={titulo} semente={String(pessoa.id)} tamanho={32} />
+      {rotulo}
 
-      <span style={{ flex: 1, minWidth: 0 }}>
+      {total != null && (
         <span
           style={{
-            display: "block",
-            fontSize: "var(--text-md)",
-            fontWeight: ativa ? "var(--fw-semi)" : "var(--fw-normal)",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
+            fontVariantNumeric: "tabular-nums",
+            color: ativo ? "var(--primary)" : "var(--text-tertiary)",
+            fontWeight: "var(--fw-semi)",
           }}
         >
-          {titulo}
+          {total}
         </span>
-
-        {/*
-          Uma linha de apoio só, e ela muda de conteúdo.
-
-          ⚠️ O documento é o que distingue dois cadastros de nome parecido, e é o
-          que falta quando não há. Sem documento, o telefone serve ao mesmo
-          propósito; sem os dois, os papéis dizem ao menos por que a pessoa está
-          ali.
-        */}
-        <span
-          style={{
-            display: "block",
-            marginTop: 1,
-            fontSize: "var(--text-sm)",
-            color: "var(--text-tertiary)",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {apoio(pessoa)}
-        </span>
-      </span>
+      )}
     </button>
   );
 }
 
+/** O traço do campo vazio. Célula em branco parece coluna quebrada. */
+function Vazio() {
+  return <span style={{ color: "var(--text-disabled)" }}>—</span>;
+}
+
 function apoio(p: Cliente): string {
-  if (p.cnpj) return formatarDocumento(p.cnpj);
-  if (p.contato) return p.contato;
-  return p.papeis.join(" · ");
+  const papeis = p.papeis.map((x) => PAPEIS.find((y) => y.valor === x)?.rotulo ?? x);
+
+  // A razão social só entra quando ela NÃO é o que já está no nome acima.
+  const razao =
+    p.nomeFantasia?.trim() && p.nomeFantasia.trim() !== p.razao ? p.razao : null;
+
+  return [razao, papeis.join(", ")].filter(Boolean).join(" · ");
 }
 
 /** CPF ou CNPJ, pela quantidade de dígitos. */
@@ -414,44 +379,4 @@ function formatarDocumento(bruto: string): string {
   if (d.length === 14) return d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
 
   return bruto;
-}
-
-/**
- * Nada escolhido.
- *
- * ⚠️ Acontece com a lista filtrada até o vazio, ou logo depois de excluir. Fora
- * isso a primeira pessoa já vem escolhida: abrir num painel vazio faria a tela
- * pedir um clique antes de mostrar qualquer coisa.
- */
-function SemPessoa() {
-  return (
-    <div style={{ flex: 1, display: "grid", placeItems: "center" }}>
-      <div style={{ textAlign: "center", maxWidth: 260 }}>
-        <svg
-          width="34"
-          height="34"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.4"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          style={{ color: "var(--text-disabled)", marginBottom: 10 }}
-        >
-          <circle cx="12" cy="8" r="3.6" />
-          <path d="M5 20a7 7 0 0 1 14 0" />
-        </svg>
-
-        <p
-          style={{
-            fontSize: "var(--text-sm)",
-            color: "var(--text-tertiary)",
-            lineHeight: "var(--lh-snug)",
-          }}
-        >
-          Escolha alguém na lista para ver o cadastro.
-        </p>
-      </div>
-    </div>
-  );
 }
