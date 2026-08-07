@@ -464,6 +464,17 @@ export function PainelWhatsapp() {
     conversasRef.current = conversas;
   }, [conversas]);
 
+  /*
+   * Se o painel esta na tela, para o aviso ler sem virar dependencia do canal.
+   * Mesmo motivo do `filtroAtual`: por `aberto` nas dependencias, o Realtime
+   * seria derrubado e recriado a cada abrir e fechar.
+   */
+  const painelAbertoRef = useRef(false);
+
+  useEffect(() => {
+    painelAbertoRef.current = aberto;
+  }, [aberto]);
+
   useEffect(() => {
     selecionadaRef.current = selecionada?.id ?? null;
   }, [selecionada?.id]);
@@ -541,7 +552,17 @@ export function PainelWhatsapp() {
       const conversaId = linha.fkConversa;
       if (conversaId == null || linha.id == null) return;
 
-      const olhando = conversaId === selecionadaRef.current && !document.hidden;
+      /*
+       * ⚠️ "Estar vendo" exige o PAINEL ABERTO.
+       *
+       * A conversa escolhida continua guardada depois de fechar o painel, entao
+       * so comparar o id calava o aviso justamente no caso mais comum: painel
+       * fechado, pessoa trabalhando noutra tela do sistema, e a ultima conversa
+       * aberta sendo a que respondeu.
+       */
+      const olhando =
+        painelAbertoRef.current && conversaId === selecionadaRef.current && !document.hidden;
+
       if (olhando) return;
 
       if (jaAvisadas.current.has(linha.id)) return;
