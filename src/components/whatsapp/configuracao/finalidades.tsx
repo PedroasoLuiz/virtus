@@ -469,27 +469,19 @@ function FormularioDoVinculo({
             legenda="O seu texto com os valores de exemplo no lugar. É assim que o cliente vê."
           >
             {modelo ? (
-              <div
-                style={{
-                  padding: "10px 12px",
-                  borderRadius: "var(--radius-lg)",
-                  /*
-                    ⚠️ Em camadas, e não `backgroundColor` direto.
-
-                    `--kanban-coluna-bg` é translúcido (alfa 0.35): sozinho, ele
-                    deixa passar o branco do drawer e some. Sobre uma base
-                    sólida, ele rende a mesma cor das colunas do quadro, que é
-                    onde essa cor já quer dizer "fundo de conteúdo".
-                  */
-                  background:
-                    "linear-gradient(var(--kanban-coluna-bg), var(--kanban-coluna-bg)), var(--sidebar-bg)",
-                  fontSize: "var(--text-sm)",
-                  lineHeight: "var(--lh-normal)",
-                  whiteSpace: "pre-wrap",
-                }}
+              /*
+               * ⚠️ O copiar leva o texto do MODELO, com os {{ }}, e não a prévia
+               * com os exemplos. É o que serve para duplicar o modelo no painel
+               * da Meta, que é a razão de alguém querer copiar daqui. O título
+               * do botão diz isso, senão o que vai para a área de transferência
+               * não bate com o que está desenhado ao lado.
+               */
+              <CartaoDeTexto
+                copiar={modelo.corpo}
+                tituloDoCopiar="Copiar o texto do modelo, com os {{ }}"
               >
                 {comFormatacaoDoWhatsapp(previaDoCorpo(modelo.corpo, exemplos))}
-              </div>
+              </CartaoDeTexto>
             ) : (
               <p style={{ fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>
                 Escolha o modelo em Parametrização para ver como a mensagem fica.
@@ -697,44 +689,108 @@ function Dicionario({
 
 /** Um corpo pronto para copiar no painel da Meta, para quem ainda não tem. */
 function Sugestao({ finalidade }: { finalidade: Finalidade }) {
-  const [copiado, setCopiado] = useState(false);
-
   return (
     <Secao
       titulo="Não tem um modelo para isto?"
       legenda="Crie no painel da Meta com o texto abaixo, ou escreva o seu. Depois que a Meta aprovar, ele aparece na lista acima."
     >
-      <div
-        style={{
-          padding: "10px 12px",
-          borderRadius: "var(--radius-lg)",
-          backgroundColor: "var(--kanban-coluna-bg)",
-          fontSize: "var(--text-sm)",
-          lineHeight: "var(--lh-normal)",
-        }}
+      <CartaoDeTexto
+        copiar={finalidade.corpoSugerido}
+        tituloDoCopiar="Copiar o texto sugerido"
       >
         {finalidade.corpoSugerido}
-      </div>
-
-      <button
-        type="button"
-        onClick={() => {
-          void navigator.clipboard.writeText(finalidade.corpoSugerido);
-          setCopiado(true);
-        }}
-        style={{
-          marginTop: 8,
-          border: "none",
-          background: "transparent",
-          padding: 0,
-          fontSize: "var(--text-sm)",
-          color: "var(--primary)",
-          cursor: "pointer",
-        }}
-      >
-        {copiado ? "Copiado" : "Copiar o texto"}
-      </button>
+      </CartaoDeTexto>
     </Secao>
+  );
+}
+
+/**
+ * O cartão de texto, com o copiar DENTRO.
+ *
+ * ⚠️ O botão mora no canto do próprio cartão, e não ao lado do título da seção.
+ * No título, ele ficava a uma linha de distância do que copia e disputava a
+ * leitura com o nome da seção; dentro, não há dúvida sobre o que vai para a
+ * área de transferência.
+ *
+ * ⚠️ Em camadas, e não `backgroundColor` direto. `--kanban-coluna-bg` é
+ * translúcido (alfa 0.35): sozinho, deixa passar o branco do drawer e some.
+ * Sobre uma base sólida ele rende a cor das colunas do quadro, que é onde essa
+ * cor já quer dizer "fundo de conteúdo".
+ */
+function CartaoDeTexto({
+  copiar,
+  tituloDoCopiar,
+  children,
+}: {
+  copiar: string;
+  tituloDoCopiar: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      style={{
+        position: "relative",
+        // Folga à direita para o texto nunca correr por baixo do botão.
+        padding: "10px 40px 10px 12px",
+        borderRadius: "var(--radius-lg)",
+        background:
+          "linear-gradient(var(--kanban-coluna-bg), var(--kanban-coluna-bg)), var(--sidebar-bg)",
+        fontSize: "var(--text-sm)",
+        lineHeight: "var(--lh-normal)",
+        whiteSpace: "pre-wrap",
+      }}
+    >
+      {children}
+
+      <div style={{ position: "absolute", top: 6, right: 6 }}>
+        <Copiar texto={copiar} titulo={tituloDoCopiar} />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Copiar, no verde da marca e sem moldura.
+ *
+ * Mesmo desenho do copiar da URL de callback: é uma ação de apoio ao lado do
+ * dado, não um botão com peso próprio. A confirmação troca o ícone por um
+ * certo, porque copiar não tem retorno visível nenhum.
+ */
+function Copiar({ texto, titulo }: { texto: string; titulo: string }) {
+  const [copiado, setCopiado] = useState(false);
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        void navigator.clipboard.writeText(texto);
+        setCopiado(true);
+      }}
+      title={copiado ? "Copiado" : titulo}
+      aria-label={copiado ? "Copiado" : titulo}
+      style={{
+        flexShrink: 0,
+        width: 22,
+        height: 22,
+        display: "grid",
+        placeItems: "center",
+        border: "none",
+        background: "transparent",
+        color: "var(--primary)",
+        cursor: "pointer",
+      }}
+    >
+      {copiado ? (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M4 12.5l5.5 5.5L20 7" />
+        </svg>
+      ) : (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="9" y="9" width="12" height="12" rx="2.5" />
+          <path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" />
+        </svg>
+      )}
+    </button>
   );
 }
 

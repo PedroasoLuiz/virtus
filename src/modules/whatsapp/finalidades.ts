@@ -58,7 +58,11 @@ export type Finalidade = {
 export const FINALIDADES: Finalidade[] = [
   {
     id: "cobranca",
-    rotulo: "Parcela em aberto",
+    /*
+     * "Parcela em aberto" dizia o ESTADO, e nao de onde a mensagem sai. Ao lado
+     * de "Parcela a pagar", as duas se pareciam demais para quem so bate o olho.
+     */
+    rotulo: "Disparo de conta a receber",
     descricao:
       "A cobrança de uma parcela de contas a receber. Quase sempre vai para quem não escreveu naquele dia, e por isso precisa de modelo aprovado.",
     origem: "Contas a receber, no botão de enviar por WhatsApp",
@@ -143,7 +147,7 @@ export const FINALIDADES: Finalidade[] = [
   },
   {
     id: "contapagar",
-    rotulo: "Parcela a pagar",
+    rotulo: "Disparo de conta a pagar",
     descricao:
       "Uma parcela do contas a pagar, para o fornecedor. O destinatário aqui não é o seu cliente: é quem você paga.",
     origem: null,
