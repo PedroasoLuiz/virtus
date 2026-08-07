@@ -70,16 +70,23 @@ export function ChipDeEtiqueta({
 
   const conteudo = (
     <>
-      <span
-        aria-hidden
-        style={{
-          width: 6,
-          height: 6,
-          flexShrink: 0,
-          borderRadius: "var(--radius-full)",
-          background: ativa || miudo ? cor.texto : "var(--text-disabled)",
-        }}
-      />
+      {/*
+        A bolinha some na versão miúda: ali o chip inteiro já é da cor da
+        etiqueta, e um ponto da mesma cor dentro dele repete a informação em três
+        pixels de largura, numa linha que divide espaço com o nome do cliente.
+      */}
+      {!miudo && (
+        <span
+          aria-hidden
+          style={{
+            width: 6,
+            height: 6,
+            flexShrink: 0,
+            borderRadius: "var(--radius-full)",
+            background: ativa ? cor.texto : "var(--text-disabled)",
+          }}
+        />
+      )}
       {etiqueta.nome}
       {onRemover && (
         <span
@@ -104,12 +111,15 @@ export function ChipDeEtiqueta({
   );
 
   /*
-   * Marca: cinza esverdeado da casa, SEM borda. Filtro: tingido da cor, COM
-   * borda.
+   * As duas versões usam a COR DA ETIQUETA tingida: fundo claro, texto escuro.
    *
-   * ⚠️ A cor translucida da coluna do kanban foi feita para assentar sobre um
-   * cinza, e nao sobre branco. Empilhada com `--surface-2` ela chega ao mesmo
-   * tom em qualquer um dos dois temas.
+   * ⚠️ Tingido e não preenchido. É a regra do sistema — cor cheia é exclusiva de
+   * ação, e uma etiqueta preenchida no meio da lista competiria com os botões. O
+   * par `fundo`/`texto` de cada cor já vem calibrado para contrastar nos dois
+   * temas, então o texto nunca fica ilegível sobre o próprio fundo.
+   *
+   * A miúda ainda perde a borda: com o fundo já colorido, ela era mais um
+   * contorno numa linha que já tem o nome do cliente e a hora.
    */
   const estilo = {
     display: "inline-flex",
@@ -119,12 +129,8 @@ export function ChipDeEtiqueta({
     padding: miudo ? "0 8px" : "0 9px",
     borderRadius: "var(--radius-full)",
     border: miudo ? "1px solid transparent" : `1px solid ${ativa ? cor.borda : "var(--border)"}`,
-    background: miudo
-      ? "linear-gradient(var(--kanban-coluna-bg), var(--kanban-coluna-bg)), var(--surface-2)"
-      : ativa
-        ? cor.fundo
-        : "var(--surface)",
-    color: miudo ? "var(--text-secondary)" : ativa ? cor.texto : "var(--text-secondary)",
+    background: miudo || ativa ? cor.fundo : "var(--surface)",
+    color: miudo || ativa ? cor.texto : "var(--text-secondary)",
     fontSize: miudo ? "var(--text-2xs)" : "var(--text-xs)",
     fontWeight: "var(--fw-semi)" as const,
     fontFamily: "var(--font)",

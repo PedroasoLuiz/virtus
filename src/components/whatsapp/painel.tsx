@@ -2544,7 +2544,13 @@ function Bolha({ item, conversaId }: { item: Item; conversaId: number }) {
    * só, em vez de tres cartoes soltos.
    */
   const raio = "var(--radius-lg)";
-  const raioPonta = "var(--radius-xs)";
+  /*
+   * O canto do RABINHO nao e arredondado: e dali que o balao sai.
+   *
+   * ⚠️ Com raio, sobrava uma meia-lua entre a curva do canto e a base do rabo, e
+   * o rabo parecia colado por fora em vez de nascer da bolha.
+   */
+  const corDaBolha = minha ? "var(--primary-subtle)" : "var(--surface)";
 
   /*
    * Quanto reservar no fim do texto para o carimbo caber ao lado.
@@ -2595,14 +2601,43 @@ function Bolha({ item, conversaId }: { item: Item; conversaId: number }) {
           borderRadius: ehFigurinha
             ? 0
             : minha
-              ? `${raio} ${raio} ${fechaBloco ? raioPonta : raio} ${raio}`
-              : `${raio} ${raio} ${raio} ${fechaBloco ? raioPonta : raio}`,
+              ? `${raio} ${raio} ${fechaBloco ? "0" : raio} ${raio}`
+              : `${raio} ${raio} ${raio} ${fechaBloco ? "0" : raio}`,
           boxShadow: ehFigurinha ? "none" : "var(--shadow-xs)",
           fontSize: "var(--text-md)",
           lineHeight: "var(--lh-snug)",
           wordBreak: "break-word",
         }}
       >
+        {/*
+          O rabinho do balão, como no iMessage e no WhatsApp do iPhone.
+
+          ⚠️ Só na ÚLTIMA do bloco. Um rabo por mensagem transformaria uma
+          sequência de três em três balões soltos; com um só, as três leem como
+          uma fala contínua e o rabo aponta para quem falou.
+
+          ⚠️ Desenhado, e não um canto quadrado fingindo de bico. O canto era
+          reto e lia como recorte, não como balão — e é justamente a curva da
+          barriga do rabo que faz o desenho parecer conversa.
+        */}
+        {fechaBloco && !ehFigurinha && (
+          <svg
+            width="10"
+            height="14"
+            viewBox="0 0 10 14"
+            aria-hidden
+            style={{
+              position: "absolute",
+              bottom: 0,
+              // Encostado na lateral, e não sobreposto: sobrepondo, a cor
+              // translúcida da minha bolha escurecia onde as duas se cruzam.
+              ...(minha ? { right: -9 } : { left: -9, transform: "scaleX(-1)" }),
+            }}
+          >
+            <path d="M0 3C0 9 3.6 12.9 9.6 13.9L0 14Z" fill={corDaBolha} />
+          </svg>
+        )}
+
         {m.midiaId != null && <Midia mensagem={m} conversaId={conversaId} />}
 
         {/*
