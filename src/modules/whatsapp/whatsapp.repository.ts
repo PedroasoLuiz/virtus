@@ -6,6 +6,8 @@ import type {
   ContaWhatsapp,
   Conversa,
   Credenciais,
+  CorDeEtiqueta,
+  Etiqueta,
   Mensagem,
   ResultadoDoEvento,
 } from "@/modules/whatsapp/whatsapp.types";
@@ -14,7 +16,7 @@ import type { VinculoDeModelo } from "@/modules/whatsapp/finalidades";
 /** Unica porta de acesso aos dados do WhatsApp. */
 
 const COLUNAS_CONVERSA =
-  'id, "fkConta", telefone, nome, "fkCliente", ultima_em, ultimo_texto, ultimo_tipo, ultima_direcao, nao_lidas, janela_expira_em, bot_respondendo_em';
+  'id, "fkConta", telefone, nome, "fkCliente", ultima_em, ultimo_texto, ultimo_tipo, ultima_direcao, nao_lidas, janela_expira_em, bot_respondendo_em, arquivada';
 
 /**
  * O nome do cliente vem por join, nao copiado para a conversa: renomear o
@@ -25,6 +27,15 @@ const COLUNAS_CONVERSA =
  * passa a exigir o nome da constraint.
  */
 const RELACAO_CLIENTE = "clientes(razao, urlicon)";
+
+/*
+ * So os IDS, e nao o nome e a cor de cada etiqueta.
+ *
+ * ⚠️ A lista de etiquetas da empresa ja veio inteira numa chamada so. Repetir
+ * nome e cor em cada uma das 200 conversas seria mandar o mesmo texto centenas
+ * de vezes para desenhar meia duzia de chips.
+ */
+const RELACAO_ETIQUETAS = 'whatsappconversasetiquetas("fkEtiqueta")';
 
 const COLUNAS_MENSAGEM =
   'id, direcao, tipo, texto, midia_id, midia_mime, midia_nome, status, erro, enviada_em, "fkUser"';
@@ -42,7 +53,9 @@ type LinhaConversa = {
   nao_lidas: number;
   janela_expira_em: string | null;
   bot_respondendo_em: string | null;
+  arquivada: boolean | null;
   clientes?: { razao: string | null; urlicon: string | null } | null;
+  whatsappconversasetiquetas?: { fkEtiqueta: number }[] | null;
 };
 
 type LinhaMensagem = {
@@ -434,13 +447,15 @@ export async function listarConversas(
   empresaId: number,
   contaId: number | undefined,
   busca: string | undefined,
+  arquivadas = false,
 ): Promise<Conversa[]> {
   const supabase = await serverClient();
 
   let query = supabase
     .from("whatsappconversas")
-    .select(`${COLUNAS_CONVERSA}, ${RELACAO_CLIENTE}`)
-    .eq("fkEmpresa", empresaId);
+    .select(`${COLUNAS_CONVERSA}, ${RELACAO_CLIENTE}, ${RELACAO_ETIQUETAS}`)
+    .eq("fkEmpresa", empresaId)
+    .eq("arquivada", arquivadas);
 
   // Cada numero tem a propria caixa de entrada, como no WhatsApp Business.
   if (contaId != null) query = query.eq("fkConta", contaId);
@@ -457,6 +472,126 @@ export async function listarConversas(
 
   if (error) throw error;
   return (data ?? []).map((l) => paraConversa(l as unknown as LinhaConversa));
+}
+
+/** As etiquetas que a empresa criou. Ordem alfabetica: e uma lista de escolha. */
+export async function listarEtiquetas(empresaId: number): Promise<Etiqueta[]> {
+  const supabase = await serverClient();
+
+  const { data, error } = await supabase
+    .from("whatsappetiquetas")
+    .select("id, nome, cor")
+    .eq("fkEmpresa", empresaId)
+    .eq("ativo", true)
+    .order("nome");
+
+  if (error) throw error;
+
+  return (data ?? []).map((l) => ({
+    id: l.id as number,
+    nome: l.nome as string,
+    cor: l.cor as CorDeEtiqueta,
+  }));
+}
+
+export async function criarEtiqueta(
+  empresaId: number,
+  nome: string,
+  cor: CorDeEtiqueta,
+): Promise<Etiqueta> {
+  const supabase = await serverClient();
+
+  const { data, error } = await supabase
+    .from("whatsappetiquetas")
+    .insert({ fkEmpresa: empresaId, nome, cor, ativo: true })
+    .select("id, nome, cor")
+    .single();
+
+  if (error) throw error;
+
+  return { id: data.id as number, nome: data.nome as string, cor: data.cor as CorDeEtiqueta };
+}
+
+/**
+ * Some da lista, mas nao do banco.
+ *
+ * ⚠️ Apagar de verdade levaria junto a classificacao de todas as conversas que
+ * a usavam, e ninguem que clica em "excluir etiqueta" espera perder o historico
+ * de quem estava marcado. Desativada, ela some da escolha e das conversas.
+ */
+export async function desativarEtiqueta(empresaId: number, id: number): Promise<void> {
+  const supabase = await serverClient();
+
+  const { error } = await supabase
+    .from("whatsappetiquetas")
+    .update({ ativo: false })
+    .eq("fkEmpresa", empresaId)
+    .eq("id", id);
+
+  if (error) throw error;
+}
+
+/**
+ * Troca o conjunto de etiquetas da conversa pelo que veio.
+ *
+ * ⚠️ Apaga o que saiu ANTES de inserir o que entrou, e nao o contrario: a chave
+ * primaria e (conversa, etiqueta), e reinserir uma que ficou daria conflito.
+ */
+export async function definirEtiquetasDaConversa(
+  conversaId: number,
+  usuarioId: string | null,
+  etiquetas: number[],
+): Promise<void> {
+  const supabase = await serverClient();
+
+  const { data: atuais, error: erroLer } = await supabase
+    .from("whatsappconversasetiquetas")
+    .select('"fkEtiqueta"')
+    .eq("fkConversa", conversaId);
+
+  if (erroLer) throw erroLer;
+
+  const tinha = (atuais ?? []).map((l) => l.fkEtiqueta as number);
+  const sair = tinha.filter((id) => !etiquetas.includes(id));
+  const entrar = etiquetas.filter((id) => !tinha.includes(id));
+
+  if (sair.length > 0) {
+    const { error } = await supabase
+      .from("whatsappconversasetiquetas")
+      .delete()
+      .eq("fkConversa", conversaId)
+      .in("fkEtiqueta", sair);
+
+    if (error) throw error;
+  }
+
+  if (entrar.length > 0) {
+    const { error } = await supabase.from("whatsappconversasetiquetas").insert(
+      entrar.map((id) => ({
+        fkConversa: conversaId,
+        fkEtiqueta: id,
+        fkUser: usuarioId,
+      })),
+    );
+
+    if (error) throw error;
+  }
+}
+
+export async function arquivarConversa(
+  empresaId: number,
+  conversaId: number,
+  arquivada: boolean,
+): Promise<void> {
+  const supabase = await serverClient();
+
+  const { error } = await supabase
+    .from("whatsappconversas")
+    .update({ arquivada })
+    .eq("fkEmpresa", empresaId)
+    .eq("id", conversaId);
+
+  if (error) throw error;
 }
 
 /**
@@ -498,7 +633,7 @@ export async function buscarConversa(empresaId: number, id: number): Promise<Con
 
   const { data, error } = await supabase
     .from("whatsappconversas")
-    .select(`${COLUNAS_CONVERSA}, ${RELACAO_CLIENTE}`)
+    .select(`${COLUNAS_CONVERSA}, ${RELACAO_CLIENTE}, ${RELACAO_ETIQUETAS}`)
     .eq("fkEmpresa", empresaId)
     .eq("id", id)
     .maybeSingle();
@@ -843,6 +978,8 @@ function paraConversa(l: LinhaConversa): Conversa {
     naoLidas: l.nao_lidas,
     janelaExpiraEm: l.janela_expira_em,
     botRespondendoEm: l.bot_respondendo_em ?? null,
+    etiquetas: (l.whatsappconversasetiquetas ?? []).map((e) => e.fkEtiqueta),
+    arquivada: l.arquivada ?? false,
   };
 }
 

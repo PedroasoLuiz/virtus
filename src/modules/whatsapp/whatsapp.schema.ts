@@ -29,7 +29,50 @@ export const conversaSchema = z.object({
   naoLidas: z.number(),
   janelaExpiraEm: z.string().nullable(),
   botRespondendoEm: z.string().nullable(),
+  etiquetas: z.array(z.number()),
+  arquivada: z.boolean(),
 });
+
+export const CORES_DE_ETIQUETA = [
+  "verde",
+  "azul",
+  "ambar",
+  "vermelho",
+  "roxo",
+  "cinza",
+] as const;
+
+export const etiquetaSchema = z.object({
+  id: z.number(),
+  nome: z.string(),
+  cor: z.enum(CORES_DE_ETIQUETA),
+});
+
+export const salvarEtiquetaBodySchema = z.object({
+  nome: z.string().trim().min(1).max(24),
+  cor: z.enum(CORES_DE_ETIQUETA),
+});
+
+export const etiquetaIdParamSchema = z.object({
+  id: z.coerce.number().int().positive(),
+});
+
+/*
+ * Etiquetas vao INTEIRAS, e nao "marca uma" / "desmarca uma".
+ *
+ * ⚠️ O painel edita a lista toda num popover, e dois atendentes mexendo ao mesmo
+ * tempo com operacoes incrementais deixariam a conversa num estado que nenhum
+ * dos dois pediu. Mandando o conjunto, o ultimo a salvar ganha e ele SABE o que
+ * mandou.
+ */
+export const atualizarConversaBodySchema = z
+  .object({
+    etiquetas: z.array(z.number().int().positive()).optional(),
+    arquivada: z.boolean().optional(),
+  })
+  .refine((v) => v.etiquetas !== undefined || v.arquivada !== undefined, {
+    message: "Nada para alterar",
+  });
 
 export const atendimentoSchema = z.object({
   id: z.number(),
@@ -74,6 +117,16 @@ export const listarConversasQuerySchema = z.object({
   busca: z.string().trim().min(1).optional(),
   /** Caixa de entrada de um numero. Ausente = todos os numeros da empresa. */
   contaId: z.coerce.number().int().positive().optional(),
+  /*
+   * O arquivo e uma LISTA A PARTE, e nao um filtro somado.
+   *
+   * Misturar arquivada com ativa devolveria a caixa de entrada ao estado de
+   * onde a pessoa acabou de tirar a conversa.
+   */
+  arquivadas: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((v) => v === "true"),
 });
 
 export const contaIdQuerySchema = z.object({
@@ -292,6 +345,9 @@ export const enviarModeloBodySchema = z.object({
 
 export type EnviarModeloBody = z.infer<typeof enviarModeloBodySchema>;
 export type ListarConversasQuery = z.infer<typeof listarConversasQuerySchema>;
+export type SalvarEtiquetaBody = z.infer<typeof salvarEtiquetaBodySchema>;
+export type EtiquetaIdParam = z.infer<typeof etiquetaIdParamSchema>;
+export type AtualizarConversaBody = z.infer<typeof atualizarConversaBodySchema>;
 export type ConversaIdParam = z.infer<typeof conversaIdParamSchema>;
 export type MidiaIdParam = z.infer<typeof midiaIdParamSchema>;
 export type EnviarTextoBody = z.infer<typeof enviarTextoBodySchema>;

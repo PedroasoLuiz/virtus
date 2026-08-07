@@ -12,7 +12,9 @@ import {
   type ClienteCandidato,
   type ContaWhatsapp,
   type Conversa,
+  type CorDeEtiqueta,
   type Credenciais,
+  type Etiqueta,
   type Mensagem,
   type Modelo,
   type ResultadoDoEvento,
@@ -302,8 +304,55 @@ export async function listarConversas(
   empresaId: number,
   contaId?: number,
   busca?: string,
+  arquivadas = false,
 ): Promise<Conversa[]> {
-  return repo.listarConversas(empresaId, contaId, busca);
+  return repo.listarConversas(empresaId, contaId, busca, arquivadas);
+}
+
+export async function listarEtiquetas(empresaId: number): Promise<Etiqueta[]> {
+  return repo.listarEtiquetas(empresaId);
+}
+
+export async function criarEtiqueta(
+  empresaId: number,
+  nome: string,
+  cor: CorDeEtiqueta,
+): Promise<Etiqueta> {
+  return repo.criarEtiqueta(empresaId, nome, cor);
+}
+
+export async function excluirEtiqueta(empresaId: number, id: number): Promise<void> {
+  await repo.desativarEtiqueta(empresaId, id);
+}
+
+/**
+ * Etiquetar e arquivar, no mesmo pedido.
+ *
+ * ⚠️ Confere a conversa ANTES de escrever. A RLS ja barraria a de outra empresa,
+ * mas por cima de um update sem linha afetada, que devolve sucesso: quem
+ * chamasse com um id de fora receberia "ok" e nada teria acontecido.
+ */
+export async function atualizarConversa(
+  empresaId: number,
+  usuarioId: string | null,
+  conversaId: number,
+  mudanca: { etiquetas?: number[]; arquivada?: boolean },
+): Promise<Conversa> {
+  const conversa = await repo.buscarConversa(empresaId, conversaId);
+  if (!conversa) throw new NotFoundError("Conversa nao encontrada");
+
+  if (mudanca.etiquetas) {
+    await repo.definirEtiquetasDaConversa(conversaId, usuarioId, mudanca.etiquetas);
+  }
+
+  if (mudanca.arquivada !== undefined) {
+    await repo.arquivarConversa(empresaId, conversaId, mudanca.arquivada);
+  }
+
+  const atualizada = await repo.buscarConversa(empresaId, conversaId);
+  if (!atualizada) throw new NotFoundError("Conversa nao encontrada");
+
+  return atualizada;
 }
 
 export async function obterConversa(empresaId: number, id: number): Promise<Conversa> {

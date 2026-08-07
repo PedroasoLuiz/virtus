@@ -682,6 +682,28 @@ export type WhatsappConversaRow = {
   bot_respondendo_em: string | null;
   /** Fim da janela de 24h da Meta. Fora dela so template passa. */
   janela_expira_em: string | null;
+  /** Fora da caixa de entrada. O historico continua inteiro. */
+  arquivada: boolean;
+};
+
+export type WhatsappEtiquetaRow = {
+  id: number;
+  created_at: string;
+  fkEmpresa: number;
+  nome: string;
+  /** Slug do design system: `verde`, `azul`, `ambar`, `vermelho`, `roxo`, `cinza`. */
+  cor: string;
+  /** Exclusao e logica: apagar levaria junto a marca de todas as conversas. */
+  ativo: boolean;
+};
+
+export type WhatsappConversaEtiquetaRow = {
+  id: number;
+  created_at: string;
+  fkConversa: number;
+  fkEtiqueta: number;
+  /** Quem marcou. Nulo quando veio de fora do painel. */
+  fkUser: string | null;
 };
 
 export type WhatsappMensagemRow = {
@@ -763,6 +785,8 @@ export type Database = {
       assinaturas: { Row: AssinaturaRow; Insert: Partial<AssinaturaRow>; Update: Partial<AssinaturaRow>; Relationships: [] };
       whatsappconversas: { Row: WhatsappConversaRow; Insert: Partial<WhatsappConversaRow>; Update: Partial<WhatsappConversaRow>; Relationships: [] };
       whatsappmensagens: { Row: WhatsappMensagemRow; Insert: Partial<WhatsappMensagemRow>; Update: Partial<WhatsappMensagemRow>; Relationships: [] };
+      whatsappetiquetas: { Row: WhatsappEtiquetaRow; Insert: Partial<WhatsappEtiquetaRow>; Update: Partial<WhatsappEtiquetaRow>; Relationships: [] };
+      whatsappconversasetiquetas: { Row: WhatsappConversaEtiquetaRow; Insert: Partial<WhatsappConversaEtiquetaRow>; Update: Partial<WhatsappConversaEtiquetaRow>; Relationships: [] };
       iapersonas: { Row: PersonaRow; Insert: Partial<PersonaRow>; Update: Partial<PersonaRow>; Relationships: [] };
       atendimentos: { Row: AtendimentoRow; Insert: Partial<AtendimentoRow>; Update: Partial<AtendimentoRow>; Relationships: [] };
       setores: { Row: SetorRow; Insert: Partial<SetorRow>; Update: Partial<SetorRow>; Relationships: [] };

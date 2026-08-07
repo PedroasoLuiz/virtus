@@ -13,6 +13,11 @@ import { EnvioPorModelo } from "@/components/whatsapp/painel/modelo";
 import { ResumoDoAtendimento } from "@/components/whatsapp/painel/resumo";
 import { Composicao } from "@/components/whatsapp/painel/composicao";
 import {
+  BotaoDeEtiquetas,
+  ChipDeEtiqueta,
+  PontosDeEtiqueta,
+} from "@/components/whatsapp/painel/etiquetas";
+import {
   botRespondendo,
   formatarTelefone,
   janelaAberta,
@@ -23,6 +28,8 @@ import {
   type ClienteCandidato,
   type ContaWhatsapp,
   type Conversa,
+  type CorDeEtiqueta,
+  type Etiqueta,
   type Mensagem,
 } from "@/modules/whatsapp/whatsapp.types";
 
@@ -42,8 +49,13 @@ import {
  * `--surface` sobre `--surface-2`, e nao o contrario.
  */
 
-const LARGURA = 900;
-const LARGURA_LISTA = 300;
+/*
+ * ⚠️ 1180 e nao 900. A conversa dividia o espaco com a lista de 300 fixos, e o
+ * que sobrava deixava a bolha estreita: mensagem de cliente e paragrafo, nao
+ * legenda, e quebrar a cada seis palavras obrigava a ler em zigue-zague.
+ */
+const LARGURA = 1180;
+const LARGURA_LISTA = 320;
 
 /** Mensagens do mesmo lado dentro desta janela viram um bloco so. */
 const AGRUPA_ATE_MS = 5 * 60 * 1000;
@@ -90,6 +102,10 @@ export function PainelWhatsapp() {
   /* O filtro da pendencia da equipe. Ver . */
   const [soEsperando, setSoEsperando] = useState(false);
   const [carregando, setCarregando] = useState(false);
+  /* As etiquetas que a empresa criou, e quais estao filtrando a lista. */
+  const [etiquetas, setEtiquetas] = useState<Etiqueta[]>([]);
+  const [filtroEtiquetas, setFiltroEtiquetas] = useState<number[]>([]);
+  const [verArquivadas, setVerArquivadas] = useState(false);
   const [contas, setContas] = useState<ContaWhatsapp[]>([]);
   const [contaId, setContaId] = useState<number | null>(null);
   const [configAberta, setConfigAberta] = useState(false);
@@ -114,12 +130,22 @@ export function PainelWhatsapp() {
     });
   }, []);
 
+  const carregarEtiquetas = useCallback(async () => {
+    const r = await fetch("/api/v1/whatsapp/etiquetas");
+    if (!r.ok) return;
+
+    const corpo = await r.json();
+    setEtiquetas(corpo.data ?? []);
+  }, []);
+
   const naoLidas = conversas.reduce((soma, c) => soma + c.naoLidas, 0);
 
-  const carregarConversas = useCallback(async (conta: number | null, termo?: string) => {
+  const carregarConversas = useCallback(
+    async (conta: number | null, termo?: string, arquivadas = false) => {
     const parametros = new URLSearchParams();
     if (conta != null) parametros.set("contaId", String(conta));
     if (termo) parametros.set("busca", termo);
+    if (arquivadas) parametros.set("arquivadas", "true");
 
     const consulta = parametros.toString();
     const url = `/api/v1/whatsapp/conversas${consulta ? `?${consulta}` : ""}`;
@@ -129,7 +155,85 @@ export function PainelWhatsapp() {
 
     const corpo = await r.json();
     setConversas(corpo.data ?? []);
-  }, []);
+    },
+    [],
+  );
+
+  /*
+   * Etiquetar grava o CONJUNTO, e o painel ja mostra o resultado antes da
+   * resposta: classificar e gesto de passagem, e um chip que so acende depois
+   * da ida e volta faz a pessoa clicar de novo achando que nao pegou.
+   */
+  const alternarEtiqueta = useCallback(
+    async (conversa: Conversa, etiquetaId: number) => {
+      const marcadas = conversa.etiquetas.includes(etiquetaId)
+        ? conversa.etiquetas.filter((id) => id !== etiquetaId)
+        : [...conversa.etiquetas, etiquetaId];
+
+      const aplicar = (c: Conversa) =>
+        c.id === conversa.id ? { ...c, etiquetas: marcadas } : c;
+
+      setConversas((atuais) => atuais.map(aplicar));
+      setSelecionada((atual) => (atual ? aplicar(atual) : atual));
+
+      await fetch(`/api/v1/whatsapp/conversas/${conversa.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ etiquetas: marcadas }),
+      });
+    },
+    [],
+  );
+
+  const criarEtiqueta = useCallback(
+    async (nome: string, cor: CorDeEtiqueta) => {
+      const r = await fetch("/api/v1/whatsapp/etiquetas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nome, cor }),
+      });
+
+      if (!r.ok) {
+        avisar("erro", "Não foi possível criar a etiqueta");
+        return;
+      }
+
+      await carregarEtiquetas();
+    },
+    [avisar, carregarEtiquetas],
+  );
+
+  /*
+   * ⚠️ Arquivar TIRA da lista na hora, e nao espera o proximo carregamento.
+   *
+   * A conversa arquivada nao pertence mais a caixa de entrada: deixa-la la ate
+   * a lista recarregar sozinha faria parecer que o clique nao funcionou, e a
+   * pessoa arquivaria de novo.
+   */
+  const arquivarConversa = useCallback(
+    async (conversa: Conversa, arquivada: boolean) => {
+      setConversas((atuais) => atuais.filter((c) => c.id !== conversa.id));
+      setSelecionada(null);
+      setMensagens([]);
+
+      const r = await fetch(`/api/v1/whatsapp/conversas/${conversa.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ arquivada }),
+      });
+
+      if (!r.ok) {
+        avisar("erro", "Não foi possível arquivar");
+        return;
+      }
+
+      avisar(
+        "sucesso",
+        arquivada ? "Conversa arquivada" : "Conversa de volta à caixa de entrada",
+      );
+    },
+    [avisar],
+  );
 
   const abrirConversa = useCallback(async (conversa: Conversa) => {
     setSelecionada(conversa);
@@ -163,6 +267,13 @@ export function PainelWhatsapp() {
     return () => clearTimeout(t);
   }, [carregarContas]);
 
+  // Mesmo desvio do carregamento das contas: a busca sai do corpo do efeito
+  // para nao virar uma cascata de render a cada montagem.
+  useEffect(() => {
+    const t = setTimeout(() => void carregarEtiquetas(), 0);
+    return () => clearTimeout(t);
+  }, [carregarEtiquetas]);
+
   /*
    * ⚠️ `aberto` esta nas dependencias de proposito, e nao e sobra.
    *
@@ -174,11 +285,16 @@ export function PainelWhatsapp() {
    */
   useEffect(() => {
     const t = setTimeout(
-      () => void carregarConversas(contaAtual?.id ?? null, busca.trim() || undefined),
+      () =>
+        void carregarConversas(
+          contaAtual?.id ?? null,
+          busca.trim() || undefined,
+          verArquivadas,
+        ),
       250,
     );
     return () => clearTimeout(t);
-  }, [busca, contaAtual?.id, carregarConversas, aberto]);
+  }, [busca, contaAtual?.id, carregarConversas, aberto, verArquivadas]);
 
 
   /*
@@ -418,7 +534,15 @@ export function PainelWhatsapp() {
             style={{
               position: "fixed",
               top: 8,
-              right: 8,
+              /*
+               * ⚠️ ESQUERDA, e nao direita.
+               *
+               * E onde o WhatsApp poe a lista de conversas, e onde a mao vai
+               * procurar. O botao que abre continua no canto inferior direito
+               * de proposito: ele nao pertence a nenhuma tela, e ali nao briga
+               * com a busca global.
+               */
+              left: 8,
               bottom: 8,
               width: `min(${LARGURA}px, calc(100vw - 16px))`,
               zIndex: 401,
@@ -428,7 +552,7 @@ export function PainelWhatsapp() {
               borderRadius: "var(--radius-xl)",
               boxShadow: "var(--shadow-lg)",
               overflow: "hidden",
-              animation: "drawer-in 220ms var(--ease-out)",
+              animation: "drawer-in-esquerda 220ms var(--ease-out)",
             }}
           >
             {/*
@@ -476,6 +600,19 @@ export function PainelWhatsapp() {
               estreito={estreito}
               soEsperando={soEsperando}
               onFiltrarEsperando={setSoEsperando}
+              etiquetas={etiquetas}
+              filtroEtiquetas={filtroEtiquetas}
+              onFiltrarEtiqueta={(id) =>
+                setFiltroEtiquetas((atuais) =>
+                  atuais.includes(id) ? atuais.filter((x) => x !== id) : [...atuais, id],
+                )
+              }
+              verArquivadas={verArquivadas}
+              onVerArquivadas={(v) => {
+                setVerArquivadas(v);
+                setSelecionada(null);
+                setMensagens([]);
+              }}
               conversas={conversas}
               contas={contasAtivas}
               contaAtual={contaAtual}
@@ -510,6 +647,14 @@ export function PainelWhatsapp() {
               onResponder={responder}
               onEnviarAnexo={enviarAnexo}
               onEnviarModelo={enviarModelo}
+              etiquetas={etiquetas}
+              onAlternarEtiqueta={(id) => {
+                if (selecionada) void alternarEtiqueta(selecionada, id);
+              }}
+              onCriarEtiqueta={criarEtiqueta}
+              onArquivar={() => {
+                if (selecionada) void arquivarConversa(selecionada, !selecionada.arquivada);
+              }}
               onSair={() => setAberto(false)}
               onVinculou={() => {
                 if (selecionada) void abrirConversa(selecionada);
@@ -653,6 +798,11 @@ function ListaDeConversas({
   onBuscar,
   onEscolher,
   onAbrirConfig,
+  etiquetas,
+  filtroEtiquetas,
+  onFiltrarEtiqueta,
+  verArquivadas,
+  onVerArquivadas,
   estreito,
   soEsperando,
   onFiltrarEsperando,
@@ -670,9 +820,28 @@ function ListaDeConversas({
   estreito: boolean;
   soEsperando: boolean;
   onFiltrarEsperando: (v: boolean) => void;
+  etiquetas: Etiqueta[];
+  filtroEtiquetas: number[];
+  onFiltrarEtiqueta: (id: number) => void;
+  verArquivadas: boolean;
+  onVerArquivadas: (v: boolean) => void;
 }) {
   const esperando = conversas.filter(esperaDemais);
-  const listadas = soEsperando ? esperando : conversas;
+
+  /*
+   * O filtro das etiquetas roda AQUI, e nao no servidor.
+   *
+   * A lista ja veio inteira e vem limitada a 200: marcar um chip precisa ser
+   * instantaneo, e uma ida ao banco por clique daria meio segundo de espera
+   * para peneirar o que ja esta na memoria. O arquivo e o unico que continua
+   * indo ao servidor, porque aquilo e outra lista e nao um recorte desta.
+   */
+  const porEtiqueta =
+    filtroEtiquetas.length === 0
+      ? conversas
+      : conversas.filter((c) => c.etiquetas.some((id) => filtroEtiquetas.includes(id)));
+
+  const listadas = soEsperando ? porEtiqueta.filter(esperaDemais) : porEtiqueta;
 
   return (
     <div
@@ -782,40 +951,104 @@ function ListaDeConversas({
           "encaminhei e ninguem respondeu" e "ele voltou a escrever e ninguem
           viu".
         */}
-        {esperando.length > 0 && (
-          <button
-            type="button"
-            onClick={() => onFiltrarEsperando(!soEsperando)}
-            aria-pressed={soEsperando}
+        {/*
+          A fileira de filtros: espera, etiquetas e o arquivo.
+
+          ⚠️ Rola na horizontal em vez de quebrar linha. Uma empresa com dez
+          etiquetas empurraria a lista de conversas para o rodape do painel, e a
+          lista e o que a pessoa veio ver.
+        */}
+        {(esperando.length > 0 || etiquetas.length > 0) && (
+          <div
             style={{
-              alignSelf: "flex-start",
-              display: "inline-flex",
+              display: "flex",
               alignItems: "center",
               gap: 6,
-              height: 24,
-              padding: "0 10px",
-              borderRadius: "var(--radius-full)",
-              border: `1px solid ${soEsperando ? "var(--warning-border)" : "var(--border)"}`,
-              background: soEsperando ? "var(--warning-bg)" : "var(--surface)",
-              color: soEsperando ? "var(--text-primary)" : "var(--text-secondary)",
-              fontSize: "var(--text-xs)",
-              fontWeight: "var(--fw-semi)",
-              fontFamily: "var(--font)",
-              cursor: "pointer",
+              overflowX: "auto",
+              paddingBottom: 1,
+              scrollbarWidth: "none",
             }}
           >
-            <span
-              aria-hidden
-              style={{
-                width: 6,
-                height: 6,
-                borderRadius: "var(--radius-full)",
-                background: "var(--warning-text)",
-              }}
-            />
-            Aguardando resposta ({esperando.length})
-          </button>
+            {esperando.length > 0 && (
+              <button
+                type="button"
+                onClick={() => onFiltrarEsperando(!soEsperando)}
+                aria-pressed={soEsperando}
+                style={{
+                  flexShrink: 0,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 5,
+                  height: 22,
+                  padding: "0 9px",
+                  borderRadius: "var(--radius-full)",
+                  border: `1px solid ${soEsperando ? "var(--warning-border)" : "var(--border)"}`,
+                  background: soEsperando ? "var(--warning-bg)" : "var(--surface)",
+                  color: soEsperando ? "var(--warning-text)" : "var(--text-secondary)",
+                  fontSize: "var(--text-xs)",
+                  fontWeight: "var(--fw-semi)",
+                  fontFamily: "var(--font)",
+                  whiteSpace: "nowrap",
+                  cursor: "pointer",
+                }}
+              >
+                <span
+                  aria-hidden
+                  style={{
+                    width: 6,
+                    height: 6,
+                    flexShrink: 0,
+                    borderRadius: "var(--radius-full)",
+                    background: soEsperando ? "var(--warning-text)" : "var(--text-disabled)",
+                  }}
+                />
+                Aguardando resposta ({esperando.length})
+              </button>
+            )}
+
+            {etiquetas.map((e) => (
+              <ChipDeEtiqueta
+                key={e.id}
+                etiqueta={e}
+                ativa={filtroEtiquetas.includes(e.id)}
+                onClick={() => onFiltrarEtiqueta(e.id)}
+              />
+            ))}
+          </div>
         )}
+
+        {/*
+          O arquivo e uma LISTA A PARTE, e nao mais um chip da fileira.
+          Misturado com os filtros ele viraria "mostrar tambem as arquivadas", e
+          devolveria a caixa de entrada ao estado de onde a pessoa acabou de
+          tirar a conversa.
+        */}
+        <button
+          type="button"
+          onClick={() => onVerArquivadas(!verArquivadas)}
+          aria-pressed={verArquivadas}
+          style={{
+            alignSelf: "flex-start",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            marginTop: -2,
+            padding: 0,
+            border: "none",
+            background: "transparent",
+            color: verArquivadas ? "var(--primary)" : "var(--text-tertiary)",
+            fontSize: "var(--text-xs)",
+            fontWeight: "var(--fw-semi)",
+            fontFamily: "var(--font)",
+            cursor: "pointer",
+          }}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="4" width="18" height="4.5" rx="1.4" />
+            <path d="M5 8.5V19a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19V8.5M10 12.5h4" />
+          </svg>
+          {verArquivadas ? "Voltar à caixa de entrada" : "Ver arquivadas"}
+        </button>
       </header>
 
       {/*
@@ -846,6 +1079,9 @@ function ListaDeConversas({
               conversa={c}
               ativo={c.id === selecionadaId}
               esperando={esperaDemais(c)}
+              cores={c.etiquetas
+                .map((id) => etiquetas.find((e) => e.id === id)?.cor)
+                .filter((cor): cor is CorDeEtiqueta => Boolean(cor))}
               onClick={() => onEscolher(c)}
             />
           ))
@@ -877,12 +1113,15 @@ function ItemDaLista({
   conversa,
   ativo,
   esperando,
+  cores,
   onClick,
 }: {
   conversa: Conversa;
   ativo: boolean;
   /** Ha tempo demais sem alguem responder. Ver `esperaDemais`. */
   esperando: boolean;
+  /** Cores das etiquetas desta conversa, ja resolvidas pela lista. */
+  cores: CorDeEtiqueta[];
   onClick: () => void;
 }) {
   const titulo = tituloDa(conversa);
@@ -960,6 +1199,7 @@ function ItemDaLista({
           >
             {titulo}
           </span>
+          <PontosDeEtiqueta cores={cores} />
           <span
             style={{
               fontSize: "var(--text-xs)",
@@ -1368,6 +1608,10 @@ function Thread({
   onResponder,
   onEnviarAnexo,
   onEnviarModelo,
+  etiquetas,
+  onAlternarEtiqueta,
+  onCriarEtiqueta,
+  onArquivar,
   onSair,
   onVinculou,
   onVoltar,
@@ -1379,6 +1623,11 @@ function Thread({
   onResponder: (texto: string) => Promise<void>;
   onEnviarAnexo: (arquivo: File, legenda: string) => Promise<void>;
   onEnviarModelo: (nome: string, parametros: string[]) => Promise<void>;
+  /** As etiquetas da empresa, para marcar sem sair da conversa. */
+  etiquetas: Etiqueta[];
+  onAlternarEtiqueta: (id: number) => void;
+  onCriarEtiqueta: (nome: string, cor: CorDeEtiqueta) => Promise<void>;
+  onArquivar: () => void;
   /** Fecha o painel inteiro. Sair para o cadastro sem isto deixaria o veu por cima. */
   onSair: () => void;
   /** Recarrega a conversa depois de vincular, para o nome e a foto entrarem. */
@@ -1470,6 +1719,10 @@ function Thread({
 
   const aberta = janelaAberta(conversa.janelaExpiraEm);
   const titulo = tituloDa(conversa);
+  // A conversa guarda so os ids; nome e cor vivem na lista da empresa.
+  const marcadas = conversa.etiquetas
+    .map((id) => etiquetas.find((e) => e.id === id))
+    .filter((e): e is Etiqueta => Boolean(e));
 
   return (
     /*
@@ -1553,12 +1806,70 @@ function Thread({
           </div>
         </div>
 
+        {/*
+          Etiquetar e arquivar moram AQUI, com a conversa aberta.
+
+          ⚠️ Classificar depende de ler o que a pessoa escreveu. Numa tela de
+          cadastro a parte, quem etiqueta estaria decidindo de cabeca — e a
+          etiqueta erra justamente por isso.
+        */}
+        <BotaoDeEtiquetas
+          etiquetas={etiquetas}
+          marcadas={conversa.etiquetas}
+          onAlternar={onAlternarEtiqueta}
+          onCriar={onCriarEtiqueta}
+        />
+
+        <button
+          type="button"
+          onClick={onArquivar}
+          aria-label={conversa.arquivada ? "Desarquivar conversa" : "Arquivar conversa"}
+          title={conversa.arquivada ? "Voltar à caixa de entrada" : "Arquivar"}
+          style={{
+            flexShrink: 0,
+            width: 28,
+            height: 28,
+            display: "grid",
+            placeItems: "center",
+            border: "1px solid var(--border)",
+            background: "var(--surface)",
+            borderRadius: "var(--radius-sm)",
+            cursor: "pointer",
+            color: "var(--text-secondary)",
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="4" width="18" height="4.5" rx="1.4" />
+            <path d="M5 8.5V19a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19V8.5M10 12.5h4" />
+          </svg>
+        </button>
+
         <BotaoDeDetalhes
           conversaId={conversa.id}
           aberto={detalhesAbertos}
           onAlternar={() => setDetalhesAbertos((v) => !v)}
         />
       </header>
+
+      {/*
+        As etiquetas da conversa, logo abaixo do nome. O X em cada uma tira a
+        marca sem abrir o menu: desmarcar e o gesto mais comum depois que o
+        assunto se resolve.
+      */}
+      {marcadas.length > 0 && (
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 5,
+            padding: "0 48px 8px 16px",
+          }}
+        >
+          {marcadas.map((e) => (
+            <ChipDeEtiqueta key={e.id} etiqueta={e} onRemover={() => onAlternarEtiqueta(e.id)} />
+          ))}
+        </div>
+      )}
 
       {detalhesAbertos && (
         <DetalhesDoContato conversa={conversa} onSair={onSair} onVinculou={onVinculou} />

@@ -1,6 +1,9 @@
 import { handler } from "@/shared/http/handler";
 import * as controller from "@/modules/whatsapp/whatsapp.controller";
-import { conversaIdParamSchema } from "@/modules/whatsapp/whatsapp.schema";
+import {
+  atualizarConversaBodySchema,
+  conversaIdParamSchema,
+} from "@/modules/whatsapp/whatsapp.schema";
 
 /**
  * /api/v1/whatsapp/conversas/{id} — detalhes do contato.
@@ -13,4 +16,14 @@ import { conversaIdParamSchema } from "@/modules/whatsapp/whatsapp.schema";
 export const GET = handler(
   { params: conversaIdParamSchema, requerModulo: "financeiro" },
   controller.detalhar,
+);
+
+/** Etiquetar e arquivar. Ambos sao da conversa, e nao da mensagem. */
+export const PATCH = handler(
+  {
+    body: atualizarConversaBodySchema,
+    params: conversaIdParamSchema,
+    requerModulo: "financeiro",
+  },
+  controller.atualizarConversa,
 );

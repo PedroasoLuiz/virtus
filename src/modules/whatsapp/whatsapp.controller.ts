@@ -13,6 +13,7 @@ import {
   clienteCandidatoSchema,
   contaSchema,
   conversaSchema,
+  etiquetaSchema,
   mensagemSchema,
   modeloSchema,
   type AtivarContaBody,
@@ -29,6 +30,9 @@ import {
   type EnviarTextoBody,
   type ListarConversasQuery,
   type MidiaIdParam,
+  type SalvarEtiquetaBody,
+  type EtiquetaIdParam,
+  type AtualizarConversaBody,
 } from "@/modules/whatsapp/whatsapp.schema";
 
 /** Traduz HTTP <-> servico. */
@@ -144,9 +148,53 @@ export async function listarConversas({
   ctx,
 }: Entrada<undefined, ListarConversasQuery, unknown>) {
   const empresaId = empresaObrigatoria(ctx);
-  const conversas = await service.listarConversas(empresaId, query.contaId, query.busca);
+  const conversas = await service.listarConversas(
+    empresaId,
+    query.contaId,
+    query.busca,
+    query.arquivadas,
+  );
 
   return ok(conversas.map((c) => conversaSchema.parse(c)));
+}
+
+export async function listarEtiquetas({ ctx }: Entrada<undefined, undefined, unknown>) {
+  const empresaId = empresaObrigatoria(ctx);
+  const etiquetas = await service.listarEtiquetas(empresaId);
+
+  return ok(etiquetas.map((e) => etiquetaSchema.parse(e)));
+}
+
+export async function criarEtiqueta({ body, ctx }: Entrada<SalvarEtiquetaBody, undefined, unknown>) {
+  const empresaId = empresaObrigatoria(ctx);
+  const etiqueta = await service.criarEtiqueta(empresaId, body.nome, body.cor);
+
+  return created(etiquetaSchema.parse(etiqueta));
+}
+
+export async function excluirEtiqueta({
+  params,
+  ctx,
+}: Entrada<undefined, undefined, EtiquetaIdParam>) {
+  const empresaId = empresaObrigatoria(ctx);
+  await service.excluirEtiqueta(empresaId, params.id);
+
+  return ok({ id: params.id });
+}
+
+export async function atualizarConversa({
+  body,
+  params,
+  ctx,
+}: Entrada<AtualizarConversaBody, undefined, ConversaIdParam>) {
+  const empresaId = empresaObrigatoria(ctx);
+
+  const conversa = await service.atualizarConversa(empresaId, ctx.usuarioId, params.id, {
+    etiquetas: body.etiquetas,
+    arquivada: body.arquivada,
+  });
+
+  return ok(conversaSchema.parse(conversa));
 }
 
 export async function abrirConversa({

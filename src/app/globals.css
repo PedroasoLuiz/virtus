@@ -140,6 +140,13 @@
   --info-border: #bae6fd;
   --info-text: #0369a1;
 
+  /* Roxo so existe para ETIQUETA. Nenhum status do sistema e roxo, e por isso
+     ele nao tem `--roxo` cheio: tingido, ele nunca vai ser confundido com um
+     estado que a pessoa precisa resolver. */
+  --roxo-bg: #faf5ff;
+  --roxo-border: #d8b4fe;
+  --roxo-text: #7e22ce;
+
   --neutral: #6b7280;
   --neutral-bg: #f4f4f5;
   --neutral-border: #e4e4e7;
@@ -286,6 +293,10 @@
   --info-bg: rgba(56, 189, 248, 0.1);
   --info-border: rgba(56, 189, 248, 0.26);
   --info-text: #38bdf8;
+
+  --roxo-bg: rgba(192, 132, 252, 0.1);
+  --roxo-border: rgba(192, 132, 252, 0.26);
+  --roxo-text: #c084fc;
 
   --neutral: #8e8e93;
   --neutral-bg: rgba(255, 255, 255, 0.06);
@@ -484,6 +495,19 @@ h1, h2, h3, h4 {
 /* Entrada do drawer lateral. */
 @keyframes drawer-in {
   from { opacity: 0; transform: translateX(16px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* O mesmo, para quem nasce na ESQUERDA. Espelhado e nao reaproveitado: entrar
+   deslizando na direcao errada faz o painel parecer que esta saindo. */
+@keyframes drawer-in-esquerda {
+  from { opacity: 0; transform: translateX(-16px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Menu que nasce preso a um botao. */
+@keyframes pop-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
   to   { opacity: 1; transform: none; }
 }
 @keyframes fade-in {

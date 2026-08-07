@@ -85,6 +85,22 @@ export type ResultadoDoEvento = {
   conversas: number[];
 };
 
+/**
+ * Cor de etiqueta.
+ *
+ * ⚠️ Slug do design system, e nao hex. Cor livre parece liberdade e vira
+ * problema: o roxo que o usuario escolheu no tema claro some no escuro, e nao ha
+ * ninguem para corrigir depois.
+ */
+export type CorDeEtiqueta = "verde" | "azul" | "ambar" | "vermelho" | "roxo" | "cinza";
+
+/** Classificacao de conversa. Pertence a EMPRESA: rotulo de uma so nao filtra. */
+export type Etiqueta = {
+  id: number;
+  nome: string;
+  cor: CorDeEtiqueta;
+};
+
 export type Conversa = {
   id: number;
   /** Numero da casa por onde esta conversa corre. A resposta sai por ele. */
@@ -110,6 +126,10 @@ export type Conversa = {
    * para o atendente nao responder por cima dela.
    */
   botRespondendoEm: string | null;
+  /** Ids das etiquetas desta conversa. Os nomes vem da lista da empresa. */
+  etiquetas: number[];
+  /** Fora da caixa de entrada, mas com o historico inteiro no lugar. */
+  arquivada: boolean;
 };
 
 /**
