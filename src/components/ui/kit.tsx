@@ -249,9 +249,12 @@ export function TableHead({ children }: { children: React.ReactNode }) {
   return (
     <thead style={{ position: "sticky", top: 0, zIndex: 2 }}>
       {/*
-        Cabecalho TRANSPARENTE, como o resto da tabela. O que separa o titulo da
-        coluna do primeiro dado e o traco embaixo dele e o peso do texto, nao
-        uma faixa cinza atravessando a tela.
+        ⚠️ Cabecalho BRANCO, e nao transparente.
+
+        Ele e `sticky`: transparente, as linhas passavam POR TRAS dele ao rolar e
+        o titulo da coluna se misturava com o nome do cliente. O branco e o mesmo
+        do cartao, entao ele continua sem parecer uma faixa cinza atravessando a
+        tela — so deixa de deixar o conteudo vazar.
       */}
       <tr
         style={{
@@ -296,6 +299,13 @@ export function Th({
         textTransform: "uppercase",
         whiteSpace: "nowrap",
         userSelect: "none",
+        /*
+         * O fundo vai na CELULA, e nao no `<tr>`.
+         *
+         * ⚠️ Com `border-collapse: collapse`, o navegador nao pinta o fundo da
+         * linha de cabecalho de forma confiavel: quem carrega cor ali e o `th`.
+         */
+        backgroundColor: "var(--surface)",
         minWidth,
       }}
     >

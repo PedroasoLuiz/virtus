@@ -31,10 +31,41 @@ import { PessoaDrawer } from "./pessoa-drawer";
  * recortam a lista — um número que não faz nada seria só mais coisa para ler.
  */
 
-const PAPEIS: { valor: PapelPessoa; rotulo: string }[] = [
-  { valor: "cliente", rotulo: "Clientes" },
-  { valor: "fornecedor", rotulo: "Fornecedores" },
-  { valor: "colaborador", rotulo: "Colaboradores" },
+/*
+ * Os tres papeis, com a sigla e a cor de cada um.
+ *
+ * ⚠️ A cor segue o DINHEIRO, e nao um sorteio: cliente e entrada (verde),
+ * fornecedor e saida (ambar), colaborador nao e nem uma coisa nem outra (azul).
+ * Quem varre a coluna aprende a distinguir os tres sem ler as siglas.
+ */
+const PAPEIS: {
+  valor: PapelPessoa;
+  rotulo: string;
+  sigla: string;
+  fundo: string;
+  texto: string;
+}[] = [
+  {
+    valor: "cliente",
+    rotulo: "Clientes",
+    sigla: "CLI",
+    fundo: "var(--success-bg)",
+    texto: "var(--success-text)",
+  },
+  {
+    valor: "fornecedor",
+    rotulo: "Fornecedores",
+    sigla: "FOR",
+    fundo: "var(--warning-bg)",
+    texto: "var(--warning-text)",
+  },
+  {
+    valor: "colaborador",
+    rotulo: "Colaboradores",
+    sigla: "COL",
+    fundo: "var(--info-bg)",
+    texto: "var(--info-text)",
+  },
 ];
 
 const POR_PAGINA = 25;
@@ -182,22 +213,25 @@ export function PessoasTela({
         </div>
 
         <TableFrame>
-          <TableArea minWidth={720}>
+          <TableArea minWidth={1010}>
             <TableHead>
               {/* Sem título: a bolinha é reconhecimento, não um dado a ler. */}
               <Th className="col-avatar" minWidth={26}>
                 {" "}
               </Th>
+              <Th minWidth={46}>#</Th>
               <Th>Nome</Th>
-              <Th minWidth={160}>Documento</Th>
-              <Th minWidth={150}>Contato</Th>
-              <Th minWidth={150}>Responsável</Th>
+              <Th minWidth={132}>Papéis</Th>
+              <Th minWidth={150}>Documento</Th>
+              <Th minWidth={140}>Contato</Th>
+              <Th minWidth={190}>E-mail</Th>
+              <Th minWidth={140}>Responsável</Th>
             </TableHead>
 
             <tbody>
               {visiveis.length === 0 && (
                 <EmptyRow
-                  colSpan={5}
+                  colSpan={8}
                   message={
                     busca.trim() || papel
                       ? "Nenhuma pessoa com esse filtro."
@@ -214,11 +248,12 @@ export function PessoasTela({
                   onClick={() => setEdicao({ pessoa: p })}
                 >
                   {/*
-                    ⚠️ A bolinha das iniciais, a mesma do chat e das personas.
+                    A bolinha das iniciais, a mesma do chat e das personas.
 
-                    Nome de empresa em caixa alta é um bloco de texto todo igual;
-                    a cor estável faz reconhecer a linha certa sem ler, e é o
-                    mesmo reconhecimento em toda tela do sistema que lista gente.
+                    ⚠️ Ela e o número fazem coisas DIFERENTES, e por isso ficam
+                    lado a lado: a cor estável faz reconhecer a linha certa sem
+                    ler, e o número é o que se dita ao telefone e o que aparece
+                    na fatura. Uma não substitui a outra.
                   */}
                   <Td className="col-avatar">
                     <Avatar
@@ -228,10 +263,11 @@ export function PessoasTela({
                     />
                   </Td>
 
+                  <Td style={{ fontVariantNumeric: "tabular-nums" }}>{p.id}</Td>
+
                   <Td style={{ maxWidth: 320 }}>
                     <div
                       style={{
-                        fontWeight: "var(--fw-medium)",
                         overflow: "hidden",
                         textOverflow: "ellipsis",
                         whiteSpace: "nowrap",
@@ -240,31 +276,61 @@ export function PessoasTela({
                       {p.nomeFantasia?.trim() || p.razao}
                     </div>
 
-                    {/*
-                      A linha de apoio carrega os PAPÉIS, e a razão social quando
-                      ela difere do fantasia.
+                    {/* A razão social só entra quando ela NÃO é o que já está
+                        no nome acima. */}
+                    {p.nomeFantasia?.trim() && p.nomeFantasia.trim() !== p.razao && (
+                      <div
+                        style={{
+                          marginTop: 1,
+                          // Um degrau abaixo do resto da linha: e o nome formal,
+                          // que serve para conferir e nao para achar.
+                          fontSize: "var(--text-xs)",
+                          color: "var(--text-tertiary)",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {p.razao}
+                      </div>
+                    )}
+                  </Td>
 
-                      ⚠️ Os papéis saíram da coluna própria. Ali eram três
-                      etiquetas ocupando cento e sessenta pixels para dizer, na
-                      esmagadora maioria das linhas, a mesma palavra: "cliente".
-                      Embaixo do nome eles custam zero largura.
-                    */}
-                    <div
-                      style={{
-                        marginTop: 1,
-                        fontSize: "var(--text-sm)",
-                        color: "var(--text-tertiary)",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {apoio(p)}
+                  {/*
+                    ⚠️ As três siglas ficam SEMPRE na mesma posição, e a que não
+                    vale aparece apagada. Mostrando só as que valem, "FOR" cairia
+                    ora na primeira coluna, ora na segunda, e a leitura vertical
+                    — que é para o que uma coluna de papel serve — sumiria.
+                  */}
+                  <Td>
+                    <div style={{ display: "flex", gap: 4 }}>
+                      {PAPEIS.map((papel) => (
+                        <Flag
+                          key={papel.valor}
+                          papel={papel}
+                          tem={p.papeis.includes(papel.valor)}
+                        />
+                      ))}
                     </div>
                   </Td>
 
                   <Td>{p.cnpj ? formatarDocumento(p.cnpj) : <Vazio />}</Td>
                   <Td>{p.contato || <Vazio />}</Td>
+
+                  <Td style={{ maxWidth: 220 }}>
+                    <span
+                      title={p.email ?? undefined}
+                      style={{
+                        display: "block",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {p.email || <Vazio />}
+                    </span>
+                  </Td>
+
                   <Td>{p.responsavel || <Vazio />}</Td>
                 </Tr>
               ))}
@@ -362,19 +428,43 @@ function Chip({
   );
 }
 
+/**
+ * A sigla de um papel.
+ *
+ * ⚠️ A que NÃO vale continua ocupando o lugar dela, apagada. Some, e a coluna
+ * perde o alinhamento: "FOR" passa a cair ora na primeira posição, ora na
+ * segunda, e ler a coluna de cima a baixo vira decifrar caso a caso.
+ */
+function Flag({ papel, tem }: { papel: (typeof PAPEIS)[number]; tem: boolean }) {
+  return (
+    <span
+      title={tem ? papel.rotulo : undefined}
+      style={{
+        width: 34,
+        height: 17,
+        flexShrink: 0,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        borderRadius: "var(--radius-xs)",
+        background: tem ? papel.fundo : "transparent",
+        color: tem ? papel.texto : "var(--text-disabled)",
+        fontSize: "var(--text-2xs)",
+        fontWeight: "var(--fw-semi)",
+        letterSpacing: "0.03em",
+        // Apagada quase some: ela existe para segurar a posição, não para ser
+        // lida. Legível demais, a linha vira três siglas competindo com o nome.
+        opacity: tem ? 1 : 0.3,
+      }}
+    >
+      {papel.sigla}
+    </span>
+  );
+}
+
 /** O traço do campo vazio. Célula em branco parece coluna quebrada. */
 function Vazio() {
   return <span style={{ color: "var(--text-disabled)" }}>—</span>;
-}
-
-function apoio(p: Cliente): string {
-  const papeis = p.papeis.map((x) => PAPEIS.find((y) => y.valor === x)?.rotulo ?? x);
-
-  // A razão social só entra quando ela NÃO é o que já está no nome acima.
-  const razao =
-    p.nomeFantasia?.trim() && p.nomeFantasia.trim() !== p.razao ? p.razao : null;
-
-  return [razao, papeis.join(", ")].filter(Boolean).join(" · ");
 }
 
 /** CPF ou CNPJ, pela quantidade de dígitos. */
