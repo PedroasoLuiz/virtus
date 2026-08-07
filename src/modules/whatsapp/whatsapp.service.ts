@@ -704,13 +704,23 @@ export async function enviarModelo(
    * Colar a URL inteira produz um link com o dominio duas vezes: sai bonito, o
    * cliente clica e nao chega a lugar nenhum — e ninguem descobre, porque o
    * envio foi aceito. Numa cobranca isso e o cliente sem o boleto.
+   *
+   * ⚠️ A trava e SO o endereco repetido, e nao "tem barra". Barra no sufixo e
+   * legitima: um modelo de campanha pode completar com `promo/verao`, e essa
+   * regra foi tirada do nosso modelo de cobranca, onde o sufixo e um token seco.
+   * Proibir barra la seria inventar uma regra do nosso caso para a base inteira.
    */
   const sufixo = urlDoBotao?.trim() ?? "";
+  const base = modelo.botao?.urlBase ?? "";
 
-  if (sufixo && (sufixo.includes("://") || sufixo.includes("/"))) {
+  const repeteOEndereco =
+    sufixo.includes("://") || (base.length > 0 && sufixo.startsWith(base));
+
+  if (sufixo && repeteOEndereco) {
     throw new BusinessRuleError(
       "O botao do modelo recebe so o final do endereco, e nao o link inteiro. " +
-        `O comeco (${modelo.botao?.urlBase ?? "..."}) ja esta no modelo aprovado.`,
+        `O comeco (${base || "..."}) ja esta no modelo aprovado, e mandar de novo ` +
+        "produz um link com o dominio duas vezes.",
     );
   }
 

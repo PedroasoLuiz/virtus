@@ -260,9 +260,13 @@ function LinhaDeModelo({
             botão que o painel não monta. O ícone diz "não dá" sem gritar, e o
             porquê fica na dica.
           */}
+          {/*
+            ⚠️ Sem `flex: 1`. Esticando, o nome empurrava o ícone para a outra
+            ponta da célula, e um cadeado a três centímetros do texto vira um
+            enfeite de coluna em vez de uma marca daquele nome.
+          */}
           <span
             style={{
-              flex: 1,
               minWidth: 0,
               fontWeight: "var(--fw-semi)",
               overflow: "hidden",
@@ -637,13 +641,41 @@ export function EnvioDoModelo({
       ))}
 
       {pedeLink && (
-        <CampoDoModelo
-          rotulo="Link"
-          dica="só o final"
-          valor={link}
-          onMudar={setLink}
-          prefixo={modelo.botao?.urlBase}
-        />
+        <>
+          <CampoDoModelo
+            rotulo="Link"
+            dica="só o final"
+            valor={link}
+            onMudar={setLink}
+            prefixo={modelo.botao?.urlBase}
+          />
+
+          {/*
+            O endereço INTEIRO, montado, quando já há o que montar.
+
+            ⚠️ É a única defesa que serve para qualquer modelo. Saber que o
+            sufixo da cobrança é um token é conhecimento do NOSSO caso; num
+            modelo de campanha ele pode ser `promo/verao` e a barra é legítima.
+            O que vale em todos é ver o link pronto antes de gastar a mensagem.
+          */}
+          {link.trim() && (
+            <p
+              style={{
+                marginLeft: 67,
+                marginTop: -3,
+                fontSize: "var(--text-xs)",
+                color: "var(--text-tertiary)",
+                wordBreak: "break-all",
+                lineHeight: "var(--lh-snug)",
+              }}
+            >
+              O botão vai abrir{" "}
+              <span style={{ color: "var(--info-text)" }}>
+                {(modelo.botao?.urlBase ?? "") + link.trim()}
+              </span>
+            </p>
+          )}
+        </>
       )}
 
       {/* A mesma linha de sempre: o que sai à esquerda, o botão redondo à
