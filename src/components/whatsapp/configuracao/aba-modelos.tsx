@@ -7,6 +7,7 @@ import {
   CabecalhoDeSecao,
   EmptyRow,
   Pagination,
+  PanelTabs,
   SkeletonRows,
   TableArea,
   TableHead,
@@ -29,6 +30,16 @@ import { Finalidades } from "./finalidades";
 
 const POR_PAGINA = 10;
 
+/*
+ * Duas sub-abas, na ordem em que se pensa.
+ *
+ * "Sistema" e o que o VPAY envia e por qual modelo; "Externo" e o catalogo que a
+ * Meta aprovou para aquele numero. Empilhadas numa tela so, o inventario abria a
+ * pagina e a pessoa lia um catalogo antes de saber para que ele serve.
+ */
+const SUB_SISTEMA = "Sistema";
+const SUB_EXTERNO = "Externo";
+
 export function AbaDeModelos({
   contas,
   cache,
@@ -47,6 +58,7 @@ export function AbaDeModelos({
   /** O UNICO cartao de previa da tela. Nulo enquanto o mouse nao chega. */
   const [espiando, setEspiando] = useState<Espiada | null>(null);
   const [vinculos, setVinculos] = useState<VinculoDeModelo[] | null>(null);
+  const [sub, setSub] = useState(SUB_SISTEMA);
 
   const escolhida = contaId ?? ativas[0]?.id ?? null;
   const todos = escolhida == null ? null : (cache[escolhida] ?? null);
@@ -109,24 +121,18 @@ export function AbaDeModelos({
    * chamada externa: salvar um vinculo precisaria invalidar a lista da Meta
    * junto, e ai cada gravacao gastaria uma ida ate la sem necessidade.
    */
-  const carregarVinculos = useCallback(async (contaId: number, limpar = false) => {
-    // Limpa so na TROCA de numero: recarregar depois de salvar mantendo a lista
-    // evita a tabela piscar vazia por um quadro.
-    if (limpar) setVinculos(null);
-
-    const r = await fetch(`/api/v1/whatsapp/vinculos?contaId=${contaId}`);
+  const carregarVinculos = useCallback(async () => {
+    const r = await fetch("/api/v1/whatsapp/vinculos");
     const corpo = await r.json().catch(() => null);
 
     setVinculos(r.ok ? (corpo?.data ?? []) : []);
   }, []);
 
   useEffect(() => {
-    if (escolhida == null) return;
-
-    const t = setTimeout(() => void carregarVinculos(escolhida, true), 0);
+    const t = setTimeout(() => void carregarVinculos(), 0);
 
     return () => clearTimeout(t);
-  }, [escolhida, carregarVinculos]);
+  }, [carregarVinculos]);
 
   if (ativas.length === 0) {
     return (
@@ -141,9 +147,35 @@ export function AbaDeModelos({
     <>
       <CabecalhoDeSecao
         colado
-        titulo="Modelos aprovados"
-        legenda="Lidos da Meta agora, porque o status muda lá sem aviso. Só modelo aprovado pode ser enviado, e é ele que permite falar com quem não escreve há mais de 24 horas. Para criar ou editar, use o painel da Meta."
+        titulo="Modelos"
+        legenda="Modelo é da conta da Meta, e por isso pertence a um número: dois números em WABAs diferentes têm listas diferentes. Escolha de qual número você está falando e depois o que fazer com os modelos dele."
       />
+
+      {/*
+        ⚠️ Sistema PRIMEIRO, e não a lista de aprovados.
+
+        A pergunta que traz alguém aqui é "o que o sistema envia, e por qual
+        modelo" — a lista da Meta é o inventário que responde à segunda metade
+        dela. Ela abrindo a tela fazia a pessoa ler um catálogo antes de saber
+        para que ele serve.
+      */}
+      <PanelTabs
+        tabs={[SUB_SISTEMA, SUB_EXTERNO]}
+        active={sub}
+        onChange={(t) => setSub(t as typeof SUB_SISTEMA)}
+      />
+
+      {sub === SUB_SISTEMA && (
+        <Finalidades contas={ativas} vinculos={vinculos} onMudou={() => void carregarVinculos()} />
+      )}
+
+      {sub === SUB_EXTERNO && (
+        <>
+          <CabecalhoDeSecao
+            colado
+            titulo="Modelos aprovados"
+            legenda="Lidos da Meta agora, porque o status muda lá sem aviso. Só modelo aprovado pode ser enviado, e é ele que permite falar com quem não escreve há mais de 24 horas. Para criar ou editar, use o painel da Meta."
+          />
 
       {/*
         ⚠️ Aparece SEMPRE, mesmo com um número só.
@@ -157,7 +189,6 @@ export function AbaDeModelos({
         Estreito e à esquerda, colado na tabela: é um filtro do que vem a
         seguir, não um campo de formulário.
       */}
-      {/* O respiro cheio da seção mora aqui embaixo, e não acima do seletor. */}
       <div style={{ marginBottom: 26 }}>
         <select
           value={escolhida ?? ""}
@@ -178,11 +209,12 @@ export function AbaDeModelos({
       </div>
 
 
-      {erro && (
-        <p style={{ fontSize: "var(--text-sm)", color: "var(--danger)", marginBottom: 12 }}>
-          {erro}
-        </p>
-      )}
+
+          {erro && (
+            <p style={{ fontSize: "var(--text-sm)", color: "var(--danger)", marginBottom: 12 }}>
+              {erro}
+            </p>
+          )}
 
         <TableArea minWidth={0}>
           <TableHead>
@@ -244,31 +276,20 @@ export function AbaDeModelos({
           />
 
         )}
-
-        {/*
-          ⚠️ DEPOIS da lista, e não antes.
-
-          A tabela de cima é o inventário: o que a Meta aprovou para este
-          número. Esta seção é a ligação com o sistema, e ela só faz sentido
-          depois de a pessoa ver o que tem para ligar. Invertida, a primeira
-          coisa da tela pediria para escolher entre modelos que ainda não
-          apareceram.
-        */}
-        {escolhida != null && (
-          <Finalidades
-            contaId={escolhida}
-            modelos={todos}
-            vinculos={vinculos}
-            onMudou={() => void carregarVinculos(escolhida)}
-          />
-        )}
+        </>
+      )}
 
         <PrecisaDeAjuda
           duvidas={[
             {
               pergunta: "Como ligo um modelo meu a uma cobrança?",
               resposta:
-                "Em 'O que o sistema envia', logo acima. Você escolhe um modelo aprovado e diz qual campo dele recebe o quê. O nome do modelo pode ser o que você quiser: quem sabe o que vai em cada campo é esse vínculo.",
+                "Na aba Sistema. Você escolhe um modelo aprovado e diz qual campo dele recebe o quê. O nome do modelo pode ser o que você quiser: quem sabe o que vai em cada campo é esse vínculo.",
+            },
+            {
+              pergunta: "Posso usar um número para cada coisa?",
+              resposta:
+                "Pode, e é para isso que o seletor de número existe. O vínculo é por número: cobrança pelo financeiro, ticket pelo almoxarifado, aniversário pelo comercial. Na hora de enviar, o sistema procura qual número tem o vínculo daquela finalidade e fala por ele.",
             },
             {
               pergunta: "Como crio um modelo novo?",

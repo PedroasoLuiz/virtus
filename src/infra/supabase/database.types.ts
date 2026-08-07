@@ -882,6 +882,39 @@ export type Database = {
           solicitacao_em: string | null;
         }[];
       };
+      whatsapp_vinculos_da_empresa: {
+        Args: { p_empresa: number };
+        Returns: {
+          conta: number;
+          finalidade: string;
+          modelo_nome: string | null;
+          idioma: string;
+          parametros: unknown;
+          botao_param: string | null;
+          corpo: string | null;
+          campos: number;
+          validado_em: string | null;
+          erro: string | null;
+          erro_em: string | null;
+          solicitacao_nome: string | null;
+          solicitacao_status: string | null;
+          solicitacao_motivo: string | null;
+          solicitacao_em: string | null;
+        }[];
+      };
+      whatsapp_vinculo_da_finalidade: {
+        Args: { p_empresa: number; p_finalidade: string };
+        Returns: {
+          conta: number;
+          modelo_nome: string | null;
+          idioma: string;
+          parametros: unknown;
+          botao_param: string | null;
+          corpo: string | null;
+          campos: number;
+          solicitacao_status: string | null;
+        }[];
+      };
       whatsapp_solicitar_modelo: {
         Args: {
           p_conta: number;

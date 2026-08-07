@@ -96,14 +96,16 @@ export function Avisos({ children }: { children: React.ReactNode }) {
             width: "min(46vw, 620px)",
             height: "min(46vh, 520px)",
             /*
-             * Acima do drawer (401) e do que abre dentro dele.
+             * ⚠️ Acima de TODOS os andares de drawer.
              *
-             * Em 199 a confirmacao de excluir nascia ATRAS do proprio drawer que
+             * Em 199 a confirmacao de excluir nascia atras do proprio drawer que
              * a disparou: para responder era preciso fechar o drawer, e fechar
-             * cancelava a acao. Aviso e a ultima camada da tela — se ele nao
-             * estiver visivel, nao ha por que existir.
+             * cancelava a acao. Em 499 o problema voltou quando o drawer ganhou
+             * um terceiro andar (600), entao a faixa dos avisos comeca acima de
+             * qualquer nivel possivel. Aviso e a ultima camada da tela — se ele
+             * nao estiver visivel, nao ha por que existir.
              */
-            zIndex: 499,
+            zIndex: 899,
             pointerEvents: "none",
             background:
               "radial-gradient(ellipse at 100% 100%, rgba(0,0,0,0.34) 0%, rgba(0,0,0,0.18) 42%, rgba(0,0,0,0) 72%)",
@@ -125,7 +127,7 @@ export function Avisos({ children }: { children: React.ReactNode }) {
           position: "fixed",
           right: 16,
           bottom: 16,
-          zIndex: 500,
+          zIndex: 900,
           display: "flex",
           flexDirection: "column",
           gap: 8,

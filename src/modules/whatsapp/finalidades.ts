@@ -266,6 +266,8 @@ export function finalidadePorId(id: string): Finalidade | null {
  * aceita, e por isso a tela mapeia marcador a marcador em vez de pedir ordem.
  */
 export type VinculoDeModelo = {
+  /** Por qual numero esta finalidade fala. Zero quando a leitura foi por conta. */
+  contaId: number;
   finalidade: ChaveDeFinalidade;
   /** Nulo enquanto so ha pedido: modelo em analise ainda nao vincula nada. */
   modeloNome: string | null;

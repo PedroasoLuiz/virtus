@@ -3,7 +3,6 @@ import * as controller from "@/modules/whatsapp/whatsapp.controller";
 import {
   removerVinculoQuerySchema,
   salvarVinculoBodySchema,
-  vinculosQuerySchema,
 } from "@/modules/whatsapp/whatsapp.schema";
 
 /**
@@ -13,10 +12,7 @@ import {
  * mandaria um numero usar o nome de modelo que so existe no outro.
  */
 
-export const GET = handler(
-  { query: vinculosQuerySchema, requerModulo: "financeiro" },
-  controller.listarVinculos,
-);
+export const GET = handler({ requerModulo: "financeiro" }, controller.listarVinculos);
 
 export const PUT = handler(
   { body: salvarVinculoBodySchema, requerModulo: "financeiro" },

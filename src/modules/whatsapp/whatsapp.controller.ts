@@ -24,7 +24,6 @@ import {
   type SalvarContaBody,
   type SalvarVinculoBody,
   type TestarContaBody,
-  type VinculosQuery,
   type VincularBody,
   type ConversaIdParam,
   type EnviarTextoBody,
@@ -55,10 +54,15 @@ export async function testarConta({ body, ctx }: Entrada<TestarContaBody, undefi
   return ok(await service.testarConta(body));
 }
 
-export async function listarVinculos({ query, ctx }: Entrada<undefined, VinculosQuery, unknown>) {
-  empresaObrigatoria(ctx);
-
-  return ok(await service.listarVinculos(query.contaId));
+/**
+ * Os vinculos da EMPRESA inteira.
+ *
+ * ⚠️ Nao filtra por numero, de proposito: a tela mostra em qual numero cada
+ * finalidade mora, e filtrar obrigaria a trocar de seletor para descobrir onde
+ * ela esta — sem nada dizendo que havia o que procurar.
+ */
+export async function listarVinculos({ ctx }: Entrada<undefined, undefined, unknown>) {
+  return ok(await service.listarVinculos(empresaObrigatoria(ctx)));
 }
 
 export async function salvarVinculo({ body, ctx }: Entrada<SalvarVinculoBody, undefined, unknown>) {
@@ -71,6 +75,7 @@ export async function salvarVinculo({ body, ctx }: Entrada<SalvarVinculoBody, un
    */
   await service.salvarVinculo(empresaObrigatoria(ctx), contaId, {
     ...escolha,
+    contaId,
     corpo: null,
     campos: 0,
     validadoEm: null,
@@ -82,14 +87,14 @@ export async function salvarVinculo({ body, ctx }: Entrada<SalvarVinculoBody, un
     solicitacaoEm: null,
   });
 
-  return ok(await service.listarVinculos(contaId));
+  return ok(await service.listarVinculos(empresaObrigatoria(ctx)));
 }
 
 export async function criarModelo({ body, ctx }: Entrada<CriarModeloBody, undefined, unknown>) {
   empresaObrigatoria(ctx);
   await service.criarModeloDaFinalidade(body.contaId, body.finalidade);
 
-  return ok(await service.listarVinculos(body.contaId));
+  return ok(await service.listarVinculos(empresaObrigatoria(ctx)));
 }
 
 /**
@@ -106,7 +111,7 @@ export async function conferirSolicitacao({
   empresaObrigatoria(ctx);
   await service.conferirSolicitacao(query.contaId, query.finalidade);
 
-  return ok(await service.listarVinculos(query.contaId));
+  return ok(await service.listarVinculos(empresaObrigatoria(ctx)));
 }
 
 export async function removerVinculo({
@@ -116,7 +121,7 @@ export async function removerVinculo({
   empresaObrigatoria(ctx);
   await service.removerVinculo(query.contaId, query.finalidade);
 
-  return ok(await service.listarVinculos(query.contaId));
+  return ok(await service.listarVinculos(empresaObrigatoria(ctx)));
 }
 
 export async function ativarConta({

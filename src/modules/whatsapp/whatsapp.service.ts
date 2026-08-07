@@ -82,8 +82,8 @@ export async function testarConta(
  *
  * A empresa nao entra: quem confere o tenant e a propria funcao no banco.
  */
-export async function listarVinculos(contaId: number): Promise<VinculoDeModelo[]> {
-  return repo.vinculosDaConta(contaId);
+export async function listarVinculos(empresaId: number): Promise<VinculoDeModelo[]> {
+  return repo.vinculosDaEmpresa(empresaId);
 }
 
 /**
@@ -628,47 +628,40 @@ export async function dispararFinalidade(
   finalidade: ChaveDeFinalidade,
   valores: Record<string, string>,
 ): Promise<Mensagem> {
-  const conta = await contaParaDisparo(empresaId);
+  const rotulo = finalidadePorId(finalidade)?.rotulo ?? finalidade;
 
   /*
-   * As credenciais e os vinculos saem JUNTOS, e a conta e resolvida uma vez so.
+   * ⚠️ O NUMERO sai do vinculo, e nao o contrario.
    *
-   * ⚠️ Antes isto passava por `dispararModelo`, que resolvia a conta de novo
-   * por dentro: dois `listarContas` por mensagem enviada. Num disparo de
-   * cobranca em lote, isso e uma consulta desperdicada por parcela.
+   * Antes o disparo escolhia o primeiro numero ativo da empresa e so entao
+   * procurava o vinculo. Com cobranca no financeiro e ticket no almoxarifado, o
+   * segundo nunca saia: o sistema perguntava pelo modelo de ticket ao numero
+   * errado e concluia que ninguem tinha configurado.
+   *
+   * ⚠️ Modelo em ANALISE nao entra nesta busca, porque `modelo_nome` so e
+   * preenchido na aprovacao. Por isso a mensagem abaixo checa o pedido pendente:
+   * "nao configurado" seria injusto com quem acabou de pedir.
    */
-  const [cred, vinculos] = await Promise.all([
-    repo.credenciais(conta.id),
-    repo.vinculosDaConta(conta.id),
+  const escolhido = await repo.vinculoDaFinalidade(empresaId, finalidade);
+
+  const modeloVinculado = escolhido?.vinculo.modeloNome;
+
+  if (!escolhido || !modeloVinculado) {
+    throw new BusinessRuleError(
+      escolhido?.vinculo.solicitacaoStatus === "PENDING"
+        ? `O modelo de "${rotulo}" ainda está em análise na Meta. Assim que ela aprovar, o envio libera sozinho.`
+        : `Nenhum número tem modelo vinculado a "${rotulo}". Configure em Configuração do WhatsApp, aba Modelos.`,
+    );
+  }
+
+  const { contaId, vinculo } = escolhido;
+
+  const [cred, conta] = await Promise.all([
+    repo.credenciais(contaId),
+    contaPorId(empresaId, contaId),
   ]);
 
   if (!cred) throw new BusinessRuleError("O numero escolhido esta sem token cadastrado.");
-
-  const vinculo = vinculos.find((v) => v.finalidade === finalidade);
-  const rotulo = finalidadePorId(finalidade)?.rotulo ?? finalidade;
-
-  if (!vinculo) {
-    throw new BusinessRuleError(
-      `Nenhum modelo do WhatsApp está vinculado a "${rotulo}" neste número. Configure em Configuração do WhatsApp, aba Modelos.`,
-    );
-  }
-
-  /*
-   * ⚠️ Linha existente NAO significa vinculo pronto.
-   *
-   * Enquanto o modelo padrao esta em analise, a linha ja existe com o
-   * mapeamento gravado, mas sem `modeloNome`: a Meta ainda nao aprovou. Enviar
-   * ali seria pedir a ela um template que nao esta no catalogo dela.
-   */
-  const modeloVinculado = vinculo.modeloNome;
-
-  if (!modeloVinculado) {
-    throw new BusinessRuleError(
-      vinculo.solicitacaoStatus === "PENDING"
-        ? `O modelo de "${rotulo}" ainda está em análise na Meta. Assim que ela aprovar, o envio libera sozinho.`
-        : `Nenhum modelo do WhatsApp está vinculado a "${rotulo}" neste número. Configure em Configuração do WhatsApp, aba Modelos.`,
-    );
-  }
 
   const parametros = vinculo.parametros.map((chave) => {
     const v = valores[chave];
@@ -744,16 +737,12 @@ export async function dispararFinalidade(
   });
 }
 
-/** O numero por onde o sistema fala quando ninguem escolheu um. */
-async function contaParaDisparo(empresaId: number): Promise<ContaWhatsapp> {
+/** O numero, pelo id, dentro da empresa. */
+async function contaPorId(empresaId: number, contaId: number): Promise<ContaWhatsapp> {
   const contas = await listarContas(empresaId);
-  const conta = contas.find((c) => c.ativo && c.temToken);
+  const conta = contas.find((c) => c.id === contaId);
 
-  if (!conta) {
-    throw new BusinessRuleError(
-      "Nenhum numero de WhatsApp ativo com token. Confira em Configuracao de contas.",
-    );
-  }
+  if (!conta) throw new BusinessRuleError("O numero deste vinculo nao existe mais.");
 
   return conta;
 }

@@ -173,6 +173,41 @@ export async function definirAtiva(contaId: number, ativo: boolean): Promise<voi
   if (error) throw error;
 }
 
+/**
+ * Todos os vinculos da EMPRESA, com o numero de cada um.
+ *
+ * ⚠️ Por empresa e nao por numero: "o que o sistema envia" atravessa os numeros,
+ * e ler um de cada vez obrigava a trocar de seletor para descobrir onde cada
+ * finalidade mora.
+ */
+export async function vinculosDaEmpresa(empresaId: number): Promise<VinculoDeModelo[]> {
+  const supabase = await serverClient();
+
+  const { data, error } = await supabase.rpc("whatsapp_vinculos_da_empresa", {
+    p_empresa: empresaId,
+  });
+
+  if (error) throw error;
+
+  return (data ?? []).map((l) => ({
+    contaId: l.conta,
+    finalidade: l.finalidade as VinculoDeModelo["finalidade"],
+    modeloNome: l.modelo_nome ?? null,
+    idioma: l.idioma,
+    parametros: Array.isArray(l.parametros) ? (l.parametros as string[]) : [],
+    botaoParam: l.botao_param ?? null,
+    corpo: l.corpo ?? null,
+    campos: l.campos ?? 0,
+    validadoEm: l.validado_em ?? null,
+    erro: l.erro ?? null,
+    erroEm: l.erro_em ?? null,
+    solicitacaoNome: l.solicitacao_nome ?? null,
+    solicitacaoStatus: (l.solicitacao_status ?? null) as VinculoDeModelo["solicitacaoStatus"],
+    solicitacaoMotivo: l.solicitacao_motivo ?? null,
+    solicitacaoEm: l.solicitacao_em ?? null,
+  }));
+}
+
 /** Os vinculos de finalidade deste numero. Ver `finalidades.ts`. */
 export async function vinculosDaConta(contaId: number): Promise<VinculoDeModelo[]> {
   const supabase = await serverClient();
@@ -184,6 +219,7 @@ export async function vinculosDaConta(contaId: number): Promise<VinculoDeModelo[
   if (error) throw error;
 
   return (data ?? []).map((l) => ({
+    contaId,
     finalidade: l.finalidade as VinculoDeModelo["finalidade"],
     modeloNome: l.modelo_nome,
     idioma: l.idioma,
@@ -201,6 +237,53 @@ export async function vinculosDaConta(contaId: number): Promise<VinculoDeModelo[
     solicitacaoMotivo: l.solicitacao_motivo ?? null,
     solicitacaoEm: l.solicitacao_em ?? null,
   }));
+}
+
+/**
+ * O numero por onde uma finalidade fala, com o vinculo dela.
+ *
+ * ⚠️ Devolve o vinculo E a conta juntos porque a conta SAI dele. Perguntar a
+ * conta primeiro e o vinculo depois era o furo antigo: escolhia o primeiro numero
+ * ativo e so entao procurava, e quem tem cobranca num numero e ticket em outro
+ * ficava sem o segundo.
+ */
+export async function vinculoDaFinalidade(
+  empresaId: number,
+  finalidade: string,
+): Promise<{ contaId: number; vinculo: VinculoDeModelo } | null> {
+  const supabase = await serverClient();
+
+  const { data, error } = await supabase.rpc("whatsapp_vinculo_da_finalidade", {
+    p_empresa: empresaId,
+    p_finalidade: finalidade,
+  });
+
+  if (error) throw error;
+
+  const linha = data?.[0];
+  if (!linha) return null;
+
+  return {
+    contaId: linha.conta,
+    vinculo: {
+      contaId: linha.conta,
+      finalidade: finalidade as VinculoDeModelo["finalidade"],
+      modeloNome: linha.modelo_nome ?? null,
+      idioma: linha.idioma,
+      parametros: Array.isArray(linha.parametros) ? (linha.parametros as string[]) : [],
+      botaoParam: linha.botao_param ?? null,
+      corpo: linha.corpo ?? null,
+      campos: linha.campos ?? 0,
+      validadoEm: null,
+      erro: null,
+      erroEm: null,
+      solicitacaoNome: null,
+      solicitacaoStatus: (linha.solicitacao_status ??
+        null) as VinculoDeModelo["solicitacaoStatus"],
+      solicitacaoMotivo: null,
+      solicitacaoEm: null,
+    },
+  };
 }
 
 /** Abre o pedido de criacao do modelo padrao. Ver `whatsapp_solicitar_modelo`. */

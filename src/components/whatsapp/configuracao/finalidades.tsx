@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useAvisos } from "@/components/ui/avisos";
 import { Drawer } from "@/components/ui/drawer";
 import { comFormatacaoDoWhatsapp } from "@/components/whatsapp/formatacao";
@@ -10,8 +10,10 @@ import {
   BotaoDeAcao,
   Button,
   CabecalhoDeSecao,
+  CampoBloqueado,
   Field,
   PanelTabs,
+  SkeletonRows,
   TableArea,
   TableHead,
   Td,
@@ -25,7 +27,11 @@ import {
   type Finalidade,
   type VinculoDeModelo,
 } from "@/modules/whatsapp/finalidades";
-import type { Modelo } from "@/modules/whatsapp/whatsapp.types";
+import {
+  formatarTelefone,
+  type ContaWhatsapp,
+  type Modelo,
+} from "@/modules/whatsapp/whatsapp.types";
 
 /**
  * Para que o sistema manda mensagem, e com qual modelo do cliente.
@@ -42,19 +48,20 @@ import type { Modelo } from "@/modules/whatsapp/whatsapp.types";
 type Aba = "Parametrização" | "Exibição";
 
 export function Finalidades({
-  contaId,
-  modelos,
+  contas,
   vinculos,
   onMudou,
 }: {
-  contaId: number;
-  /** Os aprovados deste número, já lidos da Meta. Nulo enquanto carregam. */
-  modelos: Modelo[] | null;
+  /** Os números ativos com token. O vínculo é de um deles. */
+  contas: ContaWhatsapp[];
   vinculos: VinculoDeModelo[] | null;
   onMudou: () => void;
 }) {
-  const { avisar, confirmar } = useAvisos();
-  const [editando, setEditando] = useState<Finalidade | null>(null);
+  const { avisar } = useAvisos();
+  const [editando, setEditando] = useState<{ finalidade: Finalidade; contaId: number } | null>(
+    null,
+  );
+  const [criando, setCriando] = useState<Finalidade | null>(null);
   const [pedindo, setPedindo] = useState<string | null>(null);
 
   const emAnalise = (vinculos ?? []).filter((v) => v.solicitacaoStatus === "PENDING");
@@ -66,15 +73,17 @@ export function Finalidades({
    * rápido o bastante para parecer instantâneo e raro o bastante para não virar
    * uma chamada externa a cada instante, multiplicada por empresa.
    */
-  const chaves = emAnalise.map((v) => v.finalidade).join(",");
+  const chaves = emAnalise.map((v) => `${v.contaId}:${v.finalidade}`).join(",");
 
   useEffect(() => {
     if (!chaves) return;
 
     const id = setInterval(() => {
-      for (const finalidade of chaves.split(",")) {
+      for (const chave of chaves.split(",")) {
+        const [conta, finalidade] = chave.split(":");
+
         void fetch(
-          `/api/v1/whatsapp/modelos/solicitacao?contaId=${contaId}&finalidade=${finalidade}`,
+          `/api/v1/whatsapp/modelos/solicitacao?contaId=${conta}&finalidade=${finalidade}`,
         ).then((r) => {
           if (r.ok) onMudou();
         });
@@ -82,18 +91,9 @@ export function Finalidades({
     }, 30_000);
 
     return () => clearInterval(id);
-  }, [chaves, contaId, onMudou]);
+  }, [chaves, onMudou]);
 
-  function pedirModelo(f: Finalidade) {
-    confirmar(
-      `Criar o modelo padrão de "${f.rotulo}"?`,
-      "Criar na Meta",
-      () => void enviarPedido(f),
-      `O sistema vai pedir à Meta um modelo chamado "${f.nomeSugerido}", com o texto sugerido e os campos já mapeados. Ele passa pela revisão dela antes de poder enviar, e quando for aprovado o vínculo acontece sozinho.`,
-    );
-  }
-
-  async function enviarPedido(f: Finalidade) {
+  async function enviarPedido(f: Finalidade, contaId: number) {
     setPedindo(f.id);
 
     const r = await fetch("/api/v1/whatsapp/modelos", {
@@ -110,6 +110,7 @@ export function Finalidades({
       return;
     }
 
+    setCriando(null);
     avisar(
       "sucesso",
       "Modelo enviado para revisão",
@@ -118,27 +119,58 @@ export function Finalidades({
     onMudou();
   }
 
+  /*
+   * Uma linha por VÍNCULO, e não por finalidade.
+   *
+   * ⚠️ É o que responde "cobrança por qual número?". A mesma finalidade pode
+   * existir em vários números — cobrança pelo financeiro, ticket pelo
+   * almoxarifado — e uma linha por finalidade esconderia o segundo. Finalidade
+   * sem vínculo nenhum entra uma vez, para não sumir da lista do que o sistema
+   * sabe enviar.
+   */
+  type Linha = { finalidade: Finalidade; vinculo: VinculoDeModelo | null };
+
+  const linhas = FINALIDADES.flatMap<Linha>((finalidade) => {
+    const seus = (vinculos ?? []).filter((v) => v.finalidade === finalidade.id);
+
+    if (seus.length === 0) return [{ finalidade, vinculo: null }];
+
+    return seus.map((vinculo) => ({ finalidade, vinculo }));
+  });
+
+  function nomeDoNumero(contaId: number): string {
+    const c = contas.find((x) => x.id === contaId);
+    if (!c) return "número removido";
+
+    return c.apelido || formatarTelefone(c.numero ?? "") || c.phoneNumberId;
+  }
+
   return (
     <>
       <CabecalhoDeSecao
         titulo="O que o sistema envia"
-        legenda="Cada item aqui é uma mensagem que o sistema dispara. Você aprova o modelo com o texto que quiser no painel da Meta e diz, aqui, qual campo dele recebe o quê. Sem esse vínculo, o envio não acontece."
+        legenda="Cada linha é uma mensagem que o sistema dispara, e por qual número ela sai. Uma finalidade pode viver num número e outra em outro: cobrança pelo financeiro, ticket pelo almoxarifado. Sem vínculo, o envio não acontece."
       />
 
       <TableArea minWidth={0}>
         <TableHead>
           <Th>Finalidade</Th>
-          <Th>Modelo vinculado</Th>
+          <Th>Número</Th>
+          <Th>Modelo</Th>
           <Th minWidth={90}>Situação</Th>
           <Th> </Th>
         </TableHead>
 
         <tbody>
-          {FINALIDADES.map((f) => {
-            const v = vinculos?.find((x) => x.finalidade === f.id) ?? null;
-
-            return (
-              <Tr key={f.id}>
+          {vinculos == null ? (
+            <SkeletonRows
+              cols={5}
+              rows={4}
+              labels={["Finalidade", "Número", "Modelo", "Situação", ""]}
+            />
+          ) : (
+            linhas.map(({ finalidade: f, vinculo: v }) => (
+              <Tr key={`${f.id}-${v?.contaId ?? 0}`}>
                 <Td>
                   <div style={{ fontWeight: "var(--fw-semi)" }}>{f.rotulo}</div>
                   <div
@@ -160,59 +192,15 @@ export function Finalidades({
                 </Td>
 
                 <Td>
-                  {v?.solicitacaoStatus === "PENDING" ? (
-                    <>
-                      <span style={{ fontFamily: "var(--font-mono, monospace)" }}>
-                        {v.solicitacaoNome}
-                      </span>
-                      <div
-                        style={{
-                          marginTop: 2,
-                          fontSize: "var(--text-xs)",
-                          color: "var(--text-tertiary)",
-                        }}
-                      >
-                        pedido à Meta, aguardando revisão
-                      </div>
-                    </>
-                  ) : v?.solicitacaoStatus === "REJECTED" && !v.modeloNome ? (
-                    <>
-                      <span style={{ fontFamily: "var(--font-mono, monospace)" }}>
-                        {v.solicitacaoNome}
-                      </span>
-                      <div
-                        style={{
-                          marginTop: 2,
-                          fontSize: "var(--text-xs)",
-                          color: "var(--text-tertiary)",
-                        }}
-                      >
-                        {v.solicitacaoMotivo ?? "A Meta recusou. Vincule um modelo seu."}
-                      </div>
-                    </>
-                  ) : v?.modeloNome ? (
-                    <>
-                      <span style={{ fontFamily: "var(--font-mono, monospace)" }}>
-                        {v.modeloNome}
-                      </span>
-
-                      {/* O motivo da falha, para não exigir abrir o formulário
-                          só para descobrir o que a Meta recusou. */}
-                      {v.erro && (
-                        <div
-                          style={{
-                            marginTop: 2,
-                            fontSize: "var(--text-xs)",
-                            color: "var(--text-tertiary)",
-                          }}
-                        >
-                          {v.erro}
-                        </div>
-                      )}
-                    </>
+                  {v ? (
+                    nomeDoNumero(v.contaId)
                   ) : (
-                    <span style={{ color: "var(--text-tertiary)" }}>nenhum</span>
+                    <span style={{ color: "var(--text-tertiary)" }}>—</span>
                   )}
+                </Td>
+
+                <Td>
+                  <ModeloDaLinha vinculo={v} />
                 </Td>
 
                 <Td>
@@ -222,7 +210,7 @@ export function Finalidades({
                 <Td>
                   <AcoesDaLinha>
                     {/*
-                      ⚠️ Some quando já há vínculo pronto ou pedido em análise.
+                      ⚠️ Só quando não há vínculo nem pedido correndo.
 
                       Pedir de novo criaria um segundo modelo na conta da
                       empresa, contra o teto dela, para a mesma finalidade — e é
@@ -231,7 +219,7 @@ export function Finalidades({
                     {!v?.modeloNome && v?.solicitacaoStatus !== "PENDING" && (
                       <BotaoDeAcao
                         rotulo="Criar o modelo padrão na Meta"
-                        onClick={() => pedirModelo(f)}
+                        onClick={() => setCriando(f)}
                         desabilitado={pedindo === f.id}
                         destaque
                       >
@@ -250,25 +238,44 @@ export function Finalidades({
                           ? "Aguardando a revisão da Meta"
                           : "Configurar"
                       }
-                      onClick={() => setEditando(f)}
-                      desabilitado={v?.solicitacaoStatus === "PENDING"}
+                      onClick={() =>
+                        setEditando({
+                          finalidade: f,
+                          contaId: v?.contaId ?? contas[0]?.id ?? 0,
+                        })
+                      }
+                      desabilitado={v?.solicitacaoStatus === "PENDING" || contas.length === 0}
                     >
                       <path d="M11.6 2.6a1.6 1.6 0 0 1 2.3 2.3L5.6 13.2l-3 .7.7-3z" />
                     </BotaoDeAcao>
                   </AcoesDaLinha>
                 </Td>
               </Tr>
-            );
-          })}
+            ))
+          )}
         </tbody>
       </TableArea>
 
+      {criando && (
+        <EscolhaDoNumero
+          finalidade={criando}
+          contas={contas}
+          ocupado={pedindo === criando.id}
+          onFechar={() => setCriando(null)}
+          onConfirmar={(contaId) => void enviarPedido(criando, contaId)}
+        />
+      )}
+
       {editando && (
         <FormularioDoVinculo
-          contaId={contaId}
-          finalidade={editando}
-          modelos={modelos ?? []}
-          vinculo={vinculos?.find((x) => x.finalidade === editando.id) ?? null}
+          contas={contas}
+          finalidade={editando.finalidade}
+          contaInicial={editando.contaId}
+          vinculo={
+            vinculos?.find(
+              (x) => x.finalidade === editando.finalidade.id && x.contaId === editando.contaId,
+            ) ?? null
+          }
           onFechar={() => setEditando(null)}
           onSalvou={() => {
             setEditando(null);
@@ -277,6 +284,132 @@ export function Finalidades({
         />
       )}
     </>
+  );
+}
+
+/** O modelo da linha, com o que houver de motivo embaixo. */
+function ModeloDaLinha({ vinculo }: { vinculo: VinculoDeModelo | null }) {
+  if (!vinculo) return <span style={{ color: "var(--text-tertiary)" }}>nenhum</span>;
+
+  const mono = { fontFamily: "var(--font-mono, monospace)" };
+  const nota = {
+    marginTop: 2,
+    fontSize: "var(--text-xs)",
+    color: "var(--text-tertiary)",
+  } as const;
+
+  if (vinculo.solicitacaoStatus === "PENDING") {
+    return (
+      <>
+        <span style={mono}>{vinculo.solicitacaoNome}</span>
+        <div style={nota}>pedido à Meta, aguardando revisão</div>
+      </>
+    );
+  }
+
+  if (vinculo.solicitacaoStatus === "REJECTED" && !vinculo.modeloNome) {
+    return (
+      <>
+        <span style={mono}>{vinculo.solicitacaoNome}</span>
+        <div style={nota}>{vinculo.solicitacaoMotivo ?? "A Meta recusou. Vincule um modelo seu."}</div>
+      </>
+    );
+  }
+
+  if (!vinculo.modeloNome) return <span style={{ color: "var(--text-tertiary)" }}>nenhum</span>;
+
+  return (
+    <>
+      <span style={mono}>{vinculo.modeloNome}</span>
+
+      {/* O motivo da falha, para não exigir abrir o formulário só para
+          descobrir o que a Meta recusou. */}
+      {vinculo.erro && <div style={nota}>{vinculo.erro}</div>}
+    </>
+  );
+}
+
+/**
+ * Por qual número o modelo padrão vai nascer.
+ *
+ * ⚠️ Pergunta antes de criar, e não depois. O modelo é criado na WABA daquele
+ * número e não migra: errar aqui significa um modelo aprovado na conta errada,
+ * ocupando o teto dela, que só se resolve criando outro no número certo.
+ */
+function EscolhaDoNumero({
+  finalidade,
+  contas,
+  ocupado,
+  onFechar,
+  onConfirmar,
+}: {
+  finalidade: Finalidade;
+  contas: ContaWhatsapp[];
+  ocupado: boolean;
+  onFechar: () => void;
+  onConfirmar: (contaId: number) => void;
+}) {
+  const [contaId, setContaId] = useState(contas[0]?.id ?? 0);
+
+  return (
+    <Drawer
+      open
+      onClose={onFechar}
+      nivel={3}
+      title="Criar o modelo padrão"
+      subtitle={finalidade.rotulo}
+      acoes={
+        <Button
+          size="xs"
+          variant="primary"
+          onClick={() => onConfirmar(contaId)}
+          disabled={ocupado || !contaId}
+        >
+          {ocupado ? "Enviando…" : "Criar na Meta"}
+        </Button>
+      }
+    >
+      <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+        <Field
+          label="Número"
+          hint="O modelo nasce na conta da Meta deste número, e é por ele que esta finalidade vai falar."
+        >
+          <select
+            style={selectStyle}
+            value={contaId}
+            onChange={(e) => setContaId(Number(e.target.value))}
+          >
+            {contas.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.apelido || formatarTelefone(c.numero ?? "") || c.phoneNumberId}
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        <Field label="Nome na Meta">
+          <CampoBloqueado valor={finalidade.nomeSugerido} />
+        </Field>
+
+        <Field label="Categoria">
+          <CampoBloqueado
+            valor={finalidade.categoria === "UTILITY" ? "Utilitário" : "Marketing"}
+          />
+        </Field>
+      </div>
+
+      <p
+        style={{
+          marginTop: 16,
+          fontSize: "calc(var(--text-xs) + 1px)",
+          color: "var(--text-tertiary)",
+          lineHeight: "var(--lh-normal)",
+        }}
+      >
+        O texto sugerido e os campos já vão mapeados. O modelo passa pela revisão da Meta antes de
+        poder enviar, e quando ela aprovar o vínculo acontece sozinho.
+      </p>
+    </Drawer>
   );
 }
 
@@ -416,21 +549,45 @@ function Atencao() {
 }
 
 function FormularioDoVinculo({
-  contaId,
+  contas,
   finalidade,
-  modelos,
+  contaInicial,
   vinculo,
   onFechar,
   onSalvou,
 }: {
-  contaId: number;
+  contas: ContaWhatsapp[];
   finalidade: Finalidade;
-  modelos: Modelo[];
+  contaInicial: number;
   vinculo: VinculoDeModelo | null;
   onFechar: () => void;
   onSalvou: () => void;
 }) {
   const { avisar } = useAvisos();
+  const [contaId, setContaId] = useState(contaInicial);
+
+  /*
+   * Os modelos aprovados saem da META, e por NUMERO.
+   *
+   * ⚠️ Lidos aqui e nao recebidos de fora: a lista muda com o numero escolhido
+   * logo acima, e trocar de numero sem trocar a lista ofereceria modelos que nao
+   * existem naquela conta.
+   */
+  const [modelos, setModelos] = useState<Modelo[]>([]);
+
+  const carregar = useCallback(async (id: number) => {
+    setModelos([]);
+    const r = await fetch(`/api/v1/whatsapp/modelos?contaId=${id}`);
+    const corpo = await r.json().catch(() => null);
+
+    setModelos(r.ok ? (corpo?.data ?? []) : []);
+  }, []);
+
+  useEffect(() => {
+    const t = setTimeout(() => void carregar(contaId), 0);
+
+    return () => clearTimeout(t);
+  }, [contaId, carregar]);
   const [nome, setNome] = useState(vinculo?.modeloNome ?? "");
   const [parametros, setParametros] = useState<string[]>(vinculo?.parametros ?? []);
   const [botao, setBotao] = useState<string | null>(vinculo?.botaoParam ?? null);
@@ -575,8 +732,29 @@ function FormularioDoVinculo({
         <Secao
           primeiro
           titulo="O modelo"
-          legenda={`${finalidade.descricao} Escolha um dos seus modelos aprovados neste número.`}
+          legenda={`${finalidade.descricao} Escolha por qual número ela fala e qual dos modelos aprovados dele atende.`}
         >
+          <Field
+            label="Número"
+            hint="O vínculo é deste número. Outra finalidade pode sair por outro."
+          >
+            <select
+              style={selectStyle}
+              value={contaId}
+              onChange={(e) => {
+                setContaId(Number(e.target.value));
+                // Zera a escolha: o modelo do número anterior não existe neste.
+                trocarModelo("");
+              }}
+            >
+              {contas.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.apelido || formatarTelefone(c.numero ?? "") || c.phoneNumberId}
+                </option>
+              ))}
+            </select>
+          </Field>
+
           <Field label="Modelo aprovado">
             <select style={selectStyle} value={nome} onChange={(e) => trocarModelo(e.target.value)}>
               <option value="">escolha um modelo</option>

@@ -213,10 +213,6 @@ export const criarModeloBodySchema = z.object({
   finalidade: z.enum(["cobranca", "ticket", "contapagar", "aniversario"]),
 });
 
-export const vinculosQuerySchema = z.object({
-  contaId: z.coerce.number().int().positive(),
-});
-
 export const removerVinculoQuerySchema = z.object({
   contaId: z.coerce.number().int().positive(),
   finalidade: z.string().trim().min(1).max(40),
@@ -236,7 +232,6 @@ export type SalvarContaBody = z.infer<typeof salvarContaBodySchema>;
 export type TestarContaBody = z.infer<typeof testarContaBodySchema>;
 export type SalvarVinculoBody = z.infer<typeof salvarVinculoBodySchema>;
 export type CriarModeloBody = z.infer<typeof criarModeloBodySchema>;
-export type VinculosQuery = z.infer<typeof vinculosQuerySchema>;
 export type RemoverVinculoQuery = z.infer<typeof removerVinculoQuerySchema>;
 export type AtivarContaBody = z.infer<typeof ativarContaBodySchema>;
 export type ContaIdQuery = z.infer<typeof contaIdQuerySchema>;
