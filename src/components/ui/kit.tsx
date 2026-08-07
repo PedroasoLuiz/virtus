@@ -86,10 +86,22 @@ export function PageHeader({
   title,
   description,
   acima,
+  onIncluir,
+  rotuloIncluir = "Adicionar",
   children,
 }: {
   title: string;
   description?: string;
+  /**
+   * O mais COLADO no titulo, como no cabecalho de secao dos drawers.
+   *
+   * ⚠️ Existe para o incluir parar de morar na outra ponta da linha. Jogado a
+   * direita, ele vira um botao solto que ninguem associa a tela, e o olho
+   * atravessa o cabecalho inteiro para ligar "Pessoas" a "adicionar". Ao lado do
+   * texto, ele le como parte do titulo — e e o mesmo gesto em toda a casa.
+   */
+  onIncluir?: () => void;
+  rotuloIncluir?: string;
   /**
    * Caminho ate aqui, acima do titulo.
    *
@@ -119,18 +131,22 @@ export function PageHeader({
           {acima && (
             <Migalha rotulo={acima.rotulo} href={acima.href} />
           )}
-          <h1
-            style={{
-              fontSize: "var(--text-2xl)",
-              fontWeight: "var(--fw-semi)",
-              color: "var(--text-primary)",
-              letterSpacing: "var(--tracking-tight)",
-              lineHeight: "var(--lh-tight)",
-              margin: 0,
-            }}
-          >
-            {title}
-          </h1>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <h1
+              style={{
+                fontSize: "var(--text-2xl)",
+                fontWeight: "var(--fw-semi)",
+                color: "var(--text-primary)",
+                letterSpacing: "var(--tracking-tight)",
+                lineHeight: "var(--lh-tight)",
+                margin: 0,
+              }}
+            >
+              {title}
+            </h1>
+
+            {onIncluir && <BotaoMais rotulo={rotuloIncluir} onClick={onIncluir} />}
+          </div>
           {description && (
             <p
               style={{

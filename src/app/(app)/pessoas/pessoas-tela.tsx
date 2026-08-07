@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import { Avatar } from "@/components/ui/avatar";
 import {
   EmptyRow,
-  IncluirButton,
   PageHeader,
   PageLayout,
   Pagination,
@@ -110,6 +109,8 @@ export function PessoasTela({
         <PageHeader
           title="Pessoas"
           description="Clientes, fornecedores e colaboradores no mesmo cadastro. Os papéis dizem em que cada um entra."
+          onIncluir={() => setEdicao({ pessoa: null })}
+          rotuloIncluir="Nova pessoa"
         >
           <SearchInput
             value={busca}
@@ -118,7 +119,6 @@ export function PessoasTela({
               setPagina(1);
             }}
           />
-          <IncluirButton onClick={() => setEdicao({ pessoa: null })} />
         </PageHeader>
 
         {/*
@@ -185,7 +185,7 @@ export function PessoasTela({
           <TableArea minWidth={720}>
             <TableHead>
               {/* Sem título: a bolinha é reconhecimento, não um dado a ler. */}
-              <Th className="col-avatar" minWidth={30}>
+              <Th className="col-avatar" minWidth={26}>
                 {" "}
               </Th>
               <Th>Nome</Th>
@@ -224,7 +224,7 @@ export function PessoasTela({
                     <Avatar
                       nome={p.nomeFantasia?.trim() || p.razao}
                       semente={String(p.id)}
-                      tamanho={28}
+                      tamanho={26}
                     />
                   </Td>
 

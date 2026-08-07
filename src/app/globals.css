@@ -645,5 +645,9 @@ table td:last-child {
  */
 table th.col-avatar,
 table td.col-avatar {
-  padding-right: 8px;
+  /* 6 e nao 8: a coluna encolheu junto com a bolinha, e o vao de 8 voltava a
+     abrir a distancia que este seletor existe para fechar. */
+  padding-right: 6px;
+  width: 1%;
+  white-space: nowrap;
 }
