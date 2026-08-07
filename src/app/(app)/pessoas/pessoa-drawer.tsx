@@ -2,20 +2,34 @@
 
 import { useState } from "react";
 import { FormDrawer } from "@/components/ui/form-drawer";
-import { ActiveToggle, Field, inputStyle, selectStyle } from "@/components/ui/kit";
+import { Avatar } from "@/components/ui/avatar";
+import {
+  ActiveToggle,
+  CabecalhoDeSecao,
+  Field,
+  inputStyle,
+  selectStyle,
+} from "@/components/ui/kit";
 import type { Cliente, PapelPessoa } from "@/modules/clientes/clientes.types";
 
 /**
- * Cadastro de cliente / fornecedor / colaborador.
+ * Cadastro de pessoa: cliente, fornecedor ou colaborador.
  *
- * Os tres papeis moram na mesma tabela com flags booleanas — por isso a tela
- * pede papel em vez de ter tres cadastros separados.
+ * ⚠️ Os três papéis moram na mesma tabela com colunas booleanas — por isso a tela
+ * pede papel em vez de existirem três cadastros separados. Uma transportadora que
+ * também compra é UMA pessoa com dois papéis, e não duas fichas para manter em
+ * sincronia.
+ *
+ * ⚠️ Em seções com legenda, como o drawer de configuração do WhatsApp. Uma pilha
+ * de dez campos sem divisão obriga a ler tudo para achar um; agrupados, o olho
+ * pula direto para o bloco certo. E a legenda responde a pergunta que o rótulo
+ * sozinho não responde ("papéis de quê?").
  */
 
-const PAPEIS: { valor: PapelPessoa; rotulo: string }[] = [
-  { valor: "cliente", rotulo: "Cliente" },
-  { valor: "fornecedor", rotulo: "Fornecedor" },
-  { valor: "colaborador", rotulo: "Colaborador" },
+const PAPEIS: { valor: PapelPessoa; rotulo: string; explica: string }[] = [
+  { valor: "cliente", rotulo: "Cliente", explica: "aparece em faturas e recebimentos" },
+  { valor: "fornecedor", rotulo: "Fornecedor", explica: "aparece em contas a pagar" },
+  { valor: "colaborador", rotulo: "Colaborador", explica: "aparece em despesas de equipe" },
 ];
 
 type Form = {
@@ -40,7 +54,7 @@ function inicial(cliente: Cliente | null): Form {
     responsavel: cliente?.responsavel ?? "",
     papeis: cliente?.papeis ?? ["cliente"],
     // Vazio num cadastro novo: quem escolhe o padrao e o banco, e o "Geral"
-    // vale mesmo quando o cliente nasce fora desta tela.
+    // vale mesmo quando a pessoa nasce fora desta tela.
     centroCustoId: cliente?.centroCustoId ? String(cliente.centroCustoId) : "",
     ativo: cliente?.ativo ?? true,
   };
@@ -54,34 +68,28 @@ export function PessoaDrawer({
 }: {
   /** null = novo cadastro. */
   cliente: Cliente | null;
-  /** Centros de RECEITA da empresa — cliente e origem de entrada. */
+  /** Centros de RECEITA da empresa — pessoa e origem de entrada. */
   centros: { id: number; descricao: string }[];
   aberto: boolean;
   onClose: () => void;
 }) {
   // `key` no uso remonta o drawer a cada registro, entao o estado inicial ja
-  // vem do cliente certo e nao precisa de efeito para sincronizar.
+  // vem da pessoa certa e nao precisa de efeito para sincronizar.
   const [form, setForm] = useState<Form>(() => inicial(cliente));
 
   const editando = cliente !== null;
   const set = <K extends keyof Form>(campo: K, valor: Form[K]) =>
     setForm((f) => ({ ...f, [campo]: valor }));
 
-  function alternarPapel(papel: PapelPessoa) {
-    setForm((f) => ({
-      ...f,
-      papeis: f.papeis.includes(papel)
-        ? f.papeis.filter((p) => p !== papel)
-        : [...f.papeis, papel],
-    }));
-  }
+  const titulo = form.razao.trim() || (editando ? "Sem nome" : "Nova pessoa");
 
   return (
     <FormDrawer
       aberto={aberto}
       onClose={onClose}
-      titulo={editando ? form.razao || "Cliente" : "Novo cadastro"}
+      titulo={editando ? titulo : "Nova pessoa"}
       subtitulo={editando ? `#${cliente.id}` : undefined}
+      larguraDrawer={600}
       url={editando ? `/api/v1/clientes/${cliente.id}` : "/api/v1/clientes"}
       metodo={editando ? "PATCH" : "POST"}
       podeSalvar={form.razao.trim().length > 0 && form.papeis.length > 0}
@@ -99,13 +107,65 @@ export function PessoaDrawer({
         ...(editando ? { ativo: form.ativo } : {}),
       })}
     >
+      {/*
+        A identidade em cima, com a bolinha.
+
+        ⚠️ A mesma cor da lista. Quem clicou numa linha precisa reconhecer que
+        abriu a que queria, e o título do drawer sozinho não faz isso: nomes de
+        empresa em caixa alta se parecem todos, e a cor é o que diferencia sem
+        ler.
+      */}
+      {editando && (
+        <header
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            paddingBottom: 4,
+          }}
+        >
+          <Avatar nome={titulo} semente={String(cliente.id)} tamanho={44} />
+
+          <div style={{ minWidth: 0 }}>
+            <div
+              style={{
+                fontSize: "var(--text-lg)",
+                fontWeight: "var(--fw-semi)",
+                letterSpacing: "var(--tracking-snug)",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {titulo}
+            </div>
+
+            <div style={{ marginTop: 2, fontSize: "var(--text-xs)", color: "var(--text-tertiary)" }}>
+              {form.papeis.length > 0
+                ? form.papeis
+                    .map((p) => PAPEIS.find((x) => x.valor === p)?.rotulo ?? p)
+                    .join(" · ")
+                : "Sem papel"}
+              {!form.ativo && " · Inativo"}
+            </div>
+          </div>
+        </header>
+      )}
+
+      <CabecalhoDeSecao
+        primeiro
+        colado
+        titulo="Identificação"
+        legenda="A razão social é o nome que sai nos documentos. O fantasia é o que a equipe usa para achar a pessoa, e é ele que aparece na listagem."
+      />
+
       <Field label="Razão social" required>
         <input
           style={inputStyle}
           value={form.razao}
           onChange={(e) => set("razao", e.target.value)}
-          placeholder="Razão social"
-          autoFocus
+          placeholder="Nome completo ou razão social"
+          autoFocus={!editando}
         />
       </Field>
 
@@ -114,7 +174,7 @@ export function PessoaDrawer({
           style={inputStyle}
           value={form.nomeFantasia}
           onChange={(e) => set("nomeFantasia", e.target.value)}
-          placeholder="Como o cliente é conhecido"
+          placeholder="Como a pessoa é conhecida"
         />
       </Field>
 
@@ -127,12 +187,27 @@ export function PessoaDrawer({
         />
       </Field>
 
+      <CabecalhoDeSecao
+        colado
+        titulo="Contato"
+        legenda="É por aqui que o sistema fala com a pessoa: a cobrança vai para o e-mail, e o telefone é o que casa esta pessoa com a conversa no WhatsApp."
+      />
+
       <Field label="Responsável">
         <input
           style={inputStyle}
           value={form.responsavel}
           onChange={(e) => set("responsavel", e.target.value)}
           placeholder="Pessoa de contato"
+        />
+      </Field>
+
+      <Field label="Telefone" hint="Com DDD. É por ele que a conversa do WhatsApp encontra este cadastro.">
+        <input
+          style={inputStyle}
+          value={form.contato}
+          onChange={(e) => set("contato", e.target.value)}
+          placeholder="(00) 00000-0000"
         />
       </Field>
 
@@ -146,13 +221,30 @@ export function PessoaDrawer({
         />
       </Field>
 
-      <Field label="Telefone">
-        <input
-          style={inputStyle}
-          value={form.contato}
-          onChange={(e) => set("contato", e.target.value)}
-          placeholder="(00) 00000-0000"
-        />
+      <CabecalhoDeSecao
+        colado
+        titulo="No sistema"
+        legenda="Os papéis decidem em que telas esta pessoa aparece. Uma transportadora que também compra é um cadastro só, com dois papéis marcados."
+      />
+
+      <Field label="Papéis" required>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          {PAPEIS.map((p) => (
+            <Papel
+              key={p.valor}
+              papel={p}
+              marcado={form.papeis.includes(p.valor)}
+              onAlternar={() =>
+                setForm((f) => ({
+                  ...f,
+                  papeis: f.papeis.includes(p.valor)
+                    ? f.papeis.filter((x) => x !== p.valor)
+                    : [...f.papeis, p.valor],
+                }))
+              }
+            />
+          ))}
+        </div>
       </Field>
 
       <Field label="Centro de custo" hint="Padrão: Geral">
@@ -170,39 +262,9 @@ export function PessoaDrawer({
         </select>
       </Field>
 
-      <Field label="Papéis" required>
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          {PAPEIS.map((p) => {
-            const marcado = form.papeis.includes(p.valor);
-            return (
-              <button
-                key={p.valor}
-                type="button"
-                onClick={() => alternarPapel(p.valor)}
-                aria-pressed={marcado}
-                style={{
-                  height: 26,
-                  padding: "0 10px",
-                  borderRadius: "var(--radius-full)",
-                  border: `1px solid ${marcado ? "var(--primary-border)" : "var(--border-strong)"}`,
-                  background: marcado ? "var(--primary-subtle)" : "var(--surface)",
-                  color: marcado ? "var(--primary)" : "var(--text-secondary)",
-                  fontSize: "var(--text-sm)",
-                  fontWeight: marcado ? "var(--fw-medium)" : 400,
-                  fontFamily: "var(--font)",
-                  cursor: "pointer",
-                }}
-              >
-                {p.rotulo}
-              </button>
-            );
-          })}
-        </div>
-      </Field>
-
       {editando && (
-        <Field label="Situação">
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <Field label="Situação" hint="Inativo some da listagem e das buscas, mas o histórico continua inteiro.">
+          <div style={{ display: "flex", alignItems: "center", gap: 8, height: "var(--h-input)" }}>
             <ActiveToggle active={form.ativo} onChange={() => set("ativo", !form.ativo)} />
             <span style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>
               {form.ativo ? "Ativo" : "Inativo"}
@@ -211,5 +273,72 @@ export function PessoaDrawer({
         </Field>
       )}
     </FormDrawer>
+  );
+}
+
+/**
+ * Um papel, com o que ele significa na prática.
+ *
+ * ⚠️ Linha inteira clicável, e não uma pastilha com o nome. "Fornecedor" sozinho
+ * não diz o que muda ao marcar — e o que muda é em que telas a pessoa passa a
+ * aparecer, que é justamente a dúvida de quem cadastra pela primeira vez.
+ */
+function Papel({
+  papel,
+  marcado,
+  onAlternar,
+}: {
+  papel: (typeof PAPEIS)[number];
+  marcado: boolean;
+  onAlternar: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onAlternar}
+      aria-pressed={marcado}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 9,
+        width: "100%",
+        padding: "7px 10px",
+        border: `1px solid ${marcado ? "var(--primary-border)" : "var(--border)"}`,
+        borderRadius: "var(--radius-md)",
+        background: marcado ? "var(--primary-subtle)" : "var(--surface)",
+        cursor: "pointer",
+        textAlign: "left",
+        fontFamily: "var(--font)",
+        transition: "background var(--dur-fast) var(--ease)",
+      }}
+    >
+      <span
+        aria-hidden
+        style={{
+          width: 15,
+          height: 15,
+          flexShrink: 0,
+          display: "grid",
+          placeItems: "center",
+          borderRadius: 4,
+          border: `1px solid ${marcado ? "var(--primary)" : "var(--border-strong)"}`,
+          background: marcado ? "var(--primary)" : "transparent",
+          color: "var(--primary-fg)",
+        }}
+      >
+        {marcado && (
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M4 12.5l5.5 5.5L20 6.5" />
+          </svg>
+        )}
+      </span>
+
+      <span style={{ minWidth: 0, fontSize: "var(--text-base)" }}>
+        <span style={{ fontWeight: marcado ? "var(--fw-semi)" : "var(--fw-normal)" }}>
+          {papel.rotulo}
+        </span>
+        <span style={{ color: "var(--text-tertiary)" }}> · {papel.explica}</span>
+      </span>
+    </button>
   );
 }
