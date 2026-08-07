@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { EmptyRow, TableArea, TableHead, Td, Th, Tr } from "@/components/ui/kit";
 import { comFormatacaoDoWhatsapp } from "@/components/whatsapp/formatacao";
 import type { Modelo } from "@/modules/whatsapp/whatsapp.types";
 
@@ -107,16 +108,18 @@ export function ColunaDeModelos({
     <aside
       aria-label="Modelos aprovados"
       style={{
-        width: 268,
+        width: 300,
         flexShrink: 0,
         display: "flex",
         flexDirection: "column",
         minHeight: 0,
-        margin: "0 10px 4px 0",
-        borderRadius: "var(--radius-lg)",
-        // O mesmo fundo da area de mensagens: as duas colunas sao a mesma casca.
-        background:
-          "linear-gradient(var(--kanban-coluna-bg), var(--kanban-coluna-bg)), var(--sidebar-bg)",
+        padding: "0 12px 4px 2px",
+        /*
+         * ⚠️ SEM fundo proprio. Com o cinza da conversa, a coluna virava um
+         * segundo cartao colado no primeiro e a tela ficava com dois blocos
+         * disputando o mesmo peso. A tabela ja tem moldura; o que separa as
+         * duas colunas e o vao entre elas.
+         */
         animation: "fade-in 160ms var(--ease-out)",
       }}
     >
@@ -126,7 +129,7 @@ export function ColunaDeModelos({
           display: "flex",
           alignItems: "center",
           gap: 8,
-          padding: "11px 10px 8px 14px",
+          padding: "11px 2px 8px 2px",
         }}
       >
         <span
@@ -160,31 +163,54 @@ export function ColunaDeModelos({
         </button>
       </header>
 
-      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "0 8px 10px" }}>
-        {modelos == null ? (
-          <p style={{ padding: "6px 6px", fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>
-            Carregando modelos…
-          </p>
-        ) : falhou ? (
-          <p style={{ padding: "6px 6px", fontSize: "var(--text-sm)", color: "var(--danger-text)", lineHeight: "var(--lh-snug)" }}>
-            Não foi possível carregar os modelos. {falhou}
-          </p>
-        ) : modelos.length === 0 ? (
-          <p style={{ padding: "6px 6px", fontSize: "var(--text-sm)", color: "var(--text-tertiary)", lineHeight: "var(--lh-snug)" }}>
-            Nenhum modelo aprovado. Modelo em revisão ou reprovado não pode ser enviado. Confira o
-            status no painel da Meta.
-          </p>
-        ) : (
-          modelos.map((m) => (
-            <LinhaDeModelo
-              key={`${m.nome}-${m.idioma}`}
-              modelo={m}
-              atual={m.nome === escolhido}
-              onEscolher={() => onEscolher(m)}
-              onEspiar={setEspiando}
-            />
-          ))
-        )}
+      {falhou && (
+        <p
+          style={{
+            padding: "0 2px 8px",
+            fontSize: "var(--text-sm)",
+            color: "var(--danger-text)",
+            lineHeight: "var(--lh-snug)",
+          }}
+        >
+          Não foi possível carregar os modelos. {falhou}
+        </p>
+      )}
+
+      {/*
+        A MESMA tabela da aba Modelos, na configuração.
+        
+        ⚠️ Duas colunas e não quatro: idioma e categoria não cabem em trezentos
+        pixels, e nenhuma das duas decide qual modelo mandar. Quem decide é o
+        nome mais o texto atrás do olho.
+      */}
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
+        <TableArea minWidth={0}>
+          <TableHead>
+            <Th>Modelo</Th>
+            <Th>Campos</Th>
+          </TableHead>
+
+          <tbody>
+            {modelos == null ? (
+              <EmptyRow colSpan={2} message="Carregando modelos…" />
+            ) : modelos.length === 0 ? (
+              <EmptyRow
+                colSpan={2}
+                message="Nenhum modelo aprovado. Confira o status no painel da Meta."
+              />
+            ) : (
+              modelos.map((m) => (
+                <LinhaDeModelo
+                  key={`${m.nome}-${m.idioma}`}
+                  modelo={m}
+                  atual={m.nome === escolhido}
+                  onEscolher={() => onEscolher(m)}
+                  onEspiar={setEspiando}
+                />
+              ))
+            )}
+          </tbody>
+        </TableArea>
       </div>
 
       {espiando && <PreviaDoModelo espiada={espiando} />}
@@ -213,74 +239,38 @@ function LinhaDeModelo({
   const bloqueado = modelo.bloqueio != null;
 
   return (
-    <button
-      type="button"
+    <Tr
       onClick={bloqueado ? undefined : onEscolher}
-      disabled={bloqueado}
-      aria-pressed={atual}
-      title={modelo.bloqueio ?? undefined}
       style={{
-        width: "100%",
-        display: "flex",
-        alignItems: "center",
-        gap: 6,
-        padding: "8px 8px 8px 10px",
-        border: `1px solid ${atual ? "var(--primary-border)" : "transparent"}`,
-        borderRadius: "var(--radius-md)",
-        /*
-         * A cor da MINHA bolha. O modelo é uma mensagem que eu vou mandar, e
-         * pintá-lo de branco de cartão o deixava com cara de registro de
-         * cadastro em vez de mensagem esperando para sair.
-         */
-        background: atual ? "var(--primary-subtle)" : "transparent",
+        // A cor da MINHA bolha no escolhido: o modelo é uma mensagem que vai
+        // sair, e o cinza de linha selecionada não diz isso.
+        background: atual ? "var(--primary-subtle)" : undefined,
+        opacity: bloqueado ? 0.5 : 1,
         cursor: bloqueado ? "not-allowed" : "pointer",
-        opacity: bloqueado ? 0.55 : 1,
-        textAlign: "left",
-        fontFamily: "var(--font)",
-        transition: "background var(--dur-fast) var(--ease)",
-      }}
-      onMouseEnter={(e) => {
-        if (!atual && !bloqueado) e.currentTarget.style.background = "var(--primary-subtle)";
-      }}
-      onMouseLeave={(e) => {
-        if (!atual) e.currentTarget.style.background = "transparent";
       }}
     >
-      <span style={{ flex: 1, minWidth: 0 }}>
-        <span
-          style={{
-            display: "block",
-            fontSize: "var(--text-sm)",
-            fontWeight: "var(--fw-semi)",
-            color: "var(--text-primary)",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {modelo.nome}
-        </span>
+      <Td>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+          <span
+            style={{
+              flex: 1,
+              minWidth: 0,
+              fontWeight: "var(--fw-semi)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+            title={modelo.bloqueio ?? modelo.nome}
+          >
+            {modelo.nome}
+          </span>
 
-        <span
-          style={{
-            display: "block",
-            marginTop: 1,
-            fontSize: "var(--text-xs)",
-            color: "var(--text-tertiary)",
-          }}
-        >
-          {modelo.bloqueio
-            ? modelo.bloqueio
-            : `${modelo.categoria.toLowerCase()} · ${
-                modelo.parametros === 0
-                  ? "sem campos"
-                  : `${modelo.parametros} campo${modelo.parametros > 1 ? "s" : ""}`
-              }`}
-        </span>
-      </span>
+          {!bloqueado && <BotaoDeEspiar modelo={modelo} onEspiar={onEspiar} />}
+        </div>
+      </Td>
 
-      {!bloqueado && <BotaoDeEspiar modelo={modelo} onEspiar={onEspiar} />}
-    </button>
+      <Td>{bloqueado ? modelo.bloqueio : modelo.parametros}</Td>
+    </Tr>
   );
 }
 
@@ -442,22 +432,39 @@ export function EnvioDoModelo({
   onTrocar,
 }: {
   modelo: Modelo;
-  onEnviar: (nome: string, parametros: string[]) => Promise<void>;
+  onEnviar: (nome: string, parametros: string[], urlDoBotao?: string) => Promise<void>;
   /** Volta para a lista, sem fechar a coluna. */
   onTrocar: () => void;
 }) {
   const [valores, setValores] = useState<string[]>([]);
+  /*
+   * ⚠️ Campo PRÓPRIO, fora dos `valores` do corpo.
+   *
+   * Na Meta o botão é outro componente, e o `{{1}}` da URL é independente dos
+   * `{{n}}` do texto. Sem este valor ela recusa com "Button at index 0 of type
+   * Url requires a parameter" — e o painel nem perguntava.
+   */
+  const [link, setLink] = useState("");
   const [enviando, setEnviando] = useState(false);
 
-  const faltaPreencher = valores.filter((v) => v?.trim()).length < modelo.parametros;
+  const pedeLink = modelo.botao?.temVariavel === true;
+
+  const faltaPreencher =
+    valores.filter((v) => v?.trim()).length < modelo.parametros ||
+    (pedeLink && link.trim().length === 0);
 
   async function enviar() {
     if (faltaPreencher || enviando) return;
 
     setEnviando(true);
     try {
-      await onEnviar(modelo.nome, valores.slice(0, modelo.parametros));
+      await onEnviar(
+        modelo.nome,
+        valores.slice(0, modelo.parametros),
+        pedeLink ? link.trim() : undefined,
+      );
       setValores([]);
+      setLink("");
       onTrocar();
     } finally {
       setEnviando(false);
@@ -468,7 +475,10 @@ export function EnvioDoModelo({
     <footer
       style={{
         flexShrink: 0,
-        maxHeight: 320,
+        // ⚠️ 420 e nao 320. Com a previa mais os campos, o rodape ficava com
+        // uma frestinha rolavel e a pessoa preenchia olhando duas linhas por
+        // vez. O limite existe so para a conversa nao sumir de vez.
+        maxHeight: 420,
         overflowY: "auto",
         padding: "8px 14px 12px",
         display: "flex",
@@ -557,45 +567,29 @@ export function EnvioDoModelo({
         no lugar do nome por causa disso.
       */}
       {Array.from({ length: modelo.parametros }, (_, i) => (
-        <div key={i}>
-          <div
-            style={{
-              marginBottom: 3,
-              fontSize: "var(--text-xs)",
-              color: "var(--text-tertiary)",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {ondeEntra(modelo.corpo, i + 1)}
-          </div>
-
-          <input
-            value={valores[i] ?? ""}
-            onChange={(e) =>
-              setValores((atuais) => {
-                const copia = [...atuais];
-                copia[i] = e.target.value;
-                return copia;
-              })
-            }
-            placeholder={`Campo ${i + 1}`}
-            style={{
-              width: "100%",
-              height: 32,
-              padding: "0 10px",
-              fontSize: "var(--text-sm)",
-              fontFamily: "var(--font)",
-              border: "1px solid var(--input-border)",
-              borderRadius: "var(--radius-md)",
-              background: "var(--surface)",
-              color: "var(--text-primary)",
-              outline: "none",
-            }}
-          />
-        </div>
+        <CampoDoModelo
+          key={i}
+          rotulo={`Campo ${i + 1}`}
+          dica={ondeEntra(modelo.corpo, i + 1)}
+          valor={valores[i] ?? ""}
+          onMudar={(v) =>
+            setValores((atuais) => {
+              const copia = [...atuais];
+              copia[i] = v;
+              return copia;
+            })
+          }
+        />
       ))}
+
+      {pedeLink && (
+        <CampoDoModelo
+          rotulo="Link"
+          dica="O que completa o endereço do botão"
+          valor={link}
+          onMudar={setLink}
+        />
+      )}
 
       {/* A mesma linha de sempre: o que sai à esquerda, o botão redondo à
           direita. É o gesto que a mão já conhece deste rodapé. */}
@@ -641,6 +635,65 @@ export function EnvioDoModelo({
         </button>
       </div>
     </footer>
+  );
+}
+
+/**
+ * Um campo do modelo: rótulo à esquerda, caixa à direita.
+ *
+ * ⚠️ Na MESMA linha, e não empilhado. Com a prévia em cima, cada campo em duas
+ * linhas empurrava o rodapé para cima da conversa: quatro campos comiam a tela
+ * toda. Deitado, cada um custa uma linha só.
+ *
+ * ⚠️ A dica virou PLACEHOLDER, e não sumiu. Ela mostra onde aquele valor cai no
+ * texto, e é o que impede o erro clássico: a ordem dos `{{n}}` não é a ordem em
+ * que se lê a frase, e já saiu cobrança com o valor no lugar do nome.
+ */
+function CampoDoModelo({
+  rotulo,
+  dica,
+  valor,
+  onMudar,
+}: {
+  rotulo: string;
+  dica: string;
+  valor: string;
+  onMudar: (v: string) => void;
+}) {
+  return (
+    <label style={{ display: "flex", alignItems: "center", gap: 9 }}>
+      <span
+        style={{
+          width: 58,
+          flexShrink: 0,
+          fontSize: "var(--text-xs)",
+          fontWeight: "var(--fw-semi)",
+          color: "var(--text-tertiary)",
+        }}
+      >
+        {rotulo}
+      </span>
+
+      <input
+        value={valor}
+        onChange={(e) => onMudar(e.target.value)}
+        placeholder={dica}
+        title={dica}
+        style={{
+          flex: 1,
+          minWidth: 0,
+          height: 30,
+          padding: "0 10px",
+          fontSize: "var(--text-sm)",
+          fontFamily: "var(--font)",
+          border: "1px solid var(--input-border)",
+          borderRadius: "var(--radius-md)",
+          background: "var(--surface)",
+          color: "var(--text-primary)",
+          outline: "none",
+        }}
+      />
+    </label>
   );
 }
 

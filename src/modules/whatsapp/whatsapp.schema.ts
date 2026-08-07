@@ -351,6 +351,14 @@ export const enviarModeloBodySchema = z.object({
    * trocar dois de lugar passa na validacao e chega errado no cliente.
    */
   parametros: z.array(z.string().trim().min(1).max(1024)).max(10).default([]),
+  /**
+   * O pedaco variavel da URL do botao.
+   *
+   * ⚠️ Separado dos `parametros` do corpo. Na Meta o botao e outro componente, e
+   * o `{{1}}` da URL e independente dos `{{n}}` do texto: juntar os dois faria a
+   * contagem do corpo bater errado e o envio ser recusado por quantidade.
+   */
+  urlDoBotao: z.string().trim().max(1024).optional(),
 });
 
 export type EnviarModeloBody = z.infer<typeof enviarModeloBodySchema>;

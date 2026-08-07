@@ -290,6 +290,7 @@ export async function enviarModelo({
     params.id,
     body.nome,
     body.parametros,
+    body.urlDoBotao,
   );
 
   return created(mensagemSchema.parse(mensagem));

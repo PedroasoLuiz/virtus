@@ -650,6 +650,7 @@ export async function enviarModelo(
   conversaId: number,
   nome: string,
   parametros: string[],
+  urlDoBotao?: string,
 ): Promise<Mensagem> {
   const conversa = await obterConversa(empresaId, conversaId);
 
@@ -683,12 +684,26 @@ export async function enviarModelo(
     );
   }
 
+  /*
+   * ⚠️ Botao de URL com variavel EXIGE o parametro dele.
+   *
+   * Sem isso a Meta recusa com "Button at index 0 of type Url requires a
+   * parameter", ja depois do clique. O painel nao pedia esse valor: o modelo
+   * aparecia como qualquer outro e falhava so na hora de sair.
+   */
+  if (modelo.botao?.temVariavel && !urlDoBotao?.trim()) {
+    throw new BusinessRuleError(
+      `O botao do modelo "${nome}" espera o complemento do link, e ele nao veio.`,
+    );
+  }
+
   const wamid = await cloud.enviarModelo(
     cred,
     conversa.telefone,
     modelo.nome,
     modelo.idioma,
     parametros,
+    modelo.botao?.temVariavel ? urlDoBotao?.trim() : undefined,
   );
 
   // Grava o corpo JA PREENCHIDO: guardar o modelo cru deixaria o historico com

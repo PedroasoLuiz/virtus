@@ -281,11 +281,14 @@ export function Tr({
   delay = 0,
   onClick,
   dimmed,
+  style,
 }: {
   children: React.ReactNode;
   delay?: number;
   onClick?: () => void;
   dimmed?: boolean;
+  /** Realce proprio da tela. O hover continua sendo do kit. */
+  style?: React.CSSProperties;
 }) {
   return (
     <tr
@@ -298,12 +301,15 @@ export function Tr({
         cursor: onClick ? "pointer" : undefined,
         transition: "background 100ms",
         opacity: dimmed ? 0.45 : 1,
+        ...style,
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.backgroundColor = "var(--surface-hover)";
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.backgroundColor = "";
+        /* Volta ao que o `style` pediu, e nao ao vazio: sem isto, o realce da
+           linha escolhida sumia na primeira passagem do mouse. */
+        e.currentTarget.style.backgroundColor = (style?.background as string) ?? "";
       }}
     >
       {children}

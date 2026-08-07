@@ -564,13 +564,13 @@ export function PainelWhatsapp() {
     void carregarConversas(contaAtual?.id ?? null, busca.trim() || undefined);
   }
 
-  async function enviarModelo(nome: string, parametros: string[]) {
+  async function enviarModelo(nome: string, parametros: string[], urlDoBotao?: string) {
     if (!selecionada) return;
 
     const r = await fetch(`/api/v1/whatsapp/conversas/${selecionada.id}/modelo`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nome, parametros }),
+      body: JSON.stringify({ nome, parametros, urlDoBotao }),
     });
 
     const corpo = await r.json().catch(() => null);
@@ -1713,7 +1713,7 @@ function Thread({
   carregando: boolean;
   onResponder: (texto: string) => Promise<void>;
   onEnviarAnexo: (arquivo: File, legenda: string) => Promise<void>;
-  onEnviarModelo: (nome: string, parametros: string[]) => Promise<void>;
+  onEnviarModelo: (nome: string, parametros: string[], urlDoBotao?: string) => Promise<void>;
   /** As etiquetas da empresa, para marcar sem sair da conversa. */
   etiquetas: Etiqueta[];
   onAlternarEtiqueta: (id: number) => void;
@@ -1742,7 +1742,9 @@ function Thread({
    * ⚠️ Fora da janela de 24h ela ja nasce aberta: ali o modelo e a UNICA saida,
    * e obrigar um clique para revelar a unica coisa possivel e um passo a toa.
    */
-  const [modelosAbertos, setModelosAbertos] = useState(false);
+  const [modelosAbertos, setModelosAbertos] = useState(
+    conversa != null && !janelaAberta(conversa.janelaExpiraEm),
+  );
   const [modeloEscolhido, setModeloEscolhido] = useState<Modelo | null>(null);
   const lista = useModelos(conversa?.id ?? 0, modelosAbertos && conversa != null);
 
