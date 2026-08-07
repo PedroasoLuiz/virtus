@@ -3,11 +3,11 @@
 import { useState } from "react";
 import { useAvisos } from "@/components/ui/avisos";
 import { Drawer } from "@/components/ui/drawer";
+import { Avatar } from "@/components/whatsapp/painel/avatar";
 import { PrecisaDeAjuda } from "@/components/ui/ajuda";
 import {
   AcoesDaLinha,
   ActiveToggle,
-  Badge,
   BotaoDeAcao,
   Button,
   CabecalhoDeSecao,
@@ -26,7 +26,7 @@ import {
   textareaStyle,
 } from "@/components/ui/kit";
 import { temPalavrao } from "@/shared/domain/linguagem";
-import { AREAS, PERMISSOES } from "@/modules/atendimento/permissoes";
+import { AREAS, PERMISSOES, permissaoPorId } from "@/modules/atendimento/permissoes";
 import type { Persona } from "@/modules/atendimento/personas.types";
 import { formatarTelefone, type ContaWhatsapp } from "@/modules/whatsapp/whatsapp.types";
 import type { ConfigIA } from "@/modules/ia/ia.types";
@@ -68,8 +68,31 @@ export function AbaDePersonas({
   setores: Setor[];
   onRecarregar: () => void;
 }) {
+  const { avisar } = useAvisos();
   const [editando, setEditando] = useState<Persona | null>(null);
   const [pagina, setPagina] = useState(1);
+
+  /*
+   * Liga e desliga sem abrir o formulario.
+   *
+   * ⚠️ Manda a persona INTEIRA, e nao so o campo: o endpoint e o mesmo do
+   * salvar, que grava o registro completo. Mandar so `ativo` apagaria o resto.
+   */
+  async function alternar(p: Persona) {
+    const r = await fetch("/api/v1/atendimento/personas", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...p, id: p.id, ativo: !p.ativo }),
+    });
+
+    if (!r.ok) {
+      const corpo = await r.json().catch(() => null);
+      avisar("atencao", corpo?.error?.message ?? "Não foi possível mudar a persona");
+      return;
+    }
+
+    onRecarregar();
+  }
 
   const totalPaginas = Math.max(1, Math.ceil((personas?.length ?? 0) / POR_PAGINA));
   const paginaAtual = Math.min(pagina, totalPaginas);
@@ -103,6 +126,8 @@ export function AbaDePersonas({
 
       <TableArea minWidth={0}>
         <TableHead>
+          {/* Sem titulo: a bolinha e reconhecimento, nao um dado a ler. */}
+          <Th minWidth={26}> </Th>
           <Th>Persona</Th>
           <Th>Onde vale</Th>
           <Th minWidth={90}>Situação</Th>
@@ -111,30 +136,40 @@ export function AbaDePersonas({
 
         <tbody>
           {personas == null ? (
-            <SkeletonRows cols={4} rows={3} labels={["Persona", "Onde vale", "Situação", ""]} />
+            <SkeletonRows
+              cols={5}
+              rows={3}
+              labels={["", "Persona", "Onde vale", "Situação", ""]}
+            />
           ) : visiveis!.length === 0 ? (
-            <EmptyRow colSpan={4} message="Nenhuma persona. A IA vai triar e encaminhar tudo." />
+            <EmptyRow colSpan={5} message="Nenhuma persona. A IA vai triar e encaminhar tudo." />
           ) : (
             visiveis!.map((p) => (
               <Tr key={p.id}>
+                {/*
+                  ⚠️ A bolinha das iniciais, a mesma do chat, em escala menor.
+
+                  Persona tem nome de gente e é escolhida no meio de outras: a
+                  cor estável faz reconhecer a linha certa sem ler, do mesmo
+                  jeito que faz na lista de conversas.
+                */}
+                <Td>
+                  <Avatar nome={p.nome || "?"} semente={String(p.id)} tamanho={26} />
+                </Td>
+
                 <Td>
                   <div style={{ fontWeight: "var(--fw-semi)" }}>{p.nome}</div>
 
-                  {/* O que ela resolve, cortado em uma linha: é o que distingue
-                      duas personas do mesmo setor. */}
+                  {/* Só a CONTAGEM: os rótulos inteiros estouravam a linha em
+                      qualquer persona com mais de duas permissões. */}
                   <div
                     style={{
                       marginTop: 2,
                       fontSize: "var(--text-xs)",
                       color: "var(--text-tertiary)",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                      maxWidth: 320,
                     }}
                   >
-                    {p.podeResolver?.replace(/\s*\n\s*/g, " · ") ||
-                      "Sem lista: só acolhe e encaminha"}
+                    {resumoDasPermissoes(p.permissoes)}
                   </div>
                 </Td>
 
@@ -151,12 +186,15 @@ export function AbaDePersonas({
                   </div>
                 </Td>
 
+                {/*
+                  ⚠️ Interruptor na LINHA, e não etiqueta.
+
+                  Desligar uma persona é o gesto mais comum aqui: acontece quando
+                  a IA respondeu algo torto e alguém quer parar aquilo agora. Uma
+                  etiqueta obrigaria a abrir o formulário, rolar e salvar.
+                */}
                 <Td>
-                  {p.ativo ? (
-                    <Badge tom="success">ativa</Badge>
-                  ) : (
-                    <Badge tom="neutral">desligada</Badge>
-                  )}
+                  <ActiveToggle active={p.ativo} onChange={() => void alternar(p)} />
                 </Td>
 
                 {/*
@@ -234,6 +272,21 @@ const PERSONA_VAZIA: Persona = {
   ativo: true,
 };
 
+/**
+ * O que esta persona faz, numa linha.
+ *
+ * ⚠️ Diz "só acolhe e encaminha" quando não há nenhuma permissão, porque é
+ * exatamente isso que acontece: persona sem permissão muda o tom da conversa e
+ * nada mais.
+ */
+function resumoDasPermissoes(ids: string[]): string {
+  const validas = ids.filter((id) => permissaoPorId(id));
+
+  if (validas.length === 0) return "Sem permissões: só acolhe e encaminha";
+
+  return `${validas.length} ${validas.length === 1 ? "permissão" : "permissões"}`;
+}
+
 function rotuloDoNumero(contas: ContaWhatsapp[], contaId: number | null): string {
   if (contaId == null) return "Todos os números";
 
@@ -290,7 +343,6 @@ function FormularioDaPersona({
         setorId: rascunho.setorId,
         nome: rascunho.nome.trim(),
         descricao: rascunho.descricao?.trim() || null,
-        podeResolver: rascunho.podeResolver?.trim() || null,
         permissoes: rascunho.permissoes,
         ativo: rascunho.ativo,
       }),
@@ -447,21 +499,18 @@ function FormularioDaPersona({
           </Field>
         </Grupo>
 
-        <Grupo
-          titulo="O que ela fecha sozinha"
-          legenda="Um item por linha. Fora dessa lista a IA encaminha, mesmo que pareça saber a resposta. Valor, vencimento e boleto ficam de fora sempre, e escrevê-los aqui não muda isso."
-        >
-          <Field label="Pode resolver">
-            <textarea
-              style={{ ...textareaStyle, minHeight: 110 }}
-              placeholder={
-                "horário de atendimento e endereço\ncomo enviar a nota fiscal\nprazo padrão de retorno do setor"
-              }
-              value={rascunho.podeResolver ?? ""}
-              onChange={(e) => setRascunho({ ...rascunho, podeResolver: e.target.value })}
-            />
-          </Field>
+        {/*
+          ⚠️ Sem "pode resolver" em texto livre.
 
+          O que a persona fecha sozinha passou a ser a lista da aba Permissões.
+          Manter os dois seria manter duas respostas para a mesma pergunta, e a
+          da direita — a que o bot realmente obedece — perderia para a que a
+          pessoa acabou de digitar.
+        */}
+        <Grupo
+          titulo="Quando ela vale"
+          legenda="Desligada, o assunto dela volta a ser só entendido e encaminhado, como se a persona não existisse."
+        >
           <Field label="Ativa" hint="Desligada, o assunto volta a ser só encaminhado.">
             <ActiveToggle
               active={rascunho.ativo}
@@ -496,7 +545,6 @@ function FormularioDaPersona({
               setRascunho((atual) => ({
                 ...atual,
                 descricao: r.descricao,
-                podeResolver: r.podeResolver,
                 permissoes: r.permissoes,
               }));
               setSugerindo(false);
@@ -723,20 +771,38 @@ function Permissoes({
   onMarcar: (id: string, ligada: boolean) => void;
 }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
-      {geral && (
-        <p
-          style={{
-            fontSize: "calc(var(--text-xs) + 1px)",
-            color: "var(--text-tertiary)",
-            lineHeight: "var(--lh-normal)",
-          }}
-        >
-          Esta é a persona geral: ela atende antes de o cliente se identificar, e por isso não
-          consulta nada do cadastro. Dê um setor a ela, em Parametrização, para liberar as
-          consultas.
-        </p>
-      )}
+    <div>
+      {/*
+        Título e uma frase no topo, e não uma legenda por área.
+
+        ⚠️ A regra é a mesma para tudo que toca cadastro, e repeti-la em cada
+        bloco fazia a tela ter mais aviso que opção. Dita uma vez, ela vale para
+        a lista inteira.
+      */}
+      <div
+        style={{
+          marginTop: 4,
+          fontSize: "calc(var(--text-lg) + 2px)",
+          fontWeight: "var(--fw-semi)",
+          color: "var(--text-primary)",
+          letterSpacing: "var(--tracking-snug)",
+        }}
+      >
+        O que ela resolve sozinha
+      </div>
+
+      <p
+        style={{
+          margin: "6px 0 20px",
+          fontSize: "calc(var(--text-xs) + 1px)",
+          color: "var(--text-tertiary)",
+          lineHeight: "var(--lh-normal)",
+        }}
+      >
+        {geral
+          ? "Esta é a persona geral: ela atende antes de o cliente se identificar, e por isso só fala do que não é dado de ninguém. Dê um setor a ela, em Parametrização, para liberar as consultas."
+          : "O que estiver marcado, ela resolve sozinha. O resto ela encaminha, mesmo que pareça saber a resposta. Consulta de cadastro continua exigindo CPF ou CNPJ e o código enviado ao e-mail."}
+      </p>
 
       {AREAS.map((area) => {
         const itens = PERMISSOES.filter(
@@ -746,84 +812,77 @@ function Permissoes({
         if (itens.length === 0) return null;
 
         return (
-          <section key={area.id}>
-            <div
-              style={{
-                fontSize: "calc(var(--text-lg) + 2px)",
-                fontWeight: "var(--fw-semi)",
-                color: "var(--text-primary)",
-                letterSpacing: "var(--tracking-snug)",
-              }}
-            >
+          <section key={area.id} style={{ marginBottom: 20 }}>
+            {/* Rótulo técnico, o mesmo dos cabeçalhos de tabela: a área
+                organiza a lista, não abre uma seção nova da tela. */}
+            <div className="rotulo" style={{ marginBottom: 6 }}>
               {area.rotulo}
             </div>
-            <p
-              style={{
-                marginTop: 6,
-                marginBottom: 10,
-                fontSize: "calc(var(--text-xs) + 1px)",
-                color: "var(--text-tertiary)",
-                lineHeight: "var(--lh-normal)",
-              }}
-            >
-              {area.legenda}
-            </p>
 
-            <div style={{ display: "flex", flexDirection: "column" }}>
-              {itens.map((p, i) => (
+            {itens.map((p) => {
+              const marcada = escolhidas.includes(p.id);
+
+              return (
                 <label
                   key={p.id}
                   style={{
                     display: "flex",
+                    alignItems: "center",
                     gap: 10,
-                    padding: "10px 0",
-                    borderTop: i === 0 ? "none" : "1px solid var(--border)",
+                    /*
+                      A linha inteira é o alvo do clique, e por isso ela tem
+                      moldura: sem ela, a área clicável não tem onde começar nem
+                      terminar, e o mouse acerta por sorte.
+                    */
+                    padding: "8px 10px",
+                    marginBottom: 4,
+                    borderRadius: "var(--radius-md)",
+                    border: `1px solid ${marcada ? "var(--primary)" : "var(--border)"}`,
+                    background: marcada ? "var(--primary-subtle)" : "var(--surface)",
                     cursor: "pointer",
+                    transition: "border-color var(--dur) var(--ease)",
                   }}
                 >
                   <input
                     type="checkbox"
-                    checked={escolhidas.includes(p.id)}
+                    checked={marcada}
                     onChange={(e) => onMarcar(p.id, e.target.checked)}
-                    style={{ marginTop: 3, accentColor: "var(--primary)" }}
+                    style={{ flexShrink: 0, accentColor: "var(--primary)" }}
                   />
 
-                  <div style={{ minWidth: 0 }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: "var(--text-sm)" }}>{p.rotulo}</div>
                     <div
                       style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 6,
-                        fontSize: "var(--text-sm)",
-                        fontWeight: "var(--fw-semi)",
-                      }}
-                    >
-                      {p.rotulo}
-
-                      {/*
-                        ⚠️ "em breve" aparece MARCÁVEL, e não escondido.
-
-                        Deixar pronto antes de a tela existir é útil, mas quem
-                        marca e não vê a IA responder aquilo concluiria que
-                        quebrou.
-                      */}
-                      {p.emBreve && <Badge tom="neutral">em breve</Badge>}
-                    </div>
-
-                    <div
-                      style={{
-                        marginTop: 2,
-                        fontSize: "calc(var(--text-xs) + 1px)",
+                        marginTop: 1,
+                        fontSize: "var(--text-xs)",
                         color: "var(--text-tertiary)",
-                        lineHeight: "var(--lh-normal)",
                       }}
                     >
                       {p.descricao}
                     </div>
                   </div>
+
+                  {/*
+                    ⚠️ "em breve" aparece MARCÁVEL, e não escondido.
+
+                    Deixar pronto antes de a tela existir é útil, mas quem marca
+                    e não vê a IA responder aquilo concluiria que quebrou.
+                  */}
+                  {p.emBreve && (
+                    <span
+                      style={{
+                        flexShrink: 0,
+                        fontSize: "var(--text-xs)",
+                        color: "var(--text-tertiary)",
+                      }}
+                    >
+                      em breve
+                    </span>
+                  )}
                 </label>
-              ))}
-            </div>
+              );
+            })}
           </section>
         );
       })}
@@ -848,22 +907,32 @@ function BotaoDeSugestao({ onClick }: { onClick: () => void }) {
       style={{
         display: "inline-flex",
         alignItems: "center",
-        gap: 7,
+        gap: 5,
         marginTop: 8,
-        height: "var(--h-btn-sm)",
-        padding: "0 14px",
+        /*
+         * Do tamanho do TEXTO, e nao da largura do campo.
+         *
+         * ⚠️ `alignSelf` porque o pai e uma coluna flex, que estica o filho de
+         * ponta a ponta por padrao. Esticado, o convite ganhava o peso de um
+         * botao principal logo abaixo de um campo de texto — e ele e um atalho,
+         * nao a acao da tela.
+         */
+        alignSelf: "flex-start",
+        width: "fit-content",
+        height: 26,
+        padding: "0 9px",
         borderRadius: "var(--radius-full)",
         border: "1px solid var(--primary)",
         background: "var(--surface)",
         color: "var(--primary)",
-        fontSize: "var(--text-sm)",
+        fontSize: "var(--text-xs)",
         fontWeight: "var(--fw-semi)",
         fontFamily: "var(--font)",
         cursor: "pointer",
       }}
     >
       {/* Estrelas: o desenho que o sistema usa para "escrito por IA". */}
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
         <path d="M12 3l1.9 4.7L18.6 9.6l-4.7 1.9L12 16.2l-1.9-4.7L5.4 9.6l4.7-1.9z" />
         <path d="M18 15.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z" />
       </svg>
@@ -889,7 +958,7 @@ function PedirSugestao({
   credenciais: ConfigIA[];
   setorNome: string | null;
   onFechar: () => void;
-  onPronto: (r: { descricao: string; podeResolver: string; permissoes: string[] }) => void;
+  onPronto: (r: { descricao: string; permissoes: string[] }) => void;
 }) {
   const { avisar } = useAvisos();
   const [credencialId, setCredencialId] = useState(credenciais[0]?.id ?? 0);

@@ -57,10 +57,9 @@ const ESQUEMA_DA_SUGESTAO = {
   type: "object",
   properties: {
     descricao: { type: "string" },
-    podeResolver: { type: "string" },
     permissoes: { type: "array", items: { type: "string" } },
   },
-  required: ["descricao", "podeResolver", "permissoes"],
+  required: ["descricao", "permissoes"],
 };
 
 /**
@@ -78,7 +77,7 @@ export async function pedirSugestao(
   empresaId: number,
   credencialId: number,
   entrada: { setorNome: string | null; contexto: string },
-): Promise<{ descricao: string; podeResolver: string; permissoes: string[] }> {
+): Promise<{ descricao: string; permissoes: string[] }> {
   const cred = await iaRepo.chaveParaTeste(credencialId);
 
   if (!cred) throw new BusinessRuleError("Chave de IA não encontrada nesta empresa.");
@@ -94,9 +93,8 @@ export async function pedirSugestao(
 
   const instrucao = [
     "Você ajuda a escrever a configuração de um atendente virtual de WhatsApp de uma empresa brasileira.",
-    "Devolva JSON com três campos:",
-    '- "descricao": como o atendente fala. Duas a quatro frases, em português do Brasil, na terceira pessoa. Descreve tom e postura, não o que ele resolve.',
-    '- "podeResolver": uma lista, um item por linha, do que ele fecha sozinho. Frases curtas, minúsculas, sem numeração e sem travessão. No máximo seis linhas.',
+    "Devolva JSON com dois campos:",
+    '- "descricao": como o atendente fala. Duas a quatro frases, em português do Brasil, na terceira pessoa. Descreve tom e postura, não o que ele resolve: o que ele resolve são as permissões.',
     '- "permissoes": os identificadores das consultas que fazem sentido, escolhidos SÓ da lista abaixo. Pode vir vazio.',
     "",
     "Consultas disponíveis:",
@@ -110,7 +108,6 @@ export async function pedirSugestao(
 
   const resposta = await responderEmJson<{
     descricao: string;
-    podeResolver: string;
     permissoes: string[];
   }>(
     {
@@ -142,7 +139,6 @@ export async function pedirSugestao(
 
   return {
     descricao: resposta.descricao ?? "",
-    podeResolver: resposta.podeResolver ?? "",
     permissoes: (resposta.permissoes ?? []).filter((id) => validas.has(id)),
   };
 }
