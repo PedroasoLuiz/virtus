@@ -219,29 +219,53 @@ export function EnvioPorModelo({
                 )}
               </div>
 
+              {/*
+                ⚠️ Cada campo mostra ONDE ele cai no texto.
+
+                "Campo 1", "Campo 2" não dizem nada, e a ordem dos marcadores no
+                corpo não é a ordem em que se lê: neste modelo o `{{2}}` é o
+                ticket e aparece depois do nome. Já saiu para um cliente uma
+                mensagem com o valor no lugar do nome por causa disso. O trecho
+                em volta do marcador resolve sem depender de cadastro nenhum.
+              */}
               {Array.from({ length: modelo.parametros }, (_, i) => (
-                <input
-                  key={i}
-                  value={valores[i] ?? ""}
-                  onChange={(e) =>
-                    setValores((atuais) => {
-                      const copia = [...atuais];
-                      copia[i] = e.target.value;
-                      return copia;
-                    })
-                  }
-                  placeholder={`Campo ${i + 1}`}
-                  style={{
-                    height: 32,
-                    padding: "0 10px",
-                    fontSize: "var(--text-sm)",
-                    border: "1px solid var(--input-border)",
-                    borderRadius: "var(--radius-md)",
-                    background: "var(--surface)",
-                    color: "var(--text-primary)",
-                    outline: "none",
-                  }}
-                />
+                <div key={i}>
+                  <div
+                    style={{
+                      marginBottom: 3,
+                      fontSize: "var(--text-xs)",
+                      color: "var(--text-tertiary)",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {ondeEntra(modelo.corpo, i + 1)}
+                  </div>
+
+                  <input
+                    value={valores[i] ?? ""}
+                    onChange={(e) =>
+                      setValores((atuais) => {
+                        const copia = [...atuais];
+                        copia[i] = e.target.value;
+                        return copia;
+                      })
+                    }
+                    placeholder={`Campo ${i + 1}`}
+                    style={{
+                      width: "100%",
+                      height: 32,
+                      padding: "0 10px",
+                      fontSize: "var(--text-sm)",
+                      border: "1px solid var(--input-border)",
+                      borderRadius: "var(--radius-md)",
+                      background: "var(--surface)",
+                      color: "var(--text-primary)",
+                      outline: "none",
+                    }}
+                  />
+                </div>
               ))}
 
               <button
@@ -270,6 +294,33 @@ export function EnvioPorModelo({
     </footer>
   );
 }
+/**
+ * O trecho do texto em volta de um marcador.
+ *
+ * ⚠️ Existe porque a POSIÇÃO do `{{n}}` não se adivinha pelo número dele: um
+ * modelo pode citar o `{{4}}` antes do `{{2}}`, e a Meta aceita. Sem ver onde
+ * cai, quem preenche vai pela ordem em que lê a frase — e foi assim que saiu
+ * uma cobrança com o valor no lugar do nome do cliente.
+ *
+ * Corta em 24 caracteres de cada lado: o suficiente para reconhecer o lugar sem
+ * a linha virar um parágrafo.
+ */
+function ondeEntra(corpo: string, numero: number): string {
+  const marcador = new RegExp(`\\{\\{\\s*${numero}\\s*\\}\\}`);
+  const achado = corpo.match(marcador);
+
+  if (!achado || achado.index == null) return `Campo ${numero}`;
+
+  const antes = corpo.slice(Math.max(0, achado.index - 24), achado.index);
+  const depois = corpo.slice(achado.index + achado[0].length).slice(0, 24);
+
+  // A quebra de linha vira espaco: numa linha so, ela nao separa nada e ainda
+  // corta a frase no meio sem motivo visivel.
+  const limpo = (t: string) => t.replace(/\s*\n\s*/g, " ");
+
+  return `${limpo(antes)}[ ]${limpo(depois)}`.trim();
+}
+
 /** Troca `{{1}}`, `{{2}}`… pelos valores digitados, para a prévia. */
 function preencher(corpo: string, valores: string[]): string {
   return corpo.replace(/\{\{\s*(\d+)\s*\}\}/g, (marcador, n: string) => {

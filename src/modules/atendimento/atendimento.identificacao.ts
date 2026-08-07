@@ -85,7 +85,7 @@ export function corpoDoEmail(codigo: string, empresa: string): string {
  */
 export function textoDoSaldo(s: SaldoDoCliente): string {
   if (s.emAberto <= 0) {
-    return "Consultei aqui e não há nada em aberto no seu cadastro. Se você recebeu alguma cobrança, me avisa que eu chamo o financeiro.";
+    return "Consultei aqui e não há nada em aberto no seu cadastro. Se você recebeu alguma cobrança, me avisa que eu registro para conferirem.";
   }
 
   const partes = [`Você tem ${REAIS.format(s.emAberto)} em aberto`];
@@ -105,7 +105,14 @@ export function textoDoSaldo(s: SaldoDoCliente): string {
     partes.push(` O próximo vencimento${valor} é em ${emData(s.proximoVencimento)}.`);
   }
 
-  partes.push(" Se precisar da segunda via para pagar, me diz que eu passo para o financeiro.");
+  /*
+   * ⚠️ "Registro o pedido", e nao "passo para o financeiro".
+   *
+   * Quem fala pode SER o financeiro — a persona daquele setor —, e ai a frase
+   * dizia que ela ia passar para ela mesma. E o que acontece de verdade e o
+   * registro: o envio da segunda via ainda depende de alguem.
+   */
+  partes.push(" Se precisar da segunda via para pagar, me diz que eu já registro o pedido.");
 
   return partes.join("");
 }
@@ -135,6 +142,6 @@ export function textoDosTitulos(titulos: TituloEmAberto[]): string {
   return [
     titulos.length === 1 ? "É esta:" : `São ${titulos.length}:`,
     ...linhas,
-    "Se precisar da segunda via para pagar, me diz que eu passo para o financeiro.",
+    "Se precisar da segunda via para pagar, me diz que eu já registro o pedido.",
   ].join("\n");
 }

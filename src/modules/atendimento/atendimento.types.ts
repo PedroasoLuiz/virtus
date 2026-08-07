@@ -43,6 +43,14 @@ export type ContextoDoBot = {
   atendimentoSituacao: SituacaoAtendimento | null;
   /** Para onde ja foi encaminhado, para o bot nao encaminhar duas vezes. */
   atendimentoSetor: string | null;
+  /**
+   * O ID do setor ja escolhido nesta janela.
+   *
+   * ⚠️ Existe para a PERSONA sobreviver as mensagens em que o modelo nao repete
+   * o setor. Na identificacao ele devolve `setorId` zero, e a conversa perdia a
+   * persona no meio: a assinatura sumia e o tom voltava ao da triagem.
+   */
+  atendimentoSetorId: number | null;
   /** ⚠️ QUAL era o assunto. Sem isso o bot nao percebe quando ele muda. */
   atendimentoIntencao: string | null;
   /** Uma pessoa pegou o atendimento na fila. */

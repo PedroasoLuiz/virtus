@@ -979,6 +979,7 @@ export type Database = {
           atendimento_id: number | null;
           atendimento_situacao: string | null;
           atendimento_setor: string | null;
+          atendimento_setor_id: number | null;
           atendimento_intencao: string | null;
           atendimento_aceito: boolean;
           tentativas: number;

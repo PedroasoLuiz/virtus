@@ -743,7 +743,15 @@ async function executar(conversaId: number): Promise<void> {
      * falar com ninguem, ela perguntou algo que o sistema sabe responder.
      * Gravar isso na fila encheria o financeiro de tarefas ja resolvidas.
      */
-    const persona = personaDaVez(personas, triagem.setorId || null);
+    /*
+     * ⚠️ O setor JA ESCOLHIDO vale quando o modelo nao repete um.
+     *
+     * Na identificacao ele devolve `setorId` zero, porque nao esta triando: e a
+     * mesma conversa, no mesmo assunto. Sem esta reserva, a persona sumia no
+     * meio do atendimento e a assinatura ia junto — o cliente via "Ingrid" na
+     * primeira mensagem e ninguem na seguinte.
+     */
+    const persona = personaDaVez(personas, triagem.setorId || ctx.atendimentoSetorId);
 
     if (triagem.acao && triagem.acao !== "NENHUMA") {
       /*

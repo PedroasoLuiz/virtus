@@ -47,6 +47,7 @@ export async function contexto(
     atendimentoId: l.atendimento_id,
     atendimentoSituacao: (l.atendimento_situacao as SituacaoAtendimento | null) ?? null,
     atendimentoSetor: l.atendimento_setor ?? null,
+    atendimentoSetorId: l.atendimento_setor_id ?? null,
     atendimentoIntencao: l.atendimento_intencao ?? null,
     atendimentoAceito: l.atendimento_aceito ?? false,
     tentativas: l.tentativas,
