@@ -276,45 +276,38 @@ export function TarefaDrawer({
           </>
         )
       }
+      /* O Badge do ticket é informação, e por isso continua no rodapé. */
       footer={
+        !criando && tarefa.ticketId != null ? (
+          <Badge tom="success">TICKET {tarefa.ticketId}</Badge>
+        ) : undefined
+      }
+      acoes={
         criando ? (
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-            <Button size="sm" onClick={onClose} disabled={salvando}>
-              Cancelar
-            </Button>
-            <Button size="sm" variant="primary" onClick={criar} disabled={salvando || !titulo.trim()}>
-              {salvando ? "Criando…" : "Criar tarefa"}
-            </Button>
-          </div>
+          <Button size="xs" variant="primary" onClick={criar} disabled={salvando || !titulo.trim()}>
+            {salvando ? "Criando…" : "Criar tarefa"}
+          </Button>
         ) : (
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {tarefa.ticketId != null && <Badge tom="success">TICKET {tarefa.ticketId}</Badge>}
-
-            {/* A tarefa concluída vira cobrança daqui. Desabilitado com o motivo
-                no `title`: sumir faria a pessoa procurar onde o botão foi parar. */}
-            {projeto.modalidade === "POR_DEMANDA" && tarefa.ticketId == null && (
-              <Button
-                size="sm"
-                variant="primary"
-                disabled={!tarefa.concluidaEm || tarefa.valor <= 0}
-                title={
-                  !tarefa.concluidaEm
-                    ? "A tarefa precisa estar concluída"
-                    : tarefa.valor <= 0
-                      ? "Informe o valor da tarefa"
-                      : undefined
-                }
-                onClick={() => void chamarTicket(`/api/v1/projetos/${projeto.id}/cobranca`)}
-              >
-                Gerar ticket
-              </Button>
-            )}
-
-            <span style={{ flex: 1 }} />
-            <Button size="sm" onClick={onClose}>
-              Fechar
+          /* A tarefa concluída vira cobrança daqui. Desabilitado com o motivo
+             no `title`: sumir faria a pessoa procurar onde o botão foi parar. */
+          projeto.modalidade === "POR_DEMANDA" &&
+          tarefa.ticketId == null && (
+            <Button
+              size="xs"
+              variant="primary"
+              disabled={!tarefa.concluidaEm || tarefa.valor <= 0}
+              title={
+                !tarefa.concluidaEm
+                  ? "A tarefa precisa estar concluída"
+                  : tarefa.valor <= 0
+                    ? "Informe o valor da tarefa"
+                    : undefined
+              }
+              onClick={() => void chamarTicket(`/api/v1/projetos/${projeto.id}/cobranca`)}
+            >
+              Gerar ticket
             </Button>
-          </div>
+          )
         )
       }
     >

@@ -268,25 +268,26 @@ export function NovoRecebimentoDrawer({
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <Totais abatido={abatido} acrescimo={acrescimo} total={total} />
 
-          <span style={{ flex: 1 }} />
-          <Button
-            size="sm"
-            variant="primary"
-            disabled={salvando || destinos.length === 0 || !contaId || !clienteId}
-            title={
-              !clienteId
-                ? "Escolha de quem veio o dinheiro"
-                : !contaId
-                  ? "Escolha a conta em que o dinheiro entrou"
-                  : destinos.length === 0
-                    ? "Informe quanto foi para cada parcela"
-                    : undefined
-            }
-            onClick={registrar}
-          >
-            {salvando ? "Registrando…" : "Registrar recebimento"}
-          </Button>
         </div>
+      }
+      acoes={
+        <Button
+          size="xs"
+          variant="primary"
+          disabled={salvando || destinos.length === 0 || !contaId || !clienteId}
+          title={
+            !clienteId
+              ? "Escolha de quem veio o dinheiro"
+              : !contaId
+                ? "Escolha a conta em que o dinheiro entrou"
+                : destinos.length === 0
+                  ? "Informe quanto foi para cada parcela"
+                  : undefined
+          }
+          onClick={registrar}
+        >
+          {salvando ? "Registrando…" : "Registrar recebimento"}
+        </Button>
       }
     >
       <div style={{ display: "flex", flexDirection: "column", gap: 3, marginBottom: 16 }}>

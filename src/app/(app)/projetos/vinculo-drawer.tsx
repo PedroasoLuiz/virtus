@@ -173,16 +173,17 @@ export function VinculoDrawer({
             </div>
           )}
 
-          <span style={{ flex: 1 }} />
-          <Button
-            size="sm"
-            variant="primary"
-            disabled={marcados.length === 0 || salvando}
-            onClick={vincular}
-          >
-            {salvando ? "Vinculando…" : "Vincular"}
-          </Button>
         </div>
+      }
+      acoes={
+        <Button
+          size="xs"
+          variant="primary"
+          disabled={marcados.length === 0 || salvando}
+          onClick={vincular}
+        >
+          {salvando ? "Vinculando…" : "Vincular"}
+        </Button>
       }
     >
       <div style={{ marginBottom: 10 }}>

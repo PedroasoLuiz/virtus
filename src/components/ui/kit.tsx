@@ -638,7 +638,14 @@ export function Button({
 }: {
   children: React.ReactNode;
   variant?: "primary" | "secondary" | "ghost" | "danger";
-  size?: "sm" | "md";
+  /**
+   * `xs` existe para a linha de botoes do CABECALHO do drawer.
+   *
+   * ⚠️ Os 28px sao os do X e dos icones que moram ali: um botao de 30 ao lado
+   * deles desalinha a linha inteira, e a diferenca de dois pixels e daquelas que
+   * se ve sem saber nomear. A letra desce junto, senao o texto encosta na borda.
+   */
+  size?: "xs" | "sm" | "md";
   onClick?: () => void;
   disabled?: boolean;
   type?: "button" | "submit";
@@ -667,10 +674,11 @@ export function Button({
         alignItems: "center",
         justifyContent: "center",
         gap: 6,
-        height: size === "sm" ? "var(--h-btn-sm)" : "var(--h-btn)",
-        padding: size === "sm" ? "0 12px" : "0 16px",
-        borderRadius: "var(--radius-md)",
-        fontSize: "var(--text-base)",
+        height:
+          size === "xs" ? "var(--h-btn-xs)" : size === "sm" ? "var(--h-btn-sm)" : "var(--h-btn)",
+        padding: size === "xs" ? "0 10px" : size === "sm" ? "0 12px" : "0 16px",
+        borderRadius: size === "xs" ? "var(--radius-sm)" : "var(--radius-md)",
+        fontSize: size === "xs" ? "var(--text-sm)" : "var(--text-base)",
         fontWeight: "var(--fw-medium)",
         fontFamily: "var(--font)",
         cursor: disabled ? "not-allowed" : "pointer",

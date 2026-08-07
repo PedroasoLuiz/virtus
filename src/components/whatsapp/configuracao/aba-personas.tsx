@@ -285,17 +285,15 @@ function FormularioDaPersona({
       onClose={onFechar}
       title={rascunho.id ? "Editar persona" : "Nova persona"}
       subtitle="Nunca autoriza dizer valor, vencimento ou boleto"
-      footer={
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
-          <Button
-            size="sm"
-            variant="primary"
-            onClick={() => void salvar()}
-            disabled={salvando || rascunho.nome.trim().length < 2}
-          >
-            {salvando ? "Salvando…" : "Salvar"}
-          </Button>
-        </div>
+      acoes={
+        <Button
+          size="xs"
+          variant="primary"
+          onClick={() => void salvar()}
+          disabled={salvando || rascunho.nome.trim().length < 2}
+        >
+          {salvando ? "Salvando…" : "Salvar"}
+        </Button>
       }
     >
       <Field label="Nome" required hint="Só para você identificar aqui dentro.">

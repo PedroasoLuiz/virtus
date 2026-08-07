@@ -199,15 +199,10 @@ function Conteudo({
       onClose={onClose}
       title={criando ? "Novo contrato" : `Contrato ${contrato?.numero ?? contratoId}`}
       subtitle={contrato?.descricao ?? undefined}
-      footer={
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-          <Button size="sm" onClick={onClose} disabled={salvando}>
-            Cancelar
-          </Button>
-          <Button size="sm" variant="primary" onClick={salvar} disabled={salvando}>
-            {salvando ? "Salvando…" : criando ? "Criar" : "Salvar"}
-          </Button>
-        </div>
+      acoes={
+        <Button size="xs" variant="primary" onClick={salvar} disabled={salvando}>
+          {salvando ? "Salvando…" : criando ? "Criar" : "Salvar"}
+        </Button>
       }
     >
       {!criando && (

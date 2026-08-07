@@ -358,18 +358,16 @@ function FormularioDoVinculo({
       onClose={onFechar}
       nivel={3}
       title={finalidade.rotulo}
-      footer={
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
-          <Button
-            size="sm"
-            variant="primary"
-            onClick={() => void salvar()}
-            disabled={salvando || faltando}
-            title={faltando ? "Escolha o modelo e o que entra em cada campo" : undefined}
-          >
-            {salvando ? "Salvando…" : "Salvar"}
-          </Button>
-        </div>
+      acoes={
+        <Button
+          size="xs"
+          variant="primary"
+          onClick={() => void salvar()}
+          disabled={salvando || faltando}
+          title={faltando ? "Escolha o modelo e o que entra em cada campo" : undefined}
+        >
+          {salvando ? "Salvando…" : "Salvar"}
+        </Button>
       }
     >
       {/*

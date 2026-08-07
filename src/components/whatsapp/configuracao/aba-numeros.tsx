@@ -277,21 +277,23 @@ export function AbaDeNumeros({
          * campos; aqui a largura tem de casar com a da listagem, senao o painel
          * encolhe ao entrar na edicao.
          *
-         * No rodape so "Salvar": o X do cabecalho ja sai sem gravar, e um
-         * "Cancelar" ao lado seria um segundo botao para o mesmo gesto.
+         * So "Salvar": o X do cabecalho ja sai sem gravar, e um "Cancelar" ao
+         * lado seria um segundo botao para o mesmo gesto.
+         *
+         * ⚠️ No CABECALHO, e nao no rodape. Este formulario tem nove campos e
+         * ainda o teste de conexao: com o botao embaixo, corrigir um token no
+         * topo e gravar custava uma rolagem inteira por tentativa.
          */
-        footer={
-          <div style={{ display: "flex", justifyContent: "flex-end" }}>
-            <Button
-              size="sm"
-              variant="primary"
-              onClick={() => void salvar()}
-              disabled={salvando || problemas(rascunho, teste).length > 0}
-              title={problemas(rascunho, teste)[0]}
-            >
-              {salvando ? "Salvando…" : "Salvar"}
-            </Button>
-          </div>
+        acoes={
+          <Button
+            size="xs"
+            variant="primary"
+            onClick={() => void salvar()}
+            disabled={salvando || problemas(rascunho, teste).length > 0}
+            title={problemas(rascunho, teste)[0]}
+          >
+            {salvando ? "Salvando…" : "Salvar"}
+          </Button>
         }
       >
         <Formulario

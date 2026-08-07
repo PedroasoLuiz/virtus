@@ -102,21 +102,22 @@ export function ContaDrawer({
             </div>
           )}
 
-          <span style={{ flex: 1 }} />
-          <Button
-            size="sm"
-            variant="primary"
-            disabled={salvando || !identificavel}
-            title={
-              !identificavel
-                ? "Informe ao menos o apelido, o banco ou o número da conta"
-                : undefined
-            }
-            onClick={salvar}
-          >
-            {salvando ? "Salvando…" : "Salvar"}
-          </Button>
         </div>
+      }
+      acoes={
+        <Button
+          size="xs"
+          variant="primary"
+          disabled={salvando || !identificavel}
+          title={
+            !identificavel
+              ? "Informe ao menos o apelido, o banco ou o número da conta"
+              : undefined
+          }
+          onClick={salvar}
+        >
+          {salvando ? "Salvando…" : "Salvar"}
+        </Button>
       }
     >
       <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>

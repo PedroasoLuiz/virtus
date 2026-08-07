@@ -492,7 +492,7 @@ function Conteudo({
           </div>
         )
       }
-      footer={
+      acoes={
         <Rodape
           editando={editando}
           criando={criando}
@@ -702,6 +702,13 @@ function Conteudo({
   );
 }
 
+/**
+ * As acoes do ticket, no cabecalho.
+ *
+ * ⚠️ "Cancelar" CONTINUA existindo, ao contrario dos outros drawers. Aqui ele
+ * nao fecha a tela: ele sai do modo de edicao e devolve os campos ao que
+ * estavam. O X do cabecalho fecharia o drawer inteiro, que e outra coisa.
+ */
 function Rodape({
   editando,
   criando,
@@ -729,7 +736,7 @@ function Rodape({
       // desfez.
       <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8 }}>
         {podeEditar && (
-          <Button size="sm" onClick={onEditar}>
+          <Button size="xs" onClick={onEditar}>
             Editar
           </Button>
         )}
@@ -739,10 +746,10 @@ function Rodape({
 
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8 }}>
-      <Button size="sm" onClick={onCancelar} disabled={salvando}>
+      <Button size="xs" onClick={onCancelar} disabled={salvando}>
         Cancelar
       </Button>
-      <Button size="sm" variant="primary" onClick={onSalvar} disabled={salvando || !podeSalvar}>
+      <Button size="xs" variant="primary" onClick={onSalvar} disabled={salvando || !podeSalvar}>
         {salvando ? "Salvando…" : criando ? "Criar" : "Salvar"}
       </Button>
     </div>

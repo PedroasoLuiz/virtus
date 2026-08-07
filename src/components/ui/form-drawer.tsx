@@ -88,35 +88,33 @@ export function FormDrawer<T>({
       title={titulo}
       subtitle={subtitulo}
       width={larguraDrawer}
+      /*
+       * ⚠️ O salvar sobe para o cabeçalho; o ERRO fica embaixo.
+       *
+       * São coisas de natureza diferente. O botão é a ação, e no cabeçalho ele
+       * está sempre à mão, sem depender de quanto o formulário rolou. A mensagem
+       * de erro é texto, pode ter duas linhas, e espremida entre ícones ficaria
+       * ilegível justamente na hora em que precisa ser lida.
+       */
+      acoes={
+        <Button size="xs" variant="primary" onClick={salvar} disabled={salvando || !podeSalvar}>
+          {salvando ? "Salvando…" : "Salvar"}
+        </Button>
+      }
       footer={
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {erro && (
-            <span
-              role="alert"
-              style={{
-                flex: 1,
-                fontSize: "var(--text-sm)",
-                color: "var(--danger-text)",
-                lineHeight: "var(--lh-snug)",
-              }}
-            >
-              {erro}
-            </span>
-          )}
-          <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-            <Button size="sm" onClick={onClose} disabled={salvando}>
-              Cancelar
-            </Button>
-            <Button
-              size="sm"
-              variant="primary"
-              onClick={salvar}
-              disabled={salvando || !podeSalvar}
-            >
-              {salvando ? "Salvando…" : "Salvar"}
-            </Button>
-          </div>
-        </div>
+        erro ? (
+          <span
+            role="alert"
+            style={{
+              display: "block",
+              fontSize: "var(--text-sm)",
+              color: "var(--danger-text)",
+              lineHeight: "var(--lh-snug)",
+            }}
+          >
+            {erro}
+          </span>
+        ) : undefined
       }
     >
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{children}</div>

@@ -196,16 +196,17 @@ export function NovaFaturaDrawer({
             </div>
           </div>
 
-          <span style={{ flex: 1 }} />
-          <Button
-            size="sm"
-            variant="primary"
-            disabled={salvando || escolhidos.length === 0}
-            onClick={criar}
-          >
-            {salvando ? "Criando…" : emitir ? "Criar e emitir" : "Criar rascunho"}
-          </Button>
         </div>
+      }
+      acoes={
+        <Button
+          size="xs"
+          variant="primary"
+          disabled={salvando || escolhidos.length === 0}
+          onClick={criar}
+        >
+          {salvando ? "Criando…" : emitir ? "Criar e emitir" : "Criar rascunho"}
+        </Button>
       }
     >
       <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>

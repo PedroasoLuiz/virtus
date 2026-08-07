@@ -26,6 +26,7 @@ export function Drawer({
   subtitle,
   width = LARGURA_PADRAO,
   footer,
+  acoes,
   headerExtra,
   nivel = 1,
   children,
@@ -36,6 +37,19 @@ export function Drawer({
   subtitle?: React.ReactNode;
   width?: number;
   footer?: React.ReactNode;
+  /**
+   * A ação principal, no CABEÇALHO, à esquerda dos ícones.
+   *
+   * ⚠️ Alternativa ao `footer`, e não um complemento. Existe para formulário
+   * longo: com o salvar só no rodapé, mexer num campo do topo e gravar obriga a
+   * rolar a tela inteira, e testar um token vira uma rolagem por tentativa.
+   *
+   * ⚠️ Serve a formulário cujo rodapé é SÓ o botão. Onde o rodapé carrega total,
+   * saldo ou mensagem de erro, ele continua embaixo: aquilo é a última coisa que
+   * se lê antes de agir, e no cabeçalho um valor em dinheiro brigaria com o
+   * título.
+   */
+  acoes?: React.ReactNode;
   headerExtra?: React.ReactNode;
   /**
    * Em que andar este drawer abre.
@@ -153,6 +167,14 @@ export function Drawer({
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+            {/*
+              A ação vem PRIMEIRO da linha, e o fechar continua na ponta.
+
+              O X é o mesmo em todo drawer do sistema, e a mão já sabe onde ele
+              está: empurrá-lo para dentro para abrir espaço faria o gesto de
+              fechar errar o alvo em toda tela.
+            */}
+            {acoes}
             {headerExtra}
             <button
               onClick={onClose}

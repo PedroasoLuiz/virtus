@@ -484,18 +484,16 @@ function FormularioDoProvedor({
        * para a legenda do grupo da credencial, ao lado do campo que ela explica.
        */
       title={jaTemChave ? "Editar provedor" : "Adicionar provedor"}
-      footer={
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
-          <Button
-            size="sm"
-            variant="primary"
-            onClick={() => void salvar()}
-            disabled={salvando || erros.length > 0}
-            title={erros[0]}
-          >
-            {salvando ? "Salvando…" : "Salvar"}
-          </Button>
-        </div>
+      acoes={
+        <Button
+          size="xs"
+          variant="primary"
+          onClick={() => void salvar()}
+          disabled={salvando || erros.length > 0}
+          title={erros[0]}
+        >
+          {salvando ? "Salvando…" : "Salvar"}
+        </Button>
       }
     >
       <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>

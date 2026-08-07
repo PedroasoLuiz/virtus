@@ -53,6 +53,8 @@
   --h-input: 26px;  /* mesma altura do campo bloqueado — ver kit */
   --h-btn: 32px;
   --h-btn-sm: 30px;
+  /* Altura dos icones do cabecalho do drawer. Ver `Button size="xs"`. */
+  --h-btn-xs: 28px;
   --h-btn-lg: 40px;
   --h-row: 46px;
   --h-th: 36px;

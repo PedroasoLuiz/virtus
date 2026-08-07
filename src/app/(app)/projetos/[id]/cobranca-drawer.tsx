@@ -83,19 +83,17 @@ export function CobrancaDrawer({
             </div>
           </div>
 
-          <span style={{ flex: 1 }} />
-          <Button size="sm" onClick={onClose} disabled={gerando}>
-            Cancelar
-          </Button>
-          <Button
-            size="sm"
-            variant="primary"
-            onClick={gerar}
-            disabled={gerando || marcadas.length === 0}
-          >
-            {gerando ? "Gerando…" : "Gerar ticket"}
-          </Button>
         </div>
+      }
+      acoes={
+        <Button
+          size="xs"
+          variant="primary"
+          onClick={gerar}
+          disabled={gerando || marcadas.length === 0}
+        >
+          {gerando ? "Gerando…" : "Gerar ticket"}
+        </Button>
       }
     >
       {elegiveis.length === 0 ? (

@@ -640,12 +640,10 @@ function NovoVencimento({
       title={`Vencimento da parcela ${parcela.numero}`}
       subtitle={parcela.vencimento ? `Hoje vence em ${curto(parcela.vencimento)}` : undefined}
       width={420}
-      footer={
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
-          <Button size="sm" variant="primary" onClick={() => void salvar()} disabled={!data || salvando}>
-            {salvando ? "Salvando…" : "Salvar"}
-          </Button>
-        </div>
+      acoes={
+        <Button size="xs" variant="primary" onClick={() => void salvar()} disabled={!data || salvando}>
+          {salvando ? "Salvando…" : "Salvar"}
+        </Button>
       }
     >
       <Field

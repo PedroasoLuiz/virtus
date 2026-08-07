@@ -363,17 +363,15 @@ function Conteudo({
       }
       /* Sem Cancelar: o X do cabecalho ja fecha, e dois jeitos de sair na mesma
          tela so dividem a atencao de quem procura Salvar. */
-      footer={
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-          <Button
-            size="sm"
-            variant="primary"
-            onClick={salvarDados}
-            disabled={salvando || !podeSalvar}
-          >
-            {salvando ? "Salvando…" : criando ? "Criar" : "Salvar"}
-          </Button>
-        </div>
+      acoes={
+        <Button
+          size="xs"
+          variant="primary"
+          onClick={salvarDados}
+          disabled={salvando || !podeSalvar}
+        >
+          {salvando ? "Salvando…" : criando ? "Criar" : "Salvar"}
+        </Button>
       }
     >
       <>
