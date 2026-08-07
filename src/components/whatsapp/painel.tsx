@@ -12,11 +12,7 @@ import { Midia } from "@/components/whatsapp/painel/midia";
 import { EnvioPorModelo } from "@/components/whatsapp/painel/modelo";
 import { ResumoDoAtendimento } from "@/components/whatsapp/painel/resumo";
 import { Composicao } from "@/components/whatsapp/painel/composicao";
-import {
-  BotaoDeEtiquetas,
-  ChipDeEtiqueta,
-  PontosDeEtiqueta,
-} from "@/components/whatsapp/painel/etiquetas";
+import { BotaoDeEtiquetas, ChipDeEtiqueta } from "@/components/whatsapp/painel/etiquetas";
 import {
   botRespondendo,
   formatarTelefone,
@@ -55,7 +51,16 @@ import {
  * legenda, e quebrar a cada seis palavras obrigava a ler em zigue-zague.
  */
 const LARGURA = 1180;
-const LARGURA_LISTA = 320;
+const LARGURA_LISTA = 384;
+
+/*
+ * Onde comeca o NOME, medido da borda esquerda do cartao: o avatar mais o vao.
+ *
+ * Vale como constante porque tres coisas precisam bater nesta mesma coluna — o
+ * nome, o divisor entre conversas e o texto do "ver arquivadas". Numero solto em
+ * cada lugar so ficaria alinhado ate alguem mexer no tamanho do avatar.
+ */
+const RECUO_DO_NOME = 46;
 
 /** Mensagens do mesmo lado dentro desta janela viram um bloco so. */
 const AGRUPA_ATE_MS = 5 * 60 * 1000;
@@ -1023,30 +1028,38 @@ function ListaDeConversas({
           devolveria a caixa de entrada ao estado de onde a pessoa acabou de
           tirar a conversa.
         */}
+        {/*
+          Na MESMA grade das conversas: o icone na coluna dos avatares, o texto
+          na coluna dos nomes. Ele mora logo acima da primeira conversa, e
+          desalinhado por poucos pixels leria como um cabecalho torto em vez de
+          mais uma linha da lista.
+        */}
         <button
           type="button"
           onClick={() => onVerArquivadas(!verArquivadas)}
           aria-pressed={verArquivadas}
           style={{
-            alignSelf: "flex-start",
-            display: "inline-flex",
+            display: "flex",
             alignItems: "center",
-            gap: 6,
+            gap: 10,
             marginTop: -2,
             padding: 0,
             border: "none",
             background: "transparent",
             color: verArquivadas ? "var(--primary)" : "var(--text-tertiary)",
-            fontSize: "var(--text-xs)",
+            fontSize: "var(--text-sm)",
             fontWeight: "var(--fw-semi)",
             fontFamily: "var(--font)",
             cursor: "pointer",
+            textAlign: "left",
           }}
         >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="4" width="18" height="4.5" rx="1.4" />
-            <path d="M5 8.5V19a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19V8.5M10 12.5h4" />
-          </svg>
+          <span style={{ width: 36, flexShrink: 0, display: "grid", placeItems: "center" }}>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="4.5" rx="1.4" />
+              <path d="M5 8.5V19a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19V8.5M10 12.5h4" />
+            </svg>
+          </span>
           {verArquivadas ? "Voltar à caixa de entrada" : "Ver arquivadas"}
         </button>
       </header>
@@ -1073,15 +1086,16 @@ function ListaDeConversas({
                 : "Nenhuma conversa ainda. A primeira aparece assim que alguém escrever para o número."}
           </p>
         ) : (
-          listadas.map((c) => (
+          listadas.map((c, i) => (
             <ItemDaLista
               key={c.id}
               conversa={c}
               ativo={c.id === selecionadaId}
               esperando={esperaDemais(c)}
-              cores={c.etiquetas
-                .map((id) => etiquetas.find((e) => e.id === id)?.cor)
-                .filter((cor): cor is CorDeEtiqueta => Boolean(cor))}
+              marcadas={c.etiquetas
+                .map((id) => etiquetas.find((e) => e.id === id))
+                .filter((e): e is Etiqueta => Boolean(e))}
+              ultimo={i === listadas.length - 1}
               onClick={() => onEscolher(c)}
             />
           ))
@@ -1113,21 +1127,25 @@ function ItemDaLista({
   conversa,
   ativo,
   esperando,
-  cores,
+  marcadas,
+  ultimo,
   onClick,
 }: {
   conversa: Conversa;
   ativo: boolean;
   /** Ha tempo demais sem alguem responder. Ver `esperaDemais`. */
   esperando: boolean;
-  /** Cores das etiquetas desta conversa, ja resolvidas pela lista. */
-  cores: CorDeEtiqueta[];
+  /** As etiquetas desta conversa, ja resolvidas pela lista. */
+  marcadas: Etiqueta[];
+  /** Ultimo da lista: sem divisor embaixo, que sobraria solto no fim. */
+  ultimo: boolean;
   onClick: () => void;
 }) {
   const titulo = tituloDa(conversa);
   const naoLido = conversa.naoLidas > 0;
 
   return (
+    <div>
     <button
       type="button"
       onClick={onClick}
@@ -1136,8 +1154,13 @@ function ItemDaLista({
         display: "flex",
         gap: 10,
         alignItems: "center",
-        padding: "9px 10px",
-        marginTop: 2,
+        /*
+         * ⚠️ Sem respiro LATERAL. Com ele, o nome comecava recuado do campo de
+         * busca logo acima, e a coluna perdia a linha vertical que o olho segue
+         * de cima a baixo. O respiro que sobrou e so o de cima e o de baixo,
+         * maior que antes, porque agora ha um divisor separando as conversas.
+         */
+        padding: "11px 0",
         border: "none",
         borderRadius: "var(--radius-sm)",
         // A lista ficou branca, entao branco no selecionado nao destaca nada.
@@ -1199,7 +1222,6 @@ function ItemDaLista({
           >
             {titulo}
           </span>
-          <PontosDeEtiqueta cores={cores} />
           <span
             style={{
               fontSize: "var(--text-xs)",
@@ -1249,8 +1271,37 @@ function ItemDaLista({
             </span>
           )}
         </div>
+
+        {/*
+          A etiqueta vem DEPOIS da previa, como no WhatsApp.
+
+          ⚠️ Em cima, ao lado do nome, ela disputava espaco com a hora e com o
+          proprio nome, que e o que identifica a conversa. Embaixo ela ocupa uma
+          faixa que estava vazia e ainda le como o que e: uma marca colada na
+          conversa, e nao parte do titulo.
+        */}
+        {marcadas.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 5 }}>
+            {marcadas.map((e) => (
+              <ChipDeEtiqueta key={e.id} etiqueta={e} miudo />
+            ))}
+          </div>
+        )}
       </div>
     </button>
+
+    {/*
+      O divisor comeca onde comeca o NOME. Passando por baixo do avatar ele
+      cortaria a foto ao meio e a lista viraria uma tabela; recuado, ele separa
+      as conversas e deixa a coluna dos avatares correndo inteira.
+    */}
+    {!ultimo && (
+      <div
+        aria-hidden
+        style={{ height: 1, marginLeft: RECUO_DO_NOME, background: "var(--border)" }}
+      />
+    )}
+    </div>
   );
 }
 

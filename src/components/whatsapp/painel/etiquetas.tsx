@@ -5,7 +5,7 @@ import { CORES_DE_ETIQUETA } from "@/modules/whatsapp/whatsapp.schema";
 import type { CorDeEtiqueta, Etiqueta } from "@/modules/whatsapp/whatsapp.types";
 
 /**
- * Etiquetas de conversa: o chip, os pontos da lista e o menu de marcar.
+ * Etiquetas de conversa: o chip e o menu de marcar.
  *
  * Fora do `painel.tsx` porque aquele arquivo ja passa de duas mil linhas, e
  * etiqueta e um assunto fechado: nada aqui precisa saber de mensagem, janela de
@@ -47,11 +47,14 @@ const NOME_DA_COR: Record<CorDeEtiqueta, string> = {
 export function ChipDeEtiqueta({
   etiqueta,
   ativa = true,
+  miudo = false,
   onClick,
   onRemover,
 }: {
   etiqueta: Etiqueta;
   ativa?: boolean;
+  /** Versao da LISTA de conversas: menor, sem ponto, so o nome tingido. */
+  miudo?: boolean;
   onClick?: () => void;
   onRemover?: () => void;
 }) {
@@ -59,16 +62,23 @@ export function ChipDeEtiqueta({
 
   const conteudo = (
     <>
-      <span
-        aria-hidden
-        style={{
-          width: 6,
-          height: 6,
-          flexShrink: 0,
-          borderRadius: "var(--radius-full)",
-          background: ativa ? cor.texto : "var(--text-disabled)",
-        }}
-      />
+      {/*
+        O ponto some na versao miuda. Ali o chip inteiro ja e da cor da
+        etiqueta, e um ponto da mesma cor dentro dele so gastaria largura numa
+        linha que precisa caber ao lado da previa.
+      */}
+      {!miudo && (
+        <span
+          aria-hidden
+          style={{
+            width: 6,
+            height: 6,
+            flexShrink: 0,
+            borderRadius: "var(--radius-full)",
+            background: ativa ? cor.texto : "var(--text-disabled)",
+          }}
+        />
+      )}
       {etiqueta.nome}
       {onRemover && (
         <span
@@ -96,13 +106,13 @@ export function ChipDeEtiqueta({
     display: "inline-flex",
     alignItems: "center",
     gap: 5,
-    height: 22,
-    padding: "0 9px",
+    height: miudo ? 17 : 22,
+    padding: miudo ? "0 7px" : "0 9px",
     borderRadius: "var(--radius-full)",
     border: `1px solid ${ativa ? cor.borda : "var(--border)"}`,
     background: ativa ? cor.fundo : "var(--surface)",
     color: ativa ? cor.texto : "var(--text-secondary)",
-    fontSize: "var(--text-xs)",
+    fontSize: miudo ? "var(--text-2xs)" : "var(--text-xs)",
     fontWeight: "var(--fw-semi)" as const,
     fontFamily: "var(--font)",
     lineHeight: 1,
@@ -115,33 +125,6 @@ export function ChipDeEtiqueta({
     <button type="button" onClick={onClick} aria-pressed={ativa} style={{ ...estilo, cursor: "pointer" }}>
       {conteudo}
     </button>
-  );
-}
-
-/**
- * A classificação da conversa na LISTA, reduzida a pontos.
- *
- * ⚠️ Ponto e não chip. A linha já carrega nome, prévia, hora e não lidas; chips
- * com texto empurrariam a prévia para fora, e é a prévia que faz alguém decidir
- * se abre a conversa agora.
- */
-export function PontosDeEtiqueta({ cores }: { cores: CorDeEtiqueta[] }) {
-  if (cores.length === 0) return null;
-
-  return (
-    <span style={{ display: "inline-flex", gap: 3, flexShrink: 0 }} aria-hidden>
-      {cores.slice(0, 3).map((c, i) => (
-        <span
-          key={i}
-          style={{
-            width: 5,
-            height: 5,
-            borderRadius: "var(--radius-full)",
-            background: (PALETA[c] ?? PALETA.cinza).texto,
-          }}
-        />
-      ))}
-    </span>
   );
 }
 
