@@ -235,11 +235,15 @@ export function TableArea({
      * container, a tabela inteira encolhe — conteudo e traco juntos —, e as
      * linhas param onde o cartao pede.
      *
-     * Em cima 4 e embaixo 8: o cabecalho ja tem altura propria e um vao cheio
-     * acima dele abria um buraco entre o titulo da tela e a primeira coluna; a
-     * ultima linha, essa sim, precisa dos 8 para nao esbarrar na curva.
+     * ⚠️ Em cima o vao e ZERO, e nao pode voltar. O cabecalho e `sticky` e gruda
+     * no topo DESTA area: qualquer respiro acima dele vira uma fresta por onde as
+     * linhas aparecem enquanto rolam. Quem fecha a quina de cima e o fundo branco
+     * do proprio cabecalho.
+     *
+     * Embaixo ficam 8: a ultima linha colada no rodape esbarra na curva do
+     * cartao, e ali nao ha nada grudado para tapar.
      */
-    <div style={{ flex: 1, overflow: "auto", minHeight: 0, padding: "4px 16px 8px" }}>
+    <div style={{ flex: 1, overflow: "auto", minHeight: 0, padding: "0 16px 8px" }}>
       <table style={{ width: "100%", borderCollapse: "collapse", minWidth }}>{children}</table>
     </div>
   );
@@ -279,16 +283,72 @@ export function Th({
   align = "left",
   minWidth,
   className,
+  ordem,
+  onOrdenar,
 }: {
   children?: React.ReactNode;
   align?: "left" | "right" | "center";
   minWidth?: number;
   /** Para ajustar o recuo pelo CSS. Ver `.col-avatar` em `globals.css`. */
   className?: string;
+  /**
+   * Como esta coluna esta ordenando AGORA, ou null quando nao e ela.
+   *
+   * ⚠️ A seta so aparece na coluna ativa. Uma setinha apagada em toda coluna
+   * ordenavel anuncia a funcao e, em troca, enche o cabecalho de ruido: e mais
+   * honesto o cabecalho ficar limpo e a coluna ativa se declarar.
+   */
+  ordem?: "asc" | "desc" | null;
+  /** Presente = a coluna ordena, e o titulo vira alvo de clique. */
+  onOrdenar?: () => void;
 }) {
+  const titulo = onOrdenar ? (
+    <button
+      type="button"
+      onClick={onOrdenar}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 3,
+        padding: 0,
+        border: "none",
+        background: "transparent",
+        cursor: "pointer",
+        // Herda tudo do `th`: o botao existe para o clique e para o teclado, e
+        // nao para ter aparencia propria.
+        font: "inherit",
+        color: ordem ? "var(--text-secondary)" : "inherit",
+        letterSpacing: "inherit",
+        textTransform: "inherit",
+      }}
+    >
+      {children}
+
+      {ordem && (
+        <svg
+          width="9"
+          height="9"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden
+          style={{ flexShrink: 0 }}
+        >
+          <path d={ordem === "asc" ? "M6 15l6-6 6 6" : "M6 9l6 6 6-6"} />
+        </svg>
+      )}
+    </button>
+  ) : (
+    children
+  );
+
   return (
     <th
       className={className}
+      aria-sort={ordem ? (ordem === "asc" ? "ascending" : "descending") : undefined}
       // Sem `padding`: ele vem do CSS, pelo mesmo motivo do `Td`.
       style={{
         textAlign: align,
@@ -309,7 +369,7 @@ export function Th({
         minWidth,
       }}
     >
-      {children}
+      {titulo}
     </th>
   );
 }
@@ -324,6 +384,14 @@ export function Tr({
   children: React.ReactNode;
   delay?: number;
   onClick?: () => void;
+  /**
+   * Registro desativado.
+   *
+   * ⚠️ Muda a COR do texto, e nao a opacidade da linha inteira. Com opacidade,
+   * tudo desbotava junto — inclusive a bolinha, as siglas e os icones de acao —,
+   * e a linha parecia meio carregada em vez de inativa. E a acao tem de continuar
+   * legivel: reativar um cadastro se faz DA linha inativa.
+   */
   dimmed?: boolean;
   /** Realce proprio da tela. O hover continua sendo do kit. */
   style?: React.CSSProperties;
@@ -338,7 +406,7 @@ export function Tr({
         animationDelay: `${delay}ms`,
         cursor: onClick ? "pointer" : undefined,
         transition: "background 100ms",
-        opacity: dimmed ? 0.45 : 1,
+        color: dimmed ? "var(--text-disabled)" : undefined,
         ...style,
       }}
       onMouseEnter={(e) => {
