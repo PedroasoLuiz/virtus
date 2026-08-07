@@ -1,9 +1,21 @@
 import { ConflictError, NotFoundError } from "@/shared/errors/app-error";
 import type { Paginacao, Pagina } from "@/shared/utils/paginacao";
 import * as repo from "@/modules/clientes/clientes.repository";
-import type { Cliente, ClienteNovo, FiltroClientes } from "@/modules/clientes/clientes.types";
+import type {
+  Cliente,
+  ClienteNovo,
+  ContagemPorPapel,
+  FiltroClientes,
+} from "@/modules/clientes/clientes.types";
 
 /** Regra de negocio de clientes. */
+
+export async function contagemPorPapel(
+  empresaId: number,
+  incluirInativos: boolean,
+): Promise<ContagemPorPapel> {
+  return repo.contagemPorPapel(empresaId, incluirInativos);
+}
 
 export async function listarClientes(
   empresaId: number,

@@ -36,8 +36,27 @@ export type ClienteNovo = {
   centroCustoId?: number | null;
 };
 
+/** Por onde a tabela de pessoas pode ordenar. */
+export type CampoDeOrdem =
+  | "id"
+  | "razao"
+  | "cnpj"
+  | "contato"
+  | "email"
+  | "responsavel";
+
+/** Quantas pessoas ha em cada papel. Alimenta o filtro. */
+export type ContagemPorPapel = {
+  total: number;
+  cliente: number;
+  fornecedor: number;
+  colaborador: number;
+};
+
 export type FiltroClientes = {
   busca?: string;
   papel?: PapelPessoa;
   ativo?: boolean;
+  ordem?: CampoDeOrdem;
+  dir?: "asc" | "desc";
 };

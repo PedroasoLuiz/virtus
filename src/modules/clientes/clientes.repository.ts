@@ -3,8 +3,10 @@ import type { ClienteRow } from "@/infra/supabase/database.types";
 import { primeiroPreenchido } from "@/shared/utils/texto";
 import { intervalo, type Paginacao, type Pagina } from "@/shared/utils/paginacao";
 import type {
+  CampoDeOrdem,
   Cliente,
   ClienteNovo,
+  ContagemPorPapel,
   FiltroClientes,
   PapelPessoa,
 } from "@/modules/clientes/clientes.types";
@@ -20,6 +22,29 @@ const COLUNAS =
  */
 const RELACOES = "centrodecusto(descricao)";
 
+/** A coluna do BANCO de cada campo de ordem da tela. */
+const COLUNA_DA_ORDEM: Record<CampoDeOrdem, string> = {
+  id: "id",
+  razao: "razao",
+  cnpj: "cnpj",
+  contato: "contato",
+  email: "email",
+  responsavel: "responsavel",
+};
+
+/**
+ * A pagina da listagem, com a busca e a ordem resolvidas NO BANCO.
+ *
+ * ⚠️ Antes a tela recebia duzentos registros e fazia tudo na memoria: buscar,
+ * ordenar e paginar. Funcionava com cem pessoas e mentia com trezentas — o
+ * registro de numero 201 simplesmente nao existia para a busca, e o contador
+ * dizia 200 para sempre.
+ *
+ * ⚠️ A busca varre razao, fantasia, documento, telefone, e-mail e responsavel. E
+ * `ilike '%termo%'`, que sem indice varreria a tabela inteira a cada tecla: por
+ * isso existem os indices de trigrama em `clientes`. Sem eles, esta funcao e uma
+ * bomba-relogio de escala.
+ */
 export async function listar(
   empresaId: number,
   filtro: FiltroClientes,
@@ -35,17 +60,72 @@ export async function listar(
 
   if (filtro.ativo !== undefined) query = query.eq("ativo", filtro.ativo);
   if (filtro.papel) query = query.eq(filtro.papel, true);
+
   if (filtro.busca) {
     const termo = `%${filtro.busca}%`;
-    query = query.or(`razao.ilike.${termo},nomefantasia.ilike.${termo},cnpj.ilike.${termo}`);
+    /*
+     * ⚠️ Os digitos vao numa condicao PROPRIA. Quem digita "35 99845" procura um
+     * telefone, e o texto com pontuacao nunca casaria: o cadastro guarda
+     * "(35) 9 9845-6712". Sem isso, buscar por numero so funcionava se a pessoa
+     * acertasse a formatacao.
+     */
+    const digitos = filtro.busca.replace(/\D/g, "");
+    const porDigito = digitos.length >= 3 ? `,cnpj.ilike.%${digitos}%` : "";
+
+    query = query.or(
+      `razao.ilike.${termo},nomefantasia.ilike.${termo},cnpj.ilike.${termo},` +
+        `contato.ilike.${termo},email.ilike.${termo},responsavel.ilike.${termo}${porDigito}`,
+    );
   }
 
+  const coluna = COLUNA_DA_ORDEM[filtro.ordem ?? "razao"];
+
   const { data, error, count } = await query
-    .order("razao", { ascending: true })
+    /*
+     * ⚠️ `nullsFirst: false` nas duas direcoes. Coluna opcional (e-mail,
+     * responsavel) tem muito vazio, e invertendo a ordem eles subiam todos para
+     * o topo: a tela ficava com uma parede de tracos e o dado que importa fora
+     * da primeira pagina.
+     */
+    .order(coluna, { ascending: filtro.dir !== "desc", nullsFirst: false })
+    // Desempate estavel: sem ele, duas pessoas com o mesmo nome trocam de lugar
+    // entre paginas e uma delas some da listagem.
+    .order("id", { ascending: true })
     .range(de, ate);
 
   if (error) throw error;
   return { itens: (data ?? []).map(paraDominio), total: count ?? 0 };
+}
+
+/**
+ * Quantas pessoas ha em cada papel.
+ *
+ * ⚠️ NAO leva a busca. A contagem responde "quantos existem", e nao "quantos
+ * bateram com o que eu digitei": mudando a cada tecla, ela deixaria de ser o
+ * panorama do cadastro e viraria um segundo resultado da busca ao lado do
+ * primeiro.
+ */
+export async function contagemPorPapel(
+  empresaId: number,
+  incluirInativos: boolean,
+): Promise<ContagemPorPapel> {
+  const supabase = await serverClient();
+
+  const { data, error } = await supabase.rpc("clientes_contagem_por_papel", {
+    p_empresa: empresaId,
+    p_inativos: incluirInativos,
+  });
+
+  if (error) throw error;
+
+  const l = data?.[0];
+
+  return {
+    total: Number(l?.total ?? 0),
+    cliente: Number(l?.cliente ?? 0),
+    fornecedor: Number(l?.fornecedor ?? 0),
+    colaborador: Number(l?.colaborador ?? 0),
+  };
 }
 
 export async function buscarPorId(empresaId: number, id: number): Promise<Cliente | null> {

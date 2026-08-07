@@ -893,6 +893,15 @@ export type Database = {
        * referencia a segredo, entao fica fechada). A checagem de tenant mora
        * DENTRO da funcao, nao no parametro.
        */
+      clientes_contagem_por_papel: {
+        Args: { p_empresa: number; p_inativos?: boolean };
+        Returns: {
+          total: number;
+          cliente: number;
+          fornecedor: number;
+          colaborador: number;
+        }[];
+      };
       whatsapp_contatos_para_conversa: {
         Args: { p_conta: number; p_busca?: string | null; p_limite?: number };
         Returns: {

@@ -11,6 +11,15 @@ import { paginacaoSchema } from "@/shared/utils/paginacao";
 
 export const papelSchema = z.enum(["cliente", "fornecedor", "colaborador"]);
 
+export const campoDeOrdemSchema = z.enum([
+  "id",
+  "razao",
+  "cnpj",
+  "contato",
+  "email",
+  "responsavel",
+]);
+
 export const listarQuerySchema = paginacaoSchema.extend({
   busca: z.string().trim().max(120).optional(),
   papel: papelSchema.optional(),
@@ -18,6 +27,23 @@ export const listarQuerySchema = paginacaoSchema.extend({
     .enum(["true", "false"])
     .transform((v) => v === "true")
     .optional(),
+  ordem: campoDeOrdemSchema.optional(),
+  dir: z.enum(["asc", "desc"]).optional(),
+});
+
+export const contagemQuerySchema = z.object({
+  /** Sem isto, so os ativos entram na conta — o mesmo padrao da listagem. */
+  inativos: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((v) => v === "true"),
+});
+
+export const contagemSchema = z.object({
+  total: z.number(),
+  cliente: z.number(),
+  fornecedor: z.number(),
+  colaborador: z.number(),
 });
 
 export const criarClienteBodySchema = z.object({
@@ -51,6 +77,7 @@ export const clienteSchema = z.object({
 });
 
 export type ListarQuery = z.infer<typeof listarQuerySchema>;
+export type ContagemQuery = z.infer<typeof contagemQuerySchema>;
 export type CriarClienteBody = z.infer<typeof criarClienteBodySchema>;
 export type IdParam = z.infer<typeof idParamSchema>;
 

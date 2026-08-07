@@ -5,7 +5,9 @@ import { metaDePaginacao } from "@/shared/utils/paginacao";
 import * as service from "@/modules/clientes/clientes.service";
 import {
   clienteSchema,
+  contagemSchema,
   type AtualizarClienteBody,
+  type ContagemQuery,
   type CriarClienteBody,
   type IdParam,
   type ListarQuery,
@@ -23,6 +25,13 @@ export async function listar({ query, ctx }: Entrada<undefined, ListarQuery, unk
     itens.map((c) => clienteSchema.parse(c)),
     metaDePaginacao({ page, perPage }, total),
   );
+}
+
+export async function contagem({ query, ctx }: Entrada<undefined, ContagemQuery, unknown>) {
+  const empresaId = empresaObrigatoria(ctx);
+  const total = await service.contagemPorPapel(empresaId, query.inativos);
+
+  return ok(contagemSchema.parse(total));
 }
 
 export async function obter({ params, ctx }: Entrada<undefined, undefined, IdParam>) {

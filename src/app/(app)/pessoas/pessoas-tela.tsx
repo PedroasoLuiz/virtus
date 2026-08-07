@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Avatar } from "@/components/ui/avatar";
 import {
   AcoesDaLinha,
@@ -15,6 +15,7 @@ import {
   Panel,
   SearchInput,
   selectStyle,
+  SkeletonRows,
   TableArea,
   TableFrame,
   TableHead,
@@ -76,20 +77,23 @@ const PAPEIS: {
 
 const POR_PAGINA = 25;
 
-type Campo = "id" | "nome" | "documento" | "contato" | "email" | "responsavel";
+type Contagem = { total: number; cliente: number; fornecedor: number; colaborador: number };
+
+const VAZIO: Contagem = { total: 0, cliente: 0, fornecedor: 0, colaborador: 0 };
+
+/*
+ * Os campos de ordem sao os do BANCO, e nao os da tela.
+ *
+ * ⚠️ Ordenar por "nome fantasia quando existe, razao quando nao" era possivel na
+ * memoria e nao e no banco sem uma coluna calculada. Ordena por `razao`, que e o
+ * campo obrigatorio: a coluna mostra o fantasia, e o desencontro aparece so em
+ * quem tem os dois diferentes — bem menos ruim do que a lista mentir depois do
+ * registro 200.
+ */
+type Campo = "id" | "razao" | "cnpj" | "contato" | "email" | "responsavel";
 type Dir = "asc" | "desc";
 
-/** O que cada coluna ordenável compara. `id` sai fora: ele é número. */
-function valorDoCampo(p: Cliente, campo: Exclude<Campo, "id">): string {
-  if (campo === "nome") return p.nomeFantasia?.trim() || p.razao;
-  if (campo === "documento") return (p.cnpj ?? "").replace(/\D/g, "");
-  if (campo === "contato") return (p.contato ?? "").replace(/\D/g, "");
-  if (campo === "email") return p.email ?? "";
-  return p.responsavel ?? "";
-}
-
 export function PessoasTela({
-  pessoas,
   centros,
 }: {
   /*
@@ -100,9 +104,12 @@ export function PessoasTela({
    * Renomear a tabela e a API junto seria uma migração de banco e de rota para
    * consertar uma palavra na tela.
    */
-  pessoas: Cliente[];
   centros: { id: number; descricao: string }[];
 }) {
+  const [pessoas, setPessoas] = useState<Cliente[] | null>(null);
+  const [total, setTotal] = useState(0);
+  const [contagem, setContagem] = useState<Contagem>(VAZIO);
+
   const [busca, setBusca] = useState("");
   const [papel, setPapel] = useState<PapelPessoa | "">("");
   const [inativos, setInativos] = useState(false);
@@ -114,7 +121,7 @@ export function PessoasTela({
    * clique de distancia.
    */
   const [ordem, setOrdem] = useState<{ campo: Campo; dir: Dir }>({
-    campo: "nome",
+    campo: "razao",
     dir: "asc",
   });
   const [pagina, setPagina] = useState(1);
@@ -122,73 +129,70 @@ export function PessoasTela({
   const [edicao, setEdicao] = useState<{ pessoa: Cliente | null } | null>(null);
 
   /*
-   * A contagem sai da lista JÁ sem os inativos, e não do total bruto.
+   * A busca, a ordem e a página vivem no SERVIDOR.
    *
-   * ⚠️ Senão o chip diz 128 clientes, o filtro mostra 119 e a diferença fica sem
-   * explicação na tela — quem confere vai procurar o erro no lugar errado.
+   * ⚠️ Antes a tela recebia duzentos registros e fazia tudo na memória. Com cem
+   * pessoas funcionava; com trezentas passava a mentir — o registro de número
+   * 201 não existia para a busca, e o contador dizia 200 para sempre. E numa
+   * base de milhares seriam milhares de linhas trafegadas por abertura de tela
+   * para desenhar as vinte e cinco que cabem.
    */
-  const ativas = useMemo(
-    () => pessoas.filter((p) => inativos || p.ativo),
-    [pessoas, inativos],
-  );
-
-  const contagem = useMemo(
-    () => ({
-      cliente: ativas.filter((p) => p.papeis.includes("cliente")).length,
-      fornecedor: ativas.filter((p) => p.papeis.includes("fornecedor")).length,
-      colaborador: ativas.filter((p) => p.papeis.includes("colaborador")).length,
-    }),
-    [ativas],
-  );
-
-  const filtradas = useMemo(() => {
-    const termo = busca.trim().toLowerCase();
-    const digitos = termo.replace(/\D/g, "");
-
-    return ativas.filter((p) => {
-      if (papel && !p.papeis.includes(papel)) return false;
-      if (!termo) return true;
-
-      return (
-        p.razao.toLowerCase().includes(termo) ||
-        (p.nomeFantasia ?? "").toLowerCase().includes(termo) ||
-        (p.responsavel ?? "").toLowerCase().includes(termo) ||
-        (digitos.length > 0 && (p.cnpj ?? "").includes(digitos)) ||
-        (digitos.length > 0 && (p.contato ?? "").replace(/\D/g, "").includes(digitos))
-      );
+  const carregar = useCallback(async () => {
+    const p = new URLSearchParams({
+      page: String(pagina),
+      perPage: String(POR_PAGINA),
+      ordem: ordem.campo,
+      dir: ordem.dir,
     });
-  }, [ativas, busca, papel]);
+
+    if (busca.trim()) p.set("busca", busca.trim());
+    if (papel) p.set("papel", papel);
+    // Sem o parametro, a API devolve ativos e inativos: quem restringe e a tela.
+    if (!inativos) p.set("ativo", "true");
+
+    const r = await fetch(`/api/v1/clientes?${p.toString()}`);
+    if (!r.ok) return;
+
+    const corpo = await r.json();
+    setPessoas(corpo.data ?? []);
+    setTotal(corpo.meta?.total ?? 0);
+  }, [pagina, ordem, busca, papel, inativos]);
 
   /*
-   * ⚠️ `localeCompare` com `sensitivity: "base"`, e nao `<` direto.
-   *
-   * Comparacao crua de string poe "Ávila" depois de "Zamboni", porque compara o
-   * codigo do caractere: nomes com acento iam todos para o fim da lista. O
-   * `sensitivity` ainda faz "acia" e "ACIA" caírem juntos, que e o que se espera
-   * de uma agenda.
+   * ⚠️ 300ms de espera entre teclas. Sem isso, "fornecedor" sao onze consultas
+   * ao banco para responder a decima primeira.
    */
-  const ordenadas = useMemo(() => {
-    const sinal = ordem.dir === "asc" ? 1 : -1;
+  useEffect(() => {
+    const t = setTimeout(() => void carregar(), 300);
+    return () => clearTimeout(t);
+  }, [carregar]);
 
-    return [...filtradas].sort((a, b) => {
-      if (ordem.campo === "id") return (a.id - b.id) * sinal;
+  /*
+   * A contagem vem SEPARADA, e so muda com o interruptor de inativos.
+   *
+   * ⚠️ Junto da lista, ela seria recontada a cada tecla da busca e a cada troca
+   * de pagina para dar sempre o mesmo numero. E ela nao leva a busca de
+   * proposito: responde "quantos existem", e nao "quantos bateram com o que
+   * digitei" — que ja e o que a propria lista mostra.
+   */
+  useEffect(() => {
+    const controle = new AbortController();
 
-      const x = valorDoCampo(a, ordem.campo);
-      const y = valorDoCampo(b, ordem.campo);
+    fetch(`/api/v1/clientes/contagem${inativos ? "?inativos=true" : ""}`, {
+      signal: controle.signal,
+    })
+      .then(async (r) => {
+        if (!r.ok) throw new Error();
+        const corpo = await r.json();
+        setContagem(corpo.data ?? VAZIO);
+      })
+      .catch(() => {});
 
-      // Vazio vai sempre para o FIM, nas duas direcoes: inverter a ordem nao
-      // deveria trazer uma parede de tracos para o topo da tela.
-      if (!x && !y) return 0;
-      if (!x) return 1;
-      if (!y) return -1;
+    return () => controle.abort();
+  }, [inativos]);
 
-      return x.localeCompare(y, "pt-BR", { sensitivity: "base" }) * sinal;
-    });
-  }, [filtradas, ordem]);
-
-  const totalPaginas = Math.max(1, Math.ceil(filtradas.length / POR_PAGINA));
-  const paginaAtual = Math.min(pagina, totalPaginas);
-  const visiveis = ordenadas.slice((paginaAtual - 1) * POR_PAGINA, paginaAtual * POR_PAGINA);
+  const totalPaginas = Math.max(1, Math.ceil(total / POR_PAGINA));
+  const visiveis = pessoas ?? [];
 
   /*
    * Clicar na mesma coluna INVERTE; clicar noutra comeca do inicio.
@@ -249,7 +253,7 @@ export function PessoasTela({
                   aposta, e quem quer saber quantos são precisa filtrar para
                   descobrir.
                 */}
-                <option value="">Todos ({contado(ativas.length)})</option>
+                <option value="">Todos ({contado(contagem.total)})</option>
                 {PAPEIS.map((p) => (
                   <option key={p.valor} value={p.valor}>
                     {p.rotulo} ({contado(contagem[p.valor])})
@@ -308,7 +312,7 @@ export function PessoasTela({
               <Th className="col-avatar" minWidth={26}>
                 {" "}
               </Th>
-              <Th ordem={daColuna("nome")} onOrdenar={() => ordenarPor("nome")}>
+              <Th ordem={daColuna("razao")} onOrdenar={() => ordenarPor("razao")}>
                 Nome
               </Th>
               {/* Papéis não ordena: a coluna é um conjunto, e "CLI+FOR" não vem
@@ -317,8 +321,8 @@ export function PessoasTela({
               <Th minWidth={132}>Papéis</Th>
               <Th
                 minWidth={150}
-                ordem={daColuna("documento")}
-                onOrdenar={() => ordenarPor("documento")}
+                ordem={daColuna("cnpj")}
+                onOrdenar={() => ordenarPor("cnpj")}
               >
                 Documento
               </Th>
@@ -345,15 +349,33 @@ export function PessoasTela({
             </TableHead>
 
             <tbody>
-              {visiveis.length === 0 && (
-                <EmptyRow
-                  colSpan={9}
-                  message={
-                    busca.trim() || papel
-                      ? "Nenhuma pessoa com esse filtro."
-                      : "Nenhuma pessoa cadastrada ainda."
-                  }
+              {pessoas == null ? (
+                <SkeletonRows
+                  cols={9}
+                  rows={6}
+                  labels={[
+                    "#",
+                    "",
+                    "Nome",
+                    "Papéis",
+                    "Documento",
+                    "Contato",
+                    "E-mail",
+                    "Responsável",
+                    "",
+                  ]}
                 />
+              ) : (
+                visiveis.length === 0 && (
+                  <EmptyRow
+                    colSpan={9}
+                    message={
+                      busca.trim() || papel
+                        ? "Nenhuma pessoa com esse filtro."
+                        : "Nenhuma pessoa cadastrada ainda."
+                    }
+                  />
+                )
               )}
 
               {visiveis.map((p, i) => (
@@ -467,11 +489,11 @@ export function PessoasTela({
             </tbody>
           </TableArea>
 
-          {ordenadas.length > POR_PAGINA && (
+          {total > POR_PAGINA && (
             <Pagination
-              page={paginaAtual}
+              page={pagina}
               totalPages={totalPaginas}
-              total={ordenadas.length}
+              total={total}
               pageSize={POR_PAGINA}
               onPage={setPagina}
             />
@@ -487,7 +509,12 @@ export function PessoasTela({
           cliente={edicao.pessoa}
           centros={centros}
           aberto
-          onClose={() => setEdicao(null)}
+          onClose={() => {
+            setEdicao(null);
+            // A lista mora no cliente agora: sem isto, o cadastro salvo so
+            // aparecia depois de mexer na busca ou trocar de pagina.
+            void carregar();
+          }}
         />
       )}
     </PageLayout>
