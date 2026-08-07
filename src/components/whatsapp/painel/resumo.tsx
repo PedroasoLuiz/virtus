@@ -121,11 +121,23 @@ export function ResumoDoAtendimento({
 }) {
   const situacao = rotuloDaSituacao(atendimento);
 
+  /*
+   * ⚠️ O rótulo vira ÍCONE.
+   *
+   * "Nome", "Empresa" e "E-mail" gastavam metade da pastilha para dizer o que o
+   * próprio valor já diz: ninguém confunde um e-mail com um nome de empresa. O
+   * ícone marca a categoria sem competir com o dado, e o nome continua na dica
+   * do mouse para quem precisar.
+   */
   const lead = [
-    atendimento.leadNome && { rotulo: "Nome", valor: atendimento.leadNome },
-    atendimento.leadEmpresa && { rotulo: "Empresa", valor: atendimento.leadEmpresa },
-    atendimento.leadEmail && { rotulo: "E-mail", valor: atendimento.leadEmail },
-  ].filter(Boolean) as { rotulo: string; valor: string }[];
+    atendimento.leadNome && { rotulo: "Nome", valor: atendimento.leadNome, icone: PESSOA },
+    atendimento.leadEmpresa && {
+      rotulo: "Empresa",
+      valor: atendimento.leadEmpresa,
+      icone: EMPRESA,
+    },
+    atendimento.leadEmail && { rotulo: "E-mail", valor: atendimento.leadEmail, icone: ENVELOPE },
+  ].filter(Boolean) as { rotulo: string; valor: string; icone: React.ReactNode }[];
 
   return (
     <div
@@ -236,9 +248,12 @@ export function ResumoDoAtendimento({
               {lead.map((l) => (
                 <span
                   key={l.rotulo}
+                  title={l.rotulo}
                   style={{
                     display: "inline-flex",
-                    alignItems: "baseline",
+                    // `center` e nao `baseline`: um SVG nao tem linha de base, e
+                    // no baseline ele descia dois pixels abaixo do texto.
+                    alignItems: "center",
                     gap: 5,
                     maxWidth: "100%",
                     padding: "3px 8px",
@@ -247,7 +262,21 @@ export function ResumoDoAtendimento({
                     fontSize: "var(--text-xs)",
                   }}
                 >
-                  <span style={{ color: "var(--text-tertiary)", flexShrink: 0 }}>{l.rotulo}</span>
+                  <svg
+                    width="11"
+                    height="11"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.9"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    style={{ flexShrink: 0, color: "var(--text-tertiary)" }}
+                    aria-label={l.rotulo}
+                  >
+                    {l.icone}
+                  </svg>
+
                   <span
                     style={{
                       color: "var(--text-primary)",
@@ -288,6 +317,34 @@ export function ResumoDoAtendimento({
     </div>
   );
 }
+
+/*
+ * Os traços de cada rótulo do lead, no lugar da palavra.
+ *
+ * Fora do componente porque são constantes: montados lá dentro, seriam três
+ * árvores novas a cada render do cartão.
+ */
+const PESSOA = (
+  <>
+    <circle cx="12" cy="8" r="3.6" />
+    <path d="M5 20a7 7 0 0 1 14 0" />
+  </>
+);
+
+const EMPRESA = (
+  <>
+    <path d="M4 21V6a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v15" />
+    <path d="M14 10h5a1 1 0 0 1 1 1v10" />
+    <path d="M3 21h18M7.5 9h3M7.5 13h3M7.5 17h3M17 14v.01M17 17.5v.01" />
+  </>
+);
+
+const ENVELOPE = (
+  <>
+    <rect x="3" y="5.5" width="18" height="13" rx="2.2" />
+    <path d="m3.8 7 7.1 5.3a2 2 0 0 0 2.2 0L20.2 7" />
+  </>
+);
 
 /** Ação do cartão: só o ícone, com o nome na dica do navegador. */
 function BotaoDoCartao({
