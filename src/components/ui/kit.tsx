@@ -227,7 +227,14 @@ export function TableArea({
   minWidth?: number;
 }) {
   return (
-    <div style={{ flex: 1, overflow: "auto", minHeight: 0 }}>
+    /*
+     * ⚠️ Respiro em CIMA e EMBAIXO, e nao so dos lados.
+     *
+     * O cartao e branco e arredondado: a primeira linha colada no topo e a
+     * ultima colada no rodape encostam na curva da quina. Os 8 de cada lado sao
+     * o minimo para a moldura respirar sem virar espaco morto.
+     */
+    <div style={{ flex: 1, overflow: "auto", minHeight: 0, padding: "8px 0" }}>
       <table style={{ width: "100%", borderCollapse: "collapse", minWidth }}>{children}</table>
     </div>
   );

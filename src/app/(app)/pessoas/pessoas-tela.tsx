@@ -328,7 +328,13 @@ function Chip({
         height: 26,
         padding: "0 11px",
         borderRadius: "var(--radius-full)",
-        border: `1px solid ${ativo ? "var(--primary-border)" : "var(--border-strong)"}`,
+        /*
+         * ⚠️ Sem borda. Quatro pastilhas contornadas em fila viram uma cerca, e
+         * o que a fileira precisa mostrar e o NUMERO de cada papel — o contorno
+         * competia com ele. O que recorta a pastilha do cinza da tela e o
+         * proprio fundo, branco quando apagada e verde tingido quando acesa.
+         */
+        border: "1px solid transparent",
         background: ativo ? "var(--primary-subtle)" : "var(--surface)",
         color: ativo ? "var(--primary)" : "var(--text-secondary)",
         fontSize: "var(--text-sm)",
