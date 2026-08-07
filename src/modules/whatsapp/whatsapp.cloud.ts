@@ -556,6 +556,23 @@ type ModeloBruto = {
   }[];
 };
 
+/**
+ * Botoes que o painel NAO sabe disparar.
+ *
+ * ⚠️ Cada um destes exige um `action` proprio no envio — a lista de itens do
+ * pedido, o produto do catalogo, a definicao do formulario. Nada disso existe
+ * aqui, e a Meta recusa com "'action' cannot be null", ja depois do clique.
+ * Melhor nao oferecer do que oferecer e falhar.
+ */
+const BOTAO_QUE_NAO_SAI: Record<string, string> = {
+  ORDER_DETAILS: "pedido",
+  CATALOG: "catálogo",
+  MPM: "catálogo",
+  SPM: "produto",
+  FLOW: "formulário",
+  VOICE_CALL: "chamada de voz",
+};
+
 function paraModelo(t: ModeloBruto): Modelo {
   const parte = (tipo: string) => t.components?.find((c) => c.type === tipo);
   const corpo = parte("BODY")?.text ?? "";
@@ -578,6 +595,8 @@ function paraModelo(t: ModeloBruto): Modelo {
    */
   const url = parte("BUTTONS")?.buttons?.find((b) => b.type === "URL") ?? null;
 
+  const impedido = parte("BUTTONS")?.buttons?.find((b) => BOTAO_QUE_NAO_SAI[b.type ?? ""]);
+
   return {
     nome: t.name,
     idioma: t.language ?? "pt_BR",
@@ -588,6 +607,9 @@ function paraModelo(t: ModeloBruto): Modelo {
     parametros: marcadores.size,
     botao: url
       ? { texto: url.text ?? "Abrir", temVariavel: /\{\{\s*\d+\s*\}\}/.test(url.url ?? "") }
+      : null,
+    bloqueio: impedido
+      ? `Tem botão de ${BOTAO_QUE_NAO_SAI[impedido.type!]}, que não sai por aqui.`
       : null,
   };
 }

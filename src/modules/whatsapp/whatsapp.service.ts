@@ -666,6 +666,17 @@ export async function enviarModelo(
     );
   }
 
+  /*
+   * ⚠️ A trava tambem AQUI, e nao so na lista da tela.
+   *
+   * A tela nem oferece esses modelos, mas ela le a lista uma vez ao abrir: um
+   * modelo editado na Meta no meio do caminho chegaria ao envio mesmo assim, e a
+   * resposta seria "'action' cannot be null" — erro cru, sem dono.
+   */
+  if (modelo.bloqueio) {
+    throw new BusinessRuleError(`Este modelo nao pode ser enviado pelo painel. ${modelo.bloqueio}`);
+  }
+
   if (parametros.length !== modelo.parametros) {
     throw new BusinessRuleError(
       `O modelo "${nome}" espera ${modelo.parametros} parametro(s), recebeu ${parametros.length}.`,

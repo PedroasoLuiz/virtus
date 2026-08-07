@@ -199,6 +199,16 @@ export type Modelo = {
    * valor que a Meta ignoraria.
    */
   botao: { texto: string; temVariavel: boolean } | null;
+  /**
+   * Por que este modelo NAO pode sair do painel, ou null.
+   *
+   * ⚠️ Botao de pedido, catalogo ou formulario exige um `action` que so quem
+   * montou aquele fluxo sabe preencher. Sem isto o modelo aparecia na lista, a
+   * pessoa escolhia, e a Meta devolvia "'action' cannot be null for
+   * ORDER_DETAILS button type" — um erro que chega depois do clique e nao diz
+   * que a culpa era da escolha.
+   */
+  bloqueio: string | null;
 };
 
 /**

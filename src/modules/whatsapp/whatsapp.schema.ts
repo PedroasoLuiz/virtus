@@ -341,6 +341,7 @@ export const modeloSchema = z.object({
   rodape: z.string().nullable(),
   parametros: z.number(),
   botao: z.object({ texto: z.string(), temVariavel: z.boolean() }).nullable(),
+  bloqueio: z.string().nullable(),
 });
 
 export const enviarModeloBodySchema = z.object({

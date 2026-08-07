@@ -9,7 +9,12 @@ import { comFormatacaoDoWhatsapp } from "@/components/whatsapp/formatacao";
 import { hora, quando, rotuloDoDia } from "@/components/whatsapp/painel/datas";
 import { Avatar } from "@/components/whatsapp/painel/avatar";
 import { Midia } from "@/components/whatsapp/painel/midia";
-import { EnvioPorModelo } from "@/components/whatsapp/painel/modelo";
+import {
+  AvisoDaJanela,
+  ColunaDeModelos,
+  EnvioDoModelo,
+  useModelos,
+} from "@/components/whatsapp/painel/modelo";
 import { ResumoDoAtendimento, fecharResumo, resumoFechado } from "@/components/whatsapp/painel/resumo";
 import { Composicao } from "@/components/whatsapp/painel/composicao";
 import {
@@ -35,6 +40,7 @@ import {
   type CorDeEtiqueta,
   type Etiqueta,
   type Mensagem,
+  type Modelo,
 } from "@/modules/whatsapp/whatsapp.types";
 
 /**
@@ -1731,6 +1737,16 @@ function Thread({
   const itens = useMemo(() => montarItens(mensagens), [mensagens]);
 
   /*
+   * A coluna dos modelos, a direita da conversa.
+   *
+   * ⚠️ Fora da janela de 24h ela ja nasce aberta: ali o modelo e a UNICA saida,
+   * e obrigar um clique para revelar a unica coisa possivel e um passo a toa.
+   */
+  const [modelosAbertos, setModelosAbertos] = useState(false);
+  const [modeloEscolhido, setModeloEscolhido] = useState<Modelo | null>(null);
+  const lista = useModelos(conversa?.id ?? 0, modelosAbertos && conversa != null);
+
+  /*
    * Fechar o resumo VALE. A Thread tem `key` pela conversa e remonta a cada
    * troca de contato, entao um estado local reabria o cartao toda vez — quem
    * fechou uma vez o via de novo no proximo clique, e no seguinte.
@@ -1967,6 +1983,15 @@ function Thread({
         <DetalhesDoContato conversa={conversa} onSair={onSair} onVinculou={onVinculou} />
       )}
 
+      {/*
+        Duas colunas: a conversa, e os modelos quando pedidos.
+
+        ⚠️ A coluna nasce AO LADO, e nao por cima. Escolher um modelo depende de
+        ler o que o cliente escreveu, e um painel sobreposto tapa exatamente
+        isso. A conversa so encolhe.
+      */}
+      <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
       <div
         ref={area}
         onScroll={(e) => {
@@ -2033,10 +2058,22 @@ function Thread({
 
         {botRespondendo(conversa.botRespondendoEm) ? (
           <IaRespondendo />
+        ) : modeloEscolhido ? (
+          /*
+            `key` pelo NOME: trocar de modelo remonta a caixa e o preenchido
+            morre junto. Sem isso, os valores do modelo anterior ficavam nos
+            campos do novo, e mandar um valor herdado e mandar a mensagem errada.
+          */
+          <EnvioDoModelo
+            key={modeloEscolhido.nome}
+            modelo={modeloEscolhido}
+            onEnviar={onEnviarModelo}
+            onTrocar={() => setModeloEscolhido(null)}
+          />
         ) : aberta ? (
           /*
             Modelo tambem DENTRO da janela.
-            
+
             Antes ele so aparecia com a janela fechada, quando e a unica saida.
             Mas modelo nao serve so para furar a janela: e o jeito de mandar
             cobranca e aviso com o texto ja aprovado, e ate agora, com a
@@ -2045,12 +2082,25 @@ function Thread({
           <Composicao
             onEnviar={onResponder}
             onEnviarAnexo={onEnviarAnexo}
-            conversaId={conversa.id}
-            onEnviarModelo={onEnviarModelo}
+            onAbrirModelos={() => setModelosAbertos(true)}
           />
         ) : (
-          <EnvioPorModelo conversaId={conversa.id} onEnviar={onEnviarModelo} />
+          <AvisoDaJanela onAbrirModelos={() => setModelosAbertos(true)} />
         )}
+      </div>
+      </div>
+
+      {modelosAbertos && (
+        <ColunaDeModelos
+          lista={lista}
+          escolhido={modeloEscolhido?.nome ?? null}
+          onEscolher={setModeloEscolhido}
+          onFechar={() => {
+            setModelosAbertos(false);
+            setModeloEscolhido(null);
+          }}
+        />
+      )}
       </div>
     </div>
   );

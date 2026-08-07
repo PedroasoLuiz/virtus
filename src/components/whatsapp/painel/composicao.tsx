@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useAvisos } from "@/components/ui/avisos";
 import { IconeDeDocumento, tamanhoEmTexto } from "./documento";
 import { duracaoEmTexto, PlayerDeAudio } from "./audio";
-import { EnvioPorModelo } from "./modelo";
 
 /**
  * O campo de escrita: texto, anexo e voz.
@@ -491,16 +490,13 @@ function formatoDeGravacao(): { mime: string; extensao: string } | null {
 export function Composicao({
   onEnviar,
   onEnviarAnexo,
-  conversaId,
-  onEnviarModelo,
+  onAbrirModelos,
 }: {
   onEnviar: (texto: string) => Promise<void>;
   onEnviarAnexo: (arquivo: File, legenda: string) => Promise<void>;
-  /** A conversa. Quem resolve de que numero ela e, e o servidor. */
-  conversaId: number;
-  onEnviarModelo: (nome: string, parametros: string[]) => Promise<void>;
+  /** Abre a coluna dos modelos, ao lado da conversa. */
+  onAbrirModelos: () => void;
 }) {
-  const [modeloAberto, setModeloAberto] = useState(false);
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
   const campo = useRef<HTMLTextAreaElement>(null);
@@ -564,21 +560,6 @@ export function Composicao({
   const podeEnviar = (pendente != null || texto.trim().length > 0) && !enviando;
   const mostraEnviar = !gravandoAudio && (pendente != null || texto.trim().length > 0);
 
-  /*
-   * Aberto, o seletor de modelo OCUPA o lugar da escrita livre em vez de
-   * conviver com ela. Duas caixas de envio na tela deixariam ambiguo o que o
-   * botao de enviar manda.
-   */
-  if (modeloAberto) {
-    return (
-      <EnvioPorModelo
-        conversaId={conversaId}
-        onEnviar={onEnviarModelo}
-        onFechar={() => setModeloAberto(false)}
-      />
-    );
-  }
-
   return (
     <footer
       style={{
@@ -616,7 +597,7 @@ export function Composicao({
         {/* O "+" fica SEMPRE, inclusive gravando: nada impede anexar depois. */}
         <MenuDeAnexo
           desabilitado={enviando}
-          onModelo={() => setModeloAberto(true)}
+          onModelo={onAbrirModelos}
           onEscolher={(aceita) => {
             const alvo = seletor.current;
             if (!alvo) return;
