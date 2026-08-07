@@ -23,6 +23,11 @@ import * as ia from "@/modules/ia/ia.cloud";
 import * as whatsapp from "@/modules/whatsapp/whatsapp.cloud";
 import { comAssinaturaDoAutor } from "@/modules/whatsapp/whatsapp.service";
 import {
+  PERSONA_PADRAO,
+  ehSoCumprimento,
+  saudacaoPronta,
+} from "@/modules/atendimento/persona-padrao";
+import {
   ESQUEMA_DA_MENSAGEM,
   ESQUEMA_DA_TRIAGEM,
   conversaEmTexto,
@@ -250,13 +255,21 @@ async function responderComo(
  * — com o jeito e as permissoes dela. Era isso que a instrucao ja pedia ao
  * modelo, e agora o codigo confere.
  */
-function personaDaVez(personas: PersonaDoBot[], setorId: number | null): PersonaDoBot | null {
+function personaDaVez(personas: PersonaDoBot[], setorId: number | null): PersonaDoBot {
   if (setorId) {
     const doSetor = personas.find((p) => p.setorId === setorId);
     if (doSetor) return doSetor;
   }
 
-  return personas.find((p) => p.setorId == null) ?? null;
+  /*
+   * ⚠️ O padrao e o ultimo degrau, e nunca falta.
+   *
+   * Antes daqui saia `null`, e sem persona a mensagem ia sem assinatura, sem tom
+   * e sem autorizacao nenhuma — o bot de quem nunca abriu a tela de personas,
+   * que e a maioria. A geral cadastrada da empresa continua vencendo o padrao, e
+   * a de setor vence as duas.
+   */
+  return personas.find((p) => p.setorId == null) ?? PERSONA_PADRAO;
 }
 
 /** A permissao que cada consulta exige. Ver `atendimento/permissoes.ts`. */
@@ -273,10 +286,10 @@ const PERMISSAO_DA_ACAO: Partial<Record<AcaoDaTriagem, string>> = {
  * criou persona, que e a maioria — a permissao existe para RESTRINGIR quem
  * configurou, e nao para exigir configuracao de quem nao pediu nada.
  */
-function podeConsultar(persona: PersonaDoBot | null, acao: AcaoDaTriagem): boolean {
+function podeConsultar(persona: PersonaDoBot, acao: AcaoDaTriagem): boolean {
   const exigida = PERMISSAO_DA_ACAO[acao];
 
-  if (!exigida || !persona) return true;
+  if (!exigida) return true;
 
   return persona.permissoes.includes(exigida);
 }
@@ -698,6 +711,41 @@ async function executar(conversaId: number): Promise<void> {
     return;
   }
 
+  /*
+   * As personas dizem quem fala e o que ela pode. Sem nenhuma cadastrada, entra
+   * a padrao do sistema — ver `persona-padrao.ts`.
+   */
+  const personas = await repo.personas(segredo, conversaId).catch(() => []);
+
+  /*
+   * ⚠️ Um "bom dia" solto nao vale uma chamada ao provedor.
+   *
+   * Nao ha o que triar: nao ha assunto, nao ha pergunta, e a resposta e a mesma
+   * que qualquer atendente daria. Numa base grande isso e uma chamada paga por
+   * cumprimento, todo dia, para produzir o que ja se sabia escrever.
+   *
+   * So na PRIMEIRA fala do bot na janela. Depois disso, um "oi" no meio da
+   * conversa significa outra coisa — quase sempre "voce ainda esta ai?" —, e
+   * responder com saudacao seria ignorar o que veio antes.
+   */
+  const ultima = historico.filter((m) => m.direcao === "entrada").at(-1);
+
+  if (ctx.tentativas === 0 && ultima && ehSoCumprimento(ultima.texto ?? "")) {
+    const persona = personaDaVez(personas, ctx.atendimentoSetorId);
+    const primeiroNome = (ctx.nome ?? "").trim().split(/\s+/)[0] || null;
+
+    await responderComo(
+      segredo,
+      ctx,
+      conversaId,
+      saudacaoPronta(primeiroNome, new Date()),
+      persona,
+    );
+
+    logger.info("cumprimento respondido sem o modelo", { conversaId });
+    return;
+  }
+
   const setores = await repo.setores(segredo, ctx.empresaId);
 
   /*
@@ -709,12 +757,6 @@ async function executar(conversaId: number): Promise<void> {
    * vez de custar um passo a mais na conversa.
    */
   const catalogo = await repo.servicos(segredo, conversaId).catch(() => []);
-
-  /*
-   * As personas dizem o que a IA pode FECHAR sozinha, por setor. Sem persona
-   * para o setor, o comportamento continua sendo o de sempre: encaminhar.
-   */
-  const personas = await repo.personas(segredo, conversaId).catch(() => []);
 
   /*
    * A partir daqui o painel mostra "a IA esta respondendo" e trava o campo de

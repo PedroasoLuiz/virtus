@@ -325,7 +325,6 @@ function FormularioDaPersona({
   const [sugerindo, setSugerindo] = useState(false);
 
   const erros = problemas(rascunho);
-  const geral = rascunho.setorId == null;
 
   function marcar(id: string, ligada: boolean) {
     setRascunho((r) => ({
@@ -569,11 +568,7 @@ function FormularioDaPersona({
       )}
 
       {aba === ABA_PERMISSOES && (
-        <Permissoes
-          geral={geral}
-          escolhidas={rascunho.permissoes}
-          onMarcar={marcar}
-        />
+        <Permissoes escolhidas={rascunho.permissoes} onMarcar={marcar} />
       )}
 
       <div>
@@ -804,11 +799,9 @@ function Grupo({
  * ao salvar.
  */
 function Permissoes({
-  geral,
   escolhidas,
   onMarcar,
 }: {
-  geral: boolean;
   escolhidas: string[];
   onMarcar: (id: string, ligada: boolean) => void;
 }) {
@@ -841,16 +834,15 @@ function Permissoes({
           lineHeight: "var(--lh-normal)",
         }}
       >
-        {geral
-          ? "Esta é a persona geral: ela atende antes de o cliente se identificar, e por isso só fala do que não é dado de ninguém. Dê um setor a ela, em Parametrização, para liberar as consultas."
-          : "O que estiver marcado, ela resolve sozinha. O resto ela encaminha, mesmo que pareça saber a resposta. Consulta de cadastro continua exigindo CPF ou CNPJ e o código enviado ao e-mail."}
+        O que estiver marcado, ela resolve sozinha. O resto ela encaminha, mesmo que pareça saber a
+        resposta. Consulta de cadastro continua exigindo CPF ou CNPJ e o código enviado ao e-mail
+        do cadastro, qualquer que seja a persona: é essa verificação que protege o dado, e não a
+        marca aqui.
       </p>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {AREAS.map((area) => {
-          const itens = PERMISSOES.filter(
-            (p) => p.area === area.id && (!geral || !p.exigeIdentificacao),
-          );
+          const itens = PERMISSOES.filter((p) => p.area === area.id);
 
           if (itens.length === 0) return null;
 

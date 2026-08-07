@@ -24,8 +24,13 @@ export type Permissao = {
   /**
    * Le dado de CLIENTE, e por isso passa pela identificacao verificada.
    *
-   * ⚠️ E o que separa a persona geral das outras: a geral atende quem ainda nao
-   * disse quem e, entao ela nao pode ter nenhuma destas.
+   * ⚠️ NAO restringe quem pode marcar. A trava e a verificacao: documento mais
+   * o codigo enviado ao e-mail do cadastro, que acontece dentro da conversa
+   * qualquer que seja a persona. Chegamos a proibir a geral de ter estas, e era
+   * excesso — deixava o cliente que nao configura nada com um bot incapaz de
+   * responder a pergunta mais comum que existe.
+   *
+   * Serve para a TELA avisar que aquela opcao nao responde a qualquer um.
    */
   exigeIdentificacao: boolean;
   /** Ainda nao existe do lado do bot. A tela mostra e avisa. */
@@ -134,26 +139,14 @@ export function permissaoPorId(id: string): Permissao | null {
 }
 
 /**
- * As permissoes que uma persona GERAL pode ter.
+ * O que impede este conjunto de permissoes.
  *
- * ⚠️ So as que nao tocam dado de cliente. A geral e quem atende quem chegou
- * agora, antes de qualquer identificacao: dar a ela uma consulta de saldo seria
- * oferecer o dado a quem ainda nao provou ser o dono dele.
+ * ⚠️ So o desconhecido. A geral pode marcar as mesmas que as de setor: a trava
+ * do dado de cliente e a identificacao verificada, e nao quem esta falando.
+ * Proibir por tipo de persona era regra a mais no lugar errado.
  */
-export function permissoesDaGeral(): Permissao[] {
-  return PERMISSOES.filter((p) => !p.exigeIdentificacao);
-}
-
-/** O que impede este conjunto de permissoes, dada a natureza da persona. */
-export function problemasDasPermissoes(setorId: number | null, ids: string[]): string[] {
+export function problemasDasPermissoes(_setorId: number | null, ids: string[]): string[] {
   const desconhecida = ids.find((id) => !permissaoPorId(id));
-  if (desconhecida) return [`Permissão desconhecida: ${desconhecida}`];
 
-  if (setorId != null) return [];
-
-  const proibida = ids.map(permissaoPorId).find((p) => p?.exigeIdentificacao);
-
-  return proibida
-    ? [`A persona geral não pode "${proibida.rotulo}": ela atende antes de saber quem é o cliente`]
-    : [];
+  return desconhecida ? [`Permissão desconhecida: ${desconhecida}`] : [];
 }
