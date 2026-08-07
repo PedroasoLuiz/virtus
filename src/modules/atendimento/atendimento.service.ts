@@ -4,6 +4,7 @@ import * as repo from "@/modules/atendimento/atendimento.repository";
 import type {
   ContextoDoBot,
   MensagemDoBot,
+  PersonaDoBot,
   Verificado,
 } from "@/modules/atendimento/atendimento.types";
 import { enviarEmail } from "@/shared/email/enviar";
@@ -20,6 +21,7 @@ import {
 import * as iaRepo from "@/modules/ia/ia.repository";
 import * as ia from "@/modules/ia/ia.cloud";
 import * as whatsapp from "@/modules/whatsapp/whatsapp.cloud";
+import { comAssinaturaDoAutor } from "@/modules/whatsapp/whatsapp.service";
 import {
   ESQUEMA_DA_MENSAGEM,
   ESQUEMA_DA_TRIAGEM,
@@ -31,6 +33,7 @@ import {
   motivoParaCalar,
   precisaDeHumano,
   situacaoFinal,
+  type AcaoDaTriagem,
   type Triagem,
 } from "@/modules/atendimento/atendimento.triagem";
 
@@ -208,11 +211,23 @@ async function imagensRecentes(
 }
 
 /** Manda e grava, na ordem em que o resto do modulo ja faz. */
+/**
+ * Manda o que o bot tem a dizer, assinado.
+ *
+ * ⚠️ A assinatura e a MESMA dos atendentes: `*Nome:*` na primeira linha. Quem
+ * le a conversa ve "*Financeiro:*" do mesmo jeito que veria "*Pedro Luiz:*", e
+ * nao precisa descobrir se estava falando com gente ou com o sistema — a
+ * diferenca de tratamento vem do que foi dito, nao de um aviso.
+ *
+ * Sem persona a mensagem sai sem assinatura, como sempre saiu: inventar um nome
+ * seria dar identidade a algo que a empresa nao configurou.
+ */
 async function responderComo(
   segredo: string,
   ctx: ContextoDoBot,
   conversaId: number,
   texto: string,
+  persona?: PersonaDoBot | null,
 ): Promise<void> {
   const cred = await repo.credenciaisDoWhatsapp(segredo, conversaId);
 
@@ -221,8 +236,49 @@ async function responderComo(
     return;
   }
 
-  const wamid = await whatsapp.enviarTexto(cred, ctx.telefone, texto);
-  await repo.registrarSaidaDoBot(segredo, conversaId, wamid, texto);
+  const corpo = comAssinaturaDoAutor(persona?.nome ?? null, texto);
+
+  const wamid = await whatsapp.enviarTexto(cred, ctx.telefone, corpo);
+  await repo.registrarSaidaDoBot(segredo, conversaId, wamid, corpo);
+}
+
+/**
+ * Qual persona fala agora.
+ *
+ * ⚠️ A do SETOR vence a geral. A geral existe para o comeco da conversa, antes
+ * de se saber o assunto; assim que o setor aparece, quem manda e a persona dele
+ * — com o jeito e as permissoes dela. Era isso que a instrucao ja pedia ao
+ * modelo, e agora o codigo confere.
+ */
+function personaDaVez(personas: PersonaDoBot[], setorId: number | null): PersonaDoBot | null {
+  if (setorId) {
+    const doSetor = personas.find((p) => p.setorId === setorId);
+    if (doSetor) return doSetor;
+  }
+
+  return personas.find((p) => p.setorId == null) ?? null;
+}
+
+/** A permissao que cada consulta exige. Ver `atendimento/permissoes.ts`. */
+const PERMISSAO_DA_ACAO: Partial<Record<AcaoDaTriagem, string>> = {
+  SALDO: "saldo",
+  TITULOS: "titulos",
+};
+
+/**
+ * Esta persona pode fazer esta consulta?
+ *
+ * ⚠️ Sem persona nenhuma cadastrada, o comportamento e o de antes: a consulta
+ * acontece. Barrar ali desligaria a identificacao em toda empresa que ainda nao
+ * criou persona, que e a maioria — a permissao existe para RESTRINGIR quem
+ * configurou, e nao para exigir configuracao de quem nao pediu nada.
+ */
+function podeConsultar(persona: PersonaDoBot | null, acao: AcaoDaTriagem): boolean {
+  const exigida = PERMISSAO_DA_ACAO[acao];
+
+  if (!exigida || !persona) return true;
+
+  return persona.permissoes.includes(exigida);
 }
 
 /**
@@ -687,9 +743,36 @@ async function executar(conversaId: number): Promise<void> {
      * falar com ninguem, ela perguntou algo que o sistema sabe responder.
      * Gravar isso na fila encheria o financeiro de tarefas ja resolvidas.
      */
+    const persona = personaDaVez(personas, triagem.setorId || null);
+
     if (triagem.acao && triagem.acao !== "NENHUMA") {
+      /*
+       * ⚠️ A permissao e conferida AQUI, e nao so no texto da instrucao.
+       *
+       * O modelo pede a consulta pelo campo `acao`, e nada impede que ele peca
+       * uma que a persona daquele setor nao tem. Confiar so na instrucao faria a
+       * autorizacao depender de o modelo ter lido direito — e a lista de
+       * permissoes deixaria de significar alguma coisa.
+       */
+      if (!podeConsultar(persona, triagem.acao)) {
+        logger.info("consulta recusada: a persona nao tem a permissao", {
+          conversaId,
+          acao: triagem.acao,
+          persona: persona?.nome,
+        });
+
+        await responderComo(
+          segredo,
+          ctx,
+          conversaId,
+          "Essa informação eu não consigo ver por aqui. Vou passar para o setor responsável.",
+          persona,
+        );
+        return;
+      }
+
       const texto = await passoDaIdentificacao(segredo, ctx, conversaId, triagem, jaVerificado);
-      if (texto) await responderComo(segredo, ctx, conversaId, texto);
+      if (texto) await responderComo(segredo, ctx, conversaId, texto, persona);
       return;
     }
 
@@ -732,7 +815,7 @@ async function executar(conversaId: number): Promise<void> {
       return;
     }
 
-    await responderComo(segredo, ctx, conversaId, resposta);
+    await responderComo(segredo, ctx, conversaId, resposta, persona);
 
     logger.info("bot respondeu", {
       conversaId,

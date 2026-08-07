@@ -91,6 +91,8 @@ export async function personas(segredo: string, conversaId: number): Promise<Per
     descricao: p.descricao,
     evitar: p.evitar,
     podeResolver: p.pode_resolver,
+    // `jsonb` chega como `unknown`: so lista de texto interessa.
+    permissoes: Array.isArray(p.permissoes) ? (p.permissoes as string[]) : [],
     setorId: p.setor_id,
     setorNome: p.setor_nome,
   }));

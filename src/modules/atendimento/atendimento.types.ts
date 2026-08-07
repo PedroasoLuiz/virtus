@@ -124,7 +124,11 @@ export type ServicoDaEmpresa = {
 export type PersonaDoBot = {
   nome: string;
   descricao: string | null;
+  /** O que ela evita no jeito de falar. Ver `personas.types`. */
+  evitar: string | null;
   podeResolver: string | null;
+  /** Os ids do catalogo de `atendimento/permissoes.ts`. */
+  permissoes: string[];
   setorId: number | null;
   setorNome: string | null;
 };

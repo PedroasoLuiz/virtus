@@ -1,3 +1,4 @@
+import { permissaoPorId } from "@/modules/atendimento/permissoes";
 import type {
   ContextoDoBot,
   MensagemDoBot,
@@ -234,13 +235,26 @@ O código já foi enviado para ${etapa.emailMascarado} e o sistema está esperan
    */
   const listaDePersonas = personas
     .map((p) => {
-      const onde = p.setorNome ? `setor ${p.setorNome}` : "qualquer assunto";
-      const quem = p.descricao ? ` ${p.descricao}` : "";
-      const limite = p.podeResolver
-        ? `\n  Pode resolver sozinha: ${p.podeResolver}`
-        : "\n  Sem lista do que pode resolver: só acolha e encaminhe.";
+      const onde = p.setorNome ? `setor ${p.setorNome}` : "TRIAGEM, enquanto o setor não está decidido";
+      const quem = p.descricao ? `\n  Jeito de falar: ${p.descricao}` : "";
+      const evita = p.evitar ? `\n  Evita: ${p.evitar}` : "";
 
-      return `- "${p.nome}" (${onde}).${quem}${limite}`;
+      /*
+       * As permissoes entram pelo ROTULO, e nao pelo id.
+       *
+       * O modelo le linguagem, nao chave de catalogo: "consultar parcelas em
+       * aberto" diz o que ele pode oferecer, e `titulos` nao diz nada. O id
+       * continua sendo o que o codigo confere depois.
+       */
+      const podem = p.permissoes
+        .map((id) => permissaoPorId(id)?.rotulo)
+        .filter(Boolean);
+
+      const pode = podem.length > 0
+        ? `\n  Pode resolver: ${podem.join("; ")}`
+        : "\n  Não resolve nada sozinha: acolhe, entende e encaminha.";
+
+      return `- "${p.nome}" (${onde}).${quem}${evita}${pode}`;
     })
     .join("\n");
 
@@ -338,10 +352,13 @@ ${listaDePersonas || "- nenhuma persona cadastrada"}
 
 Persona é a autorização escrita de resolver um recorte, e nada além dele.
 
-- Quando o assunto for de um setor que TEM persona: incorpore o jeito dela e responda o que a lista "pode resolver" permite, sem encaminhar. Saindo dessa lista, mesmo um passo, encaminhe.
-- Quando o setor NÃO tiver persona: não invente jeito nem resposta. Faça a triagem e encaminhe, como sempre.
-- Persona nunca autoriza dizer valor, vencimento, saldo, boleto ou dado de cliente. Isso continua saindo só das consultas do sistema, pelo campo acao.
-- Nunca diga que está incorporando uma persona, nem cite o nome dela como se fosse um personagem. Ela é o seu jeito de falar naquele assunto, não um crachá.
+Você começa toda conversa na persona de TRIAGEM, que só acolhe e entende. Assim que souber de que setor é o assunto, passe a falar como a persona daquele setor: o jeito dela, o que ela evita e o que ela pode resolver valem a partir dali, e o da triagem deixa de valer.
+
+- Setor com persona: assuma o jeito dela e resolva o que a linha "pode resolver" permite, sem encaminhar. Saindo dessa lista, mesmo um passo, encaminhe.
+- Setor sem persona: não invente jeito nem resposta. Faça a triagem e encaminhe, como sempre.
+- "Pode resolver" é uma lista fechada. O que não está nela não é seu, mesmo que você saiba a resposta.
+- Persona nunca autoriza dizer valor, vencimento, saldo, boleto ou dado de cliente. Isso continua saindo só das consultas do sistema, pelo campo acao — e só quando a persona daquele setor tiver essa permissão.
+- Nunca diga que está trocando de persona, nem cite o nome dela como se fosse um personagem. O nome já vai assinado na mensagem; ele não se anuncia dentro do texto.
 
 O QUE A EMPRESA FAZ:
 ${listaDeServicos || "- catálogo não cadastrado"}

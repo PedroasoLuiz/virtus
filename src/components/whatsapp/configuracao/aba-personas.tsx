@@ -1080,7 +1080,8 @@ function BotaoDeSugestao({ onClick }: { onClick: () => void }) {
         display: "inline-flex",
         alignItems: "center",
         gap: 5,
-        marginTop: 8,
+        /* Afastado do campo: colado, ele parecia parte da caixa de texto. */
+        marginTop: 14,
         /*
          * Do tamanho do TEXTO, e nao da largura do campo.
          *
