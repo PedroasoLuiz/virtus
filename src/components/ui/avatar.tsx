@@ -5,9 +5,13 @@ import { useState } from "react";
 /**
  * A bolinha com a foto ou as iniciais.
  *
- * ⚠️ A cor sai do TELEFONE, e nao do nome. Contato sem nome mudaria de cor
- * assim que alguem o cadastrasse, e a cor e justamente o que faz reconhecer a
- * mesma pessoa na lista sem ler.
+ * ⚠️ A cor sai da SEMENTE (o telefone, o id do cadastro), e nao do nome. Contato
+ * sem nome mudaria de cor assim que alguem o cadastrasse, e a cor e justamente o
+ * que faz reconhecer a mesma pessoa na lista sem ler.
+ *
+ * ⚠️ Mora no kit, e nao no painel do WhatsApp. Nasceu la, mas a mesma bolinha
+ * identifica pessoa na agenda, na lista de cadastros e na persona: uma copia por
+ * tela faria a mesma empresa ter cor diferente em cada uma.
  */
 
 /**

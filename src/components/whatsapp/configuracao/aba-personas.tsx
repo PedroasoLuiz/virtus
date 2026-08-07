@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useAvisos } from "@/components/ui/avisos";
 import { Drawer } from "@/components/ui/drawer";
-import { Avatar } from "@/components/whatsapp/painel/avatar";
+import { Avatar } from "@/components/ui/avatar";
 import { PrecisaDeAjuda } from "@/components/ui/ajuda";
 import {
   AcoesDaLinha,

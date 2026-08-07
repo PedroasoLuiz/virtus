@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Avatar } from "@/components/whatsapp/painel/avatar";
+import { Avatar } from "@/components/ui/avatar";
 import { formatarTelefone, type ContatoDoPainel } from "@/modules/whatsapp/whatsapp.types";
 
 /**

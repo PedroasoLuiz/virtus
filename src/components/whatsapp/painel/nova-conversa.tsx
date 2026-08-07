@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useAvisos } from "@/components/ui/avisos";
-import { Avatar } from "@/components/whatsapp/painel/avatar";
+import { Avatar } from "@/components/ui/avatar";
 import { ColunaDeModelos, EnvioDoModelo, useModelos } from "@/components/whatsapp/painel/modelo";
 import {
   formatarTelefone,

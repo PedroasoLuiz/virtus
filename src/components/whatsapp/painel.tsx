@@ -7,7 +7,7 @@ import { useAvisos } from "@/components/ui/avisos";
 import { ConfiguracaoDeContas } from "@/components/whatsapp/configuracao/drawer";
 import { comFormatacaoDoWhatsapp } from "@/components/whatsapp/formatacao";
 import { hora, quando, rotuloDoDia } from "@/components/whatsapp/painel/datas";
-import { Avatar, avatarComoImagem } from "@/components/whatsapp/painel/avatar";
+import { Avatar, avatarComoImagem } from "@/components/ui/avatar";
 import { Midia } from "@/components/whatsapp/painel/midia";
 import {
   AvisoDaJanela,

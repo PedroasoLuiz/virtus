@@ -515,6 +515,12 @@ h1, h2, h3, h4 {
   to   { opacity: 1; }
 }
 
+/* Ultimo campo da ficha: sem divisoria. Ela desenharia uma linha por dentro da
+   propria moldura da secao, a um pixel dela. */
+.linha-da-ficha:last-child {
+  border-bottom: none;
+}
+
 /* Skeleton de carregamento. */
 .sk {
   position: relative;
