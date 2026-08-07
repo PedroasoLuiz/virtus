@@ -92,7 +92,11 @@ export async function salvarVinculo({ body, ctx }: Entrada<SalvarVinculoBody, un
 
 export async function criarModelo({ body, ctx }: Entrada<CriarModeloBody, undefined, unknown>) {
   empresaObrigatoria(ctx);
-  await service.criarModeloDaFinalidade(body.contaId, body.finalidade);
+  await service.criarModeloDaFinalidade(body.contaId, body.finalidade, {
+    cabecalho: body.cabecalho,
+    corpo: body.corpo,
+    rodape: body.rodape,
+  });
 
   return ok(await service.listarVinculos(empresaObrigatoria(ctx)));
 }

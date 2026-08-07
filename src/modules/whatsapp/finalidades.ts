@@ -79,6 +79,19 @@ export type Finalidade = {
   botao: VariavelDeFinalidade | null;
   /** Sugestao de corpo para quem for criar o modelo no painel da Meta. */
   corpoSugerido: string;
+  /**
+   * A primeira linha, em destaque, e a ultima, em cinza.
+   *
+   * ⚠️ Sao componentes PROPRIOS na Meta (`HEADER` e `FOOTER`), e nao texto solto
+   * no corpo. O cabecalho sai em negrito maior e o rodape em cinza pequeno, o
+   * que da ao modelo a cara de mensagem de empresa em vez de recado digitado.
+   *
+   * ⚠️ O cabecalho de TEXTO nao aceita quebra de linha nem `{{n}}` aqui: mantido
+   * fixo de proposito, porque variavel no cabecalho exige exemplo proprio e
+   * complica a aprovacao sem mudar o que a mensagem diz.
+   */
+  cabecalhoSugerido: string | null;
+  rodapeSugerido: string | null;
 };
 
 export const FINALIDADES: Finalidade[] = [
@@ -136,11 +149,19 @@ export const FINALIDADES: Finalidade[] = [
      * aprovacao — por isso a sugestao nao amarra numero a significado: quem
      * decide o que entra em cada campo e o vinculo, na tela ao lado.
      */
+    /*
+     * ⚠️ Este texto NAO segue o formato dos outros, de proposito: ele e o que ja
+     * esta em producao e aprovado. Enfeita-lo aqui criaria uma sugestao diferente
+     * da mensagem que os clientes recebem hoje, e a primeira duvida seria qual
+     * das duas vale.
+     */
+    cabecalhoSugerido: null,
     corpoSugerido:
       "Olá, {{1}}! 👋\n\n" +
       "Sua fatura referente ao *ticket nº {{2}}*, no valor de *R$ {{3}}*, com vencimento em {{4}}, já está disponível.\n\n" +
       "Para visualizar os detalhes, acesse pelo botão abaixo.\n\n" +
       "Em caso de dúvidas, estamos à disposição!",
+    rodapeSugerido: null,
   },
   {
     id: "ticket",
@@ -184,8 +205,16 @@ export const FINALIDADES: Finalidade[] = [
       },
     ],
     botao: null,
+    cabecalhoSugerido: "Atualização do seu chamado",
     corpoSugerido:
-      "Olá {{1}}, seu chamado {{2}} ({{3}}) está com a situação: {{4}}. Aberto em {{5}}. Qualquer dúvida, é só responder por aqui.",
+      "Olá, *{{1}}*! 👋\n\n" +
+      "Seu chamado foi atualizado:\n\n" +
+      "🔧 *Chamado:* {{2}}\n" +
+      "📝 *Assunto:* {{3}}\n" +
+      "📌 *Situação:* {{4}}\n" +
+      "📅 *Aberto em:* {{5}}\n\n" +
+      "Nossa equipe segue acompanhando. Qualquer dúvida, é só responder por aqui.",
+    rodapeSugerido: "Esta é uma mensagem automática",
   },
   {
     id: "contapagar",
@@ -223,8 +252,15 @@ export const FINALIDADES: Finalidade[] = [
       },
     ],
     botao: null,
+    cabecalhoSugerido: "Confirmação de pagamento",
     corpoSugerido:
-      "Olá {{1}}, sobre a parcela de R$ {{2}} com vencimento em {{3}}, referente a {{4}}. Segue nosso comprovante.",
+      "Olá, *{{1}}*!\n\n" +
+      "Estamos entrando em contato sobre a parcela abaixo:\n\n" +
+      "💰 *Valor:* R$ {{2}}\n" +
+      "📅 *Vencimento:* {{3}}\n" +
+      "📄 *Documento:* {{4}}\n\n" +
+      "Qualquer divergência, é só responder por aqui.",
+    rodapeSugerido: "Esta é uma mensagem automática",
   },
   {
     id: "aniversario",
@@ -250,7 +286,13 @@ export const FINALIDADES: Finalidade[] = [
       },
     ],
     botao: null,
-    corpoSugerido: "Feliz aniversário, {{1}}! Um abraço de toda a equipe da {{2}}.",
+    cabecalhoSugerido: "Feliz aniversário! 🎉",
+    corpoSugerido:
+      "Olá, *{{1}}*!\n\n" +
+      "Hoje é um dia especial, e a equipe da *{{2}}* quer desejar a você um feliz aniversário. 🥳\n\n" +
+      "Que o novo ano traga muita saúde, conquistas e bons negócios.\n\n" +
+      "Obrigado por caminhar com a gente!",
+    rodapeSugerido: null,
   },
 ];
 
@@ -343,6 +385,37 @@ export function problemasDoVinculo(
 
   if (v.botaoParam && v.botaoParam !== finalidade.botao?.chave) {
     erros.push("O botão só aceita o link desta finalidade");
+  }
+
+  return erros;
+}
+
+/**
+ * O que impede este texto de virar modelo na Meta.
+ *
+ * ⚠️ A checagem que importa e a dos MARCADORES. O mapeamento da finalidade e
+ * posicional e ja esta decidido: `{{2}}` do texto sugerido de cobranca e o
+ * ticket. Se quem edita apagar um marcador, ou pular do `{{1}}` para o `{{3}}`,
+ * o vinculo automatico da aprovacao passaria a apontar valor para a posicao
+ * errada — e isso so apareceria num cliente recebendo o vencimento no lugar do
+ * valor.
+ */
+export function problemasDoTexto(finalidade: Finalidade, corpo: string): string[] {
+  const erros: string[] = [];
+  const texto = corpo.trim();
+
+  if (texto.length < 10) return ["Escreva o texto da mensagem"];
+  if (texto.length > 1024) erros.push("A Meta aceita no máximo 1024 caracteres no corpo");
+
+  const esperados = finalidade.parametrosSugeridos.length;
+  const achados = [...texto.matchAll(/\{\{\s*(\d+)\s*\}\}/g)].map((m) => Number(m[1]));
+  const distintos = [...new Set(achados)].sort((a, b) => a - b);
+
+  if (distintos.length !== esperados) {
+    erros.push(`O texto precisa ter os ${esperados} campos, de {{1}} a {{${esperados}}}`);
+  } else if (distintos.some((n, i) => n !== i + 1)) {
+    // A Meta recusa numeracao com buraco, e o mapeamento depende da posicao.
+    erros.push("Os campos precisam ser numerados em sequência, começando em {{1}}");
   }
 
   return erros;

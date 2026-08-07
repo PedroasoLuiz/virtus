@@ -211,6 +211,17 @@ export const salvarVinculoBodySchema = z.object({
 export const criarModeloBodySchema = z.object({
   contaId: z.number().int().positive(),
   finalidade: z.enum(["cobranca", "ticket", "contapagar", "aniversario"]),
+  /**
+   * O texto revisado antes de criar. Ausente usa o sugerido.
+   *
+   * ⚠️ O que NAO vem daqui e o mapeamento: os `{{n}}` continuam significando o
+   * que a finalidade diz. Por isso o servico recusa texto que mude a quantidade
+   * ou a numeracao dos campos — seria o mesmo modelo apontando valores para
+   * posicoes trocadas.
+   */
+  cabecalho: z.string().trim().max(60).nullable().default(null),
+  corpo: z.string().trim().min(10).max(1024).optional(),
+  rodape: z.string().trim().max(60).nullable().default(null),
 });
 
 export const removerVinculoQuerySchema = z.object({

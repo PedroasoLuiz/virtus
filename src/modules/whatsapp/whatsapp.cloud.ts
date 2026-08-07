@@ -281,7 +281,9 @@ export async function criarModelo(
     nome: string;
     idioma: string;
     categoria: "UTILITY" | "MARKETING";
+    cabecalho: string | null;
     corpo: string;
+    rodape: string | null;
     exemplos: string[];
     botao: { texto: string; url: string; exemplo: string } | null;
   },
@@ -292,13 +294,26 @@ export async function criarModelo(
     );
   }
 
-  const componentes: Record<string, unknown>[] = [
-    {
-      type: "BODY",
-      text: entrada.corpo,
-      ...(entrada.exemplos.length > 0 ? { example: { body_text: [entrada.exemplos] } } : {}),
-    },
-  ];
+  const componentes: Record<string, unknown>[] = [];
+
+  /*
+   * A ordem dos componentes E a ordem da mensagem: cabecalho, corpo, rodape,
+   * botoes. A Meta aceita fora de ordem, mas o painel dela redesenha, e um
+   * modelo que se le diferente do que foi enviado confunde quem for conferir.
+   */
+  if (entrada.cabecalho) {
+    componentes.push({ type: "HEADER", format: "TEXT", text: entrada.cabecalho });
+  }
+
+  componentes.push({
+    type: "BODY",
+    text: entrada.corpo,
+    ...(entrada.exemplos.length > 0 ? { example: { body_text: [entrada.exemplos] } } : {}),
+  });
+
+  if (entrada.rodape) {
+    componentes.push({ type: "FOOTER", text: entrada.rodape });
+  }
 
   if (entrada.botao) {
     componentes.push({
@@ -342,13 +357,28 @@ export async function criarModelo(
     });
 
     /*
+     * ⚠️ Falta de PERMISSAO ganha frase propria.
+     *
+     * E o erro mais provavel na primeira tentativa: criar modelo exige
+     * `whatsapp_business_management` no token, e o token gerado so para enviar
+     * mensagem nao tem. A Meta responde "(#200) Requires permission", que nao
+     * diz a ninguem o que fazer — e sem isso a conclusao seria que o botao esta
+     * quebrado.
+     */
+    const bruto = corpo.error?.error_user_msg ?? corpo.error?.message ?? "";
+
+    if (corpo.error?.code === 200 || /permission/i.test(bruto)) {
+      throw new BusinessRuleError(
+        "O token deste número não tem permissão para criar modelos. Ele precisa da permissão whatsapp_business_management, marcada ao gerar o token em Usuários do sistema, no Business Manager.",
+      );
+    }
+
+    /*
      * `error_user_msg` primeiro: e o texto que a Meta escreve para o dono da
      * conta ler, e diz coisas uteis ("ja existe um modelo com esse nome").
      * `message` e para quem programa.
      */
-    throw new BusinessRuleError(
-      corpo.error?.error_user_msg ?? corpo.error?.message ?? "A Meta recusou a criação do modelo.",
-    );
+    throw new BusinessRuleError(bruto || "A Meta recusou a criação do modelo.");
   }
 
   return { id: corpo.id ?? "", status: corpo.status ?? "PENDING" };

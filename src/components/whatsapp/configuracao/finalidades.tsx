@@ -16,6 +16,7 @@ import {
   SkeletonRows,
   TableArea,
   TableHead,
+  inputStyle,
   Td,
   Th,
   Tr,
@@ -24,6 +25,7 @@ import {
 import {
   FINALIDADES,
   previaDoCorpo,
+  problemasDoTexto,
   type Finalidade,
   type VinculoDeModelo,
 } from "@/modules/whatsapp/finalidades";
@@ -93,13 +95,17 @@ export function Finalidades({
     return () => clearInterval(id);
   }, [chaves, onMudou]);
 
-  async function enviarPedido(f: Finalidade, contaId: number) {
+  async function enviarPedido(
+    f: Finalidade,
+    contaId: number,
+    texto: { cabecalho: string | null; corpo: string; rodape: string | null },
+  ) {
     setPedindo(f.id);
 
     const r = await fetch("/api/v1/whatsapp/modelos", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contaId, finalidade: f.id }),
+      body: JSON.stringify({ contaId, finalidade: f.id, ...texto }),
     });
 
     setPedindo(null);
@@ -262,7 +268,7 @@ export function Finalidades({
           contas={contas}
           ocupado={pedindo === criando.id}
           onFechar={() => setCriando(null)}
-          onConfirmar={(contaId) => void enviarPedido(criando, contaId)}
+          onConfirmar={(contaId, texto) => void enviarPedido(criando, contaId, texto)}
         />
       )}
 
@@ -330,11 +336,15 @@ function ModeloDaLinha({ vinculo }: { vinculo: VinculoDeModelo | null }) {
 }
 
 /**
- * Por qual número o modelo padrão vai nascer.
+ * Por qual número o modelo padrão vai nascer, e com que texto.
  *
- * ⚠️ Pergunta antes de criar, e não depois. O modelo é criado na WABA daquele
- * número e não migra: errar aqui significa um modelo aprovado na conta errada,
+ * ⚠️ Pergunta o número antes de criar. O modelo é criado na WABA daquele número
+ * e não migra: errar aqui significa um modelo aprovado na conta errada,
  * ocupando o teto dela, que só se resolve criando outro no número certo.
+ *
+ * ⚠️ O texto pode ser reescrito, mas os MARCADORES não. O mapeamento é
+ * posicional e já está decidido pela finalidade; apagar um `{{n}}` faria o
+ * vínculo automático apontar valor para a posição errada.
  */
 function EscolhaDoNumero({
   finalidade,
@@ -347,9 +357,23 @@ function EscolhaDoNumero({
   contas: ContaWhatsapp[];
   ocupado: boolean;
   onFechar: () => void;
-  onConfirmar: (contaId: number) => void;
+  onConfirmar: (
+    contaId: number,
+    texto: { cabecalho: string | null; corpo: string; rodape: string | null },
+  ) => void;
 }) {
   const [contaId, setContaId] = useState(contas[0]?.id ?? 0);
+  const [editando, setEditando] = useState(false);
+  const [cabecalho, setCabecalho] = useState(finalidade.cabecalhoSugerido ?? "");
+  const [corpo, setCorpo] = useState(finalidade.corpoSugerido);
+  const [rodape, setRodape] = useState(finalidade.rodapeSugerido ?? "");
+
+  const erros = problemasDoTexto(finalidade, corpo);
+
+  // Os exemplos na posição de cada marcador, para a prévia mostrar valores.
+  const exemplos = finalidade.parametrosSugeridos.map(
+    (chave) => finalidade.variaveis.find((v) => v.chave === chave)?.exemplo ?? "…",
+  );
 
   return (
     <Drawer
@@ -362,54 +386,270 @@ function EscolhaDoNumero({
         <Button
           size="xs"
           variant="primary"
-          onClick={() => onConfirmar(contaId)}
-          disabled={ocupado || !contaId}
+          onClick={() =>
+            onConfirmar(contaId, {
+              cabecalho: cabecalho.trim() || null,
+              corpo: corpo.trim(),
+              rodape: rodape.trim() || null,
+            })
+          }
+          disabled={ocupado || !contaId || erros.length > 0}
+          title={erros[0]}
         >
           {ocupado ? "Enviando…" : "Criar na Meta"}
         </Button>
       }
     >
-      <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-        <Field
-          label="Número"
-          hint="O modelo nasce na conta da Meta deste número, e é por ele que esta finalidade vai falar."
+      <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+        <SecaoSimples
+          primeiro
+          titulo="Onde criar"
+          legenda="O modelo nasce na conta da Meta deste número, e é por ele que esta finalidade vai falar. Ele não migra depois: criado no número errado, só se resolve criando outro no certo."
         >
-          <select
-            style={selectStyle}
-            value={contaId}
-            onChange={(e) => setContaId(Number(e.target.value))}
+          <Field label="Número">
+            <select
+              style={selectStyle}
+              value={contaId}
+              onChange={(e) => setContaId(Number(e.target.value))}
+            >
+              {contas.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.apelido || formatarTelefone(c.numero ?? "") || c.phoneNumberId}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field label="Nome na Meta">
+            <CampoBloqueado valor={finalidade.nomeSugerido} />
+          </Field>
+
+          <Field label="Categoria">
+            <CampoBloqueado
+              valor={finalidade.categoria === "UTILITY" ? "Utilitário" : "Marketing"}
+            />
+          </Field>
+        </SecaoSimples>
+
+        <section>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 10,
+            }}
           >
-            {contas.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.apelido || formatarTelefone(c.numero ?? "") || c.phoneNumberId}
-              </option>
-            ))}
-          </select>
-        </Field>
+            <div
+              style={{
+                fontSize: "calc(var(--text-lg) + 2px)",
+                fontWeight: "var(--fw-semi)",
+                color: "var(--text-primary)",
+                letterSpacing: "var(--tracking-snug)",
+              }}
+            >
+              Como vai ficar
+            </div>
 
-        <Field label="Nome na Meta">
-          <CampoBloqueado valor={finalidade.nomeSugerido} />
-        </Field>
+            <button
+              type="button"
+              onClick={() => setEditando((v) => !v)}
+              style={{
+                border: "none",
+                background: "transparent",
+                padding: 0,
+                fontSize: "var(--text-sm)",
+                color: "var(--primary)",
+                cursor: "pointer",
+              }}
+            >
+              {editando ? "Ver a prévia" : "Editar o texto"}
+            </button>
+          </div>
 
-        <Field label="Categoria">
-          <CampoBloqueado
-            valor={finalidade.categoria === "UTILITY" ? "Utilitário" : "Marketing"}
-          />
-        </Field>
+          <p
+            style={{
+              marginTop: 6,
+              marginBottom: 12,
+              fontSize: "calc(var(--text-xs) + 1px)",
+              color: "var(--text-tertiary)",
+              lineHeight: "var(--lh-normal)",
+            }}
+          >
+            {editando
+              ? "Escreva o que quiser, mas mantenha os campos {{1}} a {{" +
+                finalidade.parametrosSugeridos.length +
+                "}}: é a posição deles que o sistema preenche. Use *asterisco* para negrito."
+              : "É assim que a mensagem chega, com valores de exemplo no lugar dos campos."}
+          </p>
+
+          {editando ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div>
+                <label
+                  htmlFor="cab"
+                  style={{
+                    display: "block",
+                    marginBottom: 4,
+                    fontSize: "var(--text-xs)",
+                    color: "var(--text-tertiary)",
+                  }}
+                >
+                  Primeira linha, em destaque (opcional)
+                </label>
+                <input
+                  id="cab"
+                  style={{ ...inputStyle, width: "100%" }}
+                  maxLength={60}
+                  value={cabecalho}
+                  onChange={(e) => setCabecalho(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="corpo"
+                  style={{
+                    display: "block",
+                    marginBottom: 4,
+                    fontSize: "var(--text-xs)",
+                    color: "var(--text-tertiary)",
+                  }}
+                >
+                  Mensagem
+                </label>
+                <textarea
+                  id="corpo"
+                  rows={12}
+                  style={{
+                    ...inputStyle,
+                    width: "100%",
+                    height: "auto",
+                    padding: 10,
+                    lineHeight: "var(--lh-normal)",
+                    resize: "vertical",
+                  }}
+                  value={corpo}
+                  onChange={(e) => setCorpo(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="rod"
+                  style={{
+                    display: "block",
+                    marginBottom: 4,
+                    fontSize: "var(--text-xs)",
+                    color: "var(--text-tertiary)",
+                  }}
+                >
+                  Última linha, em cinza (opcional)
+                </label>
+                <input
+                  id="rod"
+                  style={{ ...inputStyle, width: "100%" }}
+                  maxLength={60}
+                  value={rodape}
+                  onChange={(e) => setRodape(e.target.value)}
+                />
+              </div>
+
+              {/*
+                ⚠️ O erro aparece EDITANDO, e não só no botão desabilitado.
+
+                A regra dos marcadores não é óbvia: quem apaga um `{{2}}` sem
+                querer precisa saber por que o salvar travou, e o `title` do
+                botão só aparece com o mouse parado em cima dele.
+              */}
+              {erros.length > 0 && (
+                <p style={{ fontSize: "var(--text-sm)", color: "var(--danger-text)" }}>{erros[0]}</p>
+              )}
+            </div>
+          ) : (
+            <>
+              <CartaoDeTexto>
+                {cabecalho.trim() && (
+                  <div style={{ fontWeight: "var(--fw-semi)", marginBottom: 8 }}>
+                    {cabecalho.trim()}
+                  </div>
+                )}
+
+                {comFormatacaoDoWhatsapp(previaDoCorpo(corpo, exemplos))}
+
+                {rodape.trim() && (
+                  <div
+                    style={{
+                      marginTop: 8,
+                      fontSize: "var(--text-xs)",
+                      color: "var(--text-tertiary)",
+                    }}
+                  >
+                    {rodape.trim()}
+                  </div>
+                )}
+              </CartaoDeTexto>
+
+              {finalidade.botao && <CartaoDeBotao texto="Acessar fatura" />}
+            </>
+          )}
+        </section>
       </div>
 
       <p
         style={{
-          marginTop: 16,
+          marginTop: 22,
           fontSize: "calc(var(--text-xs) + 1px)",
           color: "var(--text-tertiary)",
           lineHeight: "var(--lh-normal)",
         }}
       >
-        O texto sugerido e os campos já vão mapeados. O modelo passa pela revisão da Meta antes de
-        poder enviar, e quando ela aprovar o vínculo acontece sozinho.
+        Os campos já vão mapeados. O modelo passa pela revisão da Meta antes de poder enviar, e
+        quando ela aprovar o vínculo acontece sozinho.
       </p>
     </Drawer>
+  );
+}
+
+/** Título, legenda e campos. O mesmo arranjo das outras seções do módulo. */
+function SecaoSimples({
+  titulo,
+  legenda,
+  primeiro,
+  children,
+}: {
+  titulo: string;
+  legenda: string;
+  primeiro?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <section>
+      <div style={{ marginBottom: 12, marginTop: primeiro ? 0 : 4 }}>
+        <div
+          style={{
+            fontSize: "calc(var(--text-lg) + 2px)",
+            fontWeight: "var(--fw-semi)",
+            color: "var(--text-primary)",
+            letterSpacing: "var(--tracking-snug)",
+          }}
+        >
+          {titulo}
+        </div>
+        <p
+          style={{
+            marginTop: 6,
+            fontSize: "calc(var(--text-xs) + 1px)",
+            color: "var(--text-tertiary)",
+            lineHeight: "var(--lh-normal)",
+          }}
+        >
+          {legenda}
+        </p>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>{children}</div>
+    </section>
   );
 }
 

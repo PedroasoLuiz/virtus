@@ -21,6 +21,7 @@ import { testeInconclusivo, type ResultadoDoTeste } from "@/shared/domain/teste-
 import {
   finalidadePorId,
   previaDoCorpo,
+  problemasDoTexto,
   problemasDoVinculo,
   type ChaveDeFinalidade,
   type VinculoDeModelo,
@@ -146,9 +147,23 @@ export async function salvarVinculo(
 export async function criarModeloDaFinalidade(
   contaId: number,
   finalidadeId: string,
+  texto?: { cabecalho: string | null; corpo?: string; rodape: string | null },
 ): Promise<{ nome: string; status: string }> {
   const finalidade = finalidadePorId(finalidadeId);
   if (!finalidade) throw new BusinessRuleError("Finalidade desconhecida");
+
+  /*
+   * ⚠️ O texto pode ser reescrito; o MAPEAMENTO nao.
+   *
+   * Os `{{n}}` continuam significando o que a finalidade diz, e e isso que vira
+   * vinculo sozinho quando a Meta aprova. Texto com um campo a menos, ou com a
+   * numeracao fora de sequencia, apontaria valor para a posicao errada — e isso
+   * so apareceria num cliente recebendo o vencimento no lugar do valor.
+   */
+  const corpo = texto?.corpo?.trim() || finalidade.corpoSugerido;
+  const problemas = problemasDoTexto(finalidade, corpo);
+
+  if (problemas.length > 0) throw new BusinessRuleError(problemas[0]);
 
   const cred = await repo.credenciais(contaId);
   if (!cred) throw new BusinessRuleError("O numero escolhido esta sem token cadastrado.");
@@ -174,11 +189,17 @@ export async function criarModeloDaFinalidade(
     (chave) => finalidade.variaveis.find((v) => v.chave === chave)?.exemplo ?? "exemplo",
   );
 
+  // O corpo gravado no vinculo e o que foi ENVIADO, e nao o do catalogo: e ele
+  // que vai reaparecer no historico das mensagens.
+  const corpoDoVinculo = corpo;
+
   const resultado = await cloud.criarModelo(cred, {
     nome: finalidade.nomeSugerido,
     idioma: IDIOMA_PADRAO,
     categoria: finalidade.categoria,
-    corpo: finalidade.corpoSugerido,
+    cabecalho: texto ? texto.cabecalho : finalidade.cabecalhoSugerido,
+    corpo,
+    rodape: texto ? texto.rodape : finalidade.rodapeSugerido,
     exemplos,
     botao: finalidade.botao
       ? {
@@ -205,7 +226,7 @@ export async function criarModeloDaFinalidade(
     idioma: IDIOMA_PADRAO,
     parametros: finalidade.parametrosSugeridos,
     botaoParam: finalidade.botao?.chave ?? null,
-    corpo: finalidade.corpoSugerido,
+    corpo: corpoDoVinculo,
     campos: finalidade.parametrosSugeridos.length,
   });
 
