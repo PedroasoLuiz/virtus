@@ -25,6 +25,12 @@ import { BotaoDeEtiquetas, ChipDeEtiqueta } from "@/components/whatsapp/painel/e
 import { Rascunho } from "@/components/whatsapp/painel/nova-conversa";
 import { ListaDeContatos } from "@/components/whatsapp/painel/contatos";
 import {
+  avisarNoNavegador,
+  navegadorNotifica,
+  pedirPermissaoDeAviso,
+  permissaoDeAviso,
+} from "@/components/whatsapp/painel/avisos-do-navegador";
+import {
   botRespondendo,
   formatarTelefone,
   janelaAberta,
@@ -162,6 +168,15 @@ export function PainelWhatsapp() {
    * escolher qual conversa abrir; num drawer, a tela ganharia uma terceira
    * camada para fazer o que a primeira ja faz.
    */
+  /*
+   * A permissao de avisar no sistema operacional.
+   *
+   * ⚠️ Comeca `null` e so e lida depois de montar. `Notification.permission` nao
+   * existe no servidor, e ler no corpo do componente daria divergencia de
+   * hidratacao — o mesmo motivo do `useEstreito`.
+   */
+  const [permissao, setPermissao] = useState<NotificationPermission | null>(null);
+
   const [modoContatos, setModoContatos] = useState(false);
   const [rascunho, setRascunho] = useState<ContatoDoPainel | null>(null);
 
@@ -426,6 +441,30 @@ export function PainelWhatsapp() {
   }, [busca, contaAtual?.id]);
 
   useEffect(() => {
+    const t = setTimeout(() => setPermissao(permissaoDeAviso()), 0);
+    return () => clearTimeout(t);
+  }, []);
+
+  /*
+   * Quem ja foi avisado, para nao avisar duas vezes da mesma mensagem.
+   *
+   * ⚠️ O Realtime reentrega evento, e o painel esta montado em toda tela: sem
+   * isto, uma mensagem podia render dois avisos identicos em sequencia.
+   */
+  const jaAvisadas = useRef<Set<number>>(new Set());
+
+  /*
+   * A lista atual, para o aviso ler o nome sem virar dependencia do canal.
+   * Mesmo motivo do `filtroAtual`: por `conversas` nas dependencias, o Realtime
+   * seria derrubado e recriado a cada mensagem que chega.
+   */
+  const conversasRef = useRef<Conversa[]>([]);
+
+  useEffect(() => {
+    conversasRef.current = conversas;
+  }, [conversas]);
+
+  useEffect(() => {
     selecionadaRef.current = selecionada?.id ?? null;
   }, [selecionada?.id]);
 
@@ -481,6 +520,50 @@ export function PainelWhatsapp() {
       }, 400);
     };
 
+    /*
+     * O aviso do sistema operacional, quando chega mensagem de CLIENTE.
+     *
+     * ⚠️ So o que a pessoa NAO esta vendo. Conversa aberta com a aba em foco
+     * dispensa aviso: a mensagem acabou de aparecer na tela, e notificar aquilo
+     * seria repetir na quina o que ja esta no meio.
+     *
+     * ⚠️ O nome sai da lista que ja esta na memoria, e nao de uma consulta. O
+     * evento traz so o id da conversa, e ir ao servidor buscar o nome de quem
+     * escreveu somaria uma chamada por mensagem recebida — em toda tela aberta,
+     * de toda pessoa da equipe.
+     */
+    const avisarDaMensagem = (linha: {
+      id?: number;
+      fkConversa?: number;
+      texto?: string | null;
+      tipo?: string | null;
+    }) => {
+      const conversaId = linha.fkConversa;
+      if (conversaId == null || linha.id == null) return;
+
+      const olhando = conversaId === selecionadaRef.current && !document.hidden;
+      if (olhando) return;
+
+      if (jaAvisadas.current.has(linha.id)) return;
+      jaAvisadas.current.add(linha.id);
+
+      const conversa = conversasRef.current.find((c) => c.id === conversaId);
+
+      avisarNoNavegador({
+        titulo: conversa ? tituloDa(conversa) : "Nova mensagem",
+        corpo:
+          previaDoTexto(linha.texto ?? null, "entrada") ??
+          rotuloDoTipo(linha.tipo ?? null) ??
+          "Mensagem nova",
+        tag: `conversa-${conversaId}`,
+        icone: conversa?.clienteIcone,
+        aoClicar: () => {
+          definirEstadoDoPainel({ aberto: true });
+          void abrirPorId(conversaId);
+        },
+      });
+    };
+
     const canal = supabase
       .channel("whatsapp-painel")
       .on(
@@ -498,7 +581,18 @@ export function PainelWhatsapp() {
         "postgres_changes",
         { event: "*", schema: "public", table: "whatsappmensagens" },
         (evento) => {
-          const linha = (evento.new ?? evento.old) as { fkConversa?: number } | null;
+          const linha = (evento.new ?? evento.old) as {
+            id?: number;
+            fkConversa?: number;
+            direcao?: string;
+            texto?: string | null;
+            tipo?: string | null;
+          } | null;
+
+          if (evento.eventType === "INSERT" && linha?.direcao === "entrada") {
+            avisarDaMensagem(linha);
+          }
+
           aoMudar(linha?.fkConversa ?? null);
         },
       )
@@ -517,7 +611,7 @@ export function PainelWhatsapp() {
       void supabase.removeChannel(canal);
     };
     // Uma assinatura por montagem. O filtro vive em `filtroAtual`, nao aqui.
-  }, [carregarConversas]);
+  }, [abrirPorId, carregarConversas]);
 
   /*
    * Esc fecha o painel, mas nao quando a configuracao esta por cima: ela tem o
@@ -764,6 +858,11 @@ export function PainelWhatsapp() {
               onBuscar={setBusca}
               onEscolher={(c) => void abrirConversa(c)}
               onAbrirConfig={() => setConfigAberta(true)}
+              onPedirAviso={
+                navegadorNotifica() && permissao === "default"
+                  ? () => void pedirPermissaoDeAviso().then(setPermissao)
+                  : null
+              }
               onNovaConversa={() => {
                 setModoContatos(true);
                 setSelecionada(null);
@@ -874,6 +973,7 @@ function ListaDeConversas({
   onEscolher,
   onAbrirConfig,
   onNovaConversa,
+  onPedirAviso,
   etiquetas,
   filtroEtiquetas,
   onFiltrarEtiqueta,
@@ -894,6 +994,8 @@ function ListaDeConversas({
   onEscolher: (c: Conversa) => void;
   onAbrirConfig: () => void;
   onNovaConversa: () => void;
+  /** `null` quando não há o que pedir: sem suporte, ou já respondida. */
+  onPedirAviso: (() => void) | null;
   /** Unica coluna na tela: ocupa tudo em vez dos 300 fixos. */
   estreito: boolean;
   soEsperando: boolean;
@@ -959,6 +1061,39 @@ function ListaDeConversas({
             entrega ou responder um lead que veio por outro canal exigia pedir
             para a pessoa escrever antes.
           */}
+          {/*
+            ⚠️ A permissão é pedida no CLIQUE, e o botão some depois de decidida.
+
+            Pedido na carga da página, o navegador conta como abuso: o Chrome
+            silencia o pedido para sempre naquele site, e aí nem quem queria
+            consegue ligar depois. Some quando já foi respondida porque um botão
+            que não faz mais nada é ruído numa barra de três ícones.
+          */}
+          {onPedirAviso && (
+            <button
+              onClick={onPedirAviso}
+              aria-label="Avisar quando chegar mensagem"
+              title="Avisar na tela quando chegar mensagem"
+              style={{
+                width: 28,
+                height: 28,
+                flexShrink: 0,
+                display: "grid",
+                placeItems: "center",
+                border: "1px solid var(--primary-border)",
+                background: "var(--primary-subtle)",
+                borderRadius: "var(--radius-sm)",
+                cursor: "pointer",
+                color: "var(--primary)",
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 8.5a6 6 0 1 0-12 0c0 6-2.2 7.5-2.2 7.5h16.4S18 14.5 18 8.5z" />
+                <path d="M13.7 20a2 2 0 0 1-3.4 0" />
+              </svg>
+            </button>
+          )}
+
           <button
             onClick={onNovaConversa}
             aria-label="Nova conversa"
