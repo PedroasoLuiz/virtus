@@ -12,6 +12,10 @@ import {
 } from "@/components/ui/kit";
 import type { Cliente, ContatoDaPessoa, PapelPessoa } from "@/modules/clientes/clientes.types";
 import { AbaDeContatos } from "./aba-contatos";
+import { AbaDeEndereco } from "./aba-endereco";
+import { AbaDeBancarios } from "./aba-bancarios";
+import { AbaDeAcesso } from "./aba-acesso";
+import { AbaDeCentros } from "./aba-centros";
 
 /**
  * Detalhes de uma pessoa: cliente, fornecedor ou colaborador.
@@ -35,6 +39,20 @@ const PAPEIS: { valor: PapelPessoa; rotulo: string; explica: string }[] = [
 
 const ABA_INFO = "Informações";
 const ABA_CONTATOS = "Contatos";
+const ABA_ENDERECO = "Endereço";
+const ABA_BANCARIO = "Bancário";
+const ABA_CENTROS = "Centro de custo";
+const ABA_ACESSO = "Acesso";
+
+/*
+ * ⚠️ A ordem e a de QUEM ABRE, e nao a do banco.
+ *
+ * Informacoes e contato sao o que se consulta todo dia; endereco e dado
+ * bancario, o que se preenche uma vez e se confere na hora de pagar; acesso, o
+ * que quase ninguem toca. Ordenado por frequencia, a aba certa e quase sempre a
+ * primeira.
+ */
+const ABAS = [ABA_INFO, ABA_CONTATOS, ABA_ENDERECO, ABA_BANCARIO, ABA_CENTROS, ABA_ACESSO];
 
 type Form = {
   razao: string;
@@ -148,16 +166,29 @@ export function PessoaDrawer({
         um — o respiro ficava diferente em cada trecho da mesma tela.
       */}
       <div style={{ display: "flex", flexDirection: "column" }}>
-        {/* Sem cadastro salvo não há o que anexar: contato precisa de dono. */}
-        {editando && (
-          <PanelTabs tabs={[ABA_INFO, ABA_CONTATOS]} active={aba} onChange={setAba} />
-        )}
+        {/*
+          Sem cadastro salvo não há abas: endereço, conta e acesso precisam de
+          dono, e uma aba que só sabe dizer "salve primeiro" é uma aba que não
+          devia estar ali.
+        */}
+        {editando && <PanelTabs tabs={ABAS} active={aba} onChange={setAba} />}
 
-        {aba === ABA_CONTATOS && editando ? (
+        {editando && aba === ABA_CONTATOS ? (
           <AbaDeContatos
             clienteId={cliente.id}
             contatos={contatos}
             onMudou={() => void carregarContatos()}
+          />
+        ) : editando && aba === ABA_ENDERECO ? (
+          <AbaDeEndereco clienteId={cliente.id} />
+        ) : editando && aba === ABA_BANCARIO ? (
+          <AbaDeBancarios clienteId={cliente.id} />
+        ) : editando && aba === ABA_CENTROS ? (
+          <AbaDeCentros clienteId={cliente.id} centros={centros} />
+        ) : editando && aba === ABA_ACESSO ? (
+          <AbaDeAcesso
+            clienteId={cliente.id}
+            nome={form.nomeFantasia.trim() || form.razao.trim() || "este cadastro"}
           />
         ) : (
           <>
@@ -311,7 +342,16 @@ export function PessoaDrawer({
                 </div>
               </Field>
 
-              <Field label="Centro de custo" hint="Padrão: Geral">
+              {/*
+                ⚠️ Aqui fica só o PADRÃO. A lista de centros em que a pessoa
+                entra mora na aba própria: são coisas diferentes, e juntas num
+                campo só a pessoa acabava restrita ao centro que era só o
+                sugerido.
+              */}
+              <Field
+                label="Centro padrão"
+                hint="O que vem preenchido ao lançar. Os demais ficam na aba Centro de custo."
+              >
                 <select
                   value={form.centroCustoId}
                   onChange={(e) => set("centroCustoId", e.target.value)}

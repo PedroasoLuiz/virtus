@@ -6,6 +6,9 @@ import type {
   ClienteNovo,
   ContagemPorPapel,
   ContatoDaPessoa,
+  DadoBancarioDaPessoa,
+  EnderecoDaPessoa,
+  UsuarioDaPessoa,
   FiltroClientes,
 } from "@/modules/clientes/clientes.types";
 
@@ -59,6 +62,117 @@ export async function excluirContato(
 ): Promise<void> {
   await obterCliente(empresaId, clienteId);
   await repo.desativarContato(clienteId, contatoId);
+}
+
+/*
+ * ⚠️ Toda funcao de aba confere a PESSOA antes de tocar na filha.
+ *
+ * A RLS das tabelas filhas ja barra o que e de outra empresa, mas devolvendo
+ * lista vazia — indistinguivel de "esta pessoa nao tem endereco". O 404 diz a
+ * verdade, e num POST evita gravar linha orfa apontando para um id que o usuario
+ * nao pode ver.
+ */
+
+export async function enderecosDaPessoa(
+  empresaId: number,
+  clienteId: number,
+): Promise<EnderecoDaPessoa[]> {
+  await obterCliente(empresaId, clienteId);
+  return repo.enderecosDaPessoa(clienteId);
+}
+
+export async function criarEndereco(
+  empresaId: number,
+  usuarioId: string,
+  clienteId: number,
+  entrada: Omit<EnderecoDaPessoa, "id">,
+): Promise<void> {
+  await obterCliente(empresaId, clienteId);
+  await repo.criarEndereco(clienteId, usuarioId, entrada);
+}
+
+export async function definirEnderecoPrincipal(
+  empresaId: number,
+  clienteId: number,
+  enderecoId: number,
+): Promise<void> {
+  await obterCliente(empresaId, clienteId);
+  await repo.definirEnderecoPrincipal(clienteId, enderecoId);
+}
+
+export async function excluirEndereco(
+  empresaId: number,
+  clienteId: number,
+  enderecoId: number,
+): Promise<void> {
+  await obterCliente(empresaId, clienteId);
+  await repo.excluirEndereco(clienteId, enderecoId);
+}
+
+export async function bancariosDaPessoa(
+  empresaId: number,
+  clienteId: number,
+): Promise<DadoBancarioDaPessoa[]> {
+  await obterCliente(empresaId, clienteId);
+  return repo.bancariosDaPessoa(clienteId);
+}
+
+export async function criarBancario(
+  empresaId: number,
+  usuarioId: string,
+  clienteId: number,
+  entrada: Omit<DadoBancarioDaPessoa, "id">,
+): Promise<void> {
+  await obterCliente(empresaId, clienteId);
+  await repo.criarBancario(clienteId, usuarioId, entrada);
+}
+
+export async function excluirBancario(
+  empresaId: number,
+  clienteId: number,
+  bancarioId: number,
+): Promise<void> {
+  await obterCliente(empresaId, clienteId);
+  await repo.desativarBancario(clienteId, bancarioId);
+}
+
+export async function centrosDaPessoa(empresaId: number, clienteId: number): Promise<number[]> {
+  await obterCliente(empresaId, clienteId);
+  return repo.centrosDaPessoa(clienteId);
+}
+
+export async function definirCentrosDaPessoa(
+  empresaId: number,
+  usuarioId: string,
+  clienteId: number,
+  centros: number[],
+): Promise<void> {
+  await obterCliente(empresaId, clienteId);
+  await repo.definirCentrosDaPessoa(clienteId, usuarioId, centros);
+}
+
+export async function acessoDaPessoa(
+  empresaId: number,
+  clienteId: number,
+): Promise<{ comAcesso: UsuarioDaPessoa[]; disponiveis: UsuarioDaPessoa[] }> {
+  await obterCliente(empresaId, clienteId);
+
+  const [comAcesso, disponiveis] = await Promise.all([
+    repo.usuariosDaPessoa(clienteId),
+    repo.usuariosDisponiveis(),
+  ]);
+
+  return { comAcesso, disponiveis };
+}
+
+export async function definirUsuariosDaPessoa(
+  empresaId: number,
+  usuarioId: string,
+  clienteId: number,
+  usuarios: string[],
+): Promise<void> {
+  await obterCliente(empresaId, clienteId);
+  await repo.definirUsuariosDaPessoa(clienteId, usuarioId, usuarios);
 }
 
 export async function obterCliente(empresaId: number, id: number): Promise<Cliente> {

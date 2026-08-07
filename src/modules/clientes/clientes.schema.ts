@@ -61,6 +61,78 @@ export const criarClienteBodySchema = z.object({
 
 export const idParamSchema = z.object({ id: idSchema });
 
+export const filhoIdParamSchema = z.object({ id: idSchema, filhoId: idSchema });
+
+export const enderecoSchema = z.object({
+  id: z.number(),
+  cep: z.string().nullable(),
+  logradouro: z.string().nullable(),
+  numero: z.string().nullable(),
+  complemento: z.string().nullable(),
+  bairro: z.string().nullable(),
+  cidade: z.string().nullable(),
+  uf: z.string().nullable(),
+  principal: z.boolean(),
+});
+
+export const criarEnderecoBodySchema = z.object({
+  cep: z.string().trim().max(12).nullish(),
+  logradouro: z.string().trim().max(160).nullish(),
+  numero: z.string().trim().max(20).nullish(),
+  complemento: z.string().trim().max(80).nullish(),
+  bairro: z.string().trim().max(80).nullish(),
+  cidade: z.string().trim().max(80).nullish(),
+  /** Duas letras. Estado por extenso quebraria a nota fiscal na hora de emitir. */
+  uf: z.string().trim().length(2).nullish(),
+  principal: z.boolean().default(false),
+});
+
+export const bancarioSchema = z.object({
+  id: z.number(),
+  banco: z.string().nullable(),
+  agencia: z.string().nullable(),
+  conta: z.string().nullable(),
+  tipo: z.string().nullable(),
+  titular: z.string().nullable(),
+  documento: z.string().nullable(),
+  pixTipo: z.string().nullable(),
+  pixChave: z.string().nullable(),
+  principal: z.boolean(),
+});
+
+export const criarBancarioBodySchema = z.object({
+  banco: z.string().trim().max(80).nullish(),
+  agencia: z.string().trim().max(20).nullish(),
+  conta: z.string().trim().max(30).nullish(),
+  tipo: z.enum(["corrente", "poupanca"]).nullish(),
+  titular: z.string().trim().max(160).nullish(),
+  documento: z.string().trim().max(20).nullish(),
+  pixTipo: z.enum(["cpf", "cnpj", "email", "telefone", "aleatoria"]).nullish(),
+  pixChave: z.string().trim().max(160).nullish(),
+  principal: z.boolean().default(false),
+});
+
+export const usuarioComAcessoSchema = z.object({
+  id: z.string(),
+  nome: z.string().nullable(),
+  email: z.string().nullable(),
+});
+
+/*
+ * ⚠️ Os vinculos vao INTEIROS, e nao "adiciona um" / "remove um".
+ *
+ * A tela edita a lista toda de uma vez, e duas pessoas mexendo ao mesmo tempo com
+ * operacoes incrementais deixariam a pessoa num estado que nenhuma das duas
+ * pediu. Mandando o conjunto, a ultima a salvar ganha e ela SABE o que mandou.
+ */
+export const definirCentrosBodySchema = z.object({
+  centros: z.array(idSchema).max(60),
+});
+
+export const definirUsuariosBodySchema = z.object({
+  usuarios: z.array(z.uuid()).max(60),
+});
+
 export const contatoIdParamSchema = z.object({ id: idSchema, contatoId: idSchema });
 
 export const contatoSchema = z.object({
@@ -108,6 +180,11 @@ export const clienteSchema = z.object({
 export type ListarQuery = z.infer<typeof listarQuerySchema>;
 export type ContagemQuery = z.infer<typeof contagemQuerySchema>;
 export type ContatoIdParam = z.infer<typeof contatoIdParamSchema>;
+export type FilhoIdParam = z.infer<typeof filhoIdParamSchema>;
+export type CriarEnderecoBody = z.infer<typeof criarEnderecoBodySchema>;
+export type CriarBancarioBody = z.infer<typeof criarBancarioBodySchema>;
+export type DefinirCentrosBody = z.infer<typeof definirCentrosBodySchema>;
+export type DefinirUsuariosBody = z.infer<typeof definirUsuariosBodySchema>;
 export type CriarContatoBody = z.infer<typeof criarContatoBodySchema>;
 export type CriarClienteBody = z.infer<typeof criarClienteBodySchema>;
 export type IdParam = z.infer<typeof idParamSchema>;

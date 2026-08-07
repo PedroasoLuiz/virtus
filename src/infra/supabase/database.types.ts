@@ -232,6 +232,8 @@ export type ClienteCentroCustoRow = {
 export type ClienteEnderecoRow = {
   id: number;
   created_at: string;
+  updated_at: string | null;
+  fkUserCriacao: string | null;
   fkCliente: number | null;
   fkCentroCusto: number | null;
   logradouro: string | null;
@@ -736,11 +738,24 @@ export type ClienteContatoRow = {
   created_at: string;
   fkCliente: number;
   fkUserCriacao: string | null;
+  /**
+   * ⚠️ `whatsapp` e legado do FlutterFlow e nao e mais criado pela tela: o
+   * telefone do WhatsApp e o mesmo telefone, e um tipo so para ele fazia o
+   * mesmo numero aparecer duas vezes na agenda.
+   */
   tipo: "telefone" | "whatsapp" | "email";
   valor: string;
   /** De quem e este contato dentro da empresa: financeiro, comercial, a pessoa. */
   rotulo: string | null;
   ativo: boolean;
+};
+
+export type UsuarioClienteRow = {
+  id: number;
+  created_at: string;
+  fkUser: string;
+  fkCliente: number;
+  fkUserCriacao: string | null;
 };
 
 export type Database = {
@@ -774,6 +789,7 @@ export type Database = {
       centrodecusto: { Row: CentroCustoRow; Insert: Partial<CentroCustoRow>; Update: Partial<CentroCustoRow>; Relationships: [] };
       empresas: { Row: EmpresaRow; Insert: Partial<EmpresaRow>; Update: Partial<EmpresaRow>; Relationships: [] };
       usuarios: { Row: UsuarioRow; Insert: Partial<UsuarioRow>; Update: Partial<UsuarioRow>; Relationships: [] };
+      usuariosxclientes: { Row: UsuarioClienteRow; Insert: Partial<UsuarioClienteRow>; Update: Partial<UsuarioClienteRow>; Relationships: [] };
       usuariosxempresas: { Row: UsuarioEmpresaRow; Insert: Partial<UsuarioEmpresaRow>; Update: Partial<UsuarioEmpresaRow>; Relationships: [] };
       planos: { Row: PlanoRow; Insert: Partial<PlanoRow>; Update: Partial<PlanoRow>; Relationships: [] };
       faturasorigens: { Row: FaturaOrigemRow; Insert: Partial<FaturaOrigemRow>; Update: Partial<FaturaOrigemRow>; Relationships: [] };
@@ -785,6 +801,40 @@ export type Database = {
       assinaturas: { Row: AssinaturaRow; Insert: Partial<AssinaturaRow>; Update: Partial<AssinaturaRow>; Relationships: [] };
       whatsappconversas: { Row: WhatsappConversaRow; Insert: Partial<WhatsappConversaRow>; Update: Partial<WhatsappConversaRow>; Relationships: [] };
       whatsappmensagens: { Row: WhatsappMensagemRow; Insert: Partial<WhatsappMensagemRow>; Update: Partial<WhatsappMensagemRow>; Relationships: [] };
+      clientesbancarios: {
+        Row: {
+          id: number;
+          created_at: string;
+          fkCliente: number;
+          fkUserCriacao: string | null;
+          banco: string | null;
+          agencia: string | null;
+          conta: string | null;
+          tipo: string | null;
+          titular: string | null;
+          documento: string | null;
+          pix_tipo: string | null;
+          pix_chave: string | null;
+          principal: boolean;
+          ativo: boolean;
+        };
+        Insert: Partial<{
+          fkCliente: number;
+          fkUserCriacao: string | null;
+          banco: string | null;
+          agencia: string | null;
+          conta: string | null;
+          tipo: string | null;
+          titular: string | null;
+          documento: string | null;
+          pix_tipo: string | null;
+          pix_chave: string | null;
+          principal: boolean;
+          ativo: boolean;
+        }>;
+        Update: Partial<{ principal: boolean; ativo: boolean }>;
+        Relationships: [];
+      };
       whatsappetiquetas: { Row: WhatsappEtiquetaRow; Insert: Partial<WhatsappEtiquetaRow>; Update: Partial<WhatsappEtiquetaRow>; Relationships: [] };
       whatsappconversasetiquetas: { Row: WhatsappConversaEtiquetaRow; Insert: Partial<WhatsappConversaEtiquetaRow>; Update: Partial<WhatsappConversaEtiquetaRow>; Relationships: [] };
       iapersonas: { Row: PersonaRow; Insert: Partial<PersonaRow>; Update: Partial<PersonaRow>; Relationships: [] };

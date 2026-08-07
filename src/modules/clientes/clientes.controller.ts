@@ -6,12 +6,20 @@ import * as service from "@/modules/clientes/clientes.service";
 import {
   clienteSchema,
   contagemSchema,
+  bancarioSchema,
   contatoSchema,
+  enderecoSchema,
+  usuarioComAcessoSchema,
   type AtualizarClienteBody,
   type ContagemQuery,
   type ContatoIdParam,
   type CriarClienteBody,
+  type CriarBancarioBody,
   type CriarContatoBody,
+  type CriarEnderecoBody,
+  type DefinirCentrosBody,
+  type DefinirUsuariosBody,
+  type FilhoIdParam,
   type IdParam,
   type ListarQuery,
 } from "@/modules/clientes/clientes.schema";
@@ -71,6 +79,141 @@ export async function excluirContato({
   await service.excluirContato(empresaId, params.id, params.contatoId);
 
   return ok({ id: params.contatoId });
+}
+
+export async function listarEnderecos({
+  params,
+  ctx,
+}: Entrada<undefined, undefined, IdParam>) {
+  const empresaId = empresaObrigatoria(ctx);
+  const enderecos = await service.enderecosDaPessoa(empresaId, params.id);
+
+  return ok(enderecos.map((e) => enderecoSchema.parse(e)));
+}
+
+export async function criarEndereco({
+  body,
+  params,
+  ctx,
+}: Entrada<CriarEnderecoBody, undefined, IdParam>) {
+  const empresaId = empresaObrigatoria(ctx);
+
+  await service.criarEndereco(empresaId, ctx.usuarioId, params.id, {
+    cep: body.cep?.trim() || null,
+    logradouro: body.logradouro?.trim() || null,
+    numero: body.numero?.trim() || null,
+    complemento: body.complemento?.trim() || null,
+    bairro: body.bairro?.trim() || null,
+    cidade: body.cidade?.trim() || null,
+    uf: body.uf?.trim().toUpperCase() || null,
+    principal: body.principal,
+  });
+
+  return created({ id: params.id });
+}
+
+export async function enderecoPrincipal({
+  params,
+  ctx,
+}: Entrada<undefined, undefined, FilhoIdParam>) {
+  const empresaId = empresaObrigatoria(ctx);
+  await service.definirEnderecoPrincipal(empresaId, params.id, params.filhoId);
+
+  return ok({ id: params.filhoId });
+}
+
+export async function excluirEndereco({
+  params,
+  ctx,
+}: Entrada<undefined, undefined, FilhoIdParam>) {
+  const empresaId = empresaObrigatoria(ctx);
+  await service.excluirEndereco(empresaId, params.id, params.filhoId);
+
+  return ok({ id: params.filhoId });
+}
+
+export async function listarBancarios({
+  params,
+  ctx,
+}: Entrada<undefined, undefined, IdParam>) {
+  const empresaId = empresaObrigatoria(ctx);
+  const dados = await service.bancariosDaPessoa(empresaId, params.id);
+
+  return ok(dados.map((d) => bancarioSchema.parse(d)));
+}
+
+export async function criarBancario({
+  body,
+  params,
+  ctx,
+}: Entrada<CriarBancarioBody, undefined, IdParam>) {
+  const empresaId = empresaObrigatoria(ctx);
+
+  await service.criarBancario(empresaId, ctx.usuarioId, params.id, {
+    banco: body.banco?.trim() || null,
+    agencia: body.agencia?.trim() || null,
+    conta: body.conta?.trim() || null,
+    tipo: body.tipo ?? null,
+    titular: body.titular?.trim() || null,
+    documento: body.documento?.replace(/\D/g, "") || null,
+    pixTipo: body.pixTipo ?? null,
+    pixChave: body.pixChave?.trim() || null,
+    principal: body.principal,
+  });
+
+  return created({ id: params.id });
+}
+
+export async function excluirBancario({
+  params,
+  ctx,
+}: Entrada<undefined, undefined, FilhoIdParam>) {
+  const empresaId = empresaObrigatoria(ctx);
+  await service.excluirBancario(empresaId, params.id, params.filhoId);
+
+  return ok({ id: params.filhoId });
+}
+
+export async function listarCentrosDaPessoa({
+  params,
+  ctx,
+}: Entrada<undefined, undefined, IdParam>) {
+  const empresaId = empresaObrigatoria(ctx);
+  const centros = await service.centrosDaPessoa(empresaId, params.id);
+
+  return ok({ centros });
+}
+
+export async function definirCentrosDaPessoa({
+  body,
+  params,
+  ctx,
+}: Entrada<DefinirCentrosBody, undefined, IdParam>) {
+  const empresaId = empresaObrigatoria(ctx);
+  await service.definirCentrosDaPessoa(empresaId, ctx.usuarioId, params.id, body.centros);
+
+  return ok({ centros: body.centros });
+}
+
+export async function listarAcesso({ params, ctx }: Entrada<undefined, undefined, IdParam>) {
+  const empresaId = empresaObrigatoria(ctx);
+  const { comAcesso, disponiveis } = await service.acessoDaPessoa(empresaId, params.id);
+
+  return ok({
+    comAcesso: comAcesso.map((u) => usuarioComAcessoSchema.parse(u)),
+    disponiveis: disponiveis.map((u) => usuarioComAcessoSchema.parse(u)),
+  });
+}
+
+export async function definirAcesso({
+  body,
+  params,
+  ctx,
+}: Entrada<DefinirUsuariosBody, undefined, IdParam>) {
+  const empresaId = empresaObrigatoria(ctx);
+  await service.definirUsuariosDaPessoa(empresaId, ctx.usuarioId, params.id, body.usuarios);
+
+  return ok({ usuarios: body.usuarios });
 }
 
 export async function obter({ params, ctx }: Entrada<undefined, undefined, IdParam>) {

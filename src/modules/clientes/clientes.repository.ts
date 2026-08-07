@@ -6,6 +6,9 @@ import type {
   CampoDeOrdem,
   Cliente,
   ContatoDaPessoa,
+  DadoBancarioDaPessoa,
+  EnderecoDaPessoa,
+  UsuarioDaPessoa,
   ClienteNovo,
   ContagemPorPapel,
   FiltroClientes,
@@ -204,6 +207,343 @@ export async function desativarContato(clienteId: number, contatoId: number): Pr
     .eq("id", contatoId);
 
   if (error) throw error;
+}
+
+// ── Enderecos ───────────────────────────────────────────────────
+
+export async function enderecosDaPessoa(clienteId: number): Promise<EnderecoDaPessoa[]> {
+  const supabase = await serverClient();
+
+  const { data, error } = await supabase
+    .from("clientesenderecos")
+    .select("id, cep, logradouro, numero, complemento, bairro, cidade, uf, principal")
+    .eq("fkCliente", clienteId)
+    // O principal primeiro: e o que a nota fiscal usa, e o que se procura ao abrir.
+    .order("principal", { ascending: false })
+    .order("id");
+
+  if (error) throw error;
+
+  return (data ?? []).map((l) => ({
+    id: l.id as number,
+    cep: (l.cep as string | null) || null,
+    logradouro: (l.logradouro as string | null) || null,
+    numero: (l.numero as string | null) || null,
+    complemento: (l.complemento as string | null) || null,
+    bairro: (l.bairro as string | null) || null,
+    cidade: (l.cidade as string | null) || null,
+    uf: (l.uf as string | null) || null,
+    principal: Boolean(l.principal),
+  }));
+}
+
+export async function criarEndereco(
+  clienteId: number,
+  usuarioId: string,
+  entrada: Omit<EnderecoDaPessoa, "id">,
+): Promise<void> {
+  const supabase = await serverClient();
+
+  /*
+   * ⚠️ O primeiro endereco nasce PRINCIPAL, mesmo sem ninguem pedir.
+   *
+   * "Nenhum principal" e um estado que nao serve a ninguem: a nota fiscal
+   * precisa de um endereco, e com todos iguais o sistema escolheria sozinho de
+   * um jeito que a tela nao mostra.
+   */
+  const existentes = await enderecosDaPessoa(clienteId);
+  const principal = entrada.principal || existentes.length === 0;
+
+  if (principal) await limparPrincipalDeEndereco(clienteId);
+
+  const { error } = await supabase.from("clientesenderecos").insert({
+    fkCliente: clienteId,
+    fkUserCriacao: usuarioId,
+    cep: entrada.cep,
+    logradouro: entrada.logradouro,
+    numero: entrada.numero,
+    complemento: entrada.complemento,
+    bairro: entrada.bairro,
+    cidade: entrada.cidade,
+    uf: entrada.uf,
+    principal,
+  });
+
+  if (error) throw error;
+}
+
+export async function definirEnderecoPrincipal(
+  clienteId: number,
+  enderecoId: number,
+): Promise<void> {
+  const supabase = await serverClient();
+
+  await limparPrincipalDeEndereco(clienteId);
+
+  const { error } = await supabase
+    .from("clientesenderecos")
+    .update({ principal: true })
+    .eq("fkCliente", clienteId)
+    .eq("id", enderecoId);
+
+  if (error) throw error;
+}
+
+/** ⚠️ Um principal por pessoa: o anterior cai antes de o novo subir. */
+async function limparPrincipalDeEndereco(clienteId: number): Promise<void> {
+  const supabase = await serverClient();
+
+  const { error } = await supabase
+    .from("clientesenderecos")
+    .update({ principal: false })
+    .eq("fkCliente", clienteId)
+    .eq("principal", true);
+
+  if (error) throw error;
+}
+
+export async function excluirEndereco(clienteId: number, enderecoId: number): Promise<void> {
+  const supabase = await serverClient();
+
+  const { error } = await supabase
+    .from("clientesenderecos")
+    .delete()
+    .eq("fkCliente", clienteId)
+    .eq("id", enderecoId);
+
+  if (error) throw error;
+}
+
+// ── Dados bancarios ─────────────────────────────────────────────
+
+export async function bancariosDaPessoa(clienteId: number): Promise<DadoBancarioDaPessoa[]> {
+  const supabase = await serverClient();
+
+  const { data, error } = await supabase
+    .from("clientesbancarios")
+    .select("id, banco, agencia, conta, tipo, titular, documento, pix_tipo, pix_chave, principal")
+    .eq("fkCliente", clienteId)
+    .eq("ativo", true)
+    .order("principal", { ascending: false })
+    .order("id");
+
+  if (error) throw error;
+
+  return (data ?? []).map((l) => ({
+    id: l.id as number,
+    banco: (l.banco as string | null) || null,
+    agencia: (l.agencia as string | null) || null,
+    conta: (l.conta as string | null) || null,
+    tipo: (l.tipo as string | null) || null,
+    titular: (l.titular as string | null) || null,
+    documento: (l.documento as string | null) || null,
+    pixTipo: (l.pix_tipo as string | null) || null,
+    pixChave: (l.pix_chave as string | null) || null,
+    principal: Boolean(l.principal),
+  }));
+}
+
+export async function criarBancario(
+  clienteId: number,
+  usuarioId: string,
+  entrada: Omit<DadoBancarioDaPessoa, "id">,
+): Promise<void> {
+  const supabase = await serverClient();
+
+  const existentes = await bancariosDaPessoa(clienteId);
+  const principal = entrada.principal || existentes.length === 0;
+
+  if (principal) {
+    const { error: erroLimpar } = await supabase
+      .from("clientesbancarios")
+      .update({ principal: false })
+      .eq("fkCliente", clienteId)
+      .eq("principal", true);
+
+    if (erroLimpar) throw erroLimpar;
+  }
+
+  const { error } = await supabase.from("clientesbancarios").insert({
+    fkCliente: clienteId,
+    fkUserCriacao: usuarioId,
+    banco: entrada.banco,
+    agencia: entrada.agencia,
+    conta: entrada.conta,
+    tipo: entrada.tipo,
+    titular: entrada.titular,
+    documento: entrada.documento,
+    pix_tipo: entrada.pixTipo,
+    pix_chave: entrada.pixChave,
+    principal,
+    ativo: true,
+  });
+
+  if (error) throw error;
+}
+
+/**
+ * ⚠️ Desativa, e nao apaga.
+ *
+ * A conta que saiu do cadastro e a que consta num pagamento ja feito. Apagando,
+ * a consulta de "para onde este dinheiro foi" fica sem resposta.
+ */
+export async function desativarBancario(clienteId: number, bancarioId: number): Promise<void> {
+  const supabase = await serverClient();
+
+  const { error } = await supabase
+    .from("clientesbancarios")
+    .update({ ativo: false })
+    .eq("fkCliente", clienteId)
+    .eq("id", bancarioId);
+
+  if (error) throw error;
+}
+
+// ── Centros de custo ────────────────────────────────────────────
+
+export async function centrosDaPessoa(clienteId: number): Promise<number[]> {
+  const supabase = await serverClient();
+
+  const { data, error } = await supabase
+    .from("clientesxcentrocusto")
+    .select("fkCentroCusto")
+    .eq("fkCliente", clienteId);
+
+  if (error) throw error;
+  return (data ?? []).map((l) => l.fkCentroCusto as number);
+}
+
+/**
+ * Troca o conjunto de centros pelo que veio.
+ *
+ * ⚠️ Apaga o que SAIU e insere o que entrou, em vez de limpar tudo e regravar.
+ * Limpando, dois usuarios salvando ao mesmo tempo deixariam a pessoa sem centro
+ * nenhum no intervalo entre o delete e o insert.
+ */
+export async function definirCentrosDaPessoa(
+  clienteId: number,
+  usuarioId: string,
+  centros: number[],
+): Promise<void> {
+  const supabase = await serverClient();
+
+  const tinha = await centrosDaPessoa(clienteId);
+  const sair = tinha.filter((id) => !centros.includes(id));
+  const entrar = centros.filter((id) => !tinha.includes(id));
+
+  if (sair.length > 0) {
+    const { error } = await supabase
+      .from("clientesxcentrocusto")
+      .delete()
+      .eq("fkCliente", clienteId)
+      .in("fkCentroCusto", sair);
+
+    if (error) throw error;
+  }
+
+  if (entrar.length > 0) {
+    const { error } = await supabase.from("clientesxcentrocusto").insert(
+      entrar.map((id) => ({
+        fkCliente: clienteId,
+        fkCentroCusto: id,
+        fkUserCriacao: usuarioId,
+      })),
+    );
+
+    if (error) throw error;
+  }
+}
+
+// ── Usuarios com acesso ─────────────────────────────────────────
+
+/**
+ * Quem pode ver os dados desta pessoa no portal.
+ *
+ * ⚠️ `usuarios` e visivel por `usuarios_visiveis()`: um usuario de outra empresa
+ * volta sem nome em vez de vazar. A tela mostra o proprio uuid nesse caso, que e
+ * feio e honesto.
+ */
+export async function usuariosDaPessoa(clienteId: number): Promise<UsuarioDaPessoa[]> {
+  const supabase = await serverClient();
+
+  const { data, error } = await supabase
+    .from("usuariosxclientes")
+    .select("fkUser")
+    .eq("fkCliente", clienteId);
+
+  if (error) throw error;
+
+  const ids = (data ?? []).map((l) => l.fkUser as string);
+  if (ids.length === 0) return [];
+
+  const { data: pessoas, error: erroNomes } = await supabase
+    .from("usuarios")
+    .select("fkUser, nome, email")
+    .in("fkUser", ids);
+
+  if (erroNomes) throw erroNomes;
+
+  return ids.map((id) => {
+    const u = (pessoas ?? []).find((x) => x.fkUser === id);
+
+    return {
+      id,
+      nome: (u?.nome as string | null) || null,
+      email: (u?.email as string | null) || null,
+    };
+  });
+}
+
+/** Os usuarios que este administrador enxerga, para escolher a quem dar acesso. */
+export async function usuariosDisponiveis(): Promise<UsuarioDaPessoa[]> {
+  const supabase = await serverClient();
+
+  const { data, error } = await supabase
+    .from("usuarios")
+    .select("fkUser, nome, email")
+    .order("nome");
+
+  if (error) throw error;
+
+  return (data ?? []).map((u) => ({
+    id: u.fkUser as string,
+    nome: (u.nome as string | null) || null,
+    email: (u.email as string | null) || null,
+  }));
+}
+
+export async function definirUsuariosDaPessoa(
+  clienteId: number,
+  usuarioId: string,
+  usuarios: string[],
+): Promise<void> {
+  const supabase = await serverClient();
+
+  const tinha = (await usuariosDaPessoa(clienteId)).map((u) => u.id);
+  const sair = tinha.filter((id) => !usuarios.includes(id));
+  const entrar = usuarios.filter((id) => !tinha.includes(id));
+
+  if (sair.length > 0) {
+    const { error } = await supabase
+      .from("usuariosxclientes")
+      .delete()
+      .eq("fkCliente", clienteId)
+      .in("fkUser", sair);
+
+    if (error) throw error;
+  }
+
+  if (entrar.length > 0) {
+    const { error } = await supabase.from("usuariosxclientes").insert(
+      entrar.map((id) => ({
+        fkCliente: clienteId,
+        fkUser: id,
+        fkUserCriacao: usuarioId,
+      })),
+    );
+
+    if (error) throw error;
+  }
 }
 
 export async function buscarPorId(empresaId: number, id: number): Promise<Cliente | null> {

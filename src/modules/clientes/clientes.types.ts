@@ -52,6 +52,47 @@ export type ContatoDaPessoa = {
   rotulo: string | null;
 };
 
+/** Um endereco da pessoa. */
+export type EnderecoDaPessoa = {
+  id: number;
+  cep: string | null;
+  logradouro: string | null;
+  numero: string | null;
+  complemento: string | null;
+  bairro: string | null;
+  cidade: string | null;
+  uf: string | null;
+  principal: boolean;
+};
+
+/**
+ * Onde a empresa paga esta pessoa, ou de onde ela recebe.
+ *
+ * ⚠️ Nao e conta bancaria da EMPRESA. Aquelas tem saldo, limite e extrato, e
+ * entram no fluxo de caixa; estas sao dado de terceiro, para preencher um
+ * pagamento — e nunca para conciliar.
+ */
+export type DadoBancarioDaPessoa = {
+  id: number;
+  banco: string | null;
+  agencia: string | null;
+  conta: string | null;
+  tipo: string | null;
+  /** Quem recebe, quando nao e a propria pessoa do cadastro. */
+  titular: string | null;
+  documento: string | null;
+  pixTipo: string | null;
+  pixChave: string | null;
+  principal: boolean;
+};
+
+/** Um usuario com acesso aos dados desta pessoa. */
+export type UsuarioDaPessoa = {
+  id: string;
+  nome: string | null;
+  email: string | null;
+};
+
 /** Por onde a tabela de pessoas pode ordenar. */
 export type CampoDeOrdem =
   | "id"
