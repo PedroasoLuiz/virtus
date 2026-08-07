@@ -100,8 +100,18 @@ export const FINALIDADES: Finalidade[] = [
         "O trecho final da URL do botão. O começo do endereço já fica fixo no modelo aprovado, e é o mesmo link que vai no e-mail.",
       exemplo: "a3f9c2e1b7…",
     },
+    /*
+     * ⚠️ Os marcadores sobem em ORDEM de aparicao: `{{1}}`, `{{2}}`, `{{3}}`,
+     * `{{4}}` na sequencia em que se le. A Meta exige numeracao sequencial, e
+     * um texto que comeca no `{{1}}` e pula para o `{{4}}` e recusado na
+     * aprovacao — por isso a sugestao nao amarra numero a significado: quem
+     * decide o que entra em cada campo e o vinculo, na tela ao lado.
+     */
     corpoSugerido:
-      "Olá {{1}}, sua parcela de R$ {{2}} vence em {{3}}. Referente ao(s) ticket(s) {{4}}. Toque no botão para ver os detalhes e pagar.",
+      "Olá, {{1}}! 👋\n\n" +
+      "Sua fatura referente ao *ticket nº {{2}}*, no valor de *R$ {{3}}*, com vencimento em {{4}}, já está disponível.\n\n" +
+      "Para visualizar os detalhes, acesse pelo botão abaixo.\n\n" +
+      "Em caso de dúvidas, estamos à disposição!",
   },
   {
     id: "ticket",
