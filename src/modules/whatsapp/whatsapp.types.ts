@@ -264,6 +264,13 @@ export function rotuloDoTipo(tipo: string | null): string | null {
     document: "Documento",
     location: "Localização",
     contacts: "Contato",
+    /*
+     * ⚠️ A Meta manda `unsupported` para o que a API nao entrega: enquete,
+     * pagamento, mensagem apagada. Sem rotulo, a linha ficava com um traco solto
+     * no lugar da previa e ninguem sabia se era falha nossa ou coisa do
+     * remetente.
+     */
+    unsupported: "Mensagem não suportada",
   };
 
   return tipo ? (porTipo[tipo] ?? null) : null;

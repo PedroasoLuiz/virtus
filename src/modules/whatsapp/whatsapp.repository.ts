@@ -35,7 +35,7 @@ const RELACAO_CLIENTE = "clientes(razao, urlicon)";
  * nome e cor em cada uma das 200 conversas seria mandar o mesmo texto centenas
  * de vezes para desenhar meia duzia de chips.
  */
-const RELACAO_ETIQUETAS = 'whatsappconversasetiquetas("fkEtiqueta")';
+const RELACAO_ETIQUETAS = "whatsappconversasetiquetas(fkEtiqueta)";
 
 const COLUNAS_MENSAGEM =
   'id, direcao, tipo, texto, midia_id, midia_mime, midia_nome, status, erro, enviada_em, "fkUser"';
@@ -534,8 +534,12 @@ export async function desativarEtiqueta(empresaId: number, id: number): Promise<
 /**
  * Troca o conjunto de etiquetas da conversa pelo que veio.
  *
- * ⚠️ Apaga o que saiu ANTES de inserir o que entrou, e nao o contrario: a chave
- * primaria e (conversa, etiqueta), e reinserir uma que ficou daria conflito.
+ * ⚠️ O que ENTRA vai por `upsert` ignorando repetido, e nao por `insert`.
+ *
+ * A tabela tem chave unica em (conversa, etiqueta), e calcular a diferenca antes
+ * nao basta: entre ler e gravar, outro atendente marcando a mesma etiqueta
+ * derrubava o pedido inteiro com violacao de chave. Marcar duas vezes o que ja
+ * esta marcado e um nao-evento, e e assim que precisa terminar.
  */
 export async function definirEtiquetasDaConversa(
   conversaId: number,
@@ -544,38 +548,35 @@ export async function definirEtiquetasDaConversa(
 ): Promise<void> {
   const supabase = await serverClient();
 
-  const { data: atuais, error: erroLer } = await supabase
+  /*
+   * Apaga PRIMEIRO o que saiu, filtrando pelo que ficou. Sem o `not in`, a
+   * limpeza levaria junto o que esta sendo regravado logo abaixo, e um pedido
+   * que so acrescenta uma etiqueta apagaria e recriaria todas as outras.
+   */
+  const remocao = supabase
     .from("whatsappconversasetiquetas")
-    .select('"fkEtiqueta"')
+    .delete()
     .eq("fkConversa", conversaId);
 
-  if (erroLer) throw erroLer;
+  const { error: erroApagar } =
+    etiquetas.length > 0
+      ? await remocao.not("fkEtiqueta", "in", `(${etiquetas.join(",")})`)
+      : await remocao;
 
-  const tinha = (atuais ?? []).map((l) => l.fkEtiqueta as number);
-  const sair = tinha.filter((id) => !etiquetas.includes(id));
-  const entrar = etiquetas.filter((id) => !tinha.includes(id));
+  if (erroApagar) throw erroApagar;
 
-  if (sair.length > 0) {
-    const { error } = await supabase
-      .from("whatsappconversasetiquetas")
-      .delete()
-      .eq("fkConversa", conversaId)
-      .in("fkEtiqueta", sair);
+  if (etiquetas.length === 0) return;
 
-    if (error) throw error;
-  }
+  const { error } = await supabase.from("whatsappconversasetiquetas").upsert(
+    etiquetas.map((id) => ({
+      fkConversa: conversaId,
+      fkEtiqueta: id,
+      fkUser: usuarioId,
+    })),
+    { onConflict: "fkConversa,fkEtiqueta", ignoreDuplicates: true },
+  );
 
-  if (entrar.length > 0) {
-    const { error } = await supabase.from("whatsappconversasetiquetas").insert(
-      entrar.map((id) => ({
-        fkConversa: conversaId,
-        fkEtiqueta: id,
-        fkUser: usuarioId,
-      })),
-    );
-
-    if (error) throw error;
-  }
+  if (error) throw error;
 }
 
 export async function arquivarConversa(

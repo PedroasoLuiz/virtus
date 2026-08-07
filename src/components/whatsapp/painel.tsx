@@ -169,6 +169,19 @@ export function PainelWhatsapp() {
 
   const naoLidas = conversas.reduce((soma, c) => soma + c.naoLidas, 0);
 
+  /*
+   * O que cada caixa mostrou da ultima vez.
+   *
+   * ⚠️ Existe para a troca entre a caixa de entrada e o arquivo ser INSTANTANEA.
+   * Sao duas listas diferentes, cada uma com sua consulta, e sem isto todo
+   * ida-e-volta entre as duas era uma tela em branco esperando o servidor. Com o
+   * cache a lista antiga aparece na hora e o pedido novo so a atualiza.
+   *
+   * Ref e nao estado: mudar o cache nao precisa redesenhar nada por si so, quem
+   * redesenha e o `setConversas` logo em seguida.
+   */
+  const caixasCarregadas = useRef<Record<string, Conversa[]>>({});
+
   const carregarConversas = useCallback(
     async (conta: number | null, termo?: string, arquivadas = false) => {
     const parametros = new URLSearchParams();
@@ -183,7 +196,10 @@ export function PainelWhatsapp() {
     if (!r.ok) return;
 
     const corpo = await r.json();
-    setConversas(corpo.data ?? []);
+    const lista: Conversa[] = corpo.data ?? [];
+
+    caixasCarregadas.current[arquivadas ? "arquivo" : "entrada"] = lista;
+    setConversas(lista);
     },
     [],
   );
@@ -655,6 +671,9 @@ export function PainelWhatsapp() {
                 setVerArquivadas(v);
                 setSelecionada(null);
                 setMensagens([]);
+                // A lista da outra caixa entra JA, do cache. O pedido ao
+                // servidor sai logo atras e so corrige o que mudou.
+                setConversas(caixasCarregadas.current[v ? "arquivo" : "entrada"] ?? []);
               }}
               conversas={conversas}
               contas={contasAtivas}
@@ -1572,9 +1591,15 @@ function PreviaDaUltima({ conversa }: { conversa: Conversa }) {
   const texto = previaDoTexto(conversa.ultimoTexto, conversa.ultimaDirecao);
   const prefixo = conversa.ultimaDirecao === "saida" ? "Você: " : "";
 
-  // Anexo com legenda mostra a legenda; sem legenda, o nome do tipo. E o que o
-  // WhatsApp faz: o icone diz o QUE e, o texto diz o que veio junto.
-  const corpo = texto ?? rotulo ?? "—";
+  /*
+   * Anexo com legenda mostra a legenda; sem legenda, o nome do tipo. E o que o
+   * WhatsApp faz: o icone diz o QUE e, o texto diz o que veio junto.
+   *
+   * ⚠️ O ultimo caso e "sem texto", e nao um traco. Um traco solto na linha nao
+   * diz se a mensagem chegou vazia, se o painel falhou ou se ainda esta
+   * carregando; a frase fecha a duvida.
+   */
+  const corpo = texto ?? rotulo ?? "Mensagem sem texto";
 
   return (
     <>
@@ -1661,6 +1686,15 @@ function IconeDoTipo({ tipo }: { tipo: string | null }) {
       <svg {...comum} aria-hidden>
         <circle cx="12" cy="8" r="3.5" />
         <path d="M5 20a7 7 0 0 1 14 0" />
+      </svg>
+    );
+  }
+
+  if (tipo === "unsupported") {
+    return (
+      <svg {...comum} aria-hidden>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 8v5M12 16.2v.1" />
       </svg>
     );
   }
