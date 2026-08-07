@@ -260,19 +260,6 @@ function LinhaDeModelo({
             botão que o painel não monta. O ícone diz "não dá" sem gritar, e o
             porquê fica na dica.
           */}
-          {bloqueado && (
-            <span
-              title={modelo.bloqueio ?? undefined}
-              aria-label={modelo.bloqueio ?? undefined}
-              style={{ flexShrink: 0, display: "grid", placeItems: "center", color: "var(--text-tertiary)" }}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="4.5" y="10.5" width="15" height="10" rx="2.2" />
-                <path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" />
-              </svg>
-            </span>
-          )}
-
           <span
             style={{
               flex: 1,
@@ -287,7 +274,25 @@ function LinhaDeModelo({
             {modelo.nome}
           </span>
 
-          {!bloqueado && <BotaoDeEspiar modelo={modelo} onEspiar={onEspiar} />}
+          {bloqueado ? (
+            <span
+              title={modelo.bloqueio ?? undefined}
+              aria-label={modelo.bloqueio ?? undefined}
+              style={{
+                flexShrink: 0,
+                display: "grid",
+                placeItems: "center",
+                color: "var(--text-tertiary)",
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="4.5" y="10.5" width="15" height="10" rx="2.2" />
+                <path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" />
+              </svg>
+            </span>
+          ) : (
+            <BotaoDeEspiar modelo={modelo} onEspiar={onEspiar} />
+          )}
         </div>
       </Td>
 
@@ -634,9 +639,10 @@ export function EnvioDoModelo({
       {pedeLink && (
         <CampoDoModelo
           rotulo="Link"
-          dica="O que completa o endereço do botão"
+          dica="só o final"
           valor={link}
           onMudar={setLink}
+          prefixo={modelo.botao?.urlBase}
         />
       )}
 
@@ -703,11 +709,22 @@ function CampoDoModelo({
   dica,
   valor,
   onMudar,
+  prefixo,
 }: {
   rotulo: string;
   dica: string;
   valor: string;
   onMudar: (v: string) => void;
+  /**
+   * O que já está fixo antes do valor, mostrado dentro da caixa.
+   *
+   * ⚠️ Só o botão de link tem. A Meta guarda o começo do endereço no modelo
+   * aprovado e concatena o que mandamos; quem via "complemento do link" no vazio
+   * colava a URL inteira, e o endereço saía com o domínio duas vezes. Ninguém
+   * descobria: o envio era aceito, o cliente clicava e não chegava a lugar
+   * nenhum. Vendo o começo, a mão completa em vez de reescrever.
+   */
+  prefixo?: string;
 }) {
   return (
     <label style={{ display: "flex", alignItems: "center", gap: 9 }}>
@@ -723,25 +740,58 @@ function CampoDoModelo({
         {rotulo}
       </span>
 
-      <input
-        value={valor}
-        onChange={(e) => onMudar(e.target.value)}
-        placeholder={dica}
-        title={dica}
+      <span
         style={{
           flex: 1,
           minWidth: 0,
+          display: "flex",
+          alignItems: "center",
           height: 30,
-          padding: "0 10px",
-          fontSize: "var(--text-sm)",
-          fontFamily: "var(--font)",
           border: "1px solid var(--input-border)",
           borderRadius: "var(--radius-md)",
           background: "var(--surface)",
-          color: "var(--text-primary)",
-          outline: "none",
+          overflow: "hidden",
         }}
-      />
+      >
+        {prefixo && (
+          <span
+            style={{
+              flexShrink: 0,
+              maxWidth: "52%",
+              paddingLeft: 10,
+              fontSize: "var(--text-xs)",
+              color: "var(--text-tertiary)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              direction: "rtl",
+              textAlign: "left",
+            }}
+            title={prefixo}
+          >
+            {prefixo}
+          </span>
+        )}
+
+        <input
+          value={valor}
+          onChange={(e) => onMudar(e.target.value)}
+          placeholder={dica}
+          title={dica}
+          style={{
+            flex: 1,
+            minWidth: 0,
+            height: "100%",
+            padding: prefixo ? "0 10px 0 1px" : "0 10px",
+            fontSize: "var(--text-sm)",
+            fontFamily: "var(--font)",
+            border: "none",
+            background: "transparent",
+            color: "var(--text-primary)",
+            outline: "none",
+          }}
+        />
+      </span>
     </label>
   );
 }

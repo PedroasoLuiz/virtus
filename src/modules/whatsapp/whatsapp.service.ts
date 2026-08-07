@@ -697,13 +697,30 @@ export async function enviarModelo(
     );
   }
 
+  /*
+   * ⚠️ O que vai no botao e o SUFIXO, e a trava existe porque o erro e silencioso.
+   *
+   * O modelo guarda o comeco fixo do endereco e a Meta concatena o que mandamos.
+   * Colar a URL inteira produz um link com o dominio duas vezes: sai bonito, o
+   * cliente clica e nao chega a lugar nenhum — e ninguem descobre, porque o
+   * envio foi aceito. Numa cobranca isso e o cliente sem o boleto.
+   */
+  const sufixo = urlDoBotao?.trim() ?? "";
+
+  if (sufixo && (sufixo.includes("://") || sufixo.includes("/"))) {
+    throw new BusinessRuleError(
+      "O botao do modelo recebe so o final do endereco, e nao o link inteiro. " +
+        `O comeco (${modelo.botao?.urlBase ?? "..."}) ja esta no modelo aprovado.`,
+    );
+  }
+
   const wamid = await cloud.enviarModelo(
     cred,
     conversa.telefone,
     modelo.nome,
     modelo.idioma,
     parametros,
-    modelo.botao?.temVariavel ? urlDoBotao?.trim() : undefined,
+    modelo.botao?.temVariavel ? sufixo : undefined,
   );
 
   // Grava o corpo JA PREENCHIDO: guardar o modelo cru deixaria o historico com

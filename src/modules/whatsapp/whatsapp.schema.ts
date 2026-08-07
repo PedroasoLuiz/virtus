@@ -340,7 +340,9 @@ export const modeloSchema = z.object({
   cabecalho: z.string().nullable(),
   rodape: z.string().nullable(),
   parametros: z.number(),
-  botao: z.object({ texto: z.string(), temVariavel: z.boolean() }).nullable(),
+  botao: z
+    .object({ texto: z.string(), temVariavel: z.boolean(), urlBase: z.string() })
+    .nullable(),
   bloqueio: z.string().nullable(),
 });
 

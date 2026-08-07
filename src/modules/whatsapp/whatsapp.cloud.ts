@@ -564,6 +564,20 @@ type ModeloBruto = {
  * aqui, e a Meta recusa com "'action' cannot be null", ja depois do clique.
  * Melhor nao oferecer do que oferecer e falhar.
  */
+/**
+ * Modelos de exemplo da Meta.
+ *
+ * ⚠️ Toda conta nasce com eles, e eles nao dizem nada a cliente nenhum:
+ * "hello_world" chegando de uma empresa de cobranca e um erro visivel do lado de
+ * la. Sao os primeiros da lista em ordem alfabetica, e o primeiro que a mao
+ * encontra num dia corrido.
+ */
+const MARCADOR = /\{\{\s*\d+\s*\}\}/;
+
+function ehExemploDaMeta(nome: string): boolean {
+  return nome === "hello_world" || nome.startsWith("sample_");
+}
+
 const BOTAO_QUE_NAO_SAI: Record<string, string> = {
   ORDER_DETAILS: "pedido",
   CATALOG: "catálogo",
@@ -597,6 +611,12 @@ function paraModelo(t: ModeloBruto): Modelo {
 
   const impedido = parte("BUTTONS")?.buttons?.find((b) => BOTAO_QUE_NAO_SAI[b.type ?? ""]);
 
+  const bloqueio = impedido
+    ? `Tem botão de ${BOTAO_QUE_NAO_SAI[impedido.type!]}, que não sai por aqui.`
+    : ehExemploDaMeta(t.name)
+      ? "Modelo de exemplo da Meta, serve só para teste."
+      : null;
+
   return {
     nome: t.name,
     idioma: t.language ?? "pt_BR",
@@ -606,11 +626,15 @@ function paraModelo(t: ModeloBruto): Modelo {
     rodape: parte("FOOTER")?.text ?? null,
     parametros: marcadores.size,
     botao: url
-      ? { texto: url.text ?? "Abrir", temVariavel: /\{\{\s*\d+\s*\}\}/.test(url.url ?? "") }
+      ? {
+          texto: url.text ?? "Abrir",
+          temVariavel: MARCADOR.test(url.url ?? ""),
+          // O trecho antes do `{{n}}`: e o que a tela mostra colado ao campo,
+          // para quem preenche ver o endereco inteiro se formando.
+          urlBase: (url.url ?? "").split(MARCADOR)[0],
+        }
       : null,
-    bloqueio: impedido
-      ? `Tem botão de ${BOTAO_QUE_NAO_SAI[impedido.type!]}, que não sai por aqui.`
-      : null,
+    bloqueio,
   };
 }
 

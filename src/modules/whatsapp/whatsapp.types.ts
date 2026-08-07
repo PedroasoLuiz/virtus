@@ -198,7 +198,19 @@ export type Modelo = {
    * sistema complete o endereco. Sem isso, um botao de link fixo pediria um
    * valor que a Meta ignoraria.
    */
-  botao: { texto: string; temVariavel: boolean } | null;
+  botao: {
+    texto: string;
+    temVariavel: boolean;
+    /**
+     * O comeco FIXO do endereco, ate onde a variavel entra.
+     *
+     * ⚠️ Existe para a tela mostrar o que ja esta no link em vez de pedir "o
+     * complemento" no vazio. Sem isso, quem preenchia colava a URL inteira e o
+     * endereco saia com o dominio duas vezes — um link que nao leva a lugar
+     * nenhum, dentro de uma cobranca.
+     */
+    urlBase: string;
+  } | null;
   /**
    * Por que este modelo NAO pode sair do painel, ou null.
    *
