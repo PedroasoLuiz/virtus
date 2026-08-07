@@ -9,6 +9,7 @@ export const personaSchema = z.object({
   setorId: z.number().nullable(),
   nome: z.string(),
   descricao: z.string().nullable(),
+  evitar: z.string().nullable(),
   podeResolver: z.string().nullable(),
   permissoes: z.array(z.string()),
   ativo: z.boolean(),
@@ -31,6 +32,7 @@ export const salvarPersonaBodySchema = z.object({
     .max(60)
     .refine((v) => !temPalavrao(v), "Escolha outro nome para esta persona"),
   descricao: z.string().trim().max(2000).nullable().default(null),
+  evitar: z.string().trim().max(2000).nullable().default(null),
   podeResolver: z.string().trim().max(4000).nullable().default(null),
   permissoes: z.array(z.string().trim().min(1).max(40)).max(20).default([]),
   ativo: z.boolean().default(true),

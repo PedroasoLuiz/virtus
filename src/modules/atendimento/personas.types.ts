@@ -13,6 +13,14 @@ export type Persona = {
   setorId: number | null;
   nome: string;
   descricao: string | null;
+  /**
+   * O que ela evita, no JEITO de falar.
+   *
+   * ⚠️ Nao e o contrario das permissoes, que dizem o que ela pode consultar.
+   * Isto e sobre postura: nao prometer prazo, nao falar de concorrente, nao usar
+   * giria. Junto do "quem ela e", isso se perdia no meio da descricao do tom.
+   */
+  evitar: string | null;
   podeResolver: string | null;
   /**
    * O que ela pode CONSULTAR no sistema. Ver `permissoes.ts`.

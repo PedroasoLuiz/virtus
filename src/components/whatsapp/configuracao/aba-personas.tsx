@@ -272,6 +272,7 @@ const PERSONA_VAZIA: Persona = {
   setorId: null,
   nome: "",
   descricao: null,
+  evitar: null,
   podeResolver: null,
   permissoes: [],
   ativo: true,
@@ -348,6 +349,7 @@ function FormularioDaPersona({
         setorId: rascunho.setorId,
         nome: rascunho.nome.trim(),
         descricao: rascunho.descricao?.trim() || null,
+        evitar: rascunho.evitar?.trim() || null,
         permissoes: rascunho.permissoes,
         ativo: rascunho.ativo,
       }),
@@ -440,7 +442,7 @@ function FormularioDaPersona({
             hint="O jeito de falar. Ex.: direta e prática, evita jargão, confirma antes de encerrar."
           >
             <textarea
-              style={{ ...textareaStyle, minHeight: 80 }}
+              style={{ ...textareaStyle, minHeight: 120 }}
               value={rascunho.descricao ?? ""}
               onChange={(e) => setRascunho({ ...rascunho, descricao: e.target.value })}
             />
@@ -455,6 +457,28 @@ function FormularioDaPersona({
             {(credenciais ?? []).some((c) => c.ativo && c.temChave) && (
               <BotaoDeSugestao onClick={() => setSugerindo(true)} />
             )}
+          </Field>
+
+          {/*
+            O avesso do campo de cima, e num lugar proprio.
+
+            ⚠️ Nao e o contrario das permissoes, que dizem o que ela pode
+            consultar. Isto e sobre POSTURA: nao prometer prazo, nao falar de
+            concorrente, nao usar giria. Junto do "quem ela e", virava um
+            paragrafo com duas ideias, e o modelo dava peso a primeira.
+          */}
+          <Field
+            label="O que evitar"
+            hint="Um item por linha. Ex.: nunca prometer prazo, não falar de concorrente."
+          >
+            <textarea
+              style={{ ...textareaStyle, minHeight: 90 }}
+              placeholder={
+                "prometer prazo sem confirmar com a equipe\ncomentar preço de concorrente\nusar gíria ou emoji em excesso"
+              }
+              value={rascunho.evitar ?? ""}
+              onChange={(e) => setRascunho({ ...rascunho, evitar: e.target.value })}
+            />
           </Field>
         </Grupo>
 
@@ -523,6 +547,24 @@ function FormularioDaPersona({
           </Field>
         </Grupo>
 
+        {/*
+          ⚠️ Excluir mora SÓ na parametrização, e no fim dela.
+
+          Fora das abas, ele aparecia também sobre a lista de permissões, onde a
+          pessoa está marcando o que a persona pode — e a coisa mais destrutiva
+          da tela não deve acompanhar quem está configurando outra coisa.
+
+          Respiro largo em cima: ele não é o próximo campo depois do interruptor.
+        */}
+        {rascunho.id > 0 && (
+          <div style={{ marginTop: 20 }}>
+            <AreaDeExclusao
+              nome={rascunho.nome.trim() || "esta persona"}
+              onExcluir={excluir}
+              excluindo={excluindo}
+            />
+          </div>
+        )}
       </div>
       )}
 
@@ -534,7 +576,7 @@ function FormularioDaPersona({
         />
       )}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+      <div>
         {sugerindo && (
           <PedirSugestao
             credenciais={(credenciais ?? []).filter((c) => c.ativo && c.temChave)}
@@ -549,17 +591,13 @@ function FormularioDaPersona({
               setRascunho((atual) => ({
                 ...atual,
                 descricao: r.descricao,
+                evitar: r.evitar,
                 permissoes: r.permissoes,
               }));
               setSugerindo(false);
               avisar("sucesso", "Rascunho pronto", "Revise antes de salvar.");
             }}
           />
-        )}
-
-        {/* Persona nunca gravada não tem o que excluir: basta fechar. */}
-        {rascunho.id > 0 && (
-          <AreaDeExclusao nome={rascunho.nome.trim() || "esta persona"} onExcluir={excluir} excluindo={excluindo} />
         )}
       </div>
     </Drawer>
@@ -1092,7 +1130,7 @@ function PedirSugestao({
   credenciais: ConfigIA[];
   setorNome: string | null;
   onFechar: () => void;
-  onPronto: (r: { descricao: string; permissoes: string[] }) => void;
+  onPronto: (r: { descricao: string; evitar: string; permissoes: string[] }) => void;
 }) {
   const { avisar } = useAvisos();
   const [credencialId, setCredencialId] = useState(credenciais[0]?.id ?? 0);

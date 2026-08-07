@@ -24,6 +24,8 @@ export type PersonaRow = {
   fkSetor: number | null;
   nome: string;
   descricao: string | null;
+  /** O que ela nao faz: o jeito, e nao o assunto. */
+  evitar: string | null;
   pode_resolver: string | null;
   /** Os ids das consultas que ela pode fazer. Ver `atendimento/permissoes.ts`. */
   permissoes: string[];
@@ -1063,9 +1065,11 @@ export type Database = {
         Returns: {
           nome: string;
           descricao: string | null;
+          evitar: string | null;
           pode_resolver: string | null;
           setor_id: number | null;
           setor_nome: string | null;
+          permissoes: unknown;
         }[];
       };
       whatsapp_saida_repetida: {

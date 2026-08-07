@@ -89,6 +89,7 @@ export async function personas(segredo: string, conversaId: number): Promise<Per
   return (data ?? []).map((p) => ({
     nome: p.nome,
     descricao: p.descricao,
+    evitar: p.evitar,
     podeResolver: p.pode_resolver,
     setorId: p.setor_id,
     setorNome: p.setor_nome,
