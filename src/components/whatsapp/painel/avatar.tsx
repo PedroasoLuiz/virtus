@@ -31,12 +31,12 @@ const CORES_AVATAR = [
   "#a21caf",
   "#0f766e",
 ];
-function corDoAvatar(semente: string): string {
+export function corDoAvatar(semente: string): string {
   let soma = 0;
   for (let i = 0; i < semente.length; i++) soma = (soma + semente.charCodeAt(i)) % 997;
   return CORES_AVATAR[soma % CORES_AVATAR.length];
 }
-function iniciais(nome: string): string {
+export function iniciais(nome: string): string {
   const partes = nome
     .replace(/[^\p{L}\p{N}\s]/gu, " ")
     .trim()
@@ -114,3 +114,31 @@ export function Avatar({
 }
 
 // ── Lista ───────────────────────────────────────────────────────
+
+/**
+ * As mesmas iniciais, como IMAGEM.
+ *
+ * ⚠️ Existe para o aviso do navegador. Ele mostra uma imagem por endereço, e não
+ * aceita um componente: sem isto, quem não tem foto cadastrada aparecia com o
+ * ícone genérico do site, e todos os avisos ficavam iguais — que é justamente o
+ * contrário do que o avatar existe para resolver.
+ *
+ * SVG em data URI, e não canvas: são vinte linhas de texto contra um elemento
+ * desenhado fora da tela, e o resultado é nítido em qualquer densidade.
+ */
+export function avatarComoImagem(nome: string, semente: string): string {
+  const letras = iniciais(nome);
+  const cor = corDoAvatar(semente);
+
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">` +
+    `<rect width="96" height="96" rx="48" fill="${cor}"/>` +
+    `<text x="48" y="48" fill="#fff" font-family="system-ui,-apple-system,sans-serif"` +
+    ` font-size="${letras.length > 1 ? 38 : 46}" font-weight="600"` +
+    ` text-anchor="middle" dominant-baseline="central">${letras}</text>` +
+    `</svg>`;
+
+  // `encodeURIComponent` e nao base64: o SVG tem acento e aspas, e o caminho
+  // curto (`btoa`) quebra em qualquer nome com cedilha.
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}

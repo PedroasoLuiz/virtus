@@ -7,7 +7,7 @@ import { useAvisos } from "@/components/ui/avisos";
 import { ConfiguracaoDeContas } from "@/components/whatsapp/configuracao/drawer";
 import { comFormatacaoDoWhatsapp } from "@/components/whatsapp/formatacao";
 import { hora, quando, rotuloDoDia } from "@/components/whatsapp/painel/datas";
-import { Avatar } from "@/components/whatsapp/painel/avatar";
+import { Avatar, avatarComoImagem } from "@/components/whatsapp/painel/avatar";
 import { Midia } from "@/components/whatsapp/painel/midia";
 import {
   AvisoDaJanela,
@@ -569,15 +569,26 @@ export function PainelWhatsapp() {
       jaAvisadas.current.add(linha.id);
 
       const conversa = conversasRef.current.find((c) => c.id === conversaId);
+      const titulo = conversa ? tituloDa(conversa) : "Nova mensagem";
 
       avisarNoNavegador({
-        titulo: conversa ? tituloDa(conversa) : "Nova mensagem",
+        titulo,
         corpo:
           previaDoTexto(linha.texto ?? null, "entrada") ??
           rotuloDoTipo(linha.tipo ?? null) ??
           "Mensagem nova",
         tag: `conversa-${conversaId}`,
-        icone: conversa?.clienteIcone,
+        /*
+         * A foto do cadastro, ou as INICIAIS desenhadas.
+         *
+         * ⚠️ Sem o alternativo, quem não tem foto caía no ícone genérico do
+         * site e todos os avisos ficavam iguais — o contrário do que o avatar
+         * existe para resolver. A cor sai do telefone, então é a mesma que a
+         * pessoa vê na lista.
+         */
+        icone:
+          conversa?.clienteIcone ||
+          (conversa ? avatarComoImagem(titulo, conversa.telefone) : null),
         aoClicar: () => {
           definirEstadoDoPainel({ aberto: true });
           void abrirPorId(conversaId);
@@ -2084,44 +2095,7 @@ function Thread({
   }, [itens]);
 
   if (!conversa) {
-    return (
-      <div
-        style={{
-          flex: 1,
-          display: "grid",
-          placeItems: "center",
-          padding: 24,
-          margin: "10px 10px 14px",
-          borderRadius: "var(--radius-lg)",
-          background: "linear-gradient(var(--kanban-coluna-bg), var(--kanban-coluna-bg)), var(--sidebar-bg)",
-        }}
-      >
-        <div style={{ textAlign: "center", maxWidth: 260 }}>
-          <svg
-            width="40"
-            height="40"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.3"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            style={{ color: "var(--text-disabled)", marginBottom: 10 }}
-          >
-            <path d="M21 11.5a8.4 8.4 0 0 1-12.3 7.5L3 21l2-5.7A8.4 8.4 0 1 1 21 11.5z" />
-          </svg>
-          <p
-            style={{
-              fontSize: "var(--text-sm)",
-              color: "var(--text-tertiary)",
-              lineHeight: "var(--lh-snug)",
-            }}
-          >
-            Escolha uma conversa à esquerda para ler e responder.
-          </p>
-        </div>
-      </div>
-    );
+    return <SemConversa />;
   }
 
   const aberta = janelaAberta(conversa.janelaExpiraEm);
@@ -2414,6 +2388,135 @@ function Thread({
         />
       )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * A tela quando nenhuma conversa está aberta.
+ *
+ * ⚠️ Duas bolhas, e não o balão do WhatsApp. O logotipo do aplicativo diz onde a
+ * pessoa está — o que ela já sabe. Um pedaço de conversa desenhado diz o que
+ * aquele espaço vai receber, e é a mesma anatomia (bolha recebida à esquerda,
+ * enviada à direita, com rabinho) que ela vai ver quando escolher alguém.
+ *
+ */
+function SemConversa() {
+  return (
+    <div
+      style={{
+        flex: 1,
+        display: "grid",
+        placeItems: "center",
+        padding: 24,
+        /*
+         * ⚠️ Respiro em CIMA também, diferente da área de mensagens.
+         *
+         * Lá o cabeçalho da conversa fica acima e já dá o ar; aqui não há
+         * cabeçalho nenhum — sem conversa aberta não há nome para mostrar —, e
+         * com margem zero o cartão encostava na borda de cima do painel.
+         */
+        margin: "10px 10px 14px",
+        borderRadius: "var(--radius-lg)",
+        background:
+          "linear-gradient(var(--kanban-coluna-bg), var(--kanban-coluna-bg)), var(--sidebar-bg)",
+      }}
+    >
+      <div style={{ textAlign: "center", maxWidth: 300 }}>
+        <div
+          aria-hidden
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 6,
+            width: 168,
+            margin: "0 auto 20px",
+          }}
+        >
+          <BolhaVazia />
+          <BolhaVazia minha />
+        </div>
+
+        <p
+          style={{
+            fontSize: "var(--text-lg)",
+            fontWeight: "var(--fw-semi)",
+            letterSpacing: "var(--tracking-snug)",
+            marginBottom: 5,
+          }}
+        >
+          Nenhuma conversa aberta
+        </p>
+
+        <p
+          style={{
+            fontSize: "var(--text-sm)",
+            color: "var(--text-tertiary)",
+            lineHeight: "var(--lh-normal)",
+          }}
+        >
+          Escolha alguém na lista ao lado para ler e responder.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * O esqueleto de uma bolha: linhas no lugar do texto.
+ *
+ * Sem animação de carregamento de propósito — não está carregando nada. É um
+ * desenho parado, do mesmo jeito que a moldura de um porta-retratos vazio mostra
+ * onde a foto entra.
+ */
+function BolhaVazia({ minha = false }: { minha?: boolean }) {
+  const raio = "var(--radius-lg)";
+
+  return (
+    <div
+      style={{
+        position: "relative",
+        alignSelf: minha ? "flex-end" : "flex-start",
+        width: minha ? "76%" : "88%",
+        padding: "9px 11px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 5,
+        background: minha ? "var(--primary-subtle)" : "var(--surface)",
+        borderRadius: minha
+          ? `${raio} ${raio} 0 ${raio}`
+          : `${raio} ${raio} ${raio} 0`,
+        boxShadow: "var(--shadow-xs)",
+      }}
+    >
+      <span style={{ height: 6, borderRadius: 3, background: "var(--border)", width: "100%" }} />
+      <span
+        style={{
+          height: 6,
+          borderRadius: 3,
+          background: "var(--border)",
+          width: minha ? "48%" : "64%",
+          alignSelf: minha ? "flex-end" : "flex-start",
+        }}
+      />
+
+      {/* O mesmo rabinho da conversa de verdade: é o que faz o desenho ler como
+          mensagem em vez de bloco cinza. */}
+      <svg
+        width="10"
+        height="14"
+        viewBox="0 0 10 14"
+        style={{
+          position: "absolute",
+          bottom: 0,
+          ...(minha ? { right: -9 } : { left: -9, transform: "scaleX(-1)" }),
+        }}
+      >
+        <path
+          d="M0 3C0 9 3.6 12.9 9.6 13.9L0 14Z"
+          fill={minha ? "var(--primary-subtle)" : "var(--surface)"}
+        />
+      </svg>
     </div>
   );
 }
