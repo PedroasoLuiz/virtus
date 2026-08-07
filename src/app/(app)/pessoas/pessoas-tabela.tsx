@@ -20,15 +20,23 @@ import {
   selectStyle,
 } from "@/components/ui/kit";
 import type { Cliente, PapelPessoa } from "@/modules/clientes/clientes.types";
-import { ClienteDrawer } from "./cliente-drawer";
+import { PessoaDrawer } from "./pessoa-drawer";
 
 const PAGE_SIZE = 25;
 
-export function ClientesTabela({
-  clientes,
+export function PessoasTabela({
+  pessoas,
   centros,
 }: {
-  clientes: Cliente[];
+  /*
+   * ⚠️ O tipo continua `Cliente`, e a tabela `clientes`.
+   *
+   * O que mudou foi o NOME da tela: ali dentro ha cliente, fornecedor e
+   * colaborador, e chamar tudo de cliente escondia dois tercos do cadastro.
+   * Renomear a tabela e a API junto seria uma migracao de banco e de rota para
+   * consertar uma palavra na tela.
+   */
+  pessoas: Cliente[];
   centros: { id: number; descricao: string }[];
 }) {
   const [busca, setBusca] = useState("");
@@ -39,7 +47,7 @@ export function ClientesTabela({
 
   const filtrados = useMemo(() => {
     const termo = busca.trim().toLowerCase();
-    return clientes.filter((c) => {
+    return pessoas.filter((c) => {
       if (papel && !c.papeis.includes(papel as PapelPessoa)) return false;
       if (!termo) return true;
       return (
@@ -48,7 +56,7 @@ export function ClientesTabela({
         (c.cnpj ?? "").includes(termo.replace(/\D/g, ""))
       );
     });
-  }, [clientes, busca, papel]);
+  }, [pessoas, busca, papel]);
 
   const totalPaginas = Math.max(1, Math.ceil(filtrados.length / PAGE_SIZE));
   const paginaAtual = Math.min(pagina, totalPaginas);
@@ -57,7 +65,7 @@ export function ClientesTabela({
   return (
     <PageLayout>
       <Panel>
-        <PageHeader title="Clientes">
+        <PageHeader title="Pessoas">
         <FilterButton
           activeCount={papel ? 1 : 0}
           onClear={() => {
@@ -161,7 +169,7 @@ export function ClientesTabela({
       </Panel>
 
       {edicao && (
-        <ClienteDrawer
+        <PessoaDrawer
           key={edicao.cliente?.id ?? "novo"}
           cliente={edicao.cliente}
           centros={centros}

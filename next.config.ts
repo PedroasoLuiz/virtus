@@ -22,6 +22,17 @@ function commitSha(): string {
 }
 
 const nextConfig: NextConfig = {
+  /*
+   * O modulo de clientes virou PESSOAS: ali dentro ha cliente, fornecedor e
+   * colaborador, e o nome antigo escondia dois tercos do cadastro.
+   *
+   * ⚠️ O endereco antigo continua respondendo. Ele esta em favorito de gente,
+   * em aba aberta e em link colado em conversa; quebrar tudo isso para trocar
+   * uma palavra seria caro pelo motivo errado.
+   */
+  async redirects() {
+    return [{ source: "/clientes", destination: "/pessoas", permanent: false }];
+  },
   // Ha um package-lock.json solto em C:\Users\pedro que faz o Turbopack
   // inferir a raiz errada. Fixar aqui evita o aviso a cada build.
   turbopack: { root: __dirname },

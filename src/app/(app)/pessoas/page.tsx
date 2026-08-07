@@ -2,9 +2,9 @@ import { sessaoUI } from "@/shared/auth/sessao-ui";
 import { listarClientes } from "@/modules/clientes/clientes.service";
 import { listarCentros } from "@/modules/cadastros/cadastros.service";
 import { SemEmpresa } from "../sem-empresa";
-import { ClientesTabela } from "./clientes-tabela";
+import { PessoasTabela } from "./pessoas-tabela";
 
-export default async function ClientesPage() {
+export default async function PessoasPage() {
   const { ctx } = await sessaoUI();
   if (ctx.empresaId == null) return <SemEmpresa />;
 
@@ -19,5 +19,5 @@ export default async function ClientesPage() {
     .filter((c) => c.ativo && c.tipo === "RECEITA")
     .map((c) => ({ id: c.id, descricao: c.descricao }));
 
-  return <ClientesTabela clientes={itens} centros={doCliente} />;
+  return <PessoasTabela pessoas={itens} centros={doCliente} />;
 }

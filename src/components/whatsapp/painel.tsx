@@ -2682,7 +2682,7 @@ function DetalhesDoContato({
           }}
         >
           <a
-            href={`/clientes?id=${primeira.id}`}
+            href={`/pessoas?id=${primeira.id}`}
             onClick={onSair}
             style={{ color: "var(--text-primary)", textDecoration: "none", fontWeight: "var(--fw-semi)" }}
           >
@@ -2696,7 +2696,7 @@ function DetalhesDoContato({
           */}
           {restantes > 0 && (
             <a
-              href="/clientes"
+              href="/pessoas"
               onClick={onSair}
               title={candidatos.slice(1).map((c) => c.razao).join(", ")}
               style={{ color: "var(--primary)", textDecoration: "none", fontWeight: "var(--fw-semi)" }}

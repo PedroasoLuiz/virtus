@@ -97,7 +97,7 @@ export const GRUPOS_POR_MODULO: Partial<Record<Modulo, Grupo[]>> = {
       label: "Cadastros",
       icon: "pessoas",
       items: [
-        { label: "Clientes", href: "/clientes" },
+        { label: "Pessoas", href: "/pessoas" },
         { label: "Serviços", href: "/servicos" },
         { label: "Centro de custo", href: "/centro-custo" },
       ],

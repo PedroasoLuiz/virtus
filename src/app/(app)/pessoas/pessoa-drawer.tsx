@@ -46,7 +46,7 @@ function inicial(cliente: Cliente | null): Form {
   };
 }
 
-export function ClienteDrawer({
+export function PessoaDrawer({
   cliente,
   centros,
   aberto,
