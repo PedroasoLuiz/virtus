@@ -54,7 +54,21 @@ export function EnvioPorModelo({
         const corpo = await r.json().catch(() => null);
 
         if (!r.ok) {
-          throw new Error(corpo?.error?.mensagem ?? corpo?.error?.message ?? "");
+          /*
+           * ⚠️ Os `details` entram na mensagem. Um 422 diz "dados invalidos" e
+           * para por ai; e o campo que ele lista que diz onde procurar, e sem
+           * isso a unica saida e adivinhar de fora.
+           */
+          const campos = (corpo?.error?.details ?? [])
+            .map((d: { campo?: string; mensagem?: string }) =>
+              [d.campo, d.mensagem].filter(Boolean).join(": "),
+            )
+            .filter(Boolean)
+            .join("; ");
+
+          throw new Error(
+            [corpo?.error?.message, campos].filter(Boolean).join(". ") || "",
+          );
         }
 
         setFalhou(null);
