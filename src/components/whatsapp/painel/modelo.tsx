@@ -34,6 +34,12 @@ export function EnvioPorModelo({
   onFechar?: () => void;
 }) {
   const [modelos, setModelos] = useState<Modelo[] | null>(null);
+  /*
+   * ⚠️ Falha e lista vazia sao coisas DIFERENTES, e mostrar as duas como
+   * "nenhum modelo aprovado" custou caro: com a chamada quebrada, a tela dizia
+   * que o problema estava na Meta e a busca ia para o lugar errado.
+   */
+  const [falhou, setFalhou] = useState<string | null>(null);
   const [escolhido, setEscolhido] = useState<string>("");
   const [valores, setValores] = useState<string[]>([]);
   const [enviando, setEnviando] = useState(false);
@@ -45,11 +51,20 @@ export function EnvioPorModelo({
 
     fetch(`/api/v1/whatsapp/modelos?contaId=${contaId}`, { signal: controle.signal })
       .then(async (r) => {
-        if (!r.ok) throw new Error();
-        const corpo = await r.json();
+        const corpo = await r.json().catch(() => null);
+
+        if (!r.ok) {
+          throw new Error(corpo?.error?.mensagem ?? corpo?.error?.message ?? "");
+        }
+
+        setFalhou(null);
         setModelos(corpo.data ?? []);
       })
-      .catch(() => setModelos([]));
+      .catch((e: Error) => {
+        if (e.name === "AbortError") return;
+        setFalhou(e.message || "Não foi possível falar com a Meta agora.");
+        setModelos([]);
+      });
 
     return () => controle.abort();
   }, [abertoParaEnvio, contaId]);
@@ -155,6 +170,10 @@ export function EnvioPorModelo({
       {modelos == null ? (
         <p style={{ fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>
           Carregando modelos…
+        </p>
+      ) : falhou ? (
+        <p style={{ fontSize: "var(--text-sm)", color: "var(--danger-text)" }}>
+          Não foi possível carregar os modelos. {falhou}
         </p>
       ) : modelos.length === 0 ? (
         <p style={{ fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>

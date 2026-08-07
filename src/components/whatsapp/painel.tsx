@@ -10,7 +10,7 @@ import { hora, quando, rotuloDoDia } from "@/components/whatsapp/painel/datas";
 import { Avatar } from "@/components/whatsapp/painel/avatar";
 import { Midia } from "@/components/whatsapp/painel/midia";
 import { EnvioPorModelo } from "@/components/whatsapp/painel/modelo";
-import { ResumoDoAtendimento } from "@/components/whatsapp/painel/resumo";
+import { ResumoDoAtendimento, fecharResumo, resumoFechado } from "@/components/whatsapp/painel/resumo";
 import { Composicao } from "@/components/whatsapp/painel/composicao";
 import {
   definirEstadoDoPainel,
@@ -1730,9 +1730,15 @@ function Thread({
   const area = useRef<HTMLDivElement>(null);
   const itens = useMemo(() => montarItens(mensagens), [mensagens]);
 
-  // Comeca aberto e nao precisa de efeito para reabrir: a Thread tem `key` pela
-  // conversa, entao trocar de contato remonta tudo e o resumo volta sozinho.
-  const [resumoAberto, setResumoAberto] = useState(true);
+  /*
+   * Fechar o resumo VALE. A Thread tem `key` pela conversa e remonta a cada
+   * troca de contato, entao um estado local reabria o cartao toda vez — quem
+   * fechou uma vez o via de novo no proximo clique, e no seguinte.
+   *
+   * Quem lembra e o modulo, por atendimento: assunto novo abre atendimento novo,
+   * e resumo de assunto novo merece ser lido.
+   */
+  const [, redesenhar] = useState(0);
 
   /*
    * Rolagem so acompanha quem JA estava no fim.
@@ -2014,11 +2020,14 @@ function Thread({
         mensagens de lugar, que e justamente onde o olho vai primeiro.
       */}
       <div style={{ position: "relative" }}>
-        {atendimento && resumoAberto && (
+        {atendimento && !resumoFechado(atendimento.id) && (
           <ResumoDoAtendimento
             atendimento={atendimento}
             conversa={conversa}
-            onFechar={() => setResumoAberto(false)}
+            onFechar={() => {
+              fecharResumo(atendimento.id);
+              redesenhar((n) => n + 1);
+            }}
           />
         )}
 
