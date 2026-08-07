@@ -21,11 +21,7 @@ import {
   definirEstadoDoPainel,
   useEstadoDoPainel,
 } from "@/components/whatsapp/estado-do-painel";
-import {
-  BotaoDeEtiquetas,
-  ChipDeEtiqueta,
-  PALETA,
-} from "@/components/whatsapp/painel/etiquetas";
+import { BotaoDeEtiquetas, ChipDeEtiqueta } from "@/components/whatsapp/painel/etiquetas";
 import {
   botRespondendo,
   formatarTelefone,
@@ -693,6 +689,7 @@ export function PainelWhatsapp() {
                   atuais.includes(id) ? atuais.filter((x) => x !== id) : [...atuais, id],
                 )
               }
+              onLimparEtiquetas={() => setFiltroEtiquetas([])}
               verArquivadas={verArquivadas}
               onVerArquivadas={(v) => {
                 setVerArquivadas(v);
@@ -795,6 +792,7 @@ function ListaDeConversas({
   etiquetas,
   filtroEtiquetas,
   onFiltrarEtiqueta,
+  onLimparEtiquetas,
   verArquivadas,
   onVerArquivadas,
   estreito,
@@ -817,6 +815,7 @@ function ListaDeConversas({
   etiquetas: Etiqueta[];
   filtroEtiquetas: number[];
   onFiltrarEtiqueta: (id: number) => void;
+  onLimparEtiquetas: () => void;
   verArquivadas: boolean;
   onVerArquivadas: (v: boolean) => void;
 }) {
@@ -997,6 +996,44 @@ function ListaDeConversas({
                   }}
                 />
                 Aguardando resposta ({esperando.length})
+              </button>
+            )}
+
+            {/*
+              O "todos" abre a fileira, e comeca aceso.
+
+              ⚠️ Sem ele, desligar o ultimo filtro exigia lembrar QUAL chip
+              estava aceso e clicar nele de novo. E nao havia nada dizendo que a
+              lista sem filtro nenhum e um estado, e nao um descuido: fileira
+              toda apagada parecia que a pessoa tinha deixado de escolher.
+            */}
+            {etiquetas.length > 0 && (
+              <button
+                type="button"
+                onClick={onLimparEtiquetas}
+                aria-pressed={filtroEtiquetas.length === 0}
+                style={{
+                  flexShrink: 0,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  height: 22,
+                  padding: "0 10px",
+                  borderRadius: "var(--radius-full)",
+                  border: `1px solid ${
+                    filtroEtiquetas.length === 0 ? "var(--primary-border)" : "var(--border)"
+                  }`,
+                  background:
+                    filtroEtiquetas.length === 0 ? "var(--primary-subtle)" : "var(--surface)",
+                  color:
+                    filtroEtiquetas.length === 0 ? "var(--primary)" : "var(--text-secondary)",
+                  fontSize: "var(--text-xs)",
+                  fontWeight: "var(--fw-semi)",
+                  fontFamily: "var(--font)",
+                  whiteSpace: "nowrap",
+                  cursor: "pointer",
+                }}
+              >
+                Todos
               </button>
             )}
 
@@ -1200,38 +1237,6 @@ function ItemDaLista({
           />
         )}
 
-        {/*
-          A etiqueta tambem e uma bolinha no avatar, na quina de BAIXO.
-
-          ⚠️ Ela ja foi uma faixa embaixo da previa e custou caro: reservar a
-          altura daquela faixa em TODAS as conversas, inclusive nas sem
-          etiqueta, esticava a lista inteira por causa de um caso raro. Aqui ela
-          nao ocupa linha nenhuma, e o nome da etiqueta continua a um passo de
-          distancia, na conversa aberta.
-        */}
-        {marcadas.length > 0 && (
-          <span
-            title={marcadas.map((e) => e.nome).join(", ")}
-            style={{ position: "absolute", right: -2, bottom: -2, display: "flex" }}
-          >
-            {marcadas.slice(0, 3).map((e, i) => (
-              <span
-                key={e.id}
-                aria-hidden
-                style={{
-                  width: 10,
-                  height: 10,
-                  // Sobrepostas: tres bolinhas lado a lado passariam da largura
-                  // do avatar e virariam uma fileira solta no ar.
-                  marginLeft: i === 0 ? 0 : -4,
-                  borderRadius: "var(--radius-full)",
-                  background: (PALETA[e.cor] ?? PALETA.cinza).texto,
-                  border: "2px solid var(--surface)",
-                }}
-              />
-            ))}
-          </span>
-        )}
       </div>
 
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -1243,9 +1248,12 @@ function ItemDaLista({
             height: ALTURA_DO_NOME,
           }}
         >
+          {/*
+            ⚠️ Sem `flex: 1`. Esticando, o nome empurraria as bolinhas para o
+            meio da linha e elas parariam de pertencer a ele.
+          */}
           <span
             style={{
-              flex: 1,
               minWidth: 0,
               fontSize: "var(--text-md)",
               fontWeight: naoLido ? "var(--fw-semi)" : "var(--fw-normal)",
@@ -1256,6 +1264,24 @@ function ItemDaLista({
           >
             {titulo}
           </span>
+
+          {/*
+            A etiqueta COM O NOME, colada no do cliente, igual ao chat aberto.
+
+            ⚠️ Saiu da quina do avatar: ali ela ocupava o lugar onde todo
+            aplicativo de mensagem põe o ponto de "está online", e era assim que
+            ela era lida — cor no canto da foto é presença, não classificação.
+
+            ⚠️ Duas no máximo. A linha tem altura fixa e divide espaço com o
+            nome, que é o que identifica a conversa; a terceira empurraria
+            justamente ele para as reticências.
+          */}
+          {marcadas.slice(0, 2).map((e) => (
+            <ChipDeEtiqueta key={e.id} etiqueta={e} miudo />
+          ))}
+
+          <span style={{ flex: 1 }} />
+
           <span
             style={{
               fontSize: "var(--text-xs)",
@@ -2527,7 +2553,14 @@ function Bolha({ item, conversaId }: { item: Item; conversaId: number }) {
    * com o respiro. Sobrando, o carimbo so flutua sobre esse vao; faltando, o
    * proprio vao quebra a linha e leva o carimbo junto.
    */
-  const larguraDoCarimbo = minha ? 54 : 34;
+  /*
+   * O espaco que o carimbo ocupa, reservado no fim do texto para ele nao cair
+   * por cima da ultima palavra.
+   *
+   * ⚠️ Cresce quando a faisca da IA entra na linha: ela mora ali junto da hora,
+   * e sem contar os catorze pixels dela o texto passava por baixo.
+   */
+  const larguraDoCarimbo = (minha ? 54 : 34) + (m.doBot ? 14 : 0);
 
   return (
     <div
@@ -2543,7 +2576,12 @@ function Bolha({ item, conversaId }: { item: Item; conversaId: number }) {
         style={{
           position: "relative",
           maxWidth: "70%",
-          padding: ehFigurinha ? 0 : "7px 11px 5px",
+          /*
+           * ⚠️ 8 embaixo, e nao 5. O carimbo da hora flutua sobre esse respiro,
+           * e com 5 ele encostava no fundo da bolha: sobrava mais ar em cima do
+           * texto do que embaixo da hora, e a bolha ficava torta na vertical.
+           */
+          padding: ehFigurinha ? 0 : "7px 11px 8px",
           // Sem borda: a bolha se separa do fundo pela cor e pela sombra, como
           // o card do kanban. Contorno em cada mensagem vira ruido numa
           // conversa longa. So a que falhou ganha moldura, porque ali o
@@ -2594,28 +2632,6 @@ function Bolha({ item, conversaId }: { item: Item; conversaId: number }) {
           Mensagem de atendente nao precisa: no painel, saida sem marca e gente.
           O contrario encheria a conversa de etiqueta repetida.
         */}
-        {m.doBot && abreBloco && (
-          <div
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 4,
-              marginBottom: 3,
-              fontSize: "var(--text-2xs)",
-              fontWeight: "var(--fw-semi)",
-              color: "var(--primary)",
-              letterSpacing: "0.03em",
-            }}
-          >
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="4" y="7" width="16" height="12" rx="3" />
-              <path d="M12 3v4" />
-              <path d="M9 12.5v1.5M15 12.5v1.5" />
-            </svg>
-            IA
-          </div>
-        )}
-
         {fechaBloco && (
           <div
             style={{
@@ -2632,13 +2648,36 @@ function Bolha({ item, conversaId }: { item: Item; conversaId: number }) {
               // dois, o carimbo fica mais rente ao fundo que o texto das outras
               // bolhas, e o respiro de baixo parece menor so nas curtas.
               ...(m.texto
-                ? ({ position: "absolute", right: 11, bottom: 5, lineHeight: 1 } as const)
+                ? ({ position: "absolute", right: 11, bottom: 8, lineHeight: 1 } as const)
                 : ({
                     marginTop: 2,
                     justifyContent: minha ? "flex-end" : "flex-start",
                   } as const)),
             }}
           >
+            {/*
+              A marca da IA vira FAÍSCA, e mora à esquerda da hora.
+
+              ⚠️ Antes era um robô com a palavra "IA" numa linha própria, acima
+              do texto, e só na primeira mensagem do bloco. Duas mudanças: o robô
+              é o desenho de "máquina falando", e o que a faísca diz é "isto foi
+              gerado" — a mesma marca que o resto do sistema já usa. E na linha
+              da hora ela aparece em TODA mensagem dela, que é onde o olho já vai
+              conferir quem falou e quando.
+            */}
+            {m.doBot && (
+              <svg
+                width="10"
+                height="10"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                style={{ flexShrink: 0, color: "var(--primary)" }}
+                aria-label="Enviada pela IA"
+              >
+                <path d="M12 2c.5 4.6 3.4 7.5 8 8-4.6.5-7.5 3.4-8 8-.5-4.6-3.4-7.5-8-8 4.6-.5 7.5-3.4 8-8z" />
+              </svg>
+            )}
+
             <span>{hora(m.enviadaEm)}</span>
             {minha && <Confirmacao status={m.status} />}
           </div>
