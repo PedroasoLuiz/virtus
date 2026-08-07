@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { useAvisos } from "@/components/ui/avisos";
 import { Button, CabecalhoDeSecao, Field, inputStyle, selectStyle } from "@/components/ui/kit";
 import type { DadoBancarioDaPessoa } from "@/modules/clientes/clientes.types";
+import { useRecursoDaPessoa, type CacheDoDrawer } from "./cache-do-drawer";
 
 /**
  * Para onde o dinheiro desta pessoa vai.
@@ -21,24 +22,21 @@ const PIX = [
   { valor: "aleatoria", rotulo: "Chave aleatória" },
 ];
 
-export function AbaDeBancarios({ clienteId }: { clienteId: number }) {
+export function AbaDeBancarios({
+  clienteId,
+  cache,
+}: {
+  clienteId: number;
+  cache: CacheDoDrawer;
+}) {
   const { avisar } = useAvisos();
-
-  const [itens, setItens] = useState<DadoBancarioDaPessoa[] | null>(null);
   const [novo, setNovo] = useState(false);
 
-  const carregar = useCallback(async () => {
-    const r = await fetch(`/api/v1/clientes/${clienteId}/bancarios`);
-    if (!r.ok) return;
-
-    const corpo = await r.json();
-    setItens(corpo.data ?? []);
-  }, [clienteId]);
-
-  useEffect(() => {
-    const t = setTimeout(() => void carregar(), 0);
-    return () => clearTimeout(t);
-  }, [carregar]);
+  const { dados: itens, recarregar: carregar } = useRecursoDaPessoa<DadoBancarioDaPessoa[]>(
+    cache,
+    "bancarios",
+    `/api/v1/clientes/${clienteId}/bancarios`,
+  );
 
   async function remover(id: number) {
     const r = await fetch(`/api/v1/clientes/${clienteId}/bancarios/${id}`, { method: "DELETE" });

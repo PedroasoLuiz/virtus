@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { useAvisos } from "@/components/ui/avisos";
 import { Avatar } from "@/components/ui/avatar";
 import { Button, CabecalhoDeSecao, selectStyle } from "@/components/ui/kit";
 import type { UsuarioDaPessoa } from "@/modules/clientes/clientes.types";
+import { useRecursoDaPessoa, type CacheDoDrawer } from "./cache-do-drawer";
 
 /**
  * Quem enxerga os dados desta pessoa pelo portal.
@@ -17,27 +18,30 @@ import type { UsuarioDaPessoa } from "@/modules/clientes/clientes.types";
  * candidatos sai de `usuarios_visiveis()`: ninguém consegue dar acesso a um
  * usuário que nem enxerga.
  */
-export function AbaDeAcesso({ clienteId, nome }: { clienteId: number; nome: string }) {
+type Acesso = { comAcesso: UsuarioDaPessoa[]; disponiveis: UsuarioDaPessoa[] };
+
+export function AbaDeAcesso({
+  clienteId,
+  nome,
+  cache,
+}: {
+  clienteId: number;
+  nome: string;
+  cache: CacheDoDrawer;
+}) {
   const { avisar } = useAvisos();
 
-  const [comAcesso, setComAcesso] = useState<UsuarioDaPessoa[] | null>(null);
-  const [disponiveis, setDisponiveis] = useState<UsuarioDaPessoa[]>([]);
   const [escolhido, setEscolhido] = useState("");
   const [salvando, setSalvando] = useState(false);
 
-  const carregar = useCallback(async () => {
-    const r = await fetch(`/api/v1/clientes/${clienteId}/acesso`);
-    if (!r.ok) return;
+  const { dados, recarregar: carregar } = useRecursoDaPessoa<Acesso>(
+    cache,
+    "acesso",
+    `/api/v1/clientes/${clienteId}/acesso`,
+  );
 
-    const corpo = await r.json();
-    setComAcesso(corpo.data?.comAcesso ?? []);
-    setDisponiveis(corpo.data?.disponiveis ?? []);
-  }, [clienteId]);
-
-  useEffect(() => {
-    const t = setTimeout(() => void carregar(), 0);
-    return () => clearTimeout(t);
-  }, [carregar]);
+  const comAcesso = dados?.comAcesso ?? null;
+  const disponiveis = dados?.disponiveis ?? [];
 
   async function gravar(usuarios: string[]) {
     setSalvando(true);

@@ -5,6 +5,7 @@ import { FormDrawer } from "@/components/ui/form-drawer";
 import {
   ActiveToggle,
   CabecalhoDeSecao,
+  CampoBloqueado,
   Field,
   PanelTabs,
   inputStyle,
@@ -16,6 +17,7 @@ import { AbaDeEndereco } from "./aba-endereco";
 import { AbaDeBancarios } from "./aba-bancarios";
 import { AbaDeAcesso } from "./aba-acesso";
 import { AbaDeCentros } from "./aba-centros";
+import { useCacheDoDrawer } from "./cache-do-drawer";
 
 /**
  * Detalhes de uma pessoa: cliente, fornecedor ou colaborador.
@@ -99,6 +101,16 @@ export function PessoaDrawer({
   // vem da pessoa certa e nao precisa de efeito para sincronizar.
   const [form, setForm] = useState<Form>(() => inicial(cliente));
   const [aba, setAba] = useState<string>(ABA_INFO);
+
+  /*
+   * ⚠️ O que cada aba já buscou, enquanto este drawer estiver aberto.
+   *
+   * As abas montam e desmontam ao trocar de guia: sem isto, ir a Endereço,
+   * voltar e retornar são três idas ao servidor para ler a mesma lista. Morre
+   * com o drawer de propósito — ele é remontado por `key` a cada pessoa, então
+   * fechar e reabrir traz dado fresco.
+   */
+  const cache = useCacheDoDrawer();
   const [contatos, setContatos] = useState<ContatoDaPessoa[] | null>(null);
 
   const editando = cliente !== null;
@@ -139,7 +151,6 @@ export function PessoaDrawer({
       aberto={aberto}
       onClose={onClose}
       titulo="Detalhes"
-      subtitulo={editando ? form.razao.trim() || `#${cliente.id}` : "Nova pessoa"}
       larguraDrawer={620}
       url={editando ? `/api/v1/clientes/${cliente.id}` : "/api/v1/clientes"}
       metodo={editando ? "PATCH" : "POST"}
@@ -180,14 +191,15 @@ export function PessoaDrawer({
             onMudou={() => void carregarContatos()}
           />
         ) : editando && aba === ABA_ENDERECO ? (
-          <AbaDeEndereco clienteId={cliente.id} />
+          <AbaDeEndereco clienteId={cliente.id} cache={cache} />
         ) : editando && aba === ABA_BANCARIO ? (
-          <AbaDeBancarios clienteId={cliente.id} />
+          <AbaDeBancarios clienteId={cliente.id} cache={cache} />
         ) : editando && aba === ABA_CENTROS ? (
-          <AbaDeCentros clienteId={cliente.id} centros={centros} />
+          <AbaDeCentros clienteId={cliente.id} centros={centros} cache={cache} />
         ) : editando && aba === ABA_ACESSO ? (
           <AbaDeAcesso
             clienteId={cliente.id}
+            cache={cache}
             nome={form.nomeFantasia.trim() || form.razao.trim() || "este cadastro"}
           />
         ) : (
@@ -210,19 +222,18 @@ export function PessoaDrawer({
                  *
                  * Ele é o que se dita ao telefone e o que aparece na fatura —
                  * precisa poder ser lido e copiado. Como texto solto no
-                 * cabeçalho, ninguém o encontrava; como campo desabilitado, ele
-                 * fica onde a mão procura um dado do cadastro.
+                 * cabeçalho, ninguém o encontrava; como campo, fica onde a mão
+                 * procura um dado do cadastro.
+                 *
+                 * ⚠️ `CampoBloqueado` do kit, e não um input com fundo cinza
+                 * escrito na mão. O cadeado à direita é o que diz POR QUE aquele
+                 * campo não aceita foco, e o desenho é o mesmo em toda tela que
+                 * mostra dado derivado.
                  */
                 <Field label="Número">
-                  <input
-                    value={cliente.id}
-                    readOnly
-                    style={{
-                      ...inputStyle,
-                      background: "var(--input-disabled-bg)",
-                      color: "var(--text-secondary)",
-                      cursor: "default",
-                    }}
+                  <CampoBloqueado
+                    valor={String(cliente.id)}
+                    titulo="O número é dado pelo sistema quando o cadastro nasce."
                   />
                 </Field>
               )}
@@ -403,7 +414,9 @@ export function PessoaDrawer({
  * diferentes.
  */
 function Campos({ children }: { children: React.ReactNode }) {
-  return <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>{children}</div>;
+  // 8 e o vao do resto do sistema: e o que o `FormDrawer` aplica entre os
+  // filhos dele, e o que os outros formularios usam entre campos.
+  return <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{children}</div>;
 }
 
 /**

@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { useAvisos } from "@/components/ui/avisos";
 import { CabecalhoDeSecao } from "@/components/ui/kit";
+import { useRecursoDaPessoa, type CacheDoDrawer } from "./cache-do-drawer";
 
 /**
  * Em que centros de custo esta pessoa entra.
@@ -20,35 +21,35 @@ import { CabecalhoDeSecao } from "@/components/ui/kit";
 export function AbaDeCentros({
   clienteId,
   centros,
+  cache,
 }: {
   clienteId: number;
   centros: { id: number; descricao: string }[];
+  cache: CacheDoDrawer;
 }) {
   const { avisar } = useAvisos();
-
-  const [marcados, setMarcados] = useState<number[] | null>(null);
   const [salvando, setSalvando] = useState(false);
 
-  const carregar = useCallback(async () => {
-    const r = await fetch(`/api/v1/clientes/${clienteId}/centros`);
-    if (!r.ok) return;
+  const { dados, recarregar } = useRecursoDaPessoa<{ centros: number[] }>(
+    cache,
+    "centros",
+    `/api/v1/clientes/${clienteId}/centros`,
+  );
 
-    const corpo = await r.json();
-    setMarcados(corpo.data?.centros ?? []);
-  }, [clienteId]);
-
-  useEffect(() => {
-    const t = setTimeout(() => void carregar(), 0);
-    return () => clearTimeout(t);
-  }, [carregar]);
+  const marcados = dados?.centros ?? null;
 
   async function alternar(id: number) {
     const atuais = marcados ?? [];
     const proximos = atuais.includes(id) ? atuais.filter((x) => x !== id) : [...atuais, id];
 
-    // O painel já mostra o resultado antes da resposta: marcar caixa é gesto de
-    // passagem, e uma que só acende depois da ida e volta faz clicar de novo.
-    setMarcados(proximos);
+    /*
+     * ⚠️ O CACHE muda junto com a tela, antes da resposta.
+     *
+     * Marcar caixa é gesto de passagem, e uma que só acende depois da ida e
+     * volta faz clicar de novo. Mas sem mexer no cache, trocar de aba e voltar
+     * desfazia o que acabou de ser marcado: a aba remonta lendo o guardado.
+     */
+    cache.gravar("centros", { centros: proximos });
     setSalvando(true);
 
     const r = await fetch(`/api/v1/clientes/${clienteId}/centros`, {
@@ -60,8 +61,10 @@ export function AbaDeCentros({
     setSalvando(false);
 
     if (!r.ok) {
-      setMarcados(atuais);
       avisar("atencao", "Não foi possível salvar");
+      // Volta ao que o servidor tem: o otimismo era só sobre o que ele aceitaria.
+      cache.esquecer("centros");
+      void recarregar();
     }
   }
 

@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { useAvisos } from "@/components/ui/avisos";
 import { Button, CabecalhoDeSecao, Field, inputStyle } from "@/components/ui/kit";
 import type { EnderecoDaPessoa } from "@/modules/clientes/clientes.types";
+import { useRecursoDaPessoa, type CacheDoDrawer } from "./cache-do-drawer";
 
 /**
  * Os endereços da pessoa.
@@ -12,24 +13,21 @@ import type { EnderecoDaPessoa } from "@/modules/clientes/clientes.types";
  * e a entrega raramente é no mesmo lugar da cobrança. O principal é o que a nota
  * fiscal usa.
  */
-export function AbaDeEndereco({ clienteId }: { clienteId: number }) {
+export function AbaDeEndereco({
+  clienteId,
+  cache,
+}: {
+  clienteId: number;
+  cache: CacheDoDrawer;
+}) {
   const { avisar } = useAvisos();
-
-  const [itens, setItens] = useState<EnderecoDaPessoa[] | null>(null);
   const [novo, setNovo] = useState(false);
 
-  const carregar = useCallback(async () => {
-    const r = await fetch(`/api/v1/clientes/${clienteId}/enderecos`);
-    if (!r.ok) return;
-
-    const corpo = await r.json();
-    setItens(corpo.data ?? []);
-  }, [clienteId]);
-
-  useEffect(() => {
-    const t = setTimeout(() => void carregar(), 0);
-    return () => clearTimeout(t);
-  }, [carregar]);
+  const { dados: itens, recarregar: carregar } = useRecursoDaPessoa<EnderecoDaPessoa[]>(
+    cache,
+    "enderecos",
+    `/api/v1/clientes/${clienteId}/enderecos`,
+  );
 
   async function promover(id: number) {
     const r = await fetch(`/api/v1/clientes/${clienteId}/enderecos/${id}`, { method: "PATCH" });
