@@ -13,6 +13,7 @@ import { logoutAction } from "@/modules/sessao/sessao.actions";
 export function MenuUsuario({
   email,
   nome,
+  empresa,
   trocarEmpresa,
   hrefTrocarEmpresa = "/selecionar-empresa",
   compacto = false,
@@ -20,6 +21,15 @@ export function MenuUsuario({
 }: {
   email: string;
   nome: string | null;
+  /**
+   * A empresa ativa, no topo do cartão.
+   *
+   * ⚠️ Ela morava solta acima do avatar, no rodapé da barra. Ali era um nome sem
+   * dono: não dizia que era a empresa em uso nem que dava para trocar, e ainda
+   * competia com a identidade logo abaixo. Aqui ela fica onde a pergunta nasce
+   * ("em qual empresa eu estou?") e coladinha na ação que a responde.
+   */
+  empresa?: string | null;
   trocarEmpresa: boolean;
   /**
    * Para onde leva o "Trocar de empresa".
@@ -137,6 +147,47 @@ export function MenuUsuario({
               </div>
             )}
             <div style={{ fontSize: "var(--text-xs)", color: "var(--text-tertiary)" }}>{email}</div>
+
+            {/*
+              A empresa em uso, com o prédio na frente.
+
+              ⚠️ Rotulada pelo ícone e não pela palavra "Empresa": três linhas
+              curtas empilhadas, uma delas com legenda e duas sem, viram um
+              formulário. O prédio diz de que tipo é aquele nome sem gastar
+              linha.
+            */}
+            {empresa && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 5,
+                  marginTop: 7,
+                  paddingTop: 7,
+                  borderTop: "1px solid var(--border)",
+                  fontSize: "var(--text-xs)",
+                  color: "var(--text-secondary)",
+                }}
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, color: "var(--text-tertiary)" }}>
+                  <path d="M4 21V6a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v15" />
+                  <path d="M14 10h5a1 1 0 0 1 1 1v10" />
+                  <path d="M3 21h18M7.5 9h3M7.5 13h3M7.5 17h3" />
+                </svg>
+
+                <span
+                  title={empresa}
+                  style={{
+                    minWidth: 0,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {empresa}
+                </span>
+              </div>
+            )}
           </div>
 
           <div style={{ padding: 4 }}>
