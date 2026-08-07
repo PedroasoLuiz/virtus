@@ -344,6 +344,7 @@ export const modeloSchema = z.object({
     .object({ texto: z.string(), temVariavel: z.boolean(), urlBase: z.string() })
     .nullable(),
   bloqueio: z.string().nullable(),
+  finalidade: z.object({ id: z.string(), rotulo: z.string() }).nullable(),
 });
 
 export const enviarModeloBodySchema = z.object({

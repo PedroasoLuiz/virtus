@@ -622,7 +622,26 @@ export async function modelosDaConversa(
   conversaId: number,
 ): Promise<Modelo[]> {
   const conversa = await obterConversa(empresaId, conversaId);
-  return listarModelos(conversa.contaId);
+
+  /*
+   * Os modelos da Meta, MARCADOS com a finalidade que cada um atende aqui.
+   *
+   * ⚠️ Em paralelo: sao duas fontes independentes, e a lista da Meta e a mais
+   * lenta das duas. Em sequencia, o vinculo so comecaria depois dela.
+   */
+  const [modelos, vinculos] = await Promise.all([
+    listarModelos(conversa.contaId),
+    repo.vinculosDaConta(conversa.contaId),
+  ]);
+
+  return modelos.map((m) => {
+    const vinculo = vinculos.find((v) => v.modeloNome === m.nome);
+    const rotulo = vinculo ? (finalidadePorId(vinculo.finalidade)?.rotulo ?? null) : null;
+
+    return vinculo && rotulo
+      ? { ...m, finalidade: { id: vinculo.finalidade, rotulo } }
+      : m;
+  });
 }
 
 export async function listarModelos(contaId: number): Promise<Modelo[]> {

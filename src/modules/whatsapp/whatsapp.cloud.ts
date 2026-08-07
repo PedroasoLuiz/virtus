@@ -635,6 +635,8 @@ function paraModelo(t: ModeloBruto): Modelo {
         }
       : null,
     bloqueio,
+    // Quem sabe de vinculo e o banco, nao a Meta: preenchido pelo servico.
+    finalidade: null,
   };
 }
 

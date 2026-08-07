@@ -617,6 +617,40 @@ export function EnvioDoModelo({
       {espiando && <PreviaDoModelo espiada={espiando} />}
 
       {/*
+        ⚠️ Modelo VINCULADO avisa, e não impede.
+
+        Ele é disparado pelo sistema com os valores prontos: no de cobrança, o
+        final do link é o token daquela parcela, que ninguém digita de cabeça.
+        Mandar na mão continua valendo (reenvio, teste), mas sem este aviso a
+        pessoa preenche o link no chute e manda o cliente para lugar nenhum.
+      */}
+      {modelo.finalidade && (
+        <p
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 6,
+            padding: "7px 10px",
+            borderRadius: "var(--radius-md)",
+            background: "var(--warning-bg)",
+            fontSize: "var(--text-xs)",
+            color: "var(--text-secondary)",
+            lineHeight: "var(--lh-snug)",
+          }}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--warning-text)" strokeWidth="2.2" strokeLinecap="round" style={{ flexShrink: 0, marginTop: 1 }}>
+            <path d="M12 8v5M12 16.5v.1" />
+            <circle cx="12" cy="12" r="9" />
+          </svg>
+
+          <span>
+            Este é o modelo de <strong>{modelo.finalidade.rotulo}</strong>. O sistema já o dispara
+            sozinho, com os valores e o link prontos. Enviando por aqui, você preenche tudo na mão.
+          </span>
+        </p>
+      )}
+
+      {/*
         ⚠️ Cada campo mostra ONDE ele cai no texto.
 
         "Campo 1", "Campo 2" não dizem nada, e a ordem dos marcadores no corpo
@@ -895,16 +929,23 @@ function ondeEntra(corpo: string, numero: number): string {
   const marcador = new RegExp(`\\{\\{\\s*${numero}\\s*\\}\\}`);
   const achado = corpo.match(marcador);
 
-  if (!achado || achado.index == null) return `Campo ${numero}`;
+  if (!achado || achado.index == null) return "";
 
-  const antes = corpo.slice(Math.max(0, achado.index - 24), achado.index);
-  const depois = corpo.slice(achado.index + achado[0].length).slice(0, 24);
+  const antes = corpo.slice(Math.max(0, achado.index - 22), achado.index);
+  const depois = corpo.slice(achado.index + achado[0].length).slice(0, 22);
 
   // A quebra de linha vira espaco: numa linha so, ela nao separa nada e ainda
   // corta a frase no meio sem motivo visivel.
   const limpo = (t: string) => t.replace(/\s*\n\s*/g, " ");
 
-  return `${limpo(antes)}[ ]${limpo(depois)}`.trim();
+  /*
+   * ⚠️ "entra em" na frente, e o buraco como `___`.
+   *
+   * Sem o prefixo, o trecho do texto sentado no lugar do valor era lido como
+   * EXEMPLO do que digitar: quem via `Olá, [ ]! Sua fatura` entendia que devia
+   * escrever aquilo. A frase transforma a mesma informação em endereço.
+   */
+  return `entra em: ${limpo(antes)}___${limpo(depois)}`.trim();
 }
 
 /** Troca `{{1}}`, `{{2}}`… pelos valores digitados, para a prévia. */

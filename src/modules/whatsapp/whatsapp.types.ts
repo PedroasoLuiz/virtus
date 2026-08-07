@@ -221,6 +221,16 @@ export type Modelo = {
    * que a culpa era da escolha.
    */
   bloqueio: string | null;
+  /**
+   * A finalidade que este modelo atende, quando ele esta vinculado a uma.
+   *
+   * ⚠️ Existe para o painel AVISAR, e nao para impedir. Modelo vinculado e
+   * disparado pelo sistema com os valores prontos — no de cobranca, o final do
+   * link e o token da parcela, que ninguem tem como digitar de cabeca. Mandar
+   * na mao continua possivel (reenvio, teste), mas quem faz precisa saber que
+   * existe o caminho onde isso sai preenchido.
+   */
+  finalidade: { id: string; rotulo: string } | null;
 };
 
 /**
