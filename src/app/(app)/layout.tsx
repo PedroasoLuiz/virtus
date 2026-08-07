@@ -60,6 +60,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         email={sessao.ctx.email}
         usuarioNome={sessao.usuarioNome}
         podeTrocarEmpresa={sessao.podeTrocarEmpresa}
+        whatsapp={!sessao.demo}
       />
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
         <Topbar aviso={sessao.demo ? "demo" : null} />
@@ -68,12 +69,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </div>
 
       {/*
-        O WhatsApp fica na RAIZ da casca, e nao dentro da Topbar.
-        
-        Duas razoes. O botao e flutuante, presa a tela: dentro da Topbar, que tem
-        `position: relative` + `z-index`, ele herdaria aquele contexto de
-        empilhamento e ficaria abaixo da barra lateral. E responder cliente
-        interrompe outra tarefa, entao o acesso nao pertence a nenhuma tela.
+        O painel fica na RAIZ da casca. Quem o ABRE mora no rodape da barra
+        lateral, e os dois se falam por `estado-do-painel`.
+
+        ⚠️ O painel nao pode nascer dentro da barra. Ele cobre a tela inteira, e
+        de la herdaria o contexto de empilhamento da propria barra — ficaria
+        preso dentro de duzentos pixels de largura.
 
         Fora do modo demonstracao ele nao tem o que mostrar: sem Supabase nao ha
         Realtime nem API, e o botao piscaria erro a cada montagem.

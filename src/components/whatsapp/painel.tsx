@@ -13,6 +13,10 @@ import { EnvioPorModelo } from "@/components/whatsapp/painel/modelo";
 import { ResumoDoAtendimento } from "@/components/whatsapp/painel/resumo";
 import { Composicao } from "@/components/whatsapp/painel/composicao";
 import {
+  definirEstadoDoPainel,
+  useEstadoDoPainel,
+} from "@/components/whatsapp/estado-do-painel";
+import {
   BotaoDeEtiquetas,
   ChipDeEtiqueta,
   PALETA,
@@ -122,7 +126,14 @@ export function PainelWhatsapp() {
   const { avisar } = useAvisos();
 
   const estreito = useEstreito();
-  const [aberto, setAberto] = useState(false);
+  /*
+   * Aberto e nao lidas moram FORA deste componente.
+   *
+   * O botao que abre o painel passou a viver na barra lateral, em outro ramo da
+   * arvore. Ver `estado-do-painel`.
+   */
+  const { aberto } = useEstadoDoPainel();
+  const fechar = useCallback(() => definirEstadoDoPainel({ aberto: false }), []);
   const [conversas, setConversas] = useState<Conversa[]>([]);
   const [selecionada, setSelecionada] = useState<Conversa | null>(null);
   const [mensagens, setMensagens] = useState<Mensagem[]>([]);
@@ -168,6 +179,16 @@ export function PainelWhatsapp() {
   }, []);
 
   const naoLidas = conversas.reduce((soma, c) => soma + c.naoLidas, 0);
+
+  /*
+   * O contador vai para a barra lateral.
+   *
+   * ⚠️ Em efeito, e nao durante o render: escrever numa loja externa enquanto o
+   * React monta a arvore avisaria quem ja pintou, no meio da pintura.
+   */
+  useEffect(() => {
+    definirEstadoDoPainel({ naoLidas });
+  }, [naoLidas]);
 
   /*
    * O que cada caixa mostrou da ultima vez.
@@ -481,12 +502,12 @@ export function PainelWhatsapp() {
     if (!aberto || configAberta) return;
 
     const aoTeclar = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setAberto(false);
+      if (e.key === "Escape") fechar();
     };
 
     document.addEventListener("keydown", aoTeclar);
     return () => document.removeEventListener("keydown", aoTeclar);
-  }, [aberto, configAberta]);
+  }, [aberto, configAberta, fechar]);
 
   async function responder(texto: string) {
     if (!selecionada) return;
@@ -574,7 +595,7 @@ export function PainelWhatsapp() {
   const conteudo = (
     <>
       <div
-            onClick={() => setAberto(false)}
+            onClick={fechar}
             aria-hidden
             style={{
               position: "fixed",
@@ -622,7 +643,7 @@ export function PainelWhatsapp() {
               cabecalho.
             */}
             <button
-              onClick={() => setAberto(false)}
+              onClick={fechar}
               aria-label="Fechar"
               title="Fechar"
               style={{
@@ -717,7 +738,7 @@ export function PainelWhatsapp() {
               onArquivar={() => {
                 if (selecionada) void arquivarConversa(selecionada, !selecionada.arquivada);
               }}
-              onSair={() => setAberto(false)}
+              onSair={fechar}
               onVinculou={() => {
                 if (selecionada) void abrirConversa(selecionada);
                 void carregarConversas(contaAtual?.id ?? null, busca.trim() || undefined);
@@ -736,106 +757,11 @@ export function PainelWhatsapp() {
     </>
   );
 
-  return (
-    <>
-      <BotaoDaBarra naoLidas={naoLidas} ativo={aberto} onClick={() => setAberto((v) => !v)} />
-      {aberto && typeof document !== "undefined"
-        ? createPortal(conteudo, document.body)
-        : null}
-    </>
-  );
+  return aberto && typeof document !== "undefined"
+    ? createPortal(conteudo, document.body)
+    : null;
 }
 
-// ── Botao da barra ──────────────────────────────────────────────
-
-/**
- * Botao flutuante, preso ao canto inferior direito da tela.
- *
- * Sai do topo porque nao pertence a nenhuma tela: responder cliente interrompe
- * o que a pessoa estava fazendo, venha de onde vier. No canto ele fica
- * alcancavel sem competir com a busca global nem com o aviso de demonstracao.
- *
- * z-index 300 e DELIBERADO: fica abaixo do veu do painel (400), entao ao abrir
- * a conversa o botao some junto com o resto da tela, em vez de boiar por cima do
- * proprio painel que ele abriu.
- */
-function BotaoDaBarra({
-  naoLidas,
-  ativo,
-  onClick,
-}: {
-  naoLidas: number;
-  ativo: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title="WhatsApp"
-      aria-label={naoLidas > 0 ? `WhatsApp, ${naoLidas} não lidas` : "WhatsApp"}
-      aria-pressed={ativo}
-      className="redondo"
-      style={{
-        position: "fixed",
-        right: 20,
-        bottom: 20,
-        zIndex: 300,
-        width: 54,
-        height: 54,
-        display: "grid",
-        placeItems: "center",
-        border: "none",
-        borderRadius: "var(--radius-full)",
-        background: "var(--primary)",
-        color: "var(--primary-fg)",
-        boxShadow: "var(--shadow-md)",
-        cursor: "pointer",
-        transition: "transform 140ms var(--ease-out), filter 140ms var(--ease)",
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.transform = "scale(1.06)";
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.transform = "scale(1)";
-      }}
-    >
-      {/*
-        O glifo do WhatsApp: balao com o fone dentro, preenchido. O contorno
-        generico de "mensagem" nao se reconhece a 54px no canto da tela, e o que
-        faz este botao ser encontrado sem legenda e justamente a silhueta.
-      */}
-      <svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-        <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.9-4.45 9.9-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2zm0 18.15h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.19 8.19 0 0 1-1.26-4.38c0-4.54 3.7-8.23 8.25-8.23 2.2 0 4.27.86 5.83 2.42a8.18 8.18 0 0 1 2.41 5.82c0 4.54-3.7 8.23-8.24 8.23zm4.52-6.16c-.25-.13-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.24-.64.8-.79.97-.14.16-.29.18-.54.06-.25-.13-1.05-.39-1.99-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.01-.38.11-.5.11-.11.25-.29.37-.44.13-.15.17-.25.25-.42.08-.16.04-.31-.02-.44-.06-.12-.56-1.35-.77-1.85-.2-.48-.4-.42-.56-.43h-.47c-.16 0-.43.06-.65.31-.23.25-.85.83-.85 2.02s.87 2.34.99 2.5c.12.17 1.71 2.62 4.15 3.67.58.25 1.03.4 1.39.51.58.19 1.11.16 1.53.1.47-.07 1.44-.59 1.64-1.16.2-.57.2-1.05.14-1.16-.06-.11-.22-.17-.47-.29z" />
-      </svg>
-
-      {naoLidas > 0 && (
-        <span
-          className="redondo"
-          style={{
-            position: "absolute",
-            top: 0,
-            right: 0,
-            minWidth: 21,
-            height: 21,
-            padding: "0 5px",
-            display: "grid",
-            placeItems: "center",
-            borderRadius: "var(--radius-full)",
-            background: "var(--danger)",
-            color: "#fff",
-            fontSize: "var(--text-xs)",
-            fontWeight: "var(--fw-semi)",
-            lineHeight: 1,
-            border: "2px solid var(--sidebar-bg)",
-          }}
-        >
-          {naoLidas > 99 ? "99+" : naoLidas}
-        </span>
-      )}
-    </button>
-  );
-}
 
 // ── Avatar ──────────────────────────────────────────────────────
 

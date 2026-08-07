@@ -15,6 +15,7 @@ import { useFavoritos } from "@/components/layout/favoritos";
 import { ArvoreNav, GrupoFlutuante, ItemNav, ehAtivo } from "@/components/layout/nav";
 import { Icon } from "@/components/layout/icones";
 import { MenuUsuario } from "@/components/layout/menu-usuario";
+import { BotaoLateralDoWhatsapp } from "@/components/whatsapp/botao-lateral";
 import { COOKIE_SIDEBAR } from "@/components/layout/cookies";
 
 /**
@@ -37,6 +38,7 @@ export function Sidebar({
   grupos: gruposFixos,
   inicio = "/dashboard",
   hrefTrocarEmpresa,
+  whatsapp = false,
 }: {
   modulos: Modulo[];
   empresa: string | null;
@@ -57,6 +59,13 @@ export function Sidebar({
   inicio?: string;
   /** Destino do "Trocar de empresa". O portal escolhe entre EMISSORES. */
   hrefTrocarEmpresa?: string;
+  /**
+   * O acesso ao WhatsApp, acima da identidade do usuario.
+   *
+   * ⚠️ Nao vem ligado. O portal do cliente usa esta mesma barra, e la nao ha
+   * caixa de entrada nenhuma para abrir.
+   */
+  whatsapp?: boolean;
 }) {
   const pathname = usePathname();
   const [recolhida, setRecolhida] = useState(recolhidaInicial);
@@ -197,8 +206,14 @@ export function Sidebar({
         )}
       </nav>
 
-      {/* Rodape: empresa ativa e identidade do usuario. */}
+      {/* Rodape: WhatsApp, empresa ativa e identidade do usuario. */}
       <div style={{ flexShrink: 0, padding: recolhida ? "10px 6px" : "10px 12px" }}>
+        {whatsapp && (
+          <div style={{ marginBottom: 8 }}>
+            <BotaoLateralDoWhatsapp recolhida={recolhida} />
+          </div>
+        )}
+
         {!recolhida && empresa && (
           /*
            * A empresa ativa e o alvo da troca, quando ha mais de uma.
