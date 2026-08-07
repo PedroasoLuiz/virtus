@@ -62,6 +62,29 @@ const LARGURA_LISTA = 384;
  */
 const RECUO_DO_NOME = 46;
 
+/*
+ * O respiro lateral do cartao, agora que ele vai de ponta a ponta.
+ *
+ * ⚠️ Saiu da COLUNA e entrou no CARTAO. Na coluna, o realce do selecionado
+ * parava antes da borda do painel e a conversa aberta parecia um bloco solto no
+ * meio da lista; no cartao, o texto fica no mesmo lugar e o realce chega a
+ * extremidade, como no WhatsApp.
+ */
+const RESPIRO_DO_CARTAO = 16;
+
+/*
+ * As tres faixas da linha, em altura FIXA: nome, previa de duas linhas e
+ * etiqueta.
+ *
+ * ⚠️ Fixa mesmo quando nao ha etiqueta ou quando a previa tem uma linha so.
+ * Altura variavel fazia cada conversa ter um tamanho, e a lista virava uma
+ * escada: o olho perde a cadencia e passa a procurar cada nome em vez de
+ * varrer a coluna.
+ */
+const ALTURA_DO_NOME = 18;
+const ALTURA_DA_PREVIA = 29;
+const ALTURA_DA_ETIQUETA = 17;
+
 /** Mensagens do mesmo lado dentro desta janela viram um bloco so. */
 const AGRUPA_ATE_MS = 5 * 60 * 1000;
 
@@ -181,17 +204,28 @@ export function PainelWhatsapp() {
       setConversas((atuais) => atuais.map(aplicar));
       setSelecionada((atual) => (atual ? aplicar(atual) : atual));
 
-      await fetch(`/api/v1/whatsapp/conversas/${conversa.id}`, {
+      const r = await fetch(`/api/v1/whatsapp/conversas/${conversa.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ etiquetas: marcadas }),
       });
+
+      // Falhou: desfaz o que o painel ja tinha mostrado. Um chip aceso sobre
+      // uma marca que nao gravou e pior que nao ter marcado nada.
+      if (!r.ok) {
+        const voltar = (c: Conversa) =>
+          c.id === conversa.id ? { ...c, etiquetas: conversa.etiquetas } : c;
+
+        setConversas((atuais) => atuais.map(voltar));
+        setSelecionada((atual) => (atual ? voltar(atual) : atual));
+        avisar("erro", "Não foi possível salvar a etiqueta");
+      }
     },
-    [],
+    [avisar],
   );
 
   const criarEtiqueta = useCallback(
-    async (nome: string, cor: CorDeEtiqueta) => {
+    async (nome: string, cor: CorDeEtiqueta): Promise<number | null> => {
       const r = await fetch("/api/v1/whatsapp/etiquetas", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -200,10 +234,13 @@ export function PainelWhatsapp() {
 
       if (!r.ok) {
         avisar("erro", "Não foi possível criar a etiqueta");
-        return;
+        return null;
       }
 
+      const corpo = await r.json();
       await carregarEtiquetas();
+
+      return corpo.data?.id ?? null;
     },
     [avisar, carregarEtiquetas],
   );
@@ -1042,12 +1079,12 @@ function ListaDeConversas({
             display: "flex",
             alignItems: "center",
             gap: 10,
-            marginTop: -2,
+            marginTop: 6,
             padding: 0,
             border: "none",
             background: "transparent",
             color: verArquivadas ? "var(--primary)" : "var(--text-tertiary)",
-            fontSize: "var(--text-sm)",
+            fontSize: "var(--text-md)",
             fontWeight: "var(--fw-semi)",
             fontFamily: "var(--font)",
             cursor: "pointer",
@@ -1055,7 +1092,7 @@ function ListaDeConversas({
           }}
         >
           <span style={{ width: 36, flexShrink: 0, display: "grid", placeItems: "center" }}>
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="4" width="18" height="4.5" rx="1.4" />
               <path d="M5 8.5V19a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19V8.5M10 12.5h4" />
             </svg>
@@ -1069,7 +1106,7 @@ function ListaDeConversas({
         assim o cartao do chat comeca e termina exatamente onde o campo de busca,
         e o realce do selecionado nao escapa para os lados.
       */}
-      <div style={{ flex: 1, overflowY: "auto", minHeight: 0, padding: "0 12px 8px 16px" }}>
+      <div style={{ flex: 1, overflowY: "auto", minHeight: 0, paddingBottom: 8 }}>
         {listadas.length === 0 ? (
           <p
             style={{
@@ -1160,9 +1197,9 @@ function ItemDaLista({
          * de cima a baixo. O respiro que sobrou e so o de cima e o de baixo,
          * maior que antes, porque agora ha um divisor separando as conversas.
          */
-        padding: "11px 0",
+        padding: `10px ${RESPIRO_DO_CARTAO}px`,
         border: "none",
-        borderRadius: "var(--radius-sm)",
+        borderRadius: 0,
         // A lista ficou branca, entao branco no selecionado nao destaca nada.
         // O realce passa a ser o verde suave da marca, o mesmo que a sidebar usa
         // para o item aberto.
@@ -1208,7 +1245,14 @@ function ItemDaLista({
       </div>
 
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            height: ALTURA_DO_NOME,
+          }}
+        >
           <span
             style={{
               flex: 1,
@@ -1234,7 +1278,16 @@ function ItemDaLista({
           </span>
         </div>
 
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 6, marginTop: 1 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 6,
+            marginTop: 1,
+            height: ALTURA_DA_PREVIA,
+            overflow: "hidden",
+          }}
+        >
           <span
             style={{
               flex: 1,
@@ -1280,13 +1333,20 @@ function ItemDaLista({
           faixa que estava vazia e ainda le como o que e: uma marca colada na
           conversa, e nao parte do titulo.
         */}
-        {marcadas.length > 0 && (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 5 }}>
-            {marcadas.map((e) => (
-              <ChipDeEtiqueta key={e.id} etiqueta={e} miudo />
-            ))}
-          </div>
-        )}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 4,
+            marginTop: 4,
+            height: ALTURA_DA_ETIQUETA,
+            overflow: "hidden",
+          }}
+        >
+          {marcadas.map((e) => (
+            <ChipDeEtiqueta key={e.id} etiqueta={e} miudo />
+          ))}
+        </div>
       </div>
     </button>
 
@@ -1298,7 +1358,11 @@ function ItemDaLista({
     {!ultimo && (
       <div
         aria-hidden
-        style={{ height: 1, marginLeft: RECUO_DO_NOME, background: "var(--border)" }}
+        style={{
+          height: 1,
+          marginLeft: RESPIRO_DO_CARTAO + RECUO_DO_NOME,
+          background: "var(--border)",
+        }}
       />
     )}
     </div>
@@ -1677,7 +1741,7 @@ function Thread({
   /** As etiquetas da empresa, para marcar sem sair da conversa. */
   etiquetas: Etiqueta[];
   onAlternarEtiqueta: (id: number) => void;
-  onCriarEtiqueta: (nome: string, cor: CorDeEtiqueta) => Promise<void>;
+  onCriarEtiqueta: (nome: string, cor: CorDeEtiqueta) => Promise<number | null>;
   onArquivar: () => void;
   /** Fecha o painel inteiro. Sair para o cadastro sem isto deixaria o veu por cima. */
   onSair: () => void;

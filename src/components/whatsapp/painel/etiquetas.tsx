@@ -144,7 +144,8 @@ export function BotaoDeEtiquetas({
   etiquetas: Etiqueta[];
   marcadas: number[];
   onAlternar: (id: number) => void;
-  onCriar: (nome: string, cor: CorDeEtiqueta) => Promise<void>;
+  /** Devolve o id da etiqueta criada, para ela ja entrar marcada. */
+  onCriar: (nome: string, cor: CorDeEtiqueta) => Promise<number | null>;
 }) {
   const [aberto, setAberto] = useState(false);
   const caixa = useRef<HTMLDivElement>(null);
@@ -209,7 +210,7 @@ function MenuDeEtiquetas({
   etiquetas: Etiqueta[];
   marcadas: number[];
   onAlternar: (id: number) => void;
-  onCriar: (nome: string, cor: CorDeEtiqueta) => Promise<void>;
+  onCriar: (nome: string, cor: CorDeEtiqueta) => Promise<number | null>;
 }) {
   const [criando, setCriando] = useState(false);
   const [nome, setNome] = useState("");
@@ -221,10 +222,19 @@ function MenuDeEtiquetas({
     if (!limpo || salvando) return;
 
     setSalvando(true);
-    await onCriar(limpo, cor);
+    const id = await onCriar(limpo, cor);
     setSalvando(false);
     setNome("");
     setCriando(false);
+
+    /*
+     * ⚠️ Criada JA MARCADA nesta conversa.
+     *
+     * Ninguem abre o menu de uma conversa para cadastrar etiqueta: cria porque
+     * quer classificar ESTA. Deixar a criacao sem efeito obrigava a um segundo
+     * clique para fazer o que o primeiro parecia ter feito.
+     */
+    if (id) onAlternar(id);
   };
 
   return (
