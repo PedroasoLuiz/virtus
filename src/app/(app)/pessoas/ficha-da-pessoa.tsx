@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useAvisos } from "@/components/ui/avisos";
 import { Avatar } from "@/components/ui/avatar";
-import { ActiveToggle, Button, selectStyle } from "@/components/ui/kit";
+import { ActiveToggle, Button, Field, inputStyle, selectStyle } from "@/components/ui/kit";
 import type { Cliente, PapelPessoa } from "@/modules/clientes/clientes.types";
 
 /**
@@ -13,27 +13,12 @@ import type { Cliente, PapelPessoa } from "@/modules/clientes/clientes.types";
  * que ela abre: com o drawer, ver um telefone custava abrir, ler e fechar, e
  * comparar dois cadastros era impossível. Ao lado da lista, trocar de pessoa é
  * um clique e a ficha simplesmente troca.
- */
-
-/*
- * O campo dentro da ficha: SEM moldura própria.
  *
- * ⚠️ A seção já é uma caixa e cada linha já tem sua divisória. Uma borda por
- * campo dentro disso são três molduras aninhadas, e a ficha volta a parecer o
- * formulário que ela deixou de ser. É a anatomia dos Ajustes do iOS: o valor
- * fica solto ao lado do rótulo, e só o cursor mostra que dá para editar.
+ * ⚠️ Sem caixas em volta das seções. O que separa uma da outra é a RÉGUA sob o
+ * título e o espaço em branco, como no App Store Connect. Molduras aninhadas
+ * (cartão, seção, campo) foi a primeira tentativa, e o resultado parecia
+ * formulário empilhado em vez de ficha.
  */
-const campoDaFicha: React.CSSProperties = {
-  width: "100%",
-  height: 30,
-  padding: 0,
-  border: "none",
-  background: "transparent",
-  color: "var(--text-primary)",
-  fontSize: "var(--text-base)",
-  fontFamily: "var(--font)",
-  outline: "none",
-};
 
 const PAPEIS: { valor: PapelPessoa; rotulo: string }[] = [
   { valor: "cliente", rotulo: "Cliente" },
@@ -98,8 +83,8 @@ export function FichaDaPessoa({
    *
    * Salvar a cada tecla parece elegante e é perigoso num cadastro: apagar o CNPJ
    * para redigitar gravaria o vazio no meio do caminho, e um clique errado na
-   * lista sairia da ficha com metade da alteração no banco. O botão só aparece
-   * quando há diferença, então ele não fica pedindo atenção à toa.
+   * lista sairia da ficha com metade da alteração no banco. A barra só aparece
+   * quando há diferença, então ela não fica pedindo atenção à toa.
    */
   const mudou = JSON.stringify(form) !== JSON.stringify(inicial(pessoa));
   const podeSalvar = form.razao.trim().length > 0 && form.papeis.length > 0 && mudou;
@@ -141,148 +126,122 @@ export function FichaDaPessoa({
 
   const titulo = form.razao.trim() || (editando ? "Sem nome" : "Novo cadastro");
 
+  /*
+   * A linha de apoio do cabeçalho, separada por ponto.
+   *
+   * ⚠️ Papel entra aqui como TEXTO, e não como pastilha colorida. São até três,
+   * e três pastilhas verdes embaixo de um nome grande brigam com ele: a linha
+   * cinza diz a mesma coisa e deixa o nome ser o único destaque do topo.
+   */
+  const apoio = [
+    ...form.papeis.map((p) => PAPEIS.find((x) => x.valor === p)?.rotulo ?? p),
+    editando ? `#${pessoa.id}` : null,
+    editando && !form.ativo ? "Inativo" : null,
+  ].filter(Boolean) as string[];
+
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: 0, height: "100%" }}>
-      {/*
-        O topo é o CARTÃO de identidade: avatar grande, nome e papéis. O mesmo
-        gesto do app Contatos — quem é, antes do que se sabe sobre.
-      */}
-      <div
-        style={{
-          flexShrink: 0,
-          display: "flex",
-          alignItems: "center",
-          gap: 14,
-          padding: "4px 4px 18px",
-        }}
-      >
-        <Avatar
-          nome={titulo}
-          semente={String(pessoa?.id ?? (form.razao || "novo"))}
-          tamanho={56}
-        />
+      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "28px 32px 24px" }}>
+        <header style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 30 }}>
+          <Avatar
+            nome={titulo}
+            semente={String(pessoa?.id ?? (form.razao || "novo"))}
+            tamanho={54}
+          />
 
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div
-            style={{
-              fontSize: "calc(var(--text-lg) + 2px)",
-              fontWeight: "var(--fw-semi)",
-              letterSpacing: "var(--tracking-snug)",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-            title={titulo}
-          >
-            {titulo}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h1
+              style={{
+                fontSize: "var(--text-3xl)",
+                fontWeight: "var(--fw-bold)",
+                letterSpacing: "var(--tracking-tight)",
+                lineHeight: "var(--lh-tight)",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+              title={titulo}
+            >
+              {titulo}
+            </h1>
+
+            <p
+              style={{
+                marginTop: 6,
+                fontSize: "var(--text-base)",
+                color: "var(--text-tertiary)",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {apoio.length > 0 ? apoio.join(" · ") : "Escolha ao menos um papel"}
+            </p>
           </div>
+        </header>
 
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 5,
-              marginTop: 5,
-              flexWrap: "wrap",
-            }}
-          >
-            {form.papeis.length === 0 ? (
-              <span style={{ fontSize: "var(--text-xs)", color: "var(--danger-text)" }}>
-                Escolha ao menos um papel
-              </span>
-            ) : (
-              form.papeis.map((p) => (
-                <span
-                  key={p}
-                  style={{
-                    height: 19,
-                    padding: "0 8px",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    borderRadius: "var(--radius-full)",
-                    background: "var(--primary-subtle)",
-                    color: "var(--primary)",
-                    fontSize: "var(--text-xs)",
-                    fontWeight: "var(--fw-semi)",
-                  }}
-                >
-                  {PAPEIS.find((x) => x.valor === p)?.rotulo ?? p}
-                </span>
-              ))
-            )}
-
-            {editando && (
-              <span style={{ fontSize: "var(--text-xs)", color: "var(--text-tertiary)" }}>
-                #{pessoa.id}
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div style={{ flex: 1, minHeight: 0, overflowY: "auto", paddingBottom: 4 }}>
         <Secao titulo="Identificação">
-          <Linha rotulo="Razão social" obrigatorio>
+          <Field label="Razão social" required>
             <input
-              style={campoDaFicha}
+              style={inputStyle}
               value={form.razao}
               onChange={(e) => set("razao", e.target.value)}
               placeholder="Nome completo ou razão social"
             />
-          </Linha>
+          </Field>
 
-          <Linha rotulo="Nome fantasia">
+          <Field label="Nome fantasia">
             <input
-              style={campoDaFicha}
+              style={inputStyle}
               value={form.nomeFantasia}
               onChange={(e) => set("nomeFantasia", e.target.value)}
               placeholder="Como é conhecida"
             />
-          </Linha>
+          </Field>
 
-          <Linha rotulo="CNPJ / CPF">
+          <Field label="CNPJ / CPF" hint="Somente números; deixe vazio se não tiver">
             <input
-              style={campoDaFicha}
+              style={inputStyle}
               value={form.cnpj}
               onChange={(e) => set("cnpj", e.target.value)}
-              placeholder="Somente números"
+              placeholder="00.000.000/0000-00"
             />
-          </Linha>
+          </Field>
         </Secao>
 
         <Secao titulo="Contato">
-          <Linha rotulo="Responsável">
+          <Field label="Responsável">
             <input
-              style={campoDaFicha}
+              style={inputStyle}
               value={form.responsavel}
               onChange={(e) => set("responsavel", e.target.value)}
               placeholder="Pessoa de contato"
             />
-          </Linha>
+          </Field>
 
-          <Linha rotulo="Telefone">
+          <Field label="Telefone">
             <input
-              style={campoDaFicha}
+              style={inputStyle}
               value={form.contato}
               onChange={(e) => set("contato", e.target.value)}
               placeholder="(00) 00000-0000"
             />
-          </Linha>
+          </Field>
 
-          <Linha rotulo="E-mail">
+          <Field label="E-mail">
             <input
-              style={campoDaFicha}
+              style={inputStyle}
               type="email"
               value={form.email}
               onChange={(e) => set("email", e.target.value)}
               placeholder="financeiro@empresa.com.br"
             />
-          </Linha>
+          </Field>
         </Secao>
 
-        <Secao titulo="No sistema">
-          <Linha rotulo="Papéis" obrigatorio>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        <Secao titulo="No sistema" ultima>
+          <Field label="Papéis" required>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", paddingTop: 2 }}>
               {PAPEIS.map((p) => {
                 const marcado = form.papeis.includes(p.valor);
 
@@ -300,7 +259,7 @@ export function FichaDaPessoa({
                     }
                     aria-pressed={marcado}
                     style={{
-                      height: 28,
+                      height: 26,
                       padding: "0 11px",
                       borderRadius: "var(--radius-full)",
                       border: `1px solid ${marcado ? "var(--primary-border)" : "var(--border-strong)"}`,
@@ -317,21 +276,13 @@ export function FichaDaPessoa({
                 );
               })}
             </div>
-          </Linha>
+          </Field>
 
-          <Linha rotulo="Centro de custo">
+          <Field label="Centro de custo" hint="Padrão: Geral">
             <select
               value={form.centroCustoId}
               onChange={(e) => set("centroCustoId", e.target.value)}
-              style={{
-                ...selectStyle,
-                width: "100%",
-                height: 30,
-                paddingLeft: 0,
-                border: "none",
-                background: "transparent",
-                backgroundImage: "none",
-              }}
+              style={{ ...selectStyle, width: "100%" }}
             >
               <option value="">Geral (padrão)</option>
               {centros.map((c) => (
@@ -340,17 +291,24 @@ export function FichaDaPessoa({
                 </option>
               ))}
             </select>
-          </Linha>
+          </Field>
 
           {editando && (
-            <Linha rotulo="Situação">
-              <div style={{ display: "flex", alignItems: "center", gap: 8, height: 30 }}>
+            <Field label="Situação">
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  height: "var(--h-input)",
+                }}
+              >
                 <ActiveToggle active={form.ativo} onChange={() => set("ativo", !form.ativo)} />
                 <span style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>
                   {form.ativo ? "Ativo" : "Inativo"}
                 </span>
               </div>
-            </Linha>
+            </Field>
           )}
         </Secao>
       </div>
@@ -369,12 +327,12 @@ export function FichaDaPessoa({
             display: "flex",
             alignItems: "center",
             gap: 8,
-            paddingTop: 12,
-            marginTop: 4,
+            padding: "12px 32px",
             borderTop: "1px solid var(--border)",
+            background: "var(--surface)",
           }}
         >
-          <span style={{ flex: 1, fontSize: "var(--text-xs)", color: "var(--text-tertiary)" }}>
+          <span style={{ flex: 1, fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>
             {mudou ? "Alterações não salvas" : "Preencha e salve para criar"}
           </span>
 
@@ -399,85 +357,39 @@ export function FichaDaPessoa({
 }
 
 /**
- * Um bloco de campos com título discreto.
+ * Um bloco de campos: título e uma RÉGUA embaixo.
  *
- * ⚠️ Título em caixa alta e pequeno, no tom terciário — é uma divisória, não um
- * cabeçalho de tela. Três títulos com o peso do nome da pessoa fariam a ficha
- * parecer três telas empilhadas.
+ * ⚠️ Régua, e não moldura. A caixa FECHA o conteúdo e conta como mais um nível
+ * de hierarquia; a linha só marca onde um assunto acaba. Numa ficha com três
+ * assuntos, três caixas viram três telas empilhadas — foi exatamente o que
+ * aconteceu na primeira tentativa.
  */
-function Secao({ titulo, children }: { titulo: string; children: React.ReactNode }) {
-  return (
-    <section style={{ marginBottom: 20 }}>
-      <div
-        style={{
-          marginBottom: 8,
-          fontSize: "var(--text-xs)",
-          fontWeight: "var(--fw-semi)",
-          color: "var(--text-tertiary)",
-          textTransform: "uppercase",
-          letterSpacing: "0.04em",
-        }}
-      >
-        {titulo}
-      </div>
-
-      <div
-        style={{
-          border: "1px solid var(--border)",
-          borderRadius: "var(--radius-lg)",
-          background: "var(--surface)",
-          overflow: "hidden",
-        }}
-      >
-        {children}
-      </div>
-    </section>
-  );
-}
-
-/**
- * Um campo: rótulo à esquerda, valor à direita.
- *
- * ⚠️ Deitado, e não empilhado. É a anatomia dos Ajustes do iOS, e ela existe por
- * um motivo prático: com o rótulo em cima, cada campo custa duas linhas e a
- * ficha inteira vira rolagem. Lado a lado, os rótulos formam uma coluna que o
- * olho desce sem ler tudo.
- */
-function Linha({
-  rotulo,
-  obrigatorio = false,
+function Secao({
+  titulo,
+  ultima = false,
   children,
 }: {
-  rotulo: string;
-  obrigatorio?: boolean;
+  titulo: string;
+  /** Sem o vão de baixo: o rodapé de salvar já fecha a ficha. */
+  ultima?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <label
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 12,
-        padding: "8px 12px",
-        // A divisória some na última: linha embaixo do último campo desenharia
-        // um fundo de moldura dentro da própria moldura.
-        borderBottom: "1px solid var(--border)",
-      }}
-      className="linha-da-ficha"
-    >
-      <span
+    <section style={{ marginBottom: ultima ? 0 : 30 }}>
+      <h2
         style={{
-          width: 118,
-          flexShrink: 0,
-          fontSize: "var(--text-sm)",
-          color: "var(--text-secondary)",
+          paddingBottom: 9,
+          marginBottom: 14,
+          borderBottom: "1px solid var(--border)",
+          fontSize: "var(--text-xl)",
+          fontWeight: "var(--fw-semi)",
+          letterSpacing: "var(--tracking-snug)",
         }}
       >
-        {rotulo}
-        {obrigatorio && <span style={{ color: "var(--danger)" }}> *</span>}
-      </span>
+        {titulo}
+      </h2>
 
-      <span style={{ flex: 1, minWidth: 0 }}>{children}</span>
-    </label>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>{children}</div>
+    </section>
   );
 }

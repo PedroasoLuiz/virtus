@@ -19,3 +19,6 @@ _legado/
 
 # Documentacao interna: fica no disco, fora do repositorio.
 docs/
+
+# Capturas soltas na raiz: sao referencia de conversa, nao codigo.
+/Captura de tela*.png

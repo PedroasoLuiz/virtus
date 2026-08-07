@@ -18,6 +18,12 @@ import { FichaDaPessoa } from "./ficha-da-pessoa";
  * contato, papéis" em cinco colunas obriga a ler na horizontal para montar uma
  * pessoa na cabeça — e das cinco, só o nome serve para ACHAR alguém. As outras
  * são o que se lê depois de achar, que é exatamente o que a ficha mostra.
+ *
+ * ⚠️ Sem o cartão branco sobre o cinza. Esta tela é a página inteira, e não uma
+ * tabela dentro dela: o branco vai de ponta a ponta e quem separa a lista da
+ * ficha é uma régua de um pixel. O cartão dentro do cinza é a moldura das telas
+ * de LISTAGEM, e usar as duas coisas juntas somava uma borda que não separava
+ * nada.
  */
 
 const PAPEIS: { valor: PapelPessoa; rotulo: string }[] = [
@@ -72,20 +78,12 @@ export function PessoasTela({
   return (
     <PageLayout>
       <Panel>
-        {/*
-          O mesmo cartão branco das tabelas do sistema, sobre o cinza da casca.
-          Aqui ele vem com respiro em CIMA também: nas outras telas quem dá esse
-          ar é o cabeçalho da página, e nesta o cabeçalho mora dentro da coluna
-          da esquerda.
-        */}
         <div
           style={{
             flex: 1,
             minHeight: 0,
             display: "flex",
-            margin: 16,
             backgroundColor: "var(--surface)",
-            borderRadius: "var(--radius-lg)",
             overflow: "hidden",
           }}
         >
@@ -113,14 +111,20 @@ export function PessoasTela({
                 <span
                   style={{
                     flex: 1,
-                    fontSize: "calc(var(--text-lg) + 2px)",
-                    fontWeight: "var(--fw-semi)",
-                    letterSpacing: "var(--tracking-snug)",
+                    fontSize: "var(--text-2xl)",
+                    fontWeight: "var(--fw-bold)",
+                    letterSpacing: "var(--tracking-tight)",
                   }}
                 >
                   Pessoas
                 </span>
 
+                {/*
+                  O mais REDONDO e cheio, colado no título — o gesto do App Store
+                  Connect. Um quadrado de borda cinza ao lado de um título em
+                  negrito lê como mais um campo do formulário de busca logo
+                  abaixo, e some no meio dele.
+                */}
                 <button
                   type="button"
                   onClick={() => {
@@ -129,19 +133,21 @@ export function PessoasTela({
                   }}
                   aria-label="Novo cadastro"
                   title="Novo cadastro"
+                  className="redondo"
                   style={{
-                    width: 28,
-                    height: 28,
+                    width: 22,
+                    height: 22,
+                    flexShrink: 0,
                     display: "grid",
                     placeItems: "center",
-                    border: "1px solid var(--border-strong)",
-                    background: "var(--surface)",
-                    borderRadius: "var(--radius-sm)",
+                    border: "none",
+                    background: "var(--primary)",
+                    color: "var(--primary-fg)",
+                    borderRadius: "var(--radius-full)",
                     cursor: "pointer",
-                    color: "var(--text-secondary)",
                   }}
                 >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
                     <path d="M12 5v14M5 12h14" />
                   </svg>
                 </button>
@@ -332,7 +338,14 @@ function LinhaDaPessoa({
         padding: "8px 8px",
         border: "none",
         borderRadius: "var(--radius-md)",
-        background: ativa ? "var(--surface-active)" : "transparent",
+        /*
+         * Cinza NEUTRO no escolhido, e não o verde da marca.
+         *
+         * ⚠️ Aqui o realce diz "é este que está aberto ao lado", e não "isto
+         * está ligado". O verde é a cor de ação do sistema; gasto numa seleção
+         * de lista, ele deixa de significar ação em qualquer outro lugar.
+         */
+        background: ativa ? "var(--surface-3)" : "transparent",
         cursor: "pointer",
         textAlign: "left",
         opacity: pessoa.ativo ? 1 : 0.55,
