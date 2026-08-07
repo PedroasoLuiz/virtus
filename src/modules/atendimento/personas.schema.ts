@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { temPalavrao } from "@/shared/domain/linguagem";
 
 /** Contratos de entrada e saida das personas. */
 
@@ -18,7 +19,16 @@ export const salvarPersonaBodySchema = z.object({
   contaId: z.number().int().positive().nullable().default(null),
   /** Vazio e a persona geral. */
   setorId: z.number().int().positive().nullable().default(null),
-  nome: z.string().trim().min(2).max(60),
+  /*
+   * ⚠️ A checagem do nome vive AQUI, e nao so na tela: a tela e conveniencia, o
+   * schema e a regra, e um POST direto passaria por cima do formulario.
+   */
+  nome: z
+    .string()
+    .trim()
+    .min(2)
+    .max(60)
+    .refine((v) => !temPalavrao(v), "Escolha outro nome para esta persona"),
   descricao: z.string().trim().max(2000).nullable().default(null),
   podeResolver: z.string().trim().max(4000).nullable().default(null),
   ativo: z.boolean().default(true),
