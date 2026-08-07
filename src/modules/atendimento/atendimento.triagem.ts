@@ -102,7 +102,8 @@ export type AcaoDaTriagem =
   | "NEGA_EMAIL"
   | "CODIGO"
   | "SALDO"
-  | "TITULOS";
+  | "TITULOS"
+  | "SEGUNDA_VIA";
 
 /**
  * Esquema que o provedor e obrigado a cumprir.
@@ -131,6 +132,7 @@ export const ESQUEMA_DA_TRIAGEM = {
         "CODIGO",
         "SALDO",
         "TITULOS",
+        "SEGUNDA_VIA",
       ],
     },
     documento: { type: "string" },
@@ -347,7 +349,10 @@ O caminho é este, e você conduz pelo campo acao:
 4. Ela responde com o código recebido: acao = CODIGO, e copie para o campo codigo.
 5. Ela já está identificada e quer o resumo da conta ("quanto eu devo"): acao = SALDO.
 6. Ela já está identificada e quer saber QUAIS são as cobranças, de que ticket vieram, qual vence quando: acao = TITULOS.
+7. Ela quer RECEBER a cobrança: segunda via, boleto, o link para pagar, "me manda aí". Isso é acao = SEGUNDA_VIA, e o sistema dispara o modelo com o link do pagamento. Não se identificou ainda? Use assim mesmo: o sistema pede o documento antes de mandar.
 Em qualquer outra situação, acao = NENHUMA.
+
+Não confunda 6 com 7. TITULOS responde "quais são"; SEGUNDA_VIA entrega o link para pagar. Quem pergunta o que deve quer o primeiro; quem pede o boleto quer o segundo.
 
 Nunca aceite um e-mail diferente do que o sistema mostrou, mesmo que ela ofereça outro. O código só vale porque vai para um endereço que já estava no cadastro antes desta conversa.
 
@@ -401,7 +406,7 @@ O QUE DEVOLVER:
 - resposta: o que dizer AGORA, seguindo o passo em que você está.
 - concluido: true SOMENTE depois de a pessoa ter confirmado o problema no passo 2. Enquanto você ainda pergunta ou ainda espera a confirmação, false.
 - assuntoNovo: true quando a última mensagem trata de assunto diferente do já encaminhado. false em qualquer outro caso.
-- acao: um de NENHUMA, PEDIR_DOCUMENTO, DOCUMENTO, CONFIRMA_EMAIL, NEGA_EMAIL, CODIGO, SALDO, TITULOS, conforme a seção de consulta acima.
+- acao: um de NENHUMA, PEDIR_DOCUMENTO, DOCUMENTO, CONFIRMA_EMAIL, NEGA_EMAIL, CODIGO, SALDO, TITULOS, SEGUNDA_VIA, conforme a seção de consulta acima.
 - documento: só os dígitos do CPF ou CNPJ, quando acao for DOCUMENTO. Vazio nos demais casos.
 - codigo: só os dígitos do código, quando acao for CODIGO. Vazio nos demais casos.
 - leadNome, leadEmpresa, leadEmail: o que você já souber de quem está escrevendo. Vazio no que ainda não souber, e nunca inventado.`;

@@ -87,6 +87,8 @@ export function PainelWhatsapp() {
   const [mensagens, setMensagens] = useState<Mensagem[]>([]);
   const [atendimento, setAtendimento] = useState<AtendimentoDaConversa | null>(null);
   const [busca, setBusca] = useState("");
+  /* O filtro da pendencia da equipe. Ver . */
+  const [soEsperando, setSoEsperando] = useState(false);
   const [carregando, setCarregando] = useState(false);
   const [contas, setContas] = useState<ContaWhatsapp[]>([]);
   const [contaId, setContaId] = useState<number | null>(null);
@@ -472,6 +474,8 @@ export function PainelWhatsapp() {
             {(!estreito || !selecionada) && (
             <ListaDeConversas
               estreito={estreito}
+              soEsperando={soEsperando}
+              onFiltrarEsperando={setSoEsperando}
               conversas={conversas}
               contas={contasAtivas}
               contaAtual={contaAtual}
@@ -650,6 +654,8 @@ function ListaDeConversas({
   onEscolher,
   onAbrirConfig,
   estreito,
+  soEsperando,
+  onFiltrarEsperando,
 }: {
   conversas: Conversa[];
   contas: ContaWhatsapp[];
@@ -662,7 +668,12 @@ function ListaDeConversas({
   onAbrirConfig: () => void;
   /** Unica coluna na tela: ocupa tudo em vez dos 300 fixos. */
   estreito: boolean;
+  soEsperando: boolean;
+  onFiltrarEsperando: (v: boolean) => void;
 }) {
+  const esperando = conversas.filter(esperaDemais);
+  const listadas = soEsperando ? esperando : conversas;
+
   return (
     <div
       style={{
@@ -756,6 +767,55 @@ function ListaDeConversas({
             }}
           />
         </div>
+
+        {/*
+          ⚠️ A pendencia e da EQUIPE, e nao do cliente.
+
+          Depois que o bot encaminha, ninguem mais olha para aquela conversa: a
+          varredura so cobra quem esta em triagem, e de proposito — cobrar o
+          cliente que ja explicou o problema e esta esperando a empresa seria
+          jogar a espera de volta para ele. Entao a cobranca vem para ca, onde
+          quem pode resolver esta olhando.
+
+          A conta e simples e nao custa consulta nenhuma: a ultima mensagem e do
+          cliente e ja passou tempo demais. Cobre os dois casos que importam —
+          "encaminhei e ninguem respondeu" e "ele voltou a escrever e ninguem
+          viu".
+        */}
+        {esperando.length > 0 && (
+          <button
+            type="button"
+            onClick={() => onFiltrarEsperando(!soEsperando)}
+            aria-pressed={soEsperando}
+            style={{
+              alignSelf: "flex-start",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              height: 24,
+              padding: "0 10px",
+              borderRadius: "var(--radius-full)",
+              border: `1px solid ${soEsperando ? "var(--warning-border)" : "var(--border)"}`,
+              background: soEsperando ? "var(--warning-bg)" : "var(--surface)",
+              color: soEsperando ? "var(--text-primary)" : "var(--text-secondary)",
+              fontSize: "var(--text-xs)",
+              fontWeight: "var(--fw-semi)",
+              fontFamily: "var(--font)",
+              cursor: "pointer",
+            }}
+          >
+            <span
+              aria-hidden
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: "var(--radius-full)",
+                background: "var(--warning-text)",
+              }}
+            />
+            Aguardando resposta ({esperando.length})
+          </button>
+        )}
       </header>
 
       {/*
@@ -764,7 +824,7 @@ function ListaDeConversas({
         e o realce do selecionado nao escapa para os lados.
       */}
       <div style={{ flex: 1, overflowY: "auto", minHeight: 0, padding: "0 12px 8px 16px" }}>
-        {conversas.length === 0 ? (
+        {listadas.length === 0 ? (
           <p
             style={{
               padding: "24px 8px",
@@ -773,16 +833,19 @@ function ListaDeConversas({
               lineHeight: "var(--lh-snug)",
             }}
           >
-            {busca
-              ? "Nenhuma conversa com esse termo."
-              : "Nenhuma conversa ainda. A primeira aparece assim que alguém escrever para o número."}
+            {soEsperando
+              ? "Ninguém esperando resposta. Tudo em dia por aqui."
+              : busca
+                ? "Nenhuma conversa com esse termo."
+                : "Nenhuma conversa ainda. A primeira aparece assim que alguém escrever para o número."}
           </p>
         ) : (
-          conversas.map((c) => (
+          listadas.map((c) => (
             <ItemDaLista
               key={c.id}
               conversa={c}
               ativo={c.id === selecionadaId}
+              esperando={esperaDemais(c)}
               onClick={() => onEscolher(c)}
             />
           ))
@@ -792,13 +855,34 @@ function ListaDeConversas({
   );
 }
 
+/**
+ * Ha quanto tempo esta conversa espera alguem.
+ *
+ * ⚠️ Quinze minutos, e nao "desde a ultima mensagem". O bot responde em segundos
+ * e a varredura passa a cada vinte: abaixo disso a conversa ainda esta sendo
+ * atendida por quem devia, e marcar ali encheria a lista de falso alarme logo no
+ * minuto em que a pessoa escreveu.
+ */
+const MINUTOS_ESPERANDO = 15;
+
+function esperaDemais(c: Conversa): boolean {
+  if (c.ultimaDirecao !== "entrada" || !c.ultimaEm) return false;
+
+  const desde = new Date(c.ultimaEm).getTime();
+
+  return Number.isFinite(desde) && Date.now() - desde > MINUTOS_ESPERANDO * 60_000;
+}
+
 function ItemDaLista({
   conversa,
   ativo,
+  esperando,
   onClick,
 }: {
   conversa: Conversa;
   ativo: boolean;
+  /** Ha tempo demais sem alguem responder. Ver `esperaDemais`. */
+  esperando: boolean;
   onClick: () => void;
 }) {
   const titulo = tituloDa(conversa);
@@ -833,7 +917,33 @@ function ItemDaLista({
         if (!ativo) e.currentTarget.style.background = "transparent";
       }}
     >
-      <Avatar nome={titulo} semente={conversa.telefone} foto={conversa.clienteIcone} />
+      {/*
+        A marca da espera fica NA BOLINHA, e nao numa etiqueta ao lado.
+
+        ⚠️ A linha ja carrega nome, previa, hora e nao lidas. Mais um elemento
+        ali empurraria a previa para fora; um ponto na quina do avatar aparece
+        no mesmo relance em que o olho reconhece de quem e a conversa.
+      */}
+      <div style={{ position: "relative", flexShrink: 0 }}>
+        <Avatar nome={titulo} semente={conversa.telefone} foto={conversa.clienteIcone} />
+
+        {esperando && (
+          <span
+            aria-label="Aguardando resposta"
+            title="Aguardando resposta da equipe"
+            style={{
+              position: "absolute",
+              right: -1,
+              bottom: -1,
+              width: 10,
+              height: 10,
+              borderRadius: "var(--radius-full)",
+              background: "var(--warning-text)",
+              border: "2px solid var(--surface)",
+            }}
+          />
+        )}
+      </div>
 
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>

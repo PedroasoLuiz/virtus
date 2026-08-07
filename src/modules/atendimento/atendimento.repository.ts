@@ -91,12 +91,79 @@ export async function personas(segredo: string, conversaId: number): Promise<Per
     nome: p.nome,
     descricao: p.descricao,
     evitar: p.evitar,
+    saudacao: p.saudacao,
     podeResolver: p.pode_resolver,
     // `jsonb` chega como `unknown`: so lista de texto interessa.
     permissoes: Array.isArray(p.permissoes) ? (p.permissoes as string[]) : [],
     setorId: p.setor_id,
     setorNome: p.setor_nome,
   }));
+}
+
+/** A parcela que a segunda via leva. Ver `whatsapp_parcela_para_segunda_via`. */
+export async function parcelaParaSegundaVia(
+  segredo: string,
+  conversaId: number,
+): Promise<{
+  clienteNome: string | null;
+  valor: number;
+  vencimento: string;
+  tickets: string;
+  token: string;
+} | null> {
+  const supabase = anonClient();
+
+  const { data, error } = await supabase.rpc("whatsapp_parcela_para_segunda_via", {
+    p_segredo: segredo,
+    p_conversa: conversaId,
+  });
+
+  if (error) throw error;
+
+  const l = data?.[0];
+  if (!l) return null;
+
+  return {
+    clienteNome: l.cliente_nome,
+    valor: Number(l.valor),
+    vencimento: l.vencimento,
+    tickets: l.tickets,
+    token: l.token,
+  };
+}
+
+/** O modelo vinculado a uma finalidade, no numero desta conversa. */
+export async function vinculoDoBot(
+  segredo: string,
+  conversaId: number,
+  finalidade: string,
+): Promise<{
+  modeloNome: string;
+  idioma: string;
+  parametros: string[];
+  botaoParam: string | null;
+  corpo: string | null;
+} | null> {
+  const supabase = anonClient();
+
+  const { data, error } = await supabase.rpc("whatsapp_vinculo_do_bot", {
+    p_segredo: segredo,
+    p_conversa: conversaId,
+    p_finalidade: finalidade,
+  });
+
+  if (error) throw error;
+
+  const l = data?.[0];
+  if (!l) return null;
+
+  return {
+    modeloNome: l.modelo_nome,
+    idioma: l.idioma,
+    parametros: Array.isArray(l.parametros) ? (l.parametros as string[]) : [],
+    botaoParam: l.botao_param ?? null,
+    corpo: l.corpo ?? null,
+  };
 }
 
 export async function mensagens(

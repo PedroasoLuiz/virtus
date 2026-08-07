@@ -26,6 +26,8 @@ export type PersonaRow = {
   descricao: string | null;
   /** O que ela nao faz: o jeito, e nao o assunto. */
   evitar: string | null;
+  /** A mensagem de boas-vindas. Vazia usa a padrao do sistema. */
+  saudacao: string | null;
   pode_resolver: string | null;
   /** Os ids das consultas que ela pode fazer. Ver `atendimento/permissoes.ts`. */
   permissoes: string[];
@@ -886,6 +888,26 @@ export type Database = {
           solicitacao_em: string | null;
         }[];
       };
+      whatsapp_parcela_para_segunda_via: {
+        Args: { p_segredo: string; p_conversa: number };
+        Returns: {
+          cliente_nome: string | null;
+          valor: number;
+          vencimento: string;
+          tickets: string;
+          token: string;
+        }[];
+      };
+      whatsapp_vinculo_do_bot: {
+        Args: { p_segredo: string; p_conversa: number; p_finalidade: string };
+        Returns: {
+          modelo_nome: string;
+          idioma: string;
+          parametros: unknown;
+          botao_param: string | null;
+          corpo: string | null;
+        }[];
+      };
       whatsapp_vinculos_da_empresa: {
         Args: { p_empresa: number };
         Returns: {
@@ -1067,6 +1089,7 @@ export type Database = {
           nome: string;
           descricao: string | null;
           evitar: string | null;
+          saudacao: string | null;
           pode_resolver: string | null;
           setor_id: number | null;
           setor_nome: string | null;

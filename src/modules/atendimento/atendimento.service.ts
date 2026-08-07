@@ -22,6 +22,7 @@ import * as iaRepo from "@/modules/ia/ia.repository";
 import * as ia from "@/modules/ia/ia.cloud";
 import * as whatsapp from "@/modules/whatsapp/whatsapp.cloud";
 import { comAssinaturaDoAutor } from "@/modules/whatsapp/whatsapp.service";
+import { previaDoCorpo } from "@/modules/whatsapp/finalidades";
 import {
   PERSONA_PADRAO,
   ehSoCumprimento,
@@ -276,6 +277,7 @@ function personaDaVez(personas: PersonaDoBot[], setorId: number | null): Persona
 const PERMISSAO_DA_ACAO: Partial<Record<AcaoDaTriagem, string>> = {
   SALDO: "saldo",
   TITULOS: "titulos",
+  SEGUNDA_VIA: "fatura",
 };
 
 /**
@@ -353,6 +355,90 @@ async function passoDaIdentificacao(
 
     return await textoDaConta(segredo, conversaId);
   }
+
+  if (triagem.acao === "SEGUNDA_VIA") {
+    if (!jaVerificado) {
+      return "Posso te mandar sim! Antes preciso confirmar que é você: me manda o CPF ou o CNPJ do cadastro?";
+    }
+
+    return await mandarSegundaVia(segredo, ctx, conversaId);
+  }
+
+  return null;
+}
+
+/**
+ * Manda a segunda via pelo MODELO aprovado, com o link da cobranca.
+ *
+ * ⚠️ Modelo, e nao texto livre com o link colado. O link abre a pagina da
+ * parcela, e mandar o endereco solto num texto faz o WhatsApp tratar como link
+ * qualquer: o modelo tem botao proprio, e e ele que o cliente reconhece como
+ * vindo da empresa. Fora da janela de 24 horas, alias, texto livre nem sai.
+ *
+ * ⚠️ Reaproveita o VINCULO da tela de modelos, e nao um nome fixo. Se a empresa
+ * trocar o template da cobranca, a segunda via troca junto — sem isso ela
+ * apontaria para um modelo que ninguem mantem.
+ *
+ * Devolve `null` quando conseguiu mandar: o modelo ja e a resposta, e um texto
+ * junto seria a mesma coisa dita duas vezes.
+ */
+async function mandarSegundaVia(
+  segredo: string,
+  ctx: ContextoDoBot,
+  conversaId: number,
+): Promise<string | null> {
+  const [parcela, vinculo, cred] = await Promise.all([
+    repo.parcelaParaSegundaVia(segredo, conversaId),
+    repo.vinculoDoBot(segredo, conversaId, "cobranca"),
+    repo.credenciaisDoWhatsapp(segredo, conversaId),
+  ]);
+
+  if (!parcela) {
+    return "Consultei aqui e não encontrei parcela em aberto para mandar. Se você recebeu alguma cobrança, me avisa que eu registro para conferirem.";
+  }
+
+  /*
+   * Sem vinculo, sem envio — e a frase NAO explica isso ao cliente.
+   *
+   * ⚠️ "O modelo não está configurado" é problema nosso, e dizer isso a quem
+   * pediu um boleto transfere para ele uma pendência que não é dele. Ele recebe
+   * o encaminhamento normal, e quem precisa saber vê no log.
+   */
+  if (!vinculo || !cred) {
+    logger.warn("segunda via pedida sem vinculo de cobranca no numero", { conversaId });
+    return "Já registrei o pedido da segunda via. O financeiro te manda em seguida.";
+  }
+
+  const valores: Record<string, string> = {
+    nome: parcela.clienteNome ?? ctx.clienteNome ?? "cliente",
+    valor: parcela.valor.toFixed(2).replace(".", ","),
+    vencimento: parcela.vencimento.split("-").reverse().join("/"),
+    ticket: parcela.tickets,
+    link: parcela.token,
+  };
+
+  const parametros = vinculo.parametros.map((chave) => valores[chave] ?? "");
+  const urlDoBotao = vinculo.botaoParam ? valores[vinculo.botaoParam] : undefined;
+
+  const wamid = await whatsapp.enviarModelo(
+    cred,
+    ctx.telefone,
+    vinculo.modeloNome,
+    vinculo.idioma,
+    parametros,
+    urlDoBotao,
+  );
+
+  // Grava o corpo JA PREENCHIDO, como o envio do painel: o modelo cru deixaria
+  // o historico com `{{1}}` no lugar do valor.
+  await repo.registrarSaidaDoBot(
+    segredo,
+    conversaId,
+    wamid,
+    previaDoCorpo(vinculo.corpo ?? "", parametros),
+  );
+
+  logger.info("segunda via enviada pelo bot", { conversaId });
 
   return null;
 }
@@ -738,7 +824,10 @@ async function executar(conversaId: number): Promise<void> {
       segredo,
       ctx,
       conversaId,
-      saudacaoPronta(primeiroNome, new Date()),
+      saudacaoPronta(primeiroNome, new Date(), {
+        conhecido: ctx.clienteNome != null,
+        modelo: persona.saudacao,
+      }),
       persona,
     );
 

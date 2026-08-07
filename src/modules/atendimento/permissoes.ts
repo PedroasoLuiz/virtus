@@ -81,9 +81,9 @@ export const PERMISSOES: Permissao[] = [
     id: "fatura",
     area: "financeiro",
     rotulo: "Reenviar o link da cobrança",
-    descricao: "Manda de novo o link da página da parcela, o mesmo que vai no e-mail.",
+    descricao:
+      "Dispara o modelo de cobrança com o link da parcela mais próxima de vencer. Cada disparo é cobrado pela Meta.",
     exigeIdentificacao: true,
-    emBreve: true,
   },
   {
     id: "ticket_situacao",

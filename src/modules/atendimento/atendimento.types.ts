@@ -134,6 +134,8 @@ export type PersonaDoBot = {
   descricao: string | null;
   /** O que ela evita no jeito de falar. Ver `personas.types`. */
   evitar: string | null;
+  /** A mensagem de boas-vindas dela. Vazia usa a padrao do sistema. */
+  saudacao: string | null;
   podeResolver: string | null;
   /** Os ids do catalogo de `atendimento/permissoes.ts`. */
   permissoes: string[];

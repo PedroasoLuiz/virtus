@@ -273,6 +273,7 @@ const PERSONA_VAZIA: Persona = {
   nome: "",
   descricao: null,
   evitar: null,
+  saudacao: null,
   podeResolver: null,
   permissoes: [],
   ativo: true,
@@ -349,6 +350,7 @@ function FormularioDaPersona({
         nome: rascunho.nome.trim(),
         descricao: rascunho.descricao?.trim() || null,
         evitar: rascunho.evitar?.trim() || null,
+        saudacao: rascunho.saudacao?.trim() || null,
         permissoes: rascunho.permissoes,
         ativo: rascunho.ativo,
       }),
@@ -466,6 +468,26 @@ function FormularioDaPersona({
             concorrente, nao usar giria. Junto do "quem ela e", virava um
             paragrafo com duas ideias, e o modelo dava peso a primeira.
           */}
+          {/*
+            ⚠️ Texto FIXO, e nao gerado pelo modelo.
+
+            Um "bom dia" solto nao tem o que decidir, e pagar uma chamada ao
+            provedor por cada cumprimento e desperdicio puro. Aqui a empresa
+            escreve a dela uma vez, e ela sai instantanea.
+          */}
+          <Field
+            label="Boas-vindas"
+            hint="A primeira resposta quando a pessoa so cumprimenta. Use {nome} e {periodo}. Vazio usa a do sistema."
+          >
+            <input
+              style={inputStyle}
+              maxLength={400}
+              placeholder="{periodo}{nome}! Que bom ter voce por aqui. Como posso ajudar?"
+              value={rascunho.saudacao ?? ""}
+              onChange={(e) => setRascunho({ ...rascunho, saudacao: e.target.value })}
+            />
+          </Field>
+
           <Field
             label="O que evitar"
             hint="Um item por linha. Ex.: nunca prometer prazo, não falar de concorrente."

@@ -23,6 +23,7 @@ export const PERSONA_PADRAO: PersonaDoBot = {
     "Recebe bem, escuta antes de resolver e fala como gente. É objetiva sem ser seca, confirma o que entendeu antes de encaminhar e nunca deixa a pessoa sem saber o próximo passo.",
   evitar:
     "prometer prazo ou valor\nusar linguagem de call center\nrepetir o que a pessoa acabou de dizer\nencerrar sem confirmar que ficou resolvido",
+  saudacao: null,
   podeResolver: null,
   permissoes: ["titulos", "saldo", "servicos", "horarios"],
   setorId: null,
@@ -41,7 +42,11 @@ export const PERSONA_PADRAO: PersonaDoBot = {
  * o jeito mais rapido de a pessoa perceber que fala com um robo — que e
  * exatamente o que a primeira mensagem nao pode entregar.
  */
-export function saudacaoPronta(primeiroNome: string | null, agora: Date): string {
+export function saudacaoPronta(
+  primeiroNome: string | null,
+  agora: Date,
+  contexto: { conhecido: boolean; modelo: string | null },
+): string {
   const hora = Number(
     new Intl.DateTimeFormat("pt-BR", {
       hour: "numeric",
@@ -51,11 +56,36 @@ export function saudacaoPronta(primeiroNome: string | null, agora: Date): string
   );
 
   const periodo = hora < 12 ? "Bom dia" : hora < 18 ? "Boa tarde" : "Boa noite";
-  const nome = primeiroNome?.trim();
+  const nome = primeiroNome?.trim() ?? "";
 
-  return nome
-    ? `${periodo}, ${nome}! Tudo bem? Me conta o que você precisa.`
-    : `${periodo}! Tudo bem? Me conta o que você precisa.`;
+  /*
+   * O texto da empresa vence o nosso.
+   *
+   * ⚠️ `{nome}` sai antes do `{periodo}` de proposito: quem escreve costuma
+   * comecar a frase com o periodo, e trocar na ordem inversa deixaria um
+   * "Bom dia, {nome}" com o nome vazio virando "Bom dia, !".
+   */
+  if (contexto.modelo?.trim()) {
+    return contexto.modelo
+      .replace(/\{periodo\}/gi, periodo)
+      .replace(/,?\s*\{nome\}/gi, nome ? `, ${nome}` : "")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+  }
+
+  const abertura = nome ? `${periodo}, ${nome}!` : `${periodo}!`;
+
+  /*
+   * ⚠️ Quem NAO tem cadastro recebe outra frase.
+   *
+   * Numero desconhecido em primeiro contato quase sempre e alguem chegando pela
+   * primeira vez, e "me conta o que voce precisa" trata isso como protocolo. E
+   * a mensagem que decide se essa pessoa vira cliente: ela merece ser recebida,
+   * e nao processada.
+   */
+  return contexto.conhecido
+    ? `${abertura} Tudo bem? Me conta o que você precisa.`
+    : `${abertura} Que bom ter você por aqui. Me conta o que você procura que eu te ajudo.`;
 }
 
 /**

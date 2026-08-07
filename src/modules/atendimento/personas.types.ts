@@ -21,6 +21,15 @@ export type Persona = {
    * giria. Junto do "quem ela e", isso se perdia no meio da descricao do tom.
    */
   evitar: string | null;
+  /**
+   * A mensagem de boas-vindas, escrita pela empresa.
+   *
+   * ⚠️ Existe para o cumprimento nao custar uma chamada ao provedor: um "bom
+   * dia" nao tem o que decidir, e pagar por ele todo dia e desperdicio puro.
+   * `{nome}` e trocado pelo primeiro nome do perfil do WhatsApp, e `{periodo}`
+   * pelo bom dia, boa tarde ou boa noite da hora. Vazia usa a padrao.
+   */
+  saudacao: string | null;
   podeResolver: string | null;
   /**
    * O que ela pode CONSULTAR no sistema. Ver `permissoes.ts`.
