@@ -1,15 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useAvisos } from "@/components/ui/avisos";
 import { FormDrawer } from "@/components/ui/form-drawer";
 import {
   ActiveToggle,
-  CabecalhoDeSecao,
   CampoBloqueado,
   Field,
+  Formulario,
+  GrupoDeCampos,
   PanelTabs,
   inputStyle,
-  selectStyle,
 } from "@/components/ui/kit";
 import type { Cliente, ContatoDaPessoa, PapelPessoa } from "@/modules/clientes/clientes.types";
 import { AbaDeContatos } from "./aba-contatos";
@@ -40,6 +41,7 @@ const PAPEIS: { valor: PapelPessoa; rotulo: string; explica: string }[] = [
 ];
 
 const ABA_INFO = "Informações";
+const ABA_PAPEIS = "Papéis";
 const ABA_CONTATOS = "Contatos";
 const ABA_ENDERECO = "Endereço";
 const ABA_BANCARIO = "Bancário";
@@ -54,7 +56,15 @@ const ABA_ACESSO = "Acesso";
  * que quase ninguem toca. Ordenado por frequencia, a aba certa e quase sempre a
  * primeira.
  */
-const ABAS = [ABA_INFO, ABA_CONTATOS, ABA_ENDERECO, ABA_BANCARIO, ABA_CENTROS, ABA_ACESSO];
+const ABAS = [
+  ABA_INFO,
+  ABA_PAPEIS,
+  ABA_CONTATOS,
+  ABA_ENDERECO,
+  ABA_BANCARIO,
+  ABA_CENTROS,
+  ABA_ACESSO,
+];
 
 type Form = {
   razao: string;
@@ -97,10 +107,25 @@ export function PessoaDrawer({
   aberto: boolean;
   onClose: () => void;
 }) {
+  const { avisar } = useAvisos();
+
   // `key` no uso remonta o drawer a cada registro, entao o estado inicial ja
   // vem da pessoa certa e nao precisa de efeito para sincronizar.
   const [form, setForm] = useState<Form>(() => inicial(cliente));
   const [aba, setAba] = useState<string>(ABA_INFO);
+
+  /*
+   * O telefone e o e-mail PRINCIPAIS moram fora do formulário.
+   *
+   * ⚠️ Eles são escolhidos na aba Contatos, numa coluna, e gravam sozinhos. No
+   * formulário, a pessoa cadastrava o telefone numa aba e precisava lembrar de
+   * voltar na outra para dizer qual usar — e o `valores()` do formulário
+   * sobrescreveria a escolha com o valor velho no primeiro salvar.
+   */
+  const [principal, setPrincipal] = useState({
+    telefone: cliente?.contato ?? "",
+    email: cliente?.email ?? "",
+  });
 
   /*
    * ⚠️ O que cada aba já buscou, enquanto este drawer estiver aberto.
@@ -143,8 +168,34 @@ export function PessoaDrawer({
     return () => clearTimeout(t);
   }, [carregarContatos]);
 
-  const telefones = (contatos ?? []).filter((c) => c.tipo === "telefone");
-  const emails = (contatos ?? []).filter((c) => c.tipo === "email");
+  /**
+   * Grava o principal na hora, sem esperar o salvar do formulário.
+   *
+   * ⚠️ É um PATCH de um campo só. Marcar a coluna é gesto de passagem, e guardar
+   * a escolha para o botão de salvar faria quem trocasse de aba e fechasse o
+   * drawer perder o que achou que já tinha feito.
+   */
+  async function marcarPrincipal(tipo: "telefone" | "email", valor: string) {
+    if (!cliente) return;
+
+    setPrincipal((p) => ({ ...p, [tipo]: valor }));
+
+    const r = await fetch(`/api/v1/clientes/${cliente.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(tipo === "telefone" ? { contato: valor } : { email: valor }),
+    });
+
+    if (!r.ok) {
+      // Volta ao que estava: o otimismo era só sobre o que o servidor aceitaria.
+      setPrincipal((p) => ({
+        ...p,
+        [tipo]: tipo === "telefone" ? (cliente.contato ?? "") : (cliente.email ?? ""),
+      }));
+
+      avisar("atencao", "Não foi possível marcar como principal");
+    }
+  }
 
   return (
     <FormDrawer
@@ -163,8 +214,6 @@ export function PessoaDrawer({
         // Campo opcional vazio vai como null: string vazia falharia na
         // validacao de documento e no formato de e-mail.
         cnpj: digitos || null,
-        email: form.email.trim() || null,
-        contato: form.contato.trim() || null,
         responsavel: form.responsavel.trim() || null,
         papeis: form.papeis,
         centroCustoId: form.centroCustoId ? Number(form.centroCustoId) : null,
@@ -188,14 +237,55 @@ export function PessoaDrawer({
           <AbaDeContatos
             clienteId={cliente.id}
             contatos={contatos}
+            principalTelefone={principal.telefone}
+            principalEmail={principal.email}
             onMudou={() => void carregarContatos()}
+            onPrincipal={(tipo, valor) => void marcarPrincipal(tipo, valor)}
           />
+        ) : editando && aba === ABA_PAPEIS ? (
+          <Formulario>
+            <GrupoDeCampos
+              primeiro
+              titulo="Papéis"
+              legenda="Decidem em que telas esta pessoa aparece. Uma transportadora que também compra é um cadastro só, com dois papéis marcados. É preciso ao menos um: sem papel, a pessoa não aparece em lugar nenhum."
+            >
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                {PAPEIS.map((p) => (
+                  <Papel
+                    key={p.valor}
+                    papel={p}
+                    marcado={form.papeis.includes(p.valor)}
+                    onAlternar={() =>
+                      setForm((f) => ({
+                        ...f,
+                        papeis: f.papeis.includes(p.valor)
+                          ? f.papeis.filter((x) => x !== p.valor)
+                          : [...f.papeis, p.valor],
+                      }))
+                    }
+                  />
+                ))}
+              </div>
+            </GrupoDeCampos>
+          </Formulario>
         ) : editando && aba === ABA_ENDERECO ? (
           <AbaDeEndereco clienteId={cliente.id} cache={cache} />
         ) : editando && aba === ABA_BANCARIO ? (
           <AbaDeBancarios clienteId={cliente.id} cache={cache} />
         ) : editando && aba === ABA_CENTROS ? (
-          <AbaDeCentros clienteId={cliente.id} centros={centros} cache={cache} />
+          <AbaDeCentros
+            clienteId={cliente.id}
+            centros={centros}
+            cache={cache}
+            padrao={form.centroCustoId ? Number(form.centroCustoId) : null}
+            /*
+             * ⚠️ O padrão continua no FORMULÁRIO, e sai no salvar — diferente do
+             * principal dos contatos, que grava sozinho. Ele é um campo de
+             * `clientes` como o nome e o documento, e gravar em separado faria
+             * metade do cadastro salvar no clique e metade no botão.
+             */
+            onPadrao={(id) => set("centroCustoId", id ? String(id) : "")}
+          />
         ) : editando && aba === ABA_ACESSO ? (
           <AbaDeAcesso
             clienteId={cliente.id}
@@ -203,19 +293,23 @@ export function PessoaDrawer({
             nome={form.nomeFantasia.trim() || form.razao.trim() || "este cadastro"}
           />
         ) : (
-          <>
-            <CabecalhoDeSecao
+          /*
+            ⚠️ O ritmo e o do FORMULARIO, e nao o das secoes de tela.
+            
+            Campos colados entre si (3), titulo colado no primeiro campo (12) e o
+            vao grande so entre um assunto e outro (22). E o mesmo do formulario
+            de personas, que agora divide o componente com esta tela.
+          */
+          <Formulario>
+            <GrupoDeCampos
               primeiro
-              colado
               titulo="Identificação"
               legenda={
                 fisica
                   ? "O documento decide o resto do formulário: com onze dígitos, a pessoa é física e o cadastro pede só o nome."
                   : "O documento decide o resto do formulário. A razão social é o nome que sai nos documentos; o fantasia é o que a equipe usa para achar, e é ele que aparece na listagem."
               }
-            />
-
-            <Campos>
+            >
               {editando && (
                 /*
                  * ⚠️ O número é LEITURA, e mesmo assim tem cara de campo.
@@ -272,217 +366,32 @@ export function PessoaDrawer({
                   />
                 </Field>
               )}
-            </Campos>
+            </GrupoDeCampos>
 
-            <CabecalhoDeSecao
-              colado
-              titulo="Contato principal"
-              legenda={
-                editando
-                  ? "É para onde a cobrança vai, e é o telefone que casa esta pessoa com a conversa no WhatsApp. Os demais ficam na aba Contatos."
-                  : "É para onde a cobrança vai. Depois de salvar, a aba Contatos guarda os outros telefones e e-mails."
-              }
-            />
-
-            <Campos>
-              <Field label="Responsável">
-                <input
-                  style={inputStyle}
-                  value={form.responsavel}
-                  onChange={(e) => set("responsavel", e.target.value)}
-                  placeholder="Pessoa de contato"
-                />
-              </Field>
-
-              {/*
-                ⚠️ Com cadastro salvo, o principal é ESCOLHIDO entre os
-                cadastrados; sem, é digitado.
-
-                Digitar aqui um telefone que não está na lista criaria um número
-                que existe na cobrança e não existe na agenda — e ninguém
-                descobriria até a mensagem não chegar.
-              */}
-              <Field label="Telefone">
-                <Principal
-                  valor={form.contato}
-                  opcoes={telefones}
-                  editando={editando}
-                  onMudar={(v) => set("contato", v)}
-                  vazio="Nenhum telefone cadastrado"
-                  placeholder="(00) 00000-0000"
-                />
-              </Field>
-
-              <Field label="E-mail">
-                <Principal
-                  valor={form.email}
-                  opcoes={emails}
-                  editando={editando}
-                  onMudar={(v) => set("email", v)}
-                  vazio="Nenhum e-mail cadastrado"
-                  placeholder="financeiro@empresa.com.br"
-                  tipo="email"
-                />
-              </Field>
-            </Campos>
-
-            <CabecalhoDeSecao
-              colado
-              titulo="No sistema"
-              legenda="Os papéis decidem em que telas esta pessoa aparece. Uma transportadora que também compra é um cadastro só, com dois papéis marcados."
-            />
-
-            <Campos>
-              <Field label="Papéis" required>
-                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  {PAPEIS.map((p) => (
-                    <Papel
-                      key={p.valor}
-                      papel={p}
-                      marcado={form.papeis.includes(p.valor)}
-                      onAlternar={() =>
-                        setForm((f) => ({
-                          ...f,
-                          papeis: f.papeis.includes(p.valor)
-                            ? f.papeis.filter((x) => x !== p.valor)
-                            : [...f.papeis, p.valor],
-                        }))
-                      }
-                    />
-                  ))}
+            <GrupoDeCampos
+              titulo="Situação"
+              legenda="Inativo some da listagem e das buscas, mas o histórico continua inteiro. É o jeito de aposentar um cadastro sem perder o que passou por ele."
+            >
+              <Field label="Situação">
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    height: "var(--h-input)",
+                  }}
+                >
+                  <ActiveToggle active={form.ativo} onChange={() => set("ativo", !form.ativo)} />
+                  <span style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>
+                    {form.ativo ? "Ativo" : "Inativo"}
+                  </span>
                 </div>
               </Field>
-
-              {/*
-                ⚠️ Aqui fica só o PADRÃO. A lista de centros em que a pessoa
-                entra mora na aba própria: são coisas diferentes, e juntas num
-                campo só a pessoa acabava restrita ao centro que era só o
-                sugerido.
-              */}
-              <Field
-                label="Centro padrão"
-                hint="O que vem preenchido ao lançar. Os demais ficam na aba Centro de custo."
-              >
-                <select
-                  value={form.centroCustoId}
-                  onChange={(e) => set("centroCustoId", e.target.value)}
-                  style={{ ...selectStyle, width: "100%" }}
-                >
-                  <option value="">Geral (padrão)</option>
-                  {centros.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.descricao}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-
-              {editando && (
-                <Field
-                  label="Situação"
-                  hint="Inativo some da listagem e das buscas, mas o histórico continua inteiro."
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                      height: "var(--h-input)",
-                    }}
-                  >
-                    <ActiveToggle active={form.ativo} onChange={() => set("ativo", !form.ativo)} />
-                    <span style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>
-                      {form.ativo ? "Ativo" : "Inativo"}
-                    </span>
-                  </div>
-                </Field>
-              )}
-            </Campos>
-          </>
+            </GrupoDeCampos>
+          </Formulario>
         )}
       </div>
     </FormDrawer>
-  );
-}
-
-/**
- * O bloco de campos de uma seção.
- *
- * ⚠️ O vão entre campos mora AQUI, e não no `FormDrawer`. Lá ele valia para
- * qualquer filho, e com seções e abas no meio o mesmo vão separava um campo do
- * outro e um título do campo abaixo — coisas que precisam de distâncias
- * diferentes.
- */
-function Campos({ children }: { children: React.ReactNode }) {
-  // 8 e o vao do resto do sistema: e o que o `FormDrawer` aplica entre os
-  // filhos dele, e o que os outros formularios usam entre campos.
-  return <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{children}</div>;
-}
-
-/**
- * O contato principal: escolhido entre os cadastrados, ou digitado.
- *
- * ⚠️ Vira seleção só depois de salvo, porque antes disso não existe lista de onde
- * escolher. E quando a lista existe, digitar deixa de ser opção: um telefone
- * escrito aqui e ausente da agenda é um número que existe na cobrança e não
- * existe em lugar nenhum — descoberto quando a mensagem não chega.
- */
-function Principal({
-  valor,
-  opcoes,
-  editando,
-  onMudar,
-  vazio,
-  placeholder,
-  tipo = "text",
-}: {
-  valor: string;
-  opcoes: ContatoDaPessoa[];
-  editando: boolean;
-  onMudar: (v: string) => void;
-  vazio: string;
-  placeholder: string;
-  tipo?: "text" | "email";
-}) {
-  if (!editando) {
-    return (
-      <input
-        style={inputStyle}
-        type={tipo}
-        value={valor}
-        onChange={(e) => onMudar(e.target.value)}
-        placeholder={placeholder}
-      />
-    );
-  }
-
-  return (
-    <select
-      value={valor}
-      onChange={(e) => onMudar(e.target.value)}
-      style={{ ...selectStyle, width: "100%" }}
-    >
-      <option value="">Nenhum</option>
-
-      {/*
-        ⚠️ O valor atual entra na lista mesmo quando não está entre os
-        cadastrados. Toda pessoa que já existia tem um telefone gravado e nenhum
-        contato na tabela nova: sem esta linha, abrir o cadastro apagaria o
-        número em silêncio no primeiro salvar.
-      */}
-      {valor && !opcoes.some((o) => o.valor === valor) && (
-        <option value={valor}>{valor} (não está na lista)</option>
-      )}
-
-      {opcoes.map((o) => (
-        <option key={o.id} value={o.valor}>
-          {o.valor}
-          {o.rotulo ? ` · ${o.rotulo}` : ""}
-        </option>
-      ))}
-
-      {opcoes.length === 0 && <option disabled>{vazio}</option>}
-    </select>
   );
 }
 

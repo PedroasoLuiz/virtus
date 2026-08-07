@@ -2,7 +2,22 @@
 
 import { useState } from "react";
 import { useAvisos } from "@/components/ui/avisos";
-import { Button, CabecalhoDeSecao, Field, inputStyle, selectStyle } from "@/components/ui/kit";
+import {
+  AcoesDaLinha,
+  BotaoDeAcao,
+  Button,
+  EmptyRow,
+  Field,
+  GrupoDeCampos,
+  MarcaDePrincipal,
+  TableArea,
+  TableHead,
+  Td,
+  Th,
+  Tr,
+  inputStyle,
+  selectStyle,
+} from "@/components/ui/kit";
 import type { DadoBancarioDaPessoa } from "@/modules/clientes/clientes.types";
 import { useRecursoDaPessoa, type CacheDoDrawer } from "./cache-do-drawer";
 
@@ -51,34 +66,41 @@ export function AbaDeBancarios({
 
   return (
     <>
-      <CabecalhoDeSecao
+      <GrupoDeCampos
         primeiro
-        colado
         titulo="Dados bancários"
         legenda="Para onde o pagamento sai, ou de onde a devolução vem. São dados de terceiro: não entram no fluxo de caixa nem na conciliação, servem para preencher o pagamento na hora certa."
-        onIncluir={() => setNovo(true)}
-        rotuloIncluir="Nova conta"
-      />
+      >
+        <TableArea minWidth={0}>
+          <TableHead>
+            <Th>Banco</Th>
+            <Th minWidth={150}>Conta</Th>
+            <Th minWidth={170}>PIX</Th>
+            <Th align="center" minWidth={90}>
+              Principal
+            </Th>
+            <Th> </Th>
+          </TableHead>
 
-      {itens == null ? (
-        <p style={{ fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>Carregando…</p>
-      ) : itens.length === 0 && !novo ? (
-        <p
-          style={{
-            fontSize: "var(--text-sm)",
-            color: "var(--text-tertiary)",
-            lineHeight: "var(--lh-snug)",
-          }}
-        >
-          Nenhuma conta cadastrada.
-        </p>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {itens.map((d) => (
-            <Cartao key={d.id} dado={d} onRemover={() => void remover(d.id)} />
-          ))}
-        </div>
-      )}
+          <tbody>
+            {itens == null ? (
+              <EmptyRow colSpan={5} message="Carregando…" />
+            ) : itens.length === 0 ? (
+              <EmptyRow colSpan={5} message="Nenhuma conta cadastrada." />
+            ) : (
+              itens.map((d) => <Linha key={d.id} dado={d} onRemover={() => void remover(d.id)} />)
+            )}
+          </tbody>
+        </TableArea>
+
+        {!novo && (
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
+            <Button size="sm" variant="secondary" onClick={() => setNovo(true)}>
+              Nova conta
+            </Button>
+          </div>
+        )}
+      </GrupoDeCampos>
 
       {novo && (
         <Formulario
@@ -95,99 +117,79 @@ export function AbaDeBancarios({
   );
 }
 
-function Cartao({ dado, onRemover }: { dado: DadoBancarioDaPessoa; onRemover: () => void }) {
-  const conta = [
-    dado.agencia && `Ag. ${dado.agencia}`,
-    dado.conta && `Conta ${dado.conta}`,
-    dado.tipo === "poupanca" ? "poupança" : dado.tipo === "corrente" ? "corrente" : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+function Linha({ dado, onRemover }: { dado: DadoBancarioDaPessoa; onRemover: () => void }) {
+  const conta = [dado.agencia && `Ag. ${dado.agencia}`, dado.conta].filter(Boolean).join(" · ");
 
   return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "flex-start",
-        gap: 10,
-        padding: "9px 11px",
-        border: `1px solid ${dado.principal ? "var(--primary-border)" : "var(--border)"}`,
-        borderRadius: "var(--radius-md)",
-        background: dado.principal ? "var(--primary-subtle)" : "var(--surface)",
-      }}
-    >
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: "var(--text-base)" }}>
-          {dado.banco || <span style={{ color: "var(--text-tertiary)" }}>Sem banco</span>}
-          {dado.principal && (
-            <span
-              style={{
-                marginLeft: 7,
-                fontSize: "var(--text-xs)",
-                fontWeight: "var(--fw-semi)",
-                color: "var(--primary)",
-              }}
-            >
-              Principal
-            </span>
-          )}
-        </div>
-
-        {conta && (
-          <div style={{ marginTop: 2, fontSize: "var(--text-xs)", color: "var(--text-tertiary)" }}>
-            {conta}
-          </div>
-        )}
+    <Tr>
+      <Td>
+        {dado.banco || <span style={{ color: "var(--text-disabled)" }}>Sem banco</span>}
 
         {/*
-          A chave PIX numa linha própria: hoje ela é o dado que mais se copia, e
-          espremida junto de agência e conta ela some no meio dos números.
-        */}
-        {dado.pixChave && (
-          <div style={{ marginTop: 3, fontSize: "var(--text-xs)" }}>
-            <span style={{ color: "var(--text-tertiary)" }}>
-              PIX {PIX.find((p) => p.valor === dado.pixTipo)?.rotulo ?? ""}{" "}
-            </span>
-            <span style={{ color: "var(--text-primary)" }}>{dado.pixChave}</span>
-          </div>
-        )}
-
-        {/*
-          ⚠️ Titular só aparece quando é OUTRA pessoa. Repetir o nome do próprio
-          cadastro em toda conta seria uma linha a mais dizendo o que já está no
-          topo do drawer — e o que importa aqui é justamente o caso em que não
-          bate, porque banco recusa depósito com titular diferente.
+          ⚠️ Titular só aparece quando é OUTRA pessoa, e em âmbar. Repetir o nome
+          do próprio cadastro em toda linha seria dizer o que já está no topo do
+          drawer — e o que importa é justamente o caso em que não bate, porque
+          banco recusa depósito com titular diferente.
         */}
         {dado.titular && (
-          <div style={{ marginTop: 3, fontSize: "var(--text-xs)", color: "var(--warning-text)" }}>
+          <div style={{ marginTop: 1, fontSize: "var(--text-xs)", color: "var(--warning-text)" }}>
             Titular: {dado.titular}
-            {dado.documento ? ` · ${dado.documento}` : ""}
           </div>
         )}
-      </div>
+      </Td>
 
-      <button
-        type="button"
-        onClick={onRemover}
-        aria-label="Remover conta"
-        title="Remover"
-        style={{
-          width: 22,
-          height: 22,
-          flexShrink: 0,
-          display: "grid",
-          placeItems: "center",
-          border: "none",
-          background: "transparent",
-          cursor: "pointer",
-          color: "var(--text-tertiary)",
-        }}
-      >
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
-          <path d="M18 6L6 18M6 6l12 12" />
-        </svg>
-      </button>
-    </div>
+      <Td>
+        <div>{conta || <span style={{ color: "var(--text-disabled)" }}>—</span>}</div>
+        {dado.tipo && (
+          <div style={{ marginTop: 1, fontSize: "var(--text-xs)", color: "var(--text-tertiary)" }}>
+            {dado.tipo === "poupanca" ? "Poupança" : "Corrente"}
+          </div>
+        )}
+      </Td>
+
+      <Td style={{ maxWidth: 200 }}>
+        {dado.pixChave ? (
+          <>
+            <div
+              style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+              title={dado.pixChave}
+            >
+              {dado.pixChave}
+            </div>
+            {dado.pixTipo && (
+              <div
+                style={{ marginTop: 1, fontSize: "var(--text-xs)", color: "var(--text-tertiary)" }}
+              >
+                {PIX.find((p) => p.valor === dado.pixTipo)?.rotulo ?? dado.pixTipo}
+              </div>
+            )}
+          </>
+        ) : (
+          <span style={{ color: "var(--text-disabled)" }}>—</span>
+        )}
+      </Td>
+
+      <Td style={{ textAlign: "center" }}>
+        {/*
+          Aqui a marca é só LEITURA: trocar o principal exige saber para onde o
+          pagamento passa a ir, e um clique de passagem numa coluna de conta
+          bancária é fácil demais de dar sem querer.
+        */}
+        <MarcaDePrincipal
+          marcado={dado.principal}
+          rotulo={dado.principal ? "É a conta principal" : "Não é a principal"}
+          onClick={() => {}}
+        />
+      </Td>
+
+      <Td>
+        <AcoesDaLinha>
+          <BotaoDeAcao rotulo="Remover" perigo onClick={onRemover}>
+            <path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.6 8h4.8l.6-8" />
+          </BotaoDeAcao>
+        </AcoesDaLinha>
+      </Td>
+    </Tr>
   );
 }
 

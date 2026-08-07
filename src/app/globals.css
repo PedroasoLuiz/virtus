@@ -49,6 +49,19 @@
   --space-12: 48px;
   --space-16: 64px;
 
+  /* ── Ritmo do FORMULARIO ────────────────────────────────────────────────
+     O espacamento de um formulario nao e o de uma tela. Campo com rotulo a
+     esquerda ja tem ar proprio dentro da linha: 8 entre eles fazia cada campo
+     parecer um bloco separado, e o formulario perdia a leitura de cima a baixo.
+
+     ⚠️ Sao TRES medidas, e a hierarquia esta na diferenca entre elas. Campos
+     colados (3), titulo colado no primeiro campo dele (12), e o vao grande so
+     entre um assunto e outro (22). Igualar duas quaisquer apaga a divisao que
+     as tres existem para desenhar. Ver `GrupoDeCampos` no kit. */
+  --form-gap-campo: 3px;
+  --form-gap-titulo: 12px;
+  --form-gap-grupo: 22px;
+
   /* ── Alturas ───────────────────────────────────────────────────────────── */
   --h-input: 26px;  /* mesma altura do campo bloqueado — ver kit */
   --h-btn: 32px;

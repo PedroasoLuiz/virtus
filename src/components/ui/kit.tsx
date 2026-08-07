@@ -1719,6 +1719,152 @@ export function Field({
   );
 }
 
+/**
+ * Um grupo de campos dentro de um FORMULARIO.
+ *
+ * ⚠️ Nao e o `CabecalhoDeSecao`, e a diferenca nao e estetica. Aquele separa
+ * SECOES DE TELA — uma tabela da outra, uma lista da seguinte — e por isso tem o
+ * respiro grande. Este agrupa campos: o titulo fica colado no primeiro deles, e
+ * os campos ficam colados entre si.
+ *
+ * ⚠️ As tres medidas sao TOKENS (`--form-gap-*`), e nao numeros aqui. Elas se
+ * definem umas pelas outras: campos colados, titulo colado no primeiro campo, e
+ * o vao grande so entre assuntos. Igualar duas quaisquer apaga a divisao que as
+ * tres existem para desenhar, e um numero solto num componente e o comeco
+ * disso.
+ *
+ * Nasceu no formulario de personas do WhatsApp e virou kit quando o cadastro de
+ * pessoa precisou do mesmo ritmo: duas copias divergiriam no primeiro ajuste.
+ */
+export function GrupoDeCampos({
+  titulo,
+  legenda,
+  primeiro,
+  children,
+}: {
+  titulo: string;
+  legenda: string;
+  /** Primeiro do formulario: sem o respiro que separa um grupo do anterior. */
+  primeiro?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <section>
+      <div style={{ marginBottom: "var(--form-gap-titulo)", marginTop: primeiro ? 0 : 4 }}>
+        <div
+          style={{
+            fontSize: "calc(var(--text-lg) + 2px)",
+            fontWeight: "var(--fw-semi)",
+            color: "var(--text-primary)",
+            letterSpacing: "var(--tracking-snug)",
+          }}
+        >
+          {titulo}
+        </div>
+        <p
+          style={{
+            marginTop: 6,
+            fontSize: "calc(var(--text-xs) + 1px)",
+            color: "var(--text-tertiary)",
+            lineHeight: "var(--lh-normal)",
+          }}
+        >
+          {legenda}
+        </p>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: "var(--form-gap-campo)" }}>
+        {children}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * A marca do PRINCIPAL, numa coluna de tabela.
+ *
+ * ⚠️ Um unico controle para os dois estados, e nao "Principal" escrito de um
+ * lado e um botao do outro. E uma escolha exclusiva dentro da coluna — o mesmo
+ * gesto do radio de um formulario —, e dois desenhos fariam a linha marcada
+ * parecer de outro tipo.
+ *
+ * ⚠️ Sem rotulo na celula. Quem le a coluna de cima a baixo procura QUAL esta
+ * marcado, e a palavra repetida em cada linha atrapalha exatamente essa
+ * varredura. O nome vive no `title`, onde serve a quem precisa.
+ */
+export function MarcaDePrincipal({
+  marcado,
+  rotulo,
+  onClick,
+}: {
+  marcado: boolean;
+  rotulo: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={marcado}
+      aria-label={rotulo}
+      title={rotulo}
+      style={{
+        width: 22,
+        height: 22,
+        display: "grid",
+        placeItems: "center",
+        margin: "0 auto",
+        border: "none",
+        background: "transparent",
+        borderRadius: "var(--radius-full)",
+        cursor: marcado ? "default" : "pointer",
+        color: marcado ? "var(--primary)" : "var(--text-disabled)",
+      }}
+    >
+      {marcado ? (
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+          <circle cx="12" cy="12" r="9" />
+          <path
+            d="M8 12.4l2.6 2.6L16 9.6"
+            fill="none"
+            stroke="var(--primary-fg)"
+            strokeWidth="2.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      ) : (
+        <svg
+          width="15"
+          height="15"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          aria-hidden
+        >
+          <circle cx="12" cy="12" r="9" />
+        </svg>
+      )}
+    </button>
+  );
+}
+
+/**
+ * A coluna que empilha os grupos de um formulario.
+ *
+ * ⚠️ Existe para o vao entre grupos nao ser digitado em cada tela. Ele e o maior
+ * dos tres e o unico que a pessoa realmente ve como divisao: escrito na mao,
+ * viraria 20 num drawer e 24 no outro sem ninguem perceber.
+ */
+export function Formulario({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--form-gap-grupo)" }}>
+      {children}
+    </div>
+  );
+}
+
 /** O "i" que revela a explicacao no hover. Nativo: tooltip proprio seria um popover. */
 function Info({ texto }: { texto: string }) {
   return (

@@ -3,7 +3,19 @@
 import { useState } from "react";
 import { useAvisos } from "@/components/ui/avisos";
 import { Avatar } from "@/components/ui/avatar";
-import { Button, CabecalhoDeSecao, selectStyle } from "@/components/ui/kit";
+import {
+  AcoesDaLinha,
+  BotaoDeAcao,
+  Button,
+  EmptyRow,
+  GrupoDeCampos,
+  TableArea,
+  TableHead,
+  Td,
+  Th,
+  Tr,
+  selectStyle,
+} from "@/components/ui/kit";
 import type { UsuarioDaPessoa } from "@/modules/clientes/clientes.types";
 import { useRecursoDaPessoa, type CacheDoDrawer } from "./cache-do-drawer";
 
@@ -68,103 +80,67 @@ export function AbaDeAcesso({
 
   return (
     <>
-      <CabecalhoDeSecao
+      <GrupoDeCampos
         primeiro
-        colado
         titulo="Acesso ao portal"
         legenda={`Quem estiver aqui vê as faturas, os tickets e os documentos de ${nome} pelo portal do cliente. Não é permissão dentro do sistema: é o lado de fora.`}
-      />
+      >
+        <TableArea minWidth={0}>
+          <TableHead>
+            <Th className="col-avatar" minWidth={26}>
+              {" "}
+            </Th>
+            <Th>Usuário</Th>
+            <Th minWidth={200}>E-mail</Th>
+            <Th> </Th>
+          </TableHead>
 
-      {comAcesso == null ? (
-        <p style={{ fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>Carregando…</p>
-      ) : comAcesso.length === 0 ? (
-        <p
-          style={{
-            fontSize: "var(--text-sm)",
-            color: "var(--text-tertiary)",
-            lineHeight: "var(--lh-snug)",
-          }}
-        >
-          Ninguém tem acesso a este cadastro pelo portal.
-        </p>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          {comAcesso.map((u) => (
-            <div
-              key={u.id}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                padding: "8px 10px",
-                border: "1px solid var(--border)",
-                borderRadius: "var(--radius-md)",
-                background: "var(--surface)",
-              }}
-            >
-              <Avatar nome={u.nome || u.email || "?"} semente={u.id} tamanho={26} />
+          <tbody>
+            {comAcesso == null ? (
+              <EmptyRow colSpan={4} message="Carregando…" />
+            ) : comAcesso.length === 0 ? (
+              <EmptyRow colSpan={4} message="Ninguém tem acesso a este cadastro pelo portal." />
+            ) : (
+              comAcesso.map((u) => (
+                <Tr key={u.id}>
+                  <Td className="col-avatar">
+                    <Avatar nome={u.nome || u.email || "?"} semente={u.id} tamanho={26} />
+                  </Td>
 
-              <span style={{ flex: 1, minWidth: 0 }}>
-                <span
-                  style={{
-                    display: "block",
-                    fontSize: "var(--text-base)",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
                   {/*
                     Sem nome nem e-mail, sai o uuid. É feio e é honesto: o
-                    usuário existe, e mostrar "—" faria parecer que a linha está
+                    usuário existe, e um traço faria parecer que a linha está
                     quebrada.
                   */}
-                  {u.nome || u.email || u.id}
-                </span>
+                  <Td>{u.nome || u.email || u.id}</Td>
 
-                {u.nome && u.email && (
-                  <span
-                    style={{
-                      display: "block",
-                      marginTop: 1,
-                      fontSize: "var(--text-xs)",
-                      color: "var(--text-tertiary)",
-                    }}
-                  >
-                    {u.email}
-                  </span>
-                )}
-              </span>
+                  <Td>
+                    {u.nome && u.email ? (
+                      u.email
+                    ) : (
+                      <span style={{ color: "var(--text-disabled)" }}>—</span>
+                    )}
+                  </Td>
 
-              <button
-                type="button"
-                onClick={() => void gravar(atuais.filter((id) => id !== u.id))}
-                disabled={salvando}
-                aria-label="Tirar o acesso"
-                title="Tirar o acesso"
-                style={{
-                  width: 24,
-                  height: 24,
-                  flexShrink: 0,
-                  display: "grid",
-                  placeItems: "center",
-                  border: "none",
-                  background: "transparent",
-                  borderRadius: "var(--radius-sm)",
-                  cursor: "pointer",
-                  color: "var(--text-tertiary)",
-                }}
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
-                  <path d="M18 6L6 18M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
+                  <Td>
+                    <AcoesDaLinha>
+                      <BotaoDeAcao
+                        rotulo="Tirar o acesso"
+                        perigo
+                        desabilitado={salvando}
+                        onClick={() => void gravar(atuais.filter((id) => id !== u.id))}
+                      >
+                        <path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.6 8h4.8l.6-8" />
+                      </BotaoDeAcao>
+                    </AcoesDaLinha>
+                  </Td>
+                </Tr>
+              ))
+            )}
+          </tbody>
+        </TableArea>
 
-      <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 12 }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 12 }}>
         <select
           value={escolhido}
           onChange={(e) => setEscolhido(e.target.value)}
@@ -188,9 +164,10 @@ export function AbaDeAcesso({
           disabled={!escolhido || salvando}
           onClick={() => void gravar([...atuais, escolhido])}
         >
-          Dar acesso
-        </Button>
-      </div>
+            Dar acesso
+          </Button>
+        </div>
+      </GrupoDeCampos>
     </>
   );
 }

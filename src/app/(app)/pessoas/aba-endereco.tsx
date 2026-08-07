@@ -2,7 +2,21 @@
 
 import { useState } from "react";
 import { useAvisos } from "@/components/ui/avisos";
-import { Button, CabecalhoDeSecao, Field, inputStyle } from "@/components/ui/kit";
+import {
+  AcoesDaLinha,
+  BotaoDeAcao,
+  Button,
+  EmptyRow,
+  Field,
+  GrupoDeCampos,
+  MarcaDePrincipal,
+  TableArea,
+  TableHead,
+  Td,
+  Th,
+  Tr,
+  inputStyle,
+} from "@/components/ui/kit";
 import type { EnderecoDaPessoa } from "@/modules/clientes/clientes.types";
 import { useRecursoDaPessoa, type CacheDoDrawer } from "./cache-do-drawer";
 
@@ -53,39 +67,40 @@ export function AbaDeEndereco({
 
   return (
     <>
-      <CabecalhoDeSecao
+      <GrupoDeCampos
         primeiro
-        colado
         titulo="Endereços"
         legenda="O principal é o que sai na nota fiscal. Os demais servem para entrega, obra ou filial — o primeiro cadastrado já nasce principal."
-        onIncluir={() => setNovo(true)}
-        rotuloIncluir="Novo endereço"
-      />
+      >
+        <TableArea minWidth={0}>
+          <TableHead>
+            <Th>Endereço</Th>
+            <Th minWidth={150}>Cidade</Th>
+            <Th align="center" minWidth={90}>
+              Principal
+            </Th>
+            <Th> </Th>
+          </TableHead>
 
-      {itens == null ? (
-        <p style={{ fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>Carregando…</p>
-      ) : itens.length === 0 && !novo ? (
-        <p
-          style={{
-            fontSize: "var(--text-sm)",
-            color: "var(--text-tertiary)",
-            lineHeight: "var(--lh-snug)",
-          }}
-        >
-          Nenhum endereço cadastrado.
-        </p>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {itens.map((e) => (
-            <Cartao
-              key={e.id}
-              endereco={e}
-              onPrincipal={() => void promover(e.id)}
-              onRemover={() => void remover(e.id)}
-            />
-          ))}
-        </div>
-      )}
+          <tbody>
+            {itens == null ? (
+              <EmptyRow colSpan={4} message="Carregando…" />
+            ) : itens.length === 0 ? (
+              <EmptyRow colSpan={4} message="Nenhum endereço cadastrado." />
+            ) : (
+              itens.map((e) => <Linha key={e.id} endereco={e} onPrincipal={() => void promover(e.id)} onRemover={() => void remover(e.id)} />)
+            )}
+          </tbody>
+        </TableArea>
+
+        {!novo && (
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
+            <Button size="sm" variant="secondary" onClick={() => setNovo(true)}>
+              Novo endereço
+            </Button>
+          </div>
+        )}
+      </GrupoDeCampos>
 
       {novo && (
         <Formulario
@@ -102,7 +117,7 @@ export function AbaDeEndereco({
   );
 }
 
-function Cartao({
+function Linha({
   endereco,
   onPrincipal,
   onRemover,
@@ -111,98 +126,61 @@ function Cartao({
   onPrincipal: () => void;
   onRemover: () => void;
 }) {
-  const linha1 = [endereco.logradouro, endereco.numero].filter(Boolean).join(", ");
-  const linha2 = [endereco.bairro, endereco.cidade, endereco.uf].filter(Boolean).join(" · ");
+  const rua = [endereco.logradouro, endereco.numero].filter(Boolean).join(", ");
+  const cidade = [endereco.cidade, endereco.uf].filter(Boolean).join(" / ");
 
   return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "flex-start",
-        gap: 10,
-        padding: "9px 11px",
-        border: `1px solid ${endereco.principal ? "var(--primary-border)" : "var(--border)"}`,
-        borderRadius: "var(--radius-md)",
-        background: endereco.principal ? "var(--primary-subtle)" : "var(--surface)",
-      }}
-    >
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: "var(--text-base)" }}>
-          {linha1 || <span style={{ color: "var(--text-tertiary)" }}>Sem logradouro</span>}
-          {endereco.complemento && (
-            <span style={{ color: "var(--text-tertiary)" }}> · {endereco.complemento}</span>
-          )}
+    <Tr>
+      <Td style={{ maxWidth: 260 }}>
+        <div
+          style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+        >
+          {rua || <span style={{ color: "var(--text-disabled)" }}>Sem logradouro</span>}
         </div>
 
-        <div style={{ marginTop: 2, fontSize: "var(--text-xs)", color: "var(--text-tertiary)" }}>
-          {[linha2, endereco.cep].filter(Boolean).join(" · ") || "Sem cidade"}
-        </div>
-      </div>
+        {/* Bairro e complemento na linha de apoio: são o que distingue dois
+            endereços na mesma rua, e não o que se procura primeiro. */}
+        {(endereco.bairro || endereco.complemento) && (
+          <div
+            style={{
+              marginTop: 1,
+              fontSize: "var(--text-xs)",
+              color: "var(--text-tertiary)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {[endereco.bairro, endereco.complemento].filter(Boolean).join(" · ")}
+          </div>
+        )}
+      </Td>
 
-      {/*
-        ⚠️ "Principal" é um rótulo quando já é, e um botão quando não é. Dois
-        controles diferentes para o mesmo estado deixariam a pessoa clicando no
-        que já está marcado.
-      */}
-      {endereco.principal ? (
-        <span
-          style={{
-            flexShrink: 0,
-            height: 19,
-            padding: "0 8px",
-            display: "inline-flex",
-            alignItems: "center",
-            borderRadius: "var(--radius-full)",
-            background: "var(--surface)",
-            color: "var(--primary)",
-            fontSize: "var(--text-xs)",
-            fontWeight: "var(--fw-semi)",
-          }}
-        >
-          Principal
-        </span>
-      ) : (
-        <button
-          type="button"
-          onClick={onPrincipal}
-          style={{
-            flexShrink: 0,
-            padding: 0,
-            border: "none",
-            background: "transparent",
-            cursor: "pointer",
-            fontFamily: "var(--font)",
-            fontSize: "var(--text-xs)",
-            fontWeight: "var(--fw-semi)",
-            color: "var(--primary)",
-          }}
-        >
-          Tornar principal
-        </button>
-      )}
+      <Td>
+        <div>{cidade || <span style={{ color: "var(--text-disabled)" }}>—</span>}</div>
+        {endereco.cep && (
+          <div style={{ marginTop: 1, fontSize: "var(--text-xs)", color: "var(--text-tertiary)" }}>
+            {endereco.cep}
+          </div>
+        )}
+      </Td>
 
-      <button
-        type="button"
-        onClick={onRemover}
-        aria-label="Remover endereço"
-        title="Remover"
-        style={{
-          width: 22,
-          height: 22,
-          flexShrink: 0,
-          display: "grid",
-          placeItems: "center",
-          border: "none",
-          background: "transparent",
-          cursor: "pointer",
-          color: "var(--text-tertiary)",
-        }}
-      >
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
-          <path d="M18 6L6 18M6 6l12 12" />
-        </svg>
-      </button>
-    </div>
+      <Td style={{ textAlign: "center" }}>
+        <MarcaDePrincipal
+          marcado={endereco.principal}
+          rotulo={endereco.principal ? "É o principal" : "Tornar principal"}
+          onClick={() => !endereco.principal && onPrincipal()}
+        />
+      </Td>
+
+      <Td>
+        <AcoesDaLinha>
+          <BotaoDeAcao rotulo="Remover" perigo onClick={onRemover}>
+            <path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.6 8h4.8l.6-8" />
+          </BotaoDeAcao>
+        </AcoesDaLinha>
+      </Td>
+    </Tr>
   );
 }
 

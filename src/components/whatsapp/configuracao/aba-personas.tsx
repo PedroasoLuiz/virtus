@@ -12,6 +12,8 @@ import {
   Button,
   CabecalhoDeSecao,
   EmptyRow,
+  Formulario,
+  GrupoDeCampos,
   Field,
   Pagination,
   PanelTabs,
@@ -424,7 +426,7 @@ function FormularioDaPersona({
       />
 
       {aba === ABA_PARAMETRIZACAO && (
-      <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+      <Formulario>
         <Grupo
           primeiro
           titulo="Descrição"
@@ -586,7 +588,7 @@ function FormularioDaPersona({
             />
           </div>
         )}
-      </div>
+      </Formulario>
       )}
 
       {aba === ABA_PERMISSOES && (
@@ -770,47 +772,14 @@ function AreaDeExclusao({
 }
 
 /** O mesmo agrupador das outras abas: título, legenda e os campos. */
-function Grupo({
-  titulo,
-  legenda,
-  primeiro,
-  children,
-}: {
-  titulo: string;
-  legenda: string;
-  /** Primeiro do formulário: sem o respiro que separa um grupo do anterior. */
-  primeiro?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <section>
-      <div style={{ marginBottom: 12, marginTop: primeiro ? 0 : 4 }}>
-        <div
-          style={{
-            fontSize: "calc(var(--text-lg) + 2px)",
-            fontWeight: "var(--fw-semi)",
-            color: "var(--text-primary)",
-            letterSpacing: "var(--tracking-snug)",
-          }}
-        >
-          {titulo}
-        </div>
-        <p
-          style={{
-            marginTop: 6,
-            fontSize: "calc(var(--text-xs) + 1px)",
-            color: "var(--text-tertiary)",
-            lineHeight: "var(--lh-normal)",
-          }}
-        >
-          {legenda}
-        </p>
-      </div>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>{children}</div>
-    </section>
-  );
-}
+/**
+ * ⚠️ Este grupo virou `GrupoDeCampos`, no kit.
+ *
+ * Ele nasceu aqui, e o cadastro de pessoa precisou do mesmo ritmo: duas copias
+ * divergiriam no primeiro ajuste de espacamento. O apelido fica para nao mexer
+ * nas dezenas de usos deste arquivo.
+ */
+const Grupo = GrupoDeCampos;
 
 /**
  * O que a persona pode fazer, agrupado por área.
