@@ -42,6 +42,14 @@ export async function pedirPermissaoDeAviso(): Promise<NotificationPermission | 
  * ⚠️ `tag` por CONVERSA. Sem ela, dez mensagens seguidas do mesmo cliente
  * empilham dez avisos na tela; com ela, o novo substitui o anterior e sobra um
  * por conversa, que é o que a pessoa precisa saber.
+ *
+ * ⚠️ E `renotify` LIGADO junto. Substituir sem renotificar troca o texto do
+ * aviso em silêncio: no Windows, o primeiro vai para a central de ações e os
+ * seguintes o atualizam lá dentro, sem nunca voltar a aparecer na tela. Só a
+ * primeira mensagem de uma conversa era vista, e as outras chegavam mudas.
+ *
+ * O barulho repetido era a preocupação, e ela estava mal calibrada: perder a
+ * segunda mensagem de um cliente custa muito mais do que um som a mais.
  */
 export function avisarNoNavegador(entrada: {
   titulo: string;
@@ -57,9 +65,7 @@ export function avisarNoNavegador(entrada: {
       body: entrada.corpo,
       tag: entrada.tag,
       icon: entrada.icone || "/favicon.ico",
-      // Sem renotificar: substituindo o aviso da mesma conversa em silêncio, uma
-      // rajada de mensagens não vira uma rajada de sons.
-      renotify: false,
+      renotify: true,
       silent: false,
     } as NotificationOptions);
 
