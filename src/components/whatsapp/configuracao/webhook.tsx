@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { Duvida } from "@/components/ui/ajuda";
 import { CabecalhoDeSecao } from "@/components/ui/kit";
+import { origemSegura } from "./finalidades";
 
 /**
  * O que a pessoa precisa levar ao painel da Meta.
@@ -15,7 +16,9 @@ const URL_WEBHOOK = "/api/v1/whatsapp/webhook";
 
 export function UrlDeCallback() {
   const [copiada, setCopiada] = useState(false);
-  const url = `${typeof window !== "undefined" ? window.location.origin : ""}${URL_WEBHOOK}`;
+  // ⚠️ Sempre `https`: a Meta recusa webhook em `http`, e em desenvolvimento a
+  // origem do navegador é `http://localhost`. Ver `origemSegura`.
+  const url = `${origemSegura()}${URL_WEBHOOK}`;
 
   return (
     <section>

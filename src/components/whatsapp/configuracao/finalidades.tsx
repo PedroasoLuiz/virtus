@@ -459,6 +459,8 @@ function FormularioDoVinculo({
                   </select>
                 </Field>
               )}
+
+              {finalidade.botao && botao && <LinkDoBotao />}
             </Secao>
 
             {/*
@@ -488,7 +490,20 @@ function FormularioDoVinculo({
                 {comFormatacaoDoWhatsapp(previaDoCorpo(modelo.corpo, exemplos))}
               </CartaoDeTexto>
 
-              {modelo.botao && <CartaoDeBotao texto={modelo.botao.texto} />}
+              {/*
+                ⚠️ O cartão segue a ESCOLHA, e não só o modelo.
+
+                Marcando "este modelo não tem botão", a prévia perde o cartão
+                junto: a prévia é o que o vínculo vai produzir, e não um retrato
+                do template. Mostrar o botão de um link que o sistema decidiu
+                não completar prometeria um caminho que a mensagem não leva.
+
+                Sem a finalidade ter link para dar, não há dropdown, e aí o que
+                manda é o modelo mesmo.
+              */}
+              {modelo.botao && (!finalidade.botao || botao) && (
+                <CartaoDeBotao texto={modelo.botao.texto} />
+              )}
             </Secao>
           </>
         )}
@@ -762,6 +777,88 @@ function CartaoDeTexto({
 
       <div style={{ position: "absolute", top: 6, right: 6 }}>
         <Copiar texto={copiar} titulo={tituloDoCopiar} />
+      </div>
+    </div>
+  );
+}
+
+/** O começo do endereço público. O sistema completa com o token da parcela. */
+const BASE_PUBLICA = "/p/";
+
+/**
+ * O endereço deste sistema, sempre em `https`.
+ *
+ * ⚠️ Forçado, e não copiado do navegador. A Meta recusa URL em `http` tanto no
+ * botão do modelo quanto no webhook, e em desenvolvimento a origem é
+ * `http://localhost`: copiar como está entregaria um endereço que o painel dela
+ * rejeita sem dizer por quê.
+ *
+ * `window` só existe no navegador; no render do servidor sai vazio.
+ */
+export function origemSegura(): string {
+  if (typeof window === "undefined") return "";
+
+  return window.location.origin.replace(/^http:\/\//, "https://");
+}
+
+/**
+ * O endereço que precisa estar no botão do modelo, na Meta.
+ *
+ * ⚠️ Existe porque a Meta NÃO deixa a URL inteira ser dinâmica. Ela aceita um
+ * endereço fixo com um sufixo variável, e é o sufixo que o sistema preenche com
+ * o token da cobrança. Quem cadastra o modelo lá precisa colar exatamente esta
+ * base, terminando na barra: um caractere a mais ou a menos e o link chega
+ * quebrado no cliente, e só se descobre quando alguém tenta abrir.
+ *
+ * Aparece só com o link escolhido, porque antes disso não há botão para
+ * configurar e a linha seria instrução sobre algo que não está em jogo.
+ */
+function LinkDoBotao() {
+  const url = `${origemSegura()}${BASE_PUBLICA}`;
+
+  return (
+    <div style={{ display: "flex", gap: 12, marginTop: 6 }}>
+      {/* Mesma coluna de 130px dos rótulos do formulário, para alinhar. */}
+      <span style={{ width: 130, flexShrink: 0 }} />
+
+      <div style={{ minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+          <span
+            style={{
+              flexShrink: 0,
+              fontSize: "var(--text-sm)",
+              color: "var(--text-tertiary)",
+            }}
+          >
+            Link de redirecionamento:
+          </span>
+
+          <code
+            style={{
+              minWidth: 0,
+              fontSize: "var(--text-sm)",
+              color: "var(--primary)",
+              wordBreak: "break-all",
+            }}
+          >
+            {url}
+          </code>
+
+          <Copiar texto={url} titulo="Copiar o endereço do botão" />
+        </div>
+
+        <p
+          style={{
+            marginTop: 2,
+            fontSize: "calc(var(--text-xs) + 1px)",
+            color: "var(--text-tertiary)",
+            lineHeight: "var(--lh-normal)",
+          }}
+        >
+          Cole isto na URL do botão, no painel da Meta, terminando na barra. A Meta não deixa o
+          endereço inteiro ser dinâmico: só o trecho final, que o sistema completa com o código da
+          cobrança.
+        </p>
       </div>
     </div>
   );
