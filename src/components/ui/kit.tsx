@@ -735,6 +735,7 @@ export function CabecalhoDeSecao({
   legenda,
   onIncluir,
   rotuloIncluir = "Adicionar",
+  acao,
   primeiro = false,
   colado = false,
 }: {
@@ -742,6 +743,14 @@ export function CabecalhoDeSecao({
   legenda: string;
   onIncluir?: () => void;
   rotuloIncluir?: string;
+  /**
+   * Um gesto colado no titulo, no lugar do mais.
+   *
+   * ⚠️ Colado, e nao na outra ponta da linha: jogado a direita ele vira um botao
+   * solto que ninguem associa a secao. Existe para quando a acao nao e
+   * "adicionar" — um olho que mostra a previa, por exemplo.
+   */
+  acao?: React.ReactNode;
   /**
    * O que vem logo abaixo PERTENCE ao cabecalho, e nao e o conteudo da secao.
    *
@@ -789,6 +798,7 @@ export function CabecalhoDeSecao({
         </span>
 
         {onIncluir && <BotaoMais rotulo={rotuloIncluir} onClick={onIncluir} />}
+        {acao}
       </div>
 
       <p

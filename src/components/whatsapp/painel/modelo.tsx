@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { EmptyRow, TableArea, TableHead, Td, Th, Tr } from "@/components/ui/kit";
+import { CabecalhoDeSecao, EmptyRow, TableArea, TableHead, Td, Th, Tr } from "@/components/ui/kit";
 import { comFormatacaoDoWhatsapp } from "@/components/whatsapp/formatacao";
 import type { Modelo } from "@/modules/whatsapp/whatsapp.types";
 
@@ -123,21 +123,19 @@ export function ColunaDeModelos({
         animation: "fade-in 160ms var(--ease-out)",
       }}
     >
-      <header
-        style={{
-          flexShrink: 0,
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          padding: "11px 2px 8px 2px",
-        }}
-      >
-        <span
-          className="rotulo"
-          style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}
-        >
-          Modelos aprovados
-        </span>
+      {/*
+        O mesmo cabeçalho de seção do drawer de configuração: título com um
+        degrau de peso e uma frase abaixo. A coluna aparece no meio de uma
+        conversa, sem contexto nenhum — sem a frase, "modelos aprovados" é
+        vocabulário da Meta caído na tela.
+      */}
+      <div style={{ position: "relative", flexShrink: 0 }}>
+        <CabecalhoDeSecao
+          primeiro
+          colado
+          titulo="Modelos aprovados"
+          legenda="Textos que a Meta já revisou. São os únicos que podem sair depois de 24 horas sem resposta do cliente, e passe o olho para ver como cada um chega."
+        />
 
         <button
           type="button"
@@ -145,9 +143,11 @@ export function ColunaDeModelos({
           aria-label="Fechar os modelos"
           title="Fechar"
           style={{
+            position: "absolute",
+            top: 8,
+            right: 0,
             width: 22,
             height: 22,
-            flexShrink: 0,
             display: "grid",
             placeItems: "center",
             border: "none",
@@ -161,7 +161,7 @@ export function ColunaDeModelos({
             <path d="M18 6L6 18M6 6l12 12" />
           </svg>
         </button>
-      </header>
+      </div>
 
       {falhou && (
         <p
@@ -275,7 +275,26 @@ function LinhaDeModelo({
 }
 
 /** Onde e o que mostrar na prévia. */
-type Espiada = { modelo: Modelo; x: number; y: number };
+type Espiada = {
+  modelo: Modelo;
+  /**
+   * O que já foi digitado, quando há.
+   *
+   * ⚠️ Da lista o olho mostra o modelo cru, com os `{{n}}` — ali não há valor
+   * nenhum. Da caixa de envio ele mostra a mensagem COMO ELA VAI SAIR, que é a
+   * pergunta que a pessoa está fazendo naquele momento.
+   */
+  valores?: string[];
+  /**
+   * De que lado o cartão cresce, e a partir de que borda.
+   *
+   * ⚠️ Calculado no gesto, e não fixo. O mesmo olho aparece na coluna da
+   * direita, onde o cartão só cabe crescendo para a esquerda, e no rodapé, onde
+   * crescer para a esquerda o joga para fora da tela. Fixo, ele ficava certo num
+   * lugar e invisível no outro.
+   */
+  ancora: { lado: "esquerda" | "direita"; x: number; y: number; deBaixo: boolean };
+};
 
 /**
  * O olho, igual ao da aba Modelos.
@@ -286,18 +305,34 @@ type Espiada = { modelo: Modelo; x: number; y: number };
  */
 function BotaoDeEspiar({
   modelo,
+  valores,
   onEspiar,
 }: {
   modelo: Modelo;
+  valores?: string[];
   onEspiar: (e: Espiada | null) => void;
 }) {
   // A posicao sai do proprio botao no momento do gesto: guardada antes, ela
   // apontaria para onde a linha estava antes de rolar a lista.
   const mostrar = (el: HTMLElement) => {
     const r = el.getBoundingClientRect();
-    // A esquerda, porque a coluna mora na borda direita do painel: a direita, o
-    // cartao nasceria fora da tela.
-    onEspiar({ modelo, x: r.left - 10, y: r.top });
+
+    // 320 e a largura do cartao mais o vao: abaixo disso, nao ha espaco a
+    // esquerda e ele passa a crescer para a direita.
+    const cabeAEsquerda = r.left > 320;
+    // Na metade de baixo da tela ele sobe, ancorado pelo pe do botao.
+    const deBaixo = r.top > window.innerHeight / 2;
+
+    onEspiar({
+      modelo,
+      valores,
+      ancora: {
+        lado: cabeAEsquerda ? "esquerda" : "direita",
+        x: cabeAEsquerda ? r.left - 10 : r.right + 10,
+        y: deBaixo ? r.bottom : r.top,
+        deBaixo,
+      },
+    });
   };
 
   return (
@@ -337,16 +372,18 @@ function BotaoDeEspiar({
  * `overflow` da coluna rolável.
  */
 function PreviaDoModelo({ espiada }: { espiada: Espiada }) {
-  const { modelo } = espiada;
+  const { modelo, ancora } = espiada;
 
   return (
     <div
       style={{
         position: "fixed",
-        // Ancorado pela DIREITA: o cartao cresce para dentro da tela, e nao para
-        // fora dela.
-        right: `calc(100vw - ${espiada.x}px)`,
-        top: espiada.y,
+        ...(ancora.lado === "esquerda"
+          ? { right: `calc(100vw - ${ancora.x}px)` }
+          : { left: ancora.x }),
+        ...(ancora.deBaixo
+          ? { bottom: `calc(100vh - ${ancora.y}px)` }
+          : { top: ancora.y }),
         zIndex: 500,
         width: 300,
         padding: 10,
@@ -379,7 +416,7 @@ function PreviaDoModelo({ espiada }: { espiada: Espiada }) {
           <div style={{ fontWeight: "var(--fw-semi)", marginBottom: 3 }}>{modelo.cabecalho}</div>
         )}
 
-        {comFormatacaoDoWhatsapp(modelo.corpo)}
+        {comFormatacaoDoWhatsapp(preencher(modelo.corpo, espiada.valores ?? []))}
 
         {modelo.rodape && (
           <div style={{ marginTop: 5, fontSize: "var(--text-xs)", color: "var(--text-tertiary)" }}>
@@ -446,6 +483,7 @@ export function EnvioDoModelo({
    */
   const [link, setLink] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const [espiando, setEspiando] = useState<Espiada | null>(null);
 
   const pedeLink = modelo.botao?.temVariavel === true;
 
@@ -475,88 +513,45 @@ export function EnvioDoModelo({
     <footer
       style={{
         flexShrink: 0,
-        // ⚠️ 420 e nao 320. Com a previa mais os campos, o rodape ficava com
-        // uma frestinha rolavel e a pessoa preenchia olhando duas linhas por
-        // vez. O limite existe so para a conversa nao sumir de vez.
-        maxHeight: 420,
-        overflowY: "auto",
-        padding: "8px 14px 12px",
+        /*
+         * ⚠️ SEM rolagem. Os campos ficam todos na tela: rolar para achar o
+         * terceiro de quatro faz preencher às cegas, e o valor no campo errado
+         * sai cobrado. O limite só volta acima de dez, onde não há tela que
+         * caiba.
+         */
+        maxHeight: modelo.parametros > 10 ? 420 : undefined,
+        overflowY: modelo.parametros > 10 ? "auto" : "visible",
+        padding: "0 14px 12px",
         display: "flex",
         flexDirection: "column",
         gap: 8,
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <button
-          type="button"
-          onClick={onTrocar}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 4,
-            padding: 0,
-            border: "none",
-            background: "transparent",
-            cursor: "pointer",
-            fontFamily: "var(--font)",
-            fontSize: "var(--text-xs)",
-            fontWeight: "var(--fw-semi)",
-            color: "var(--text-tertiary)",
-          }}
-        >
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M15 18l-6-6 6-6" />
-          </svg>
-          Outro modelo
-        </button>
-
-        <span style={{ flex: 1 }} />
-
-        <span
-          style={{
-            fontSize: "var(--text-xs)",
-            color: "var(--text-tertiary)",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {modelo.nome}
-        </span>
-      </div>
-
       {/*
-        A prévia com a cara de BOLHA ENVIADA, e não de caixa de formulário. É
-        literalmente o que o cliente vai ver daqui a um segundo.
+        O nome do modelo vira TÍTULO, com a mesma anatomia da coluna ao lado, e a
+        prévia sai de cena.
+
+        ⚠️ Ela ocupava metade do rodapé para mostrar um texto que não muda: o
+        modelo é aprovado, e o que a pessoa precisa ver enquanto preenche são os
+        CAMPOS. O texto continua a um passo, atrás do olho.
+
+        ⚠️ Sem "outro modelo": a coluna da direita está aberta com a lista
+        inteira, e um botão que faz o mesmo que ela vira um segundo caminho para
+        o mesmo lugar.
       */}
-      <div
-        style={{
-          alignSelf: "flex-end",
-          maxWidth: "88%",
-          padding: "8px 11px",
-          borderRadius: "var(--radius-lg) var(--radius-lg) var(--radius-xs) var(--radius-lg)",
-          background: "var(--primary-subtle)",
-          boxShadow: "var(--shadow-xs)",
-          fontSize: "var(--text-sm)",
-          lineHeight: "var(--lh-normal)",
-          whiteSpace: "pre-wrap",
-          color: "var(--text-primary)",
-        }}
-      >
-        {modelo.cabecalho && (
-          <div style={{ fontWeight: "var(--fw-semi)", marginBottom: 3 }}>{modelo.cabecalho}</div>
-        )}
+      <CabecalhoDeSecao
+        primeiro
+        colado
+        titulo={modelo.nome}
+        legenda={
+          modelo.parametros === 0
+            ? "Este modelo não tem campos. É só enviar."
+            : "Preencha os campos abaixo. A dica de cada um mostra onde ele cai no texto."
+        }
+        acao={<BotaoDeEspiar modelo={modelo} valores={valores} onEspiar={setEspiando} />}
+      />
 
-        {preencher(modelo.corpo, valores)}
-
-        {modelo.rodape && (
-          <div style={{ marginTop: 5, fontSize: "var(--text-xs)", color: "var(--text-tertiary)" }}>
-            {modelo.rodape}
-          </div>
-        )}
-
-        {modelo.botao && <CartaoDoBotao texto={modelo.botao.texto} />}
-      </div>
+      {espiando && <PreviaDoModelo espiada={espiando} />}
 
       {/*
         ⚠️ Cada campo mostra ONDE ele cai no texto.
