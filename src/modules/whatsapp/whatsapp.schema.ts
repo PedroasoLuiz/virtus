@@ -201,6 +201,15 @@ export const salvarVinculoBodySchema = z.object({
   botaoParam: z.string().trim().min(1).max(40).nullable().default(null),
 });
 
+/** Cria na Meta o modelo sugerido de uma finalidade. */
+export const criarModeloBodySchema = z.object({
+  contaId: z.number().int().positive(),
+  finalidade: z.enum(["cobranca", "ticket", "contapagar", "aniversario"]),
+  /** A limpeza para o formato da Meta acontece no servico. */
+  nome: z.string().trim().min(3).max(120),
+  idioma: z.string().trim().min(2).max(20).default("pt_BR"),
+});
+
 export const vinculosQuerySchema = z.object({
   contaId: z.coerce.number().int().positive(),
 });
@@ -223,6 +232,7 @@ export const ativarContaBodySchema = z.object({
 export type SalvarContaBody = z.infer<typeof salvarContaBodySchema>;
 export type TestarContaBody = z.infer<typeof testarContaBodySchema>;
 export type SalvarVinculoBody = z.infer<typeof salvarVinculoBodySchema>;
+export type CriarModeloBody = z.infer<typeof criarModeloBodySchema>;
 export type VinculosQuery = z.infer<typeof vinculosQuerySchema>;
 export type RemoverVinculoQuery = z.infer<typeof removerVinculoQuerySchema>;
 export type AtivarContaBody = z.infer<typeof ativarContaBodySchema>;

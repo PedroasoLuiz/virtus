@@ -259,6 +259,102 @@ export async function listarModelos(cred: Credenciais): Promise<Modelo[]> {
 }
 
 /**
+ * Cria um modelo no catalogo da Meta.
+ *
+ * ⚠️ Nasce PENDENTE, nunca aprovado. A Meta revisa depois: utilitario costuma
+ * sair em minutos, mas nao da para criar e enviar no mesmo gesto. Quem chama
+ * precisa dizer isso na tela, senao a conclusao e que o botao nao funcionou.
+ *
+ * ⚠️ O `example` e OBRIGATORIO quando o corpo tem `{{n}}`. Sem ele a Meta
+ * responde 400 sem explicar direito, e e o erro mais comum de quem cria por API.
+ * Os exemplos saem do proprio catalogo de finalidades, que ja os tinha para a
+ * previa.
+ *
+ * ⚠️ O botao de URL vai com o `{{1}}` no FIM do endereco, que e a forma que a
+ * Meta documenta para sufixo dinamico. Criado assim, pelo JSON, o marcador nao
+ * passa pela codificacao do painel — que foi onde ele ja chegou escapado e o
+ * link concatenou em vez de substituir.
+ */
+export async function criarModelo(
+  cred: Credenciais,
+  entrada: {
+    nome: string;
+    idioma: string;
+    categoria: "UTILITY" | "MARKETING";
+    corpo: string;
+    exemplos: string[];
+    botao: { texto: string; url: string; exemplo: string } | null;
+  },
+): Promise<{ id: string; status: string }> {
+  if (!cred.wabaId) {
+    throw new BusinessRuleError(
+      "Este numero nao tem a conta (WABA) cadastrada, entao nao da para criar o modelo.",
+    );
+  }
+
+  const componentes: Record<string, unknown>[] = [
+    {
+      type: "BODY",
+      text: entrada.corpo,
+      ...(entrada.exemplos.length > 0 ? { example: { body_text: [entrada.exemplos] } } : {}),
+    },
+  ];
+
+  if (entrada.botao) {
+    componentes.push({
+      type: "BUTTONS",
+      buttons: [
+        {
+          type: "URL",
+          text: entrada.botao.texto,
+          url: `${entrada.botao.url}{{1}}`,
+          example: [`${entrada.botao.url}${entrada.botao.exemplo}`],
+        },
+      ],
+    });
+  }
+
+  const resposta = await fetch(`${BASE}/${cred.apiVersao}/${cred.wabaId}/message_templates`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${cred.token}`,
+    },
+    body: JSON.stringify({
+      name: entrada.nome,
+      language: entrada.idioma,
+      category: entrada.categoria,
+      components: componentes,
+    }),
+  });
+
+  const corpo = (await resposta.json().catch(() => ({}))) as {
+    id?: string;
+    status?: string;
+    error?: { message?: string; error_user_msg?: string; code?: number };
+  };
+
+  if (!resposta.ok) {
+    logger.error("Meta recusou a criacao do modelo", {
+      status: resposta.status,
+      codigo: corpo.error?.code,
+      nome: entrada.nome,
+    });
+
+    /*
+     * `error_user_msg` primeiro: e o texto que a Meta escreve para o dono da
+     * conta ler, e diz coisas uteis ("ja existe um modelo com esse nome").
+     * `message` e para quem programa.
+     */
+    throw new BusinessRuleError(
+      corpo.error?.error_user_msg ?? corpo.error?.message ?? "A Meta recusou a criação do modelo.",
+    );
+  }
+
+  return { id: corpo.id ?? "", status: corpo.status ?? "PENDING" };
+}
+
+/**
  * Confere as credenciais da Meta antes de gravar o numero.
  *
  * ⚠️ Le o proprio numero (`GET /{phone_number_id}`) em vez de mandar mensagem.

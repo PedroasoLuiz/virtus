@@ -17,6 +17,7 @@ import {
   modeloSchema,
   type AtivarContaBody,
   type ContaIdQuery,
+  type CriarModeloBody,
   type ConversaIdQuery,
   type EnviarModeloBody,
   type RemoverVinculoQuery,
@@ -78,6 +79,14 @@ export async function salvarVinculo({ body, ctx }: Entrada<SalvarVinculoBody, un
   });
 
   return ok(await service.listarVinculos(contaId));
+}
+
+export async function criarModelo({ body, ctx }: Entrada<CriarModeloBody, undefined, unknown>) {
+  empresaObrigatoria(ctx);
+
+  return ok(
+    await service.criarModeloDaFinalidade(body.contaId, body.finalidade, body.nome, body.idioma),
+  );
 }
 
 export async function removerVinculo({

@@ -12,6 +12,7 @@ import {
   Field,
   PanelTabs,
   TableArea,
+  inputStyle,
   TableHead,
   Td,
   Th,
@@ -388,7 +389,7 @@ function FormularioDoVinculo({
           ocupando o topo, mas continua a um clique para comparar o próprio
           texto com um que já sabe onde cada campo entra.
         */}
-        <Sugestao finalidade={finalidade} recolher={Boolean(nome)} />
+        <Sugestao finalidade={finalidade} contaId={contaId} recolher={Boolean(nome)} />
 
         <Secao
           primeiro
@@ -722,9 +723,56 @@ function Dicionario({
  * escolha muda. Recolher por baixo de quem acabou de abrir seria a tela
  * discutindo com o usuário.
  */
-function Sugestao({ finalidade, recolher }: { finalidade: Finalidade; recolher: boolean }) {
+function Sugestao({
+  finalidade,
+  contaId,
+  recolher,
+}: {
+  finalidade: Finalidade;
+  contaId: number;
+  recolher: boolean;
+}) {
+  const { avisar } = useAvisos();
   const [aberta, setAberta] = useState<boolean | null>(null);
   const [anterior, setAnterior] = useState(recolher);
+  const [nome, setNome] = useState<string>(finalidade.id);
+  const [criando, setCriando] = useState(false);
+
+  async function criar() {
+    if (criando) return;
+    setCriando(true);
+
+    const r = await fetch("/api/v1/whatsapp/modelos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contaId, finalidade: finalidade.id, nome, idioma: "pt_BR" }),
+    });
+
+    setCriando(false);
+    const corpo = await r.json().catch(() => null);
+
+    if (!r.ok) {
+      const detalhe = corpo?.error?.details?.[0];
+      avisar(
+        "atencao",
+        detalhe
+          ? `${detalhe.campo}: ${detalhe.mensagem}`
+          : (corpo?.error?.message ?? "A Meta recusou a criação do modelo"),
+      );
+      return;
+    }
+
+    /*
+     * ⚠️ "Enviado para revisão", e não "criado". O modelo nasce PENDENTE: dizer
+     * que está pronto faria a pessoa procurá-lo no seletor logo abaixo, onde ele
+     * ainda não está — a lista só mostra aprovados.
+     */
+    avisar(
+      "sucesso",
+      `Modelo "${corpo.data.nome}" enviado para revisão`,
+      "A Meta costuma responder em minutos. Quando aprovar, feche e abra o painel para ele aparecer no seletor abaixo.",
+    );
+  }
 
   // Estado derivado durante o render, e não num efeito: assim a sanfona já sai
   // no estado certo no mesmo quadro em que o modelo é escolhido.
@@ -794,6 +842,68 @@ function Sugestao({ finalidade, recolher }: { finalidade: Finalidade; recolher: 
           <CartaoDeTexto copiar={finalidade.corpoSugerido} tituloDoCopiar="Copiar o texto sugerido">
             {finalidade.corpoSugerido}
           </CartaoDeTexto>
+
+          {finalidade.botao && <CartaoDeBotao texto="Acessar fatura" />}
+
+          {/*
+            ⚠️ Criar direto, sem passar pelo painel da Meta.
+
+            É o passo onde mais se erra: o corpo precisa de exemplos para cada
+            `{{n}}`, e o botão precisa da URL terminando na barra com o marcador
+            no fim. Pela API isso vai montado certo, e o que sobra para a pessoa
+            é escolher o nome.
+          */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "flex-end",
+              gap: 8,
+              marginTop: 14,
+              flexWrap: "wrap",
+            }}
+          >
+            <div>
+              <label
+                htmlFor={`nome-${finalidade.id}`}
+                style={{
+                  display: "block",
+                  marginBottom: 4,
+                  fontSize: "var(--text-xs)",
+                  color: "var(--text-tertiary)",
+                }}
+              >
+                Nome do modelo na Meta
+              </label>
+              <input
+                id={`nome-${finalidade.id}`}
+                style={{ ...inputStyle, width: 220 }}
+                value={nome}
+                onChange={(e) => setNome(e.target.value)}
+              />
+            </div>
+
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => void criar()}
+              disabled={criando || nome.trim().length < 3}
+            >
+              {criando ? "Enviando…" : "Criar na Meta"}
+            </Button>
+          </div>
+
+          <p
+            style={{
+              marginTop: 6,
+              fontSize: "var(--text-xs)",
+              color: "var(--text-tertiary)",
+              lineHeight: "var(--lh-normal)",
+            }}
+          >
+            Só letras minúsculas, números e sublinhado. O modelo entra como{" "}
+            {finalidade.categoria === "UTILITY" ? "utilitário" : "marketing"} e passa pela revisão
+            da Meta antes de poder ser vinculado.
+          </p>
         </>
       )}
     </section>

@@ -132,6 +132,73 @@ export async function salvarVinculo(
   logger.info("vinculo de modelo gravado", { empresaId, contaId, finalidade: vinculo.finalidade });
 }
 
+/**
+ * Cria na Meta o modelo sugerido de uma finalidade.
+ *
+ * ⚠️ O nome do modelo obedece a Meta, e nao o gosto de quem digita: minusculas,
+ * numeros e sublinhado, ate 512. Um espaco ou acento faz ela recusar com uma
+ * mensagem que ninguem liga ao campo, entao a limpeza acontece aqui.
+ *
+ * ⚠️ Cria e para. NAO vincula: o modelo nasce pendente de revisao, e vincular um
+ * template que ainda pode ser recusado deixaria a tela dizendo "pronto" para um
+ * envio que a Meta nao aceita.
+ */
+export async function criarModeloDaFinalidade(
+  contaId: number,
+  finalidadeId: string,
+  nome: string,
+  idioma: string,
+): Promise<{ nome: string; status: string }> {
+  const finalidade = finalidadePorId(finalidadeId);
+  if (!finalidade) throw new BusinessRuleError("Finalidade desconhecida");
+
+  const cred = await repo.credenciais(contaId);
+  if (!cred) throw new BusinessRuleError("O numero escolhido esta sem token cadastrado.");
+
+  const limpo = nome
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9_]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 512);
+
+  if (limpo.length < 3) throw new BusinessRuleError("Dê um nome com ao menos 3 letras ao modelo.");
+
+  /*
+   * Os exemplos saem na ORDEM dos marcadores do corpo sugerido, e nao na ordem
+   * do catalogo: a Meta confere posicao por posicao contra os `{{n}}`.
+   */
+  const marcadores = new Set(finalidade.corpoSugerido.match(/\{\{\s*\d+\s*\}\}/g) ?? []);
+  const exemplos = finalidade.variaveis.slice(0, marcadores.size).map((v) => v.exemplo);
+
+  const resultado = await cloud.criarModelo(cred, {
+    nome: limpo,
+    idioma,
+    categoria: finalidade.categoria,
+    corpo: finalidade.corpoSugerido,
+    exemplos,
+    botao: finalidade.botao
+      ? {
+          texto: "Acessar fatura",
+          /*
+           * ⚠️ Sempre `https`, e sem barra dobrada. A Meta recusa botao em
+           * `http`, e `APP_URL` cai em `http://localhost` quando ninguem
+           * configurou — o modelo seria criado com um endereco que ela nao
+           * aceita, e a recusa nao diria que o problema era o esquema.
+           */
+          url: `${serverEnv().APP_URL.replace(/^http:\/\//, "https://").replace(/\/+$/, "")}/p/`,
+          exemplo: "a3f9c2e1b7",
+        }
+      : null,
+  });
+
+  logger.info("modelo criado na Meta", { contaId, finalidade: finalidadeId, nome: limpo });
+
+  return { nome: limpo, status: resultado.status };
+}
+
 export async function removerVinculo(contaId: number, finalidade: string): Promise<void> {
   await repo.removerVinculo(contaId, finalidade);
 }

@@ -43,6 +43,16 @@ export type Finalidade = {
    * conclusao e que o envio quebrou.
    */
   origem: string | null;
+  /**
+   * A categoria da Meta.
+   *
+   * ⚠️ Nao e rotulo: ela muda o preco e o criterio de aprovacao. `UTILITY` e
+   * para mensagem que continua algo que o cliente ja pediu — cobranca, ordem de
+   * servico — e sai mais barata. Parabens de aniversario nao continua nada, e
+   * mandar isso como utilitaria e o caminho para a conta ser reclassificada ou o
+   * modelo recusado.
+   */
+  categoria: "UTILITY" | "MARKETING";
   variaveis: VariavelDeFinalidade[];
   /**
    * A variavel do BOTAO de URL, quando o modelo tiver um.
@@ -66,6 +76,7 @@ export const FINALIDADES: Finalidade[] = [
     descricao:
       "A cobrança de uma parcela de contas a receber. Quase sempre vai para quem não escreveu naquele dia, e por isso precisa de modelo aprovado.",
     origem: "Contas a receber, no botão de enviar por WhatsApp",
+    categoria: "UTILITY",
     variaveis: [
       {
         chave: "nome",
@@ -119,6 +130,7 @@ export const FINALIDADES: Finalidade[] = [
     descricao:
       "Avisa o cliente sobre uma ordem de serviço: que abriu, que andou, que fechou. O texto do modelo é que decide qual desses é.",
     origem: null,
+    categoria: "UTILITY",
     variaveis: [
       {
         chave: "cliente",
@@ -161,6 +173,7 @@ export const FINALIDADES: Finalidade[] = [
     descricao:
       "Uma parcela do contas a pagar, para o fornecedor. O destinatário aqui não é o seu cliente: é quem você paga.",
     origem: null,
+    categoria: "UTILITY",
     variaveis: [
       {
         chave: "fornecedor",
@@ -197,6 +210,7 @@ export const FINALIDADES: Finalidade[] = [
     descricao:
       "A mensagem de parabéns. Sai sozinha, sem ninguém clicar, e por isso o texto do modelo precisa valer para qualquer cliente.",
     origem: null,
+    categoria: "MARKETING",
     variaveis: [
       {
         chave: "nome",
