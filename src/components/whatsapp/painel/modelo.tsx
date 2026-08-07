@@ -251,6 +251,28 @@ function LinhaDeModelo({
     >
       <Td>
         <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+          {/*
+            O impedimento vira CADEADO, e não frase na linha.
+
+            ⚠️ Escrito, "tem botão de pedido, que não sai por aqui" tomava a
+            coluna inteira e puxava a atenção para o único modelo que não
+            interessa. E lido de relance parecia erro, quando é só um tipo de
+            botão que o painel não monta. O ícone diz "não dá" sem gritar, e o
+            porquê fica na dica.
+          */}
+          {bloqueado && (
+            <span
+              title={modelo.bloqueio ?? undefined}
+              aria-label={modelo.bloqueio ?? undefined}
+              style={{ flexShrink: 0, display: "grid", placeItems: "center", color: "var(--text-tertiary)" }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="4.5" y="10.5" width="15" height="10" rx="2.2" />
+                <path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" />
+              </svg>
+            </span>
+          )}
+
           <span
             style={{
               flex: 1,
@@ -269,7 +291,7 @@ function LinhaDeModelo({
         </div>
       </Td>
 
-      <Td>{bloqueado ? modelo.bloqueio : modelo.parametros}</Td>
+      <Td>{modelo.parametros}</Td>
     </Tr>
   );
 }
@@ -548,7 +570,39 @@ export function EnvioDoModelo({
             ? "Este modelo não tem campos. É só enviar."
             : "Preencha os campos abaixo. A dica de cada um mostra onde ele cai no texto."
         }
-        acao={<BotaoDeEspiar modelo={modelo} valores={valores} onEspiar={setEspiando} />}
+        acao={
+          <>
+            <BotaoDeEspiar modelo={modelo} valores={valores} onEspiar={setEspiando} />
+
+            {/*
+              ⚠️ Um ÍCONE, e não o botão "outro modelo" que saiu daqui.
+
+              A coluna fecha ao escolher, e sem isto não haveria caminho de volta:
+              a barra de escrita virou a caixa do modelo, então o "+" que abria a
+              lista também não está mais na tela.
+            */}
+            <button
+              type="button"
+              onClick={onTrocar}
+              aria-label="Escolher outro modelo"
+              title="Escolher outro modelo"
+              style={{
+                width: 20,
+                height: 20,
+                display: "grid",
+                placeItems: "center",
+                border: "none",
+                background: "transparent",
+                cursor: "pointer",
+                color: "var(--primary)",
+              }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 6h16M4 12h16M4 18h10" />
+              </svg>
+            </button>
+          </>
+        }
       />
 
       {espiando && <PreviaDoModelo espiada={espiando} />}

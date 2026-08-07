@@ -2070,7 +2070,10 @@ function Thread({
             key={modeloEscolhido.nome}
             modelo={modeloEscolhido}
             onEnviar={onEnviarModelo}
-            onTrocar={() => setModeloEscolhido(null)}
+            onTrocar={() => {
+              setModeloEscolhido(null);
+              setModelosAbertos(true);
+            }}
           />
         ) : aberta ? (
           /*
@@ -2096,7 +2099,16 @@ function Thread({
         <ColunaDeModelos
           lista={lista}
           escolhido={modeloEscolhido?.nome ?? null}
-          onEscolher={setModeloEscolhido}
+          onEscolher={(m) => {
+            setModeloEscolhido(m);
+            /*
+             * ⚠️ A coluna FECHA na escolha. Ela existe para escolher, e escolhido
+             * o modelo o que importa e a conversa de volta na largura inteira
+             * mais os campos para preencher. Aberta, ela ficava ali repetindo
+             * uma decisao ja tomada e comendo trezentos pixels da leitura.
+             */
+            setModelosAbertos(false);
+          }}
           onFechar={() => {
             setModelosAbertos(false);
             setModeloEscolhido(null);
