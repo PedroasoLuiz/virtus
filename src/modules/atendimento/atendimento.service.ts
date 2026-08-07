@@ -429,14 +429,21 @@ async function mandarSegundaVia(
     urlDoBotao,
   );
 
-  // Grava o corpo JA PREENCHIDO, como o envio do painel: o modelo cru deixaria
-  // o historico com `{{1}}` no lugar do valor.
-  await repo.registrarSaidaDoBot(
-    segredo,
-    conversaId,
-    wamid,
-    previaDoCorpo(vinculo.corpo ?? "", parametros),
-  );
+  /*
+   * Grava o corpo JA PREENCHIDO, como o envio do painel: o modelo cru deixaria
+   * o historico com `{{1}}` no lugar do valor.
+   *
+   * ⚠️ Vinculo amarrado a um template que ja existia na Meta nao tem `corpo`:
+   * nunca passamos pela tela que o escreve. Sem o alternativo, o painel mostrava
+   * um balao VAZIO numa mensagem que o cliente recebeu inteira.
+   */
+  const registro = vinculo.corpo?.trim()
+    ? previaDoCorpo(vinculo.corpo, parametros)
+    : `Segunda via enviada pelo modelo ${vinculo.modeloNome}: ${parametros
+        .filter(Boolean)
+        .join(" - ")}`;
+
+  await repo.registrarSaidaDoBot(segredo, conversaId, wamid, registro);
 
   logger.info("segunda via enviada pelo bot", { conversaId });
 

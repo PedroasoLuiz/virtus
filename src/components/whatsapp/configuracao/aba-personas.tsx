@@ -1094,8 +1094,9 @@ function BotaoDeSugestao({ onClick }: { onClick: () => void }) {
         display: "inline-flex",
         alignItems: "center",
         gap: 5,
-        /* Afastado do campo: colado, ele parecia parte da caixa de texto. */
-        marginTop: 14,
+        /* O respiro fica ABAIXO: o botao pertence ao campo de cima, e o que
+         * precisava de ar era o campo seguinte. */
+        marginBottom: 14,
         /*
          * Do tamanho do TEXTO, e nao da largura do campo.
          *
