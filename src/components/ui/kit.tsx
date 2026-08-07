@@ -228,13 +228,18 @@ export function TableArea({
 }) {
   return (
     /*
-     * ⚠️ Respiro em CIMA e EMBAIXO, e nao so dos lados.
+     * O respiro do cartao mora AQUI, na area rolavel, e nao nas celulas.
      *
-     * O cartao e branco e arredondado: a primeira linha colada no topo e a
-     * ultima colada no rodape encostam na curva da quina. Os 8 de cada lado sao
-     * o minimo para a moldura respirar sem virar espaco morto.
+     * ⚠️ Nas celulas ele recuava so o TEXTO: a divisoria de cada linha continuava
+     * indo de quina a quina, porque ela e do `<tr>` e nao da celula. Com o vao no
+     * container, a tabela inteira encolhe — conteudo e traco juntos —, e as
+     * linhas param onde o cartao pede.
+     *
+     * Em cima 4 e embaixo 8: o cabecalho ja tem altura propria e um vao cheio
+     * acima dele abria um buraco entre o titulo da tela e a primeira coluna; a
+     * ultima linha, essa sim, precisa dos 8 para nao esbarrar na curva.
      */
-    <div style={{ flex: 1, overflow: "auto", minHeight: 0, padding: "8px 0" }}>
+    <div style={{ flex: 1, overflow: "auto", minHeight: 0, padding: "4px 16px 8px" }}>
       <table style={{ width: "100%", borderCollapse: "collapse", minWidth }}>{children}</table>
     </div>
   );
@@ -251,11 +256,11 @@ export function TableHead({ children }: { children: React.ReactNode }) {
       <tr
         style={{
           /*
-           * Traco em CIMA tambem, como nas listas da Apple: o cabecalho fica
-           * entre duas linhas e le como um rotulo da tabela, nao como a
-           * primeira linha dela.
+           * ⚠️ So o traco de BAIXO. O de cima fechava o cabecalho entre duas
+           * linhas, e dentro de um cartao branco isso desenha uma faixa a dois
+           * pixels da borda do proprio cartao: duas molduras paralelas, uma
+           * dentro da outra. Embaixo basta, e e ele que separa rotulo de dado.
            */
-          borderTop: "1px solid var(--border)",
           borderBottom: "1px solid var(--border)",
           height: "var(--h-th)",
         }}
@@ -596,17 +601,14 @@ export function Pagination({
         alignItems: "center",
         justifyContent: "space-between",
         /*
-         * ⚠️ Respiro extra a direita por causa do botao flutuante do WhatsApp.
+         * O mesmo recuo da tabela, para os dois alinharem dentro do cartao.
          *
-         * Ele mora no canto inferior direito da tela, fixo, e a paginacao e o
-         * unico controle do sistema que divide esse canto — sem a folga, o botao
-         * cobre "proxima pagina" e a tabela fica presa na primeira.
-         *
-         * A folga vale em toda tela, inclusive onde o botao nao aparece: o custo
-         * e um vao de 60px, e a alternativa seria a paginacao ter de saber quem
-         * mais esta na tela.
+         * ⚠️ Aqui havia 76 a direita, folga para o botao flutuante do WhatsApp
+         * nao cobrir o "proxima pagina". Ele saiu do canto da tela e foi para a
+         * barra lateral, entao a folga virou um vao de sessenta pixels defendendo
+         * a tela de um botao que nao existe mais ali.
          */
-        padding: "0 76px 0 0",
+        padding: "0 16px",
         /*
          * Sem fundo e sem borda de topo: a paginacao vira rodape da tabela, e
          * uma barra cinza embaixo de uma tabela que ja nao tem moldura

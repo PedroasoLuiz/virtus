@@ -614,17 +614,25 @@ h1, h2, h3, h4 {
  * componente, a regra de primeira e ultima celula era ignorada em silencio, e a
  * tabela continuava recuada sem nada no CSS explicando por que.
  *
- * ⚠️ Nas pontas o recuo FICA, e antes ele saia.
- *
- * A regra antiga alinhava a primeira coluna com o titulo da tela, e valia quando
- * a tabela nao tinha moldura. Ela tem: e um cartao branco de cantos
- * arredondados, e conteudo colado na borda de um cartao arredondado passa por
- * baixo da propria curva. Alinhamento com o titulo custa menos do que texto
- * encostando na quina.
+ * Nas pontas o recuo sai: ele existe para separar UMA coluna da outra, e na
+ * borda so empurraria o conteudo para dentro de um vao que a area rolavel ja
+ * abriu. Quem afasta a tabela da moldura do cartao e o `TableArea`, e nao a
+ * celula — la o vao encolhe a tabela INTEIRA, entao a divisoria de cada linha
+ * para junto com o texto em vez de seguir ate a quina.
  */
 table th,
 table td {
   padding: 0 16px;
+}
+
+table th:first-child,
+table td:first-child {
+  padding-left: 0;
+}
+
+table th:last-child,
+table td:last-child {
+  padding-right: 0;
 }
 
 /*
