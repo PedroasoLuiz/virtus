@@ -26,7 +26,12 @@ import {
   textareaStyle,
 } from "@/components/ui/kit";
 import { temPalavrao } from "@/shared/domain/linguagem";
-import { AREAS, PERMISSOES, permissaoPorId } from "@/modules/atendimento/permissoes";
+import {
+  AREAS,
+  PERMISSOES,
+  permissaoPorId,
+  type Permissao,
+} from "@/modules/atendimento/permissoes";
 import type { Persona } from "@/modules/atendimento/personas.types";
 import { formatarTelefone, type ContaWhatsapp } from "@/modules/whatsapp/whatsapp.types";
 import type { ConfigIA } from "@/modules/ia/ia.types";
@@ -127,7 +132,7 @@ export function AbaDePersonas({
       <TableArea minWidth={0}>
         <TableHead>
           {/* Sem titulo: a bolinha e reconhecimento, nao um dado a ler. */}
-          <Th minWidth={26}> </Th>
+          <Th className="col-avatar" minWidth={26}> </Th>
           <Th>Persona</Th>
           <Th>Onde vale</Th>
           <Th minWidth={90}>Situação</Th>
@@ -153,7 +158,7 @@ export function AbaDePersonas({
                   cor estável faz reconhecer a linha certa sem ler, do mesmo
                   jeito que faz na lista de conversas.
                 */}
-                <Td>
+                <Td className="col-avatar">
                   <Avatar nome={p.nome || "?"} semente={String(p.id)} tamanho={26} />
                 </Td>
 
@@ -389,7 +394,6 @@ function FormularioDaPersona({
       open
       onClose={onFechar}
       title={rascunho.id ? "Editar persona" : "Nova persona"}
-      subtitle="Nunca autoriza dizer valor, vencimento ou boleto"
       acoes={
         <Button
           size="xs"
@@ -420,7 +424,7 @@ function FormularioDaPersona({
       <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
         <Grupo
           primeiro
-          titulo="A persona"
+          titulo="Descrição"
           legenda="O nome serve só para você achar esta linha na lista. O jeito de falar é o que a IA imita quando responde por ela."
         >
           <Field label="Nome" required hint="Só para você identificar aqui dentro.">
@@ -772,13 +776,6 @@ function Permissoes({
 }) {
   return (
     <div>
-      {/*
-        Título e uma frase no topo, e não uma legenda por área.
-
-        ⚠️ A regra é a mesma para tudo que toca cadastro, e repeti-la em cada
-        bloco fazia a tela ter mais aviso que opção. Dita uma vez, ela vale para
-        a lista inteira.
-      */}
       <div
         style={{
           marginTop: 4,
@@ -791,9 +788,16 @@ function Permissoes({
         O que ela resolve sozinha
       </div>
 
+      {/*
+        Uma frase no topo, e não uma legenda por área.
+
+        ⚠️ A regra é a mesma para tudo que toca cadastro, e repeti-la em cada
+        bloco fazia a tela ter mais aviso que opção. Dita uma vez, ela vale para
+        a lista inteira.
+      */}
       <p
         style={{
-          margin: "6px 0 20px",
+          margin: "6px 0 18px",
           fontSize: "calc(var(--text-xs) + 1px)",
           color: "var(--text-tertiary)",
           lineHeight: "var(--lh-normal)",
@@ -804,89 +808,219 @@ function Permissoes({
           : "O que estiver marcado, ela resolve sozinha. O resto ela encaminha, mesmo que pareça saber a resposta. Consulta de cadastro continua exigindo CPF ou CNPJ e o código enviado ao e-mail."}
       </p>
 
-      {AREAS.map((area) => {
-        const itens = PERMISSOES.filter(
-          (p) => p.area === area.id && (!geral || !p.exigeIdentificacao),
-        );
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {AREAS.map((area) => {
+          const itens = PERMISSOES.filter(
+            (p) => p.area === area.id && (!geral || !p.exigeIdentificacao),
+          );
 
-        if (itens.length === 0) return null;
+          if (itens.length === 0) return null;
 
-        return (
-          <section key={area.id} style={{ marginBottom: 20 }}>
-            {/* Rótulo técnico, o mesmo dos cabeçalhos de tabela: a área
-                organiza a lista, não abre uma seção nova da tela. */}
-            <div className="rotulo" style={{ marginBottom: 6 }}>
-              {area.rotulo}
-            </div>
+          return (
+            <AreaDePermissoes
+              key={area.id}
+              rotulo={area.rotulo}
+              itens={itens}
+              escolhidas={escolhidas}
+              onMarcar={onMarcar}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
-            {itens.map((p) => {
-              const marcada = escolhidas.includes(p.id);
+/**
+ * Uma área, recolhível, com as permissões dela num bloco só.
+ *
+ * ⚠️ Um contêiner por área, com fios de cabelo entre as linhas, e não um cartão
+ * por permissão. Cartões individuais colocam borda em volta de cada item e a
+ * lista vira uma pilha de caixas; agrupadas, as bordas somem e o que separa uma
+ * linha da outra é uma linha de 1px recuada — o mesmo desenho das listas de
+ * ajustes do iOS.
+ *
+ * ⚠️ Fechada quando não há nada marcado. Quatro áreas abertas de uma vez são
+ * oito opções de leitura antes de a pessoa escolher a primeira; fechadas, ela lê
+ * quatro títulos e abre a que interessa. A que já tem escolha nasce aberta,
+ * porque ali há o que conferir.
+ */
+function AreaDePermissoes({
+  rotulo,
+  itens,
+  escolhidas,
+  onMarcar,
+}: {
+  rotulo: string;
+  itens: Permissao[];
+  escolhidas: string[];
+  onMarcar: (id: string, ligada: boolean) => void;
+}) {
+  const marcadas = itens.filter((p) => escolhidas.includes(p.id)).length;
+  const [aberta, setAberta] = useState(marcadas > 0);
 
-              return (
-                <label
-                  key={p.id}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    /*
-                      A linha inteira é o alvo do clique, e por isso ela tem
-                      moldura: sem ela, a área clicável não tem onde começar nem
-                      terminar, e o mouse acerta por sorte.
-                    */
-                    padding: "8px 10px",
-                    marginBottom: 4,
-                    borderRadius: "var(--radius-md)",
-                    border: `1px solid ${marcada ? "var(--primary)" : "var(--border)"}`,
-                    background: marcada ? "var(--primary-subtle)" : "var(--surface)",
-                    cursor: "pointer",
-                    transition: "border-color var(--dur) var(--ease)",
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={marcada}
-                    onChange={(e) => onMarcar(p.id, e.target.checked)}
-                    style={{ flexShrink: 0, accentColor: "var(--primary)" }}
-                  />
+  return (
+    <section>
+      <button
+        type="button"
+        onClick={() => setAberta((v) => !v)}
+        aria-expanded={aberta}
+        style={{
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "6px 0",
+          border: "none",
+          background: "transparent",
+          cursor: "pointer",
+          textAlign: "left",
+        }}
+      >
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{
+            flexShrink: 0,
+            color: "var(--text-tertiary)",
+            transform: aberta ? "rotate(90deg)" : "none",
+            transition: "transform 160ms var(--ease-out)",
+          }}
+        >
+          <path d="M9 6l6 6-6 6" />
+        </svg>
 
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontSize: "var(--text-sm)" }}>{p.rotulo}</div>
-                    <div
-                      style={{
-                        marginTop: 1,
-                        fontSize: "var(--text-xs)",
-                        color: "var(--text-tertiary)",
-                      }}
-                    >
-                      {p.descricao}
-                    </div>
+        <span
+          style={{
+            flex: 1,
+            fontSize: "var(--text-md)",
+            fontWeight: "var(--fw-semi)",
+            color: "var(--text-primary)",
+          }}
+        >
+          {rotulo}
+        </span>
+
+        {/* Quantas estão ligadas, para a área fechada não esconder o estado. */}
+        {marcadas > 0 && (
+          <span style={{ fontSize: "var(--text-xs)", color: "var(--primary)" }}>
+            {marcadas} de {itens.length}
+          </span>
+        )}
+      </button>
+
+      {aberta && (
+        <div
+          style={{
+            marginTop: 4,
+            borderRadius: 12,
+            border: "1px solid var(--border)",
+            background: "var(--surface)",
+            overflow: "hidden",
+          }}
+        >
+          {itens.map((p, i) => {
+            const marcada = escolhidas.includes(p.id);
+
+            return (
+              <label
+                key={p.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: "11px 14px",
+                  /* Fio recuado à esquerda: alinha com o texto, e não com a
+                     borda do bloco. É o que faz a lista parecer contínua. */
+                  borderTop: i === 0 ? "none" : "1px solid var(--border)",
+                  cursor: "pointer",
+                }}
+              >
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      fontSize: "var(--text-sm)",
+                      color: "var(--text-primary)",
+                    }}
+                  >
+                    {p.rotulo}
+
+                    {/*
+                      ⚠️ "em breve" aparece MARCÁVEL, e não escondido.
+
+                      Deixar pronto antes de a tela existir é útil, mas quem
+                      marca e não vê a IA responder aquilo concluiria que
+                      quebrou.
+                    */}
+                    {p.emBreve && (
+                      <span style={{ fontSize: "var(--text-xs)", color: "var(--text-tertiary)" }}>
+                        em breve
+                      </span>
+                    )}
                   </div>
 
-                  {/*
-                    ⚠️ "em breve" aparece MARCÁVEL, e não escondido.
+                  <div
+                    style={{
+                      marginTop: 2,
+                      fontSize: "var(--text-xs)",
+                      color: "var(--text-tertiary)",
+                      lineHeight: "var(--lh-normal)",
+                    }}
+                  >
+                    {p.descricao}
+                  </div>
+                </div>
 
-                    Deixar pronto antes de a tela existir é útil, mas quem marca
-                    e não vê a IA responder aquilo concluiria que quebrou.
-                  */}
-                  {p.emBreve && (
-                    <span
-                      style={{
-                        flexShrink: 0,
-                        fontSize: "var(--text-xs)",
-                        color: "var(--text-tertiary)",
-                      }}
-                    >
-                      em breve
-                    </span>
+                {/*
+                  A marca fica à DIREITA, e o clique vale na linha inteira.
+
+                  ⚠️ O `input` continua existindo, apenas invisível: ele é quem
+                  responde ao teclado e ao leitor de tela. Trocar por uma `div`
+                  com `onClick` deixaria a lista inacessível sem mouse.
+                */}
+                <input
+                  type="checkbox"
+                  checked={marcada}
+                  onChange={(e) => onMarcar(p.id, e.target.checked)}
+                  style={{ position: "absolute", opacity: 0, width: 0, height: 0 }}
+                />
+
+                <span
+                  aria-hidden
+                  style={{
+                    flexShrink: 0,
+                    width: 20,
+                    height: 20,
+                    display: "grid",
+                    placeItems: "center",
+                    borderRadius: "var(--radius-full)",
+                    border: marcada ? "none" : "1.5px solid var(--border-strong)",
+                    background: marcada ? "var(--primary)" : "transparent",
+                    color: "var(--primary-fg)",
+                    transition: "background var(--dur) var(--ease)",
+                  }}
+                >
+                  {marcada && (
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M4 12.5l5.5 5.5L20 7" />
+                    </svg>
                   )}
-                </label>
-              );
-            })}
-          </section>
-        );
-      })}
-    </div>
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }
 

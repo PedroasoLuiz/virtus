@@ -602,3 +602,18 @@ table th:last-child,
 table td:last-child {
   padding-right: 0;
 }
+
+/*
+ * Coluna de avatar: recuo curto a direita.
+ *
+ * ⚠️ Os 16px separam uma coluna de DADO da outra. Aqui a bolinha e o nome sao a
+ * mesma informacao partida em duas celulas — separa-los com o vao cheio faz o
+ * nome parecer de outra linha.
+ *
+ * Em CSS e nao em linha: estilo em linha vence seletor, e cravar o valor no
+ * componente derrubaria a regra que zera o recuo da primeira celula.
+ */
+table th.col-avatar,
+table td.col-avatar {
+  padding-right: 8px;
+}

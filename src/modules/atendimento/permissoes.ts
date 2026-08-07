@@ -41,7 +41,7 @@ export const AREAS: { id: AreaDePermissao; rotulo: string; legenda: string }[] =
   },
   {
     id: "tickets",
-    rotulo: "Ordens de serviço",
+    rotulo: "Tickets",
     legenda: "Situação e andamento dos chamados do próprio cliente.",
   },
   {

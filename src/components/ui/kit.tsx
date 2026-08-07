@@ -247,13 +247,17 @@ export function Th({
   children,
   align = "left",
   minWidth,
+  className,
 }: {
   children?: React.ReactNode;
   align?: "left" | "right" | "center";
   minWidth?: number;
+  /** Para ajustar o recuo pelo CSS. Ver `.col-avatar` em `globals.css`. */
+  className?: string;
 }) {
   return (
     <th
+      className={className}
       // Sem `padding`: ele vem do CSS, pelo mesmo motivo do `Td`.
       style={{
         textAlign: align,
@@ -311,14 +315,18 @@ export function Td({
   children,
   style,
   colSpan,
+  className,
 }: {
   children?: React.ReactNode;
   style?: React.CSSProperties;
   colSpan?: number;
+  /** Para ajustar o recuo pelo CSS. Ver `.col-avatar` em `globals.css`. */
+  className?: string;
 }) {
   return (
     <td
       colSpan={colSpan}
+      className={className}
       /*
        * ⚠️ Sem `padding` aqui: ele mora no CSS.
        *
