@@ -22,6 +22,8 @@ import {
   useEstadoDoPainel,
 } from "@/components/whatsapp/estado-do-painel";
 import { BotaoDeEtiquetas, ChipDeEtiqueta } from "@/components/whatsapp/painel/etiquetas";
+import { Rascunho } from "@/components/whatsapp/painel/nova-conversa";
+import { ListaDeContatos } from "@/components/whatsapp/painel/contatos";
 import {
   botRespondendo,
   formatarTelefone,
@@ -34,6 +36,7 @@ import {
   type ContaWhatsapp,
   type Conversa,
   type CorDeEtiqueta,
+  type ContatoDoPainel,
   type Etiqueta,
   type Mensagem,
   type Modelo,
@@ -151,6 +154,16 @@ export function PainelWhatsapp() {
   const [contas, setContas] = useState<ContaWhatsapp[]>([]);
   const [contaId, setContaId] = useState<number | null>(null);
   const [configAberta, setConfigAberta] = useState(false);
+  /*
+   * A agenda toma o lugar da lista de conversas, e o contato escolhido sem
+   * conversa vira um RASCUNHO no lugar da thread.
+   *
+   * ⚠️ No lugar, e nao por cima. Escolher com quem falar e o mesmo gesto de
+   * escolher qual conversa abrir; num drawer, a tela ganharia uma terceira
+   * camada para fazer o que a primeira ja faz.
+   */
+  const [modoContatos, setModoContatos] = useState(false);
+  const [rascunho, setRascunho] = useState<ContatoDoPainel | null>(null);
 
   const contasAtivas = useMemo(() => contas.filter((c) => c.ativo), [contas]);
   const contaAtual = contasAtivas.find((c) => c.id === contaId) ?? contasAtivas[0] ?? null;
@@ -317,13 +330,20 @@ export function PainelWhatsapp() {
     [avisar],
   );
 
-  const abrirConversa = useCallback(async (conversa: Conversa) => {
-    setSelecionada(conversa);
+  /*
+   * Abre pelo ID, com ou sem a linha da lista em maos.
+   *
+   * ⚠️ `parcial` existe so para a tela nao piscar: vindo da lista, ja ha nome e
+   * foto para desenhar enquanto as mensagens chegam. Numa conversa recem-criada
+   * nao ha nada disso, e a resposta traz tudo.
+   */
+  const abrirPorId = useCallback(async (id: number, parcial?: Conversa) => {
+    setSelecionada(parcial ?? null);
     setMensagens([]);
     setAtendimento(null);
     setCarregando(true);
 
-    const r = await fetch(`/api/v1/whatsapp/conversas/${conversa.id}/mensagens`);
+    const r = await fetch(`/api/v1/whatsapp/conversas/${id}/mensagens`);
     setCarregando(false);
     if (!r.ok) return;
 
@@ -332,10 +352,13 @@ export function PainelWhatsapp() {
     setMensagens(corpo.data.mensagens);
     setAtendimento(corpo.data.atendimento ?? null);
 
-    setConversas((atuais) =>
-      atuais.map((c) => (c.id === conversa.id ? { ...c, naoLidas: 0 } : c)),
-    );
+    setConversas((atuais) => atuais.map((c) => (c.id === id ? { ...c, naoLidas: 0 } : c)));
   }, []);
+
+  const abrirConversa = useCallback(
+    (conversa: Conversa) => abrirPorId(conversa.id, conversa),
+    [abrirPorId],
+  );
 
   /*
    * Carga da lista, com espera entre teclas.
@@ -677,7 +700,34 @@ export function PainelWhatsapp() {
               dela depois de escolher. Manter as duas nao encolhe o problema, so
               o divide: a lista fica ilegivel e a conversa tambem.
             */}
-            {(!estreito || !selecionada) && (
+            {(!estreito || (!selecionada && !rascunho)) &&
+              (modoContatos ? (
+                <ListaDeContatos
+                  contaId={contaAtual?.id ?? 0}
+                  estreito={estreito}
+                  onFechar={() => {
+                    setModoContatos(false);
+                    setRascunho(null);
+                  }}
+                  onEscolher={(c) => {
+                    /*
+                     * Ja tem conversa neste numero: abre a que existe.
+                     *
+                     * ⚠️ Comecar uma nova partiria o historico em dois, e a
+                     * pessoa que abrisse a antiga nao veria o que acabou de ser
+                     * mandado.
+                     */
+                    if (c.conversaId != null) {
+                      setModoContatos(false);
+                      setRascunho(null);
+                      void abrirPorId(c.conversaId);
+                      return;
+                    }
+
+                    setRascunho(c);
+                  }}
+                />
+              ) : (
             <ListaDeConversas
               estreito={estreito}
               soEsperando={soEsperando}
@@ -714,15 +764,48 @@ export function PainelWhatsapp() {
               onBuscar={setBusca}
               onEscolher={(c) => void abrirConversa(c)}
               onAbrirConfig={() => setConfigAberta(true)}
+              onNovaConversa={() => {
+                setModoContatos(true);
+                setSelecionada(null);
+                setMensagens([]);
+              }}
             />
-            )}
+              ))}
 
             {/*
               `key` pela conversa: trocar de contato remonta a thread, e o que
               e estado da conversa anterior (gaveta de detalhes aberta, posicao
               da rolagem) morre junto, sem efeito para zerar.
             */}
-            {(!estreito || selecionada) && (
+            {/*
+              O RASCUNHO ocupa o lugar da thread. E a mesma tela, sem historico:
+              a conversa nasce quando o modelo sai.
+            */}
+            {rascunho && contaAtual ? (
+              <Rascunho
+                key={rascunho.telefone}
+                contato={rascunho}
+                contaId={contaAtual.id}
+                onVoltar={estreito ? () => setRascunho(null) : null}
+                onCancelar={() => {
+                  setRascunho(null);
+                  setModoContatos(false);
+                }}
+                onEnviou={(conversaId) => {
+                  setRascunho(null);
+                  setModoContatos(false);
+                  /*
+                   * ⚠️ ABRE a conversa criada. Sem isso o modelo saia e a tela
+                   * ficava no mesmo lugar: a conversa nova entrava no topo da
+                   * lista e ninguem garantia que a pessoa a reconheceria entre
+                   * as outras.
+                   */
+                  void abrirPorId(conversaId);
+                  void carregarConversas(contaAtual.id, busca.trim() || undefined);
+                }}
+              />
+            ) : (
+            (!estreito || selecionada) && (
             <Thread
               key={selecionada?.id ?? "vazia"}
               onVoltar={estreito ? () => setSelecionada(null) : null}
@@ -747,6 +830,7 @@ export function PainelWhatsapp() {
                 void carregarConversas(contaAtual?.id ?? null, busca.trim() || undefined);
               }}
             />
+            )
             )}
       </aside>
 
@@ -789,6 +873,7 @@ function ListaDeConversas({
   onBuscar,
   onEscolher,
   onAbrirConfig,
+  onNovaConversa,
   etiquetas,
   filtroEtiquetas,
   onFiltrarEtiqueta,
@@ -808,6 +893,7 @@ function ListaDeConversas({
   onBuscar: (v: string) => void;
   onEscolher: (c: Conversa) => void;
   onAbrirConfig: () => void;
+  onNovaConversa: () => void;
   /** Unica coluna na tela: ocupa tudo em vez dos 300 fixos. */
   estreito: boolean;
   soEsperando: boolean;
@@ -864,6 +950,36 @@ function ListaDeConversas({
             onTrocar={onTrocarConta}
             onAbrirConfig={onAbrirConfig}
           />
+
+          {/*
+            ⚠️ Falar PRIMEIRO com alguem nao tinha caminho nenhum.
+
+            Toda conversa nascia de uma mensagem recebida ou de uma cobranca
+            disparada pelo sistema: confirmar um agendamento, avisar de uma
+            entrega ou responder um lead que veio por outro canal exigia pedir
+            para a pessoa escrever antes.
+          */}
+          <button
+            onClick={onNovaConversa}
+            aria-label="Nova conversa"
+            title="Nova conversa"
+            style={{
+              width: 28,
+              height: 28,
+              flexShrink: 0,
+              display: "grid",
+              placeItems: "center",
+              border: "1px solid var(--border)",
+              background: "var(--surface)",
+              borderRadius: "var(--radius-sm)",
+              cursor: "pointer",
+              color: "var(--text-secondary)",
+            }}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+          </button>
 
           <button
             onClick={onAbrirConfig}

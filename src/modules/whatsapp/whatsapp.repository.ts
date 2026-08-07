@@ -5,6 +5,7 @@ import type {
   ClienteCandidato,
   ContaWhatsapp,
   Conversa,
+  ContatoDoPainel,
   Credenciais,
   CorDeEtiqueta,
   Etiqueta,
@@ -472,6 +473,37 @@ export async function listarConversas(
 
   if (error) throw error;
   return (data ?? []).map((l) => paraConversa(l as unknown as LinhaConversa));
+}
+
+/**
+ * A agenda de quem pode receber uma conversa nova, neste numero.
+ *
+ * ⚠️ A funcao e SECURITY INVOKER: quem decide o que sai e a RLS de `clientes`,
+ * como em qualquer outra leitura de cadastro. Definer ali abriria a agenda
+ * inteira da base para quem chamasse.
+ */
+export async function contatosParaConversa(
+  contaId: number,
+  busca: string | null,
+  limite: number,
+): Promise<ContatoDoPainel[]> {
+  const supabase = await serverClient();
+
+  const { data, error } = await supabase.rpc("whatsapp_contatos_para_conversa", {
+    p_conta: contaId,
+    p_busca: busca,
+    p_limite: limite,
+  });
+
+  if (error) throw error;
+
+  return (data ?? []).map((l) => ({
+    clienteId: l.cliente_id as number,
+    nome: (l.nome as string | null)?.trim() || "",
+    icone: (l.icone as string | null) || null,
+    telefone: l.telefone as string,
+    conversaId: (l.conversa_id as number | null) ?? null,
+  }));
 }
 
 /** As etiquetas que a empresa criou. Ordem alfabetica: e uma lista de escolha. */

@@ -138,6 +138,36 @@ export const listarConversasQuerySchema = z.object({
     .transform((v) => v === "true"),
 });
 
+/**
+ * Um modelo para um contato que ainda nao esta no painel.
+ *
+ * ⚠️ O telefone vai como TEXTO livre e e normalizado no servico. Exigir formato
+ * aqui obrigaria a tela a adivinhar se o cliente escreve com DDI, com parenteses
+ * ou so os digitos — e o erro apareceria como "dados invalidos", sem dizer o
+ * que estava errado.
+ */
+export const dispararParaContatoBodySchema = z.object({
+  contaId: z.coerce.number().int().positive(),
+  telefone: z.string().trim().min(8).max(24),
+  nome: z.string().trim().max(120).optional(),
+  modelo: z.string().min(1),
+  parametros: z.array(z.string().trim().min(1).max(1024)).max(10).default([]),
+  urlDoBotao: z.string().trim().max(1024).optional(),
+});
+
+export const contatoSchema = z.object({
+  clienteId: z.number(),
+  nome: z.string(),
+  icone: z.string().nullable(),
+  telefone: z.string(),
+  conversaId: z.number().nullable(),
+});
+
+export const contatosQuerySchema = z.object({
+  contaId: z.coerce.number().int().positive(),
+  busca: z.string().trim().min(1).max(80).optional(),
+});
+
 export const contaIdQuerySchema = z.object({
   contaId: z.coerce.number().int().positive(),
 });
@@ -367,8 +397,10 @@ export const enviarModeloBodySchema = z.object({
 export type EnviarModeloBody = z.infer<typeof enviarModeloBodySchema>;
 export type ListarConversasQuery = z.infer<typeof listarConversasQuerySchema>;
 export type SalvarEtiquetaBody = z.infer<typeof salvarEtiquetaBodySchema>;
+export type ContatosQuery = z.infer<typeof contatosQuerySchema>;
 export type EtiquetaIdParam = z.infer<typeof etiquetaIdParamSchema>;
 export type AtualizarConversaBody = z.infer<typeof atualizarConversaBodySchema>;
+export type DispararParaContatoBody = z.infer<typeof dispararParaContatoBodySchema>;
 export type ConversaIdParam = z.infer<typeof conversaIdParamSchema>;
 export type MidiaIdParam = z.infer<typeof midiaIdParamSchema>;
 export type EnviarTextoBody = z.infer<typeof enviarTextoBodySchema>;

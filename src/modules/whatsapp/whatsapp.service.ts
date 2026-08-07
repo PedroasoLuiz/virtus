@@ -11,6 +11,7 @@ import {
   type AtendimentoDaConversa,
   type ClienteCandidato,
   type ContaWhatsapp,
+  type ContatoDoPainel,
   type Conversa,
   type CorDeEtiqueta,
   type Credenciais,
@@ -307,6 +308,23 @@ export async function listarConversas(
   arquivadas = false,
 ): Promise<Conversa[]> {
   return repo.listarConversas(empresaId, contaId, busca, arquivadas);
+}
+
+/**
+ * A agenda deste numero. `contaPorId` confere o tenant antes de qualquer leitura.
+ *
+ * ⚠️ A busca e o corte acontecem no BANCO. Com cinco mil clientes, mandar a
+ * agenda inteira a cada abertura de tela seriam cinco mil linhas trafegadas para
+ * desenhar as vinte que cabem — e o filtro por tecla ainda rodaria em cima
+ * disso, no navegador de quem esta atendendo.
+ */
+export async function contatosParaConversa(
+  empresaId: number,
+  contaId: number,
+  busca?: string,
+): Promise<ContatoDoPainel[]> {
+  const conta = await contaPorId(empresaId, contaId);
+  return repo.contatosParaConversa(conta.id, busca?.trim() || null, 40);
 }
 
 export async function listarEtiquetas(empresaId: number): Promise<Etiqueta[]> {
@@ -893,6 +911,73 @@ export async function dispararFinalidade(
      */
     texto: previaDoCorpo(vinculo.corpo ?? "", parametros),
   });
+}
+
+/**
+ * O telefone como a Meta espera: so digitos, com o pais na frente.
+ *
+ * ⚠️ Assume Brasil quando o numero vem sem pais. E o certo aqui e nao um atalho:
+ * quem digita "(35) 99898-2044" numa tela em portugues nao esta pensando em
+ * codigo de pais, e mandar isso cru faz a Meta aceitar o envio e nunca entregar.
+ * Numero ja com 55 na frente, ou com outro pais, passa intacto.
+ */
+export function paraFormatoDaMeta(bruto: string): string {
+  const digitos = bruto.replace(/\D/g, "");
+
+  // 10 = fixo com DDD, 11 = celular com o nono digito. Fora disso, ou ja tem
+  // pais, ou nao e um numero que da para consertar adivinhando.
+  return digitos.length === 10 || digitos.length === 11 ? `55${digitos}` : digitos;
+}
+
+/**
+ * Manda um modelo para um contato que ainda nao existe no painel.
+ *
+ * ⚠️ Existe porque toda conversa nascia de uma mensagem RECEBIDA, ou de uma
+ * cobranca disparada pelo sistema. Falar primeiro com alguem — confirmar um
+ * agendamento, avisar de uma entrega, responder um lead que veio por outro
+ * canal — nao tinha caminho nenhum, e fora da janela de 24h modelo e a UNICA
+ * coisa que a Meta deixa sair.
+ *
+ * ⚠️ A conversa e criada ANTES do envio, e continua existindo se ele falhar. E
+ * de proposito: a tentativa fica no painel, com o erro na mensagem, em vez de
+ * sumir sem deixar rastro de que alguem tentou falar com aquele numero.
+ */
+export async function dispararParaContato(
+  empresaId: number,
+  usuarioId: string,
+  entrada: {
+    contaId: number;
+    telefone: string;
+    nome: string | null;
+    modelo: string;
+    parametros: string[];
+    urlDoBotao?: string;
+  },
+): Promise<{ conversaId: number; mensagem: Mensagem }> {
+  // `contaPorId` ja recusa numero de outra empresa: e por ele que o tenant e
+  // conferido antes de qualquer escrita.
+  const conta = await contaPorId(empresaId, entrada.contaId);
+
+  const telefone = paraFormatoDaMeta(entrada.telefone);
+
+  if (telefone.length < 12) {
+    throw new BusinessRuleError(
+      "Numero incompleto. Informe com DDD, por exemplo (35) 99898-2044.",
+    );
+  }
+
+  const conversa = await repo.garantirConversa(empresaId, conta.id, telefone, entrada.nome);
+
+  const mensagem = await enviarModelo(
+    empresaId,
+    usuarioId,
+    conversa.id,
+    entrada.modelo,
+    entrada.parametros,
+    entrada.urlDoBotao,
+  );
+
+  return { conversaId: conversa.id, mensagem };
 }
 
 /** O numero, pelo id, dentro da empresa. */

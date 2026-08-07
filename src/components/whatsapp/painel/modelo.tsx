@@ -31,8 +31,12 @@ export type ListaDeModelos = {
  * mandava na consulta; um campo esquecido no schema da resposta fazia esse id
  * chegar `undefined`, a rota recusava e a tela concluía "nenhum modelo
  * aprovado", culpando a Meta por um erro nosso.
+ *
+ * ⚠️ `url` existe para a UMA tela onde não há conversa: a de falar primeiro com
+ * alguém. Lá o número vem do seletor, escolhido na hora, e não de um objeto que
+ * pode ter perdido o campo pelo caminho.
  */
-export function useModelos(conversaId: number, ativo: boolean): ListaDeModelos {
+export function useModelos(conversaId: number, ativo: boolean, url?: string): ListaDeModelos {
   const [modelos, setModelos] = useState<Modelo[] | null>(null);
   /*
    * ⚠️ Falha e lista vazia são coisas DIFERENTES, e mostrar as duas como
@@ -45,7 +49,7 @@ export function useModelos(conversaId: number, ativo: boolean): ListaDeModelos {
     if (!ativo) return;
     const controle = new AbortController();
 
-    fetch(`/api/v1/whatsapp/conversas/${conversaId}/modelo`, { signal: controle.signal })
+    fetch(url ?? `/api/v1/whatsapp/conversas/${conversaId}/modelo`, { signal: controle.signal })
       .then(async (r) => {
         const corpo = await r.json().catch(() => null);
 
@@ -74,7 +78,7 @@ export function useModelos(conversaId: number, ativo: boolean): ListaDeModelos {
       });
 
     return () => controle.abort();
-  }, [ativo, conversaId]);
+  }, [ativo, conversaId, url]);
 
   return { modelos, falhou };
 }

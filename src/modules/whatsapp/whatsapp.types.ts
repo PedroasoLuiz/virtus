@@ -101,6 +101,22 @@ export type Etiqueta = {
   cor: CorDeEtiqueta;
 };
 
+/**
+ * Um telefone da agenda, para abrir conversa.
+ *
+ * ⚠️ Uma linha por TELEFONE, e nao por cliente. Um cliente com dois numeros
+ * aparece duas vezes: quem escolhe esta escolhendo para ONDE a mensagem vai, e
+ * agrupar por cliente pediria um segundo passo so para dizer qual dos dois.
+ */
+export type ContatoDoPainel = {
+  clienteId: number;
+  nome: string;
+  icone: string | null;
+  telefone: string;
+  /** A conversa que este numero ja tem NESTE numero da empresa, ou null. */
+  conversaId: number | null;
+};
+
 export type Conversa = {
   id: number;
   /** Numero da casa por onde esta conversa corre. A resposta sai por ele. */

@@ -12,12 +12,14 @@ import {
   atendimentoSchema,
   clienteCandidatoSchema,
   contaSchema,
+  contatoSchema,
   conversaSchema,
   etiquetaSchema,
   mensagemSchema,
   modeloSchema,
   type AtivarContaBody,
   type ContaIdQuery,
+  type ContatosQuery,
   type CriarModeloBody,
   type ConversaIdQuery,
   type EnviarModeloBody,
@@ -33,6 +35,7 @@ import {
   type SalvarEtiquetaBody,
   type EtiquetaIdParam,
   type AtualizarConversaBody,
+  type DispararParaContatoBody,
 } from "@/modules/whatsapp/whatsapp.schema";
 
 /** Traduz HTTP <-> servico. */
@@ -158,6 +161,16 @@ export async function listarConversas({
   return ok(conversas.map((c) => conversaSchema.parse(c)));
 }
 
+export async function listarContatos({
+  query,
+  ctx,
+}: Entrada<undefined, ContatosQuery, unknown>) {
+  const empresaId = empresaObrigatoria(ctx);
+  const contatos = await service.contatosParaConversa(empresaId, query.contaId, query.busca);
+
+  return ok(contatos.map((c) => contatoSchema.parse(c)));
+}
+
 export async function listarEtiquetas({ ctx }: Entrada<undefined, undefined, unknown>) {
   const empresaId = empresaObrigatoria(ctx);
   const etiquetas = await service.listarEtiquetas(empresaId);
@@ -265,6 +278,24 @@ export async function listarModelos({ query, ctx }: Entrada<undefined, ContaIdQu
   const modelos = await service.listarModelos(query.contaId);
 
   return ok(modelos.map((m) => modeloSchema.parse(m)));
+}
+
+export async function dispararParaContato({
+  body,
+  ctx,
+}: Entrada<DispararParaContatoBody, undefined, unknown>) {
+  const empresaId = empresaObrigatoria(ctx);
+
+  const { conversaId, mensagem } = await service.dispararParaContato(empresaId, ctx.usuarioId, {
+    contaId: body.contaId,
+    telefone: body.telefone,
+    nome: body.nome?.trim() || null,
+    modelo: body.modelo,
+    parametros: body.parametros,
+    urlDoBotao: body.urlDoBotao,
+  });
+
+  return created({ conversaId, mensagem: mensagemSchema.parse(mensagem) });
 }
 
 export async function modelosDaConversa({
