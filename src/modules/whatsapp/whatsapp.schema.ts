@@ -14,6 +14,15 @@ import { paraFormatoMeta } from "@/modules/whatsapp/whatsapp.types";
 
 export const conversaSchema = z.object({
   id: z.number(),
+  /*
+   * ⚠️ Faltava aqui, e a lista de modelos vinha SEMPRE vazia.
+   *
+   * O painel pede `/modelos?contaId=…` com o numero desta conversa; sem o campo
+   * na resposta ele mandava `undefined`, a rota recusava e a tela concluia
+   * "nenhum modelo aprovado". Mesmo tropeco do `ultimoTipo` logo abaixo: o
+   * schema apaga em silencio o que o repositorio ja trouxe.
+   */
+  contaId: z.number(),
   telefone: z.string(),
   nome: z.string().nullable(),
   clienteId: z.number().nullable(),

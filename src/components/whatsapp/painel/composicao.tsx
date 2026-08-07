@@ -15,7 +15,12 @@ import { EnvioPorModelo } from "./modelo";
  */
 
 /**
- * Menu do clipe, como no WhatsApp.
+ * O "+" do campo de escrita: tudo o que não é texto livre.
+ *
+ * ⚠️ Um botão só, e não um clipe mais um ícone de modelo ao lado. Os dois eram
+ * a mesma pergunta ("o que eu mando além de texto?") partida em duas, e o
+ * segundo ícone não tinha como se explicar sozinho: ninguém reconhece "modelo
+ * aprovado" numa tabelinha de dezessete pixels. Dentro do menu ele tem nome.
  *
  * Abrir o seletor do sistema direto obriga a pessoa a caçar o arquivo num
  * dialogo que mostra TUDO. Escolhendo o tipo antes, o `accept` filtra e o
@@ -27,9 +32,12 @@ import { EnvioPorModelo } from "./modelo";
 function MenuDeAnexo({
   desabilitado,
   onEscolher,
+  onModelo,
 }: {
   desabilitado: boolean;
   onEscolher: (aceita: string) => void;
+  /** Sai do texto livre para o modelo aprovado. */
+  onModelo: () => void;
 }) {
   const [aberto, setAberto] = useState(false);
   const caixa = useRef<HTMLDivElement>(null);
@@ -106,8 +114,9 @@ function MenuDeAnexo({
           transition: "transform 160ms var(--ease-out)",
         }}
       >
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M21.4 11.05 12.25 20.2a5.5 5.5 0 0 1-7.78-7.78l9.2-9.2a3.67 3.67 0 0 1 5.18 5.19l-9.2 9.19a1.83 1.83 0 1 1-2.6-2.6l8.5-8.48" />
+        {/* Um "+" e nao o clipe: o menu deixou de ser so de arquivo. */}
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <path d="M12 5v14M5 12h14" />
         </svg>
       </button>
 
@@ -178,6 +187,64 @@ function MenuDeAnexo({
               {o.rotulo}
             </button>
           ))}
+
+          {/*
+            O modelo fica por ULTIMO e depois de um divisor. Documento, foto e
+            audio saem do computador da pessoa; o modelo sai do catalogo
+            aprovado na Meta, e enfileirado com os outros pareceria mais um
+            tipo de arquivo.
+          */}
+          <div style={{ height: 1, background: "var(--border)", margin: "5px 4px" }} />
+
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setAberto(false);
+              onModelo();
+            }}
+            style={{
+              width: "100%",
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              padding: "7px 9px",
+              border: "none",
+              borderRadius: "var(--radius-sm)",
+              background: "transparent",
+              cursor: "pointer",
+              textAlign: "left",
+              fontSize: "var(--text-md)",
+              color: "var(--text-primary)",
+              fontFamily: "var(--font)",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "var(--surface-hover)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "transparent";
+            }}
+          >
+            <span
+              className="redondo"
+              style={{
+                width: 28,
+                height: 28,
+                flexShrink: 0,
+                display: "grid",
+                placeItems: "center",
+                borderRadius: "var(--radius-full)",
+                background: "var(--primary)",
+                color: "var(--primary-fg)",
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="4" width="18" height="16" rx="2.5" />
+                <path d="M3 9h18M8 13h8M8 16.5h5" />
+              </svg>
+            </span>
+            Modelo aprovado
+          </button>
         </div>
       )}
     </div>
@@ -545,9 +612,10 @@ export function Composicao({
           }}
         />
 
-        {/* O clipe fica SEMPRE, inclusive gravando: nada impede anexar depois. */}
+        {/* O "+" fica SEMPRE, inclusive gravando: nada impede anexar depois. */}
         <MenuDeAnexo
           desabilitado={enviando}
+          onModelo={() => setModeloAberto(true)}
           onEscolher={(aceita) => {
             const alvo = seletor.current;
             if (!alvo) return;
@@ -557,33 +625,6 @@ export function Composicao({
             alvo.click();
           }}
         />
-
-        {/* Ao lado do clipe porque e a mesma familia de gesto: sair do texto
-            livre para mandar algo pronto. */}
-        <button
-          type="button"
-          onClick={() => setModeloAberto(true)}
-          disabled={enviando || gravandoAudio}
-          aria-label="Enviar modelo aprovado"
-          title="Enviar modelo aprovado"
-          style={{
-            flexShrink: 0,
-            width: 30,
-            height: 30,
-            display: "grid",
-            placeItems: "center",
-            border: "none",
-            background: "transparent",
-            cursor: enviando || gravandoAudio ? "default" : "pointer",
-            color: "var(--text-tertiary)",
-            opacity: enviando || gravandoAudio ? 0.4 : 1,
-          }}
-        >
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="4" width="18" height="16" rx="2.5" />
-            <path d="M3 9h18M8 13h8M8 16.5h5" />
-          </svg>
-        </button>
 
         {pendenteEhAudio ? (
           <PreviaDeVoz arquivo={pendente!} onDescartar={() => setPendente(null)} />
