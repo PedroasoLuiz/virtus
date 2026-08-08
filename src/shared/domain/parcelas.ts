@@ -196,6 +196,25 @@ export function esperaDinheiro(p: ParcelaNaFila): boolean {
 }
 
 /**
+ * Quanto esta conta ainda espera receber.
+ *
+ * ⚠️ Sai das PARCELAS, e nunca de `total da conta menos o que entrou`.
+ *
+ * Aquela subtracao ignora o DESCONTO. Uma conta de 1.500 baixada com 500 de
+ * desconto recebeu 1.000 e esta quitada; pela subtracao, ela aparecia com 500 em
+ * aberto para sempre, e o cliente que ja pagou continuava na lista de cobranca.
+ * Uma parcela paga nao espera mais nada, com desconto ou sem.
+ */
+export function saldoAReceber(parcelas: ParcelaNaFila[]): number {
+  return parcelas.filter(esperaDinheiro).reduce((s, p) => s + (p.total - p.recebido), 0);
+}
+
+/** O que de fato entrou, somando parcela quitada e parcela recebida pela metade. */
+export function totalRecebido(parcelas: ParcelaNaFila[]): number {
+  return parcelas.reduce((s, p) => s + p.recebido, 0);
+}
+
+/**
  * A ordem em que as parcelas sao recebidas: vencimento manda, o numero so
  * desempata.
  *
@@ -275,3 +294,228 @@ export function conferirTotal(parcelas: { valor: Centavos }[], total: Centavos):
 function ordenar(parcelas: ParcelaExistente[]): ParcelaExistente[] {
   return [...parcelas].sort((a, b) => a.numero - b.numero);
 }
+
+// â”€â”€ O que da para fazer nesta conta â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+/**
+ * Uma parcela, do ponto de vista de quem quer MEXER nela.
+ *
+ * âš ï¸ `temDocumento` e boleto ou nota emitidos, e nao o comprovante. Comprovante e
+ * prova de que o dinheiro entrou; boleto e nota sao promessas que sairam com um
+ * valor escrito, e mudar a parcela depois deixa o documento mentindo.
+ */
+export type ParcelaEditavel = ParcelaExistente & { temDocumento: boolean };
+
+export type Permissao = {
+  pode: boolean;
+  /** A frase que a tela mostra quando `pode` e falso. */
+  motivo: string | null;
+};
+
+export type OQuePodeNaConta = {
+  /** Vincular e desvincular ticket ou produto: mexe no TOTAL. */
+  tickets: Permissao;
+  /** Mexer no cronograma do que ainda esta em aberto. */
+  parcelas: Permissao;
+  /** Por parcela: dividir, juntar ou mudar o vencimento DAQUELA. */
+  porParcela: Record<number, Permissao>;
+};
+
+const LIBERADO: Permissao = { pode: true, motivo: null };
+
+/**
+ * A unica resposta para "o que da para fazer nesta conta agora".
+ *
+ * âš ï¸ Funcao pura, lida pela TELA e pelo SERVICO. A tela apaga o que nao pode e
+ * diz por que; o servico recusa de novo. Escrita duas vezes, ela divergiria no
+ * primeiro ajuste e a tela passaria a oferecer o que o servidor recusa.
+ *
+ * As tres regras, em uma frase cada:
+ *
+ * âš ï¸ Conta CANCELADA nao aceita nada. Ela parou de ser cobravel.
+ *
+ * âš ï¸ Enquanto NADA foi recebido, a conta e editavel: ticket entra e sai, e o
+ * total se redistribui entre as parcelas.
+ *
+ * âš ï¸ Ao primeiro centavo, a conta vira DOCUMENTO. O cliente pagou contra um
+ * valor, e mexer no total depois faz o boleto ou a nota que sairam divergirem
+ * dela. O que ainda da para fazer e reparcelar o que continua em aberto, sem
+ * tocar no total: e o pedido mais comum que existe ("divide o resto em duas"), e
+ * travar a conta inteira obrigaria a cancelar tudo e refazer.
+ */
+export function oQuePodeNaConta(conta: {
+  cancelada: boolean;
+  parcelas: ParcelaEditavel[];
+}): OQuePodeNaConta {
+  if (conta.cancelada) {
+    const negado = { pode: false, motivo: "Esta conta estÃ¡ cancelada." };
+
+    return {
+      tickets: negado,
+      parcelas: negado,
+      porParcela: Object.fromEntries(conta.parcelas.map((p) => [p.id, negado])),
+    };
+  }
+
+  const recebeu = conta.parcelas.some((p) => p.pago);
+  const emAberto = conta.parcelas.filter((p) => !p.pago);
+
+  const tickets: Permissao = recebeu
+    ? {
+        pode: false,
+        motivo:
+          "Esta conta jÃ¡ recebeu. Mexer no total agora faria o boleto e a nota que saÃ­ram divergirem dela: o caminho Ã© uma conta a receber nova.",
+      }
+    : LIBERADO;
+
+  const parcelas: Permissao =
+    emAberto.length === 0
+      ? { pode: false, motivo: "Todas as parcelas jÃ¡ foram recebidas." }
+      : LIBERADO;
+
+  return {
+    tickets,
+    parcelas,
+    porParcela: Object.fromEntries(
+      conta.parcelas.map((p) => [
+        p.id,
+        p.pago
+          ? { pode: false, motivo: "Parcela jÃ¡ recebida." }
+          : p.temDocumento
+            ? {
+                pode: false,
+                motivo:
+                  "JÃ¡ saiu boleto ou nota desta parcela. Mudar o valor ou o vencimento deixaria o documento dizendo outra coisa.",
+              }
+            : LIBERADO,
+      ]),
+    ),
+  };
+}
+
+/**
+ * Tira um pedaco de uma parcela e faz dele uma parcela nova. Preserva o total.
+ *
+ * âš ï¸ Diferente de `adicionarParcela`, que parte a ultima ao meio: aqui quem
+ * cadastra diz QUANTO e para QUANDO. E o que o cliente pede ao telefone â€” "tira
+ * mil dessa e joga para o mes que vem" â€”, e partir ao meio nunca era o numero
+ * combinado.
+ *
+ * âš ï¸ O vencimento novo tem de ser DEPOIS do da parcela de origem. Antes, a conta
+ * ficaria com a parcela 4 vencendo entre a 1 e a 2, e a ordem de recebimento
+ * (que manda no sistema) passaria a discordar da numeracao.
+ */
+export function dividirParcela(
+  parcelas: ParcelaEditavel[],
+  idOrigem: number,
+  novo: { valor: Centavos; vencimento: DataISO },
+): { atualizar: { id: number; numero: number; valor: Centavos }[]; criar: Parcela } {
+  const alvo = parcelas.find((p) => p.id === idOrigem);
+
+  if (!alvo) throw new BusinessRuleError("Parcela nao pertence a esta conta");
+  if (alvo.pago) throw new BusinessRuleError("Parcela ja recebida nao pode ser dividida");
+  if (alvo.temDocumento) {
+    throw new BusinessRuleError(
+      "Ja saiu boleto ou nota desta parcela; mudar o valor deixaria o documento dizendo outra coisa",
+    );
+  }
+
+  if (novo.valor <= 0) {
+    throw new BusinessRuleError("O valor da parcela nova deve ser maior que zero");
+  }
+  if (novo.valor >= alvo.valor) {
+    // Igual deixaria a parcela de origem zerada; maior, negativa.
+    throw new BusinessRuleError(
+      "O valor tem de ser menor que o da parcela de origem: o que sai dela e que vira a parcela nova",
+    );
+  }
+  if (novo.vencimento <= alvo.vencimento) {
+    throw new BusinessRuleError("O vencimento da parcela nova tem de ser depois do da origem");
+  }
+
+  const comANova: ParcelaEditavel[] = [
+    ...parcelas.map((p) =>
+      p.id === idOrigem ? { ...p, valor: subtrair(p.valor, novo.valor) } : p,
+    ),
+    // Id negativo: ela ainda nao existe no banco, e so serve para a renumeracao
+    // enxergar a nova no lugar certo da fila.
+    { id: -1, numero: 0, pago: false, temDocumento: false, ...novo },
+  ];
+
+  const numerada = renumerar(comANova);
+  const nova = numerada.find((p) => p.id === -1)!;
+
+  return {
+    atualizar: numerada
+      .filter((p) => p.id !== -1)
+      .map((p) => ({ id: p.id, numero: p.numero, valor: p.valor })),
+    criar: { numero: nova.numero, vencimento: nova.vencimento, valor: nova.valor },
+  };
+}
+
+/**
+ * Espalha um total novo entre as parcelas, mantendo os vencimentos.
+ *
+ * âš ï¸ DIVIDE entre todas em vez de jogar a diferenca na ultima. Numa conta 3x, o
+ * ticket que entra depois viraria uma ultima parcela desproporcional que ninguem
+ * combinou; dividindo, a proporcao acertada com o cliente continua de pe.
+ *
+ * âš ï¸ So roda com a conta inteira em aberto, e por isso nao recebe parcela paga: e
+ * chamada quando um ticket entra ou sai, e isso so acontece antes do primeiro
+ * recebimento.
+ */
+export function redistribuirTotal(
+  parcelas: ParcelaEditavel[],
+  novoTotal: Centavos,
+): { id: number; numero: number; vencimento: DataISO; valor: Centavos }[] {
+  if (parcelas.some((p) => p.pago)) {
+    throw new BusinessRuleError("Conta com parcela recebida nao tem o total redistribuido");
+  }
+  if (parcelas.length === 0) throw new BusinessRuleError("Conta sem parcelas");
+  if (novoTotal < parcelas.length) {
+    throw new BusinessRuleError(
+      "Total pequeno demais para o numero de parcelas: alguma ficaria sem um centavo",
+    );
+  }
+
+  const valores = dividir(novoTotal, parcelas.length);
+
+  return renumerar(parcelas).map((p, i) => ({
+    id: p.id,
+    numero: p.numero,
+    vencimento: p.vencimento,
+    valor: valores[i],
+  }));
+}
+
+/**
+ * Numera o cronograma pela ORDEM DE VENCIMENTO.
+ *
+ * âš ï¸ Parcela recebida NAO troca de numero. O recibo que o cliente tem na mao diz
+ * "parcela 2", e renumerar depois faria o papel dele apontar para outra. As em
+ * aberto ficam com os numeros que sobram, na ordem em que vencem.
+ */
+function renumerar(parcelas: ParcelaEditavel[]): ParcelaEditavel[] {
+  const pagas = parcelas.filter((p) => p.pago);
+  const usados = new Set(pagas.map((p) => p.numero));
+
+  let proximo = 1;
+  const livre = () => {
+    while (usados.has(proximo)) proximo++;
+    return proximo++;
+  };
+
+  const abertas = parcelas
+    .filter((p) => !p.pago)
+    .sort((a, b) =>
+      a.vencimento === b.vencimento
+        ? a.numero - b.numero
+        : a.vencimento < b.vencimento
+          ? -1
+          : 1,
+    )
+    .map((p) => ({ ...p, numero: livre() }));
+
+  return [...pagas, ...abertas].sort((a, b) => a.numero - b.numero);
+}
+

@@ -120,6 +120,7 @@ export const faturaResumoSchema = z.object({
   qtdParcelas: z.number(),
   qtdTickets: z.number(),
   pago: z.number(),
+  saldo: z.number(),
 });
 
 export const faturaSchema = faturaResumoSchema.extend({

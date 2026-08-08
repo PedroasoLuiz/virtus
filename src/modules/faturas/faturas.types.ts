@@ -94,7 +94,15 @@ export type FaturaResumo = {
    * Calculado, nunca guardado: e a PARCELA que carrega a verdade sobre o
    * pagamento, e um campo no cabecalho da conta seria uma segunda versao dela.
    */
+  /** O que de fato entrou: parcela quitada e parcela recebida pela metade. */
   pago: Centavos;
+  /**
+   * O que ainda espera dinheiro.
+   *
+   * ⚠️ NAO e `total - pago`. Aquela subtracao ignora o desconto dado na baixa, e
+   * mostrava uma conta quitada com saldo em aberto para sempre.
+   */
+  saldo: Centavos;
 };
 
 /** Quem criou e quem mexeu por ultimo. Alimenta o historico do drawer. */

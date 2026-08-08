@@ -17,7 +17,7 @@ import {
   type SituacaoFatura,
   type StatusFatura,
 } from "@/modules/faturas/faturas.types";
-import type { Parcela } from "@/shared/domain/parcelas";
+import { saldoAReceber, totalRecebido, type Parcela } from "@/shared/domain/parcelas";
 
 /**
  * Unica porta de acesso aos dados de faturas.
@@ -58,10 +58,10 @@ export async function listar(
 
   const linhas = data ?? [];
   const ids = linhas.map((l) => l.id);
-  const [vencimentos, tickets, pagos] = await Promise.all([
+  const [vencimentos, tickets, dinheiro] = await Promise.all([
     proximosVencimentos(ids),
     contarTickets(ids),
-    somarPago(ids),
+    somarRecebido(ids),
   ]);
 
   return {
@@ -70,7 +70,7 @@ export async function listar(
         l,
         vencimentos.get(l.id) ?? null,
         tickets.get(l.id) ?? 0,
-        pagos.get(l.id) ?? 0,
+        dinheiro.get(l.id) ?? { recebido: 0, saldo: 0 },
       ),
     ),
     total: count ?? 0,
@@ -178,24 +178,52 @@ async function dadosDaEmpresa(empresaId: number) {
   };
 }
 
-/** Quanto ja entrou em cada conta, somado das parcelas baixadas. */
-async function somarPago(faturaIds: number[]): Promise<Map<number, number>> {
-  const mapa = new Map<number, number>();
+/**
+ * Quanto cada conta recebeu, e quanto ainda espera.
+ *
+ * ⚠️ O SALDO nao e "total menos recebido". Essa subtracao ignora o desconto: uma
+ * conta de 1.500 baixada com 500 de desconto recebeu 1.000 e esta quitada, e pela
+ * subtracao ela aparecia com 500 em aberto para sempre — o cliente que ja pagou
+ * seguia na lista de cobranca. Parcela paga nao espera mais nada.
+ *
+ * ⚠️ Uma consulta para a pagina inteira. Parcela a parcela dentro do laco de
+ * renderizacao era o que o legado fazia: 25 linhas na tela viravam 25 idas ao
+ * banco.
+ */
+async function somarRecebido(
+  faturaIds: number[],
+): Promise<Map<number, { recebido: number; saldo: number }>> {
+  const mapa = new Map<number, { recebido: number; saldo: number }>();
   if (faturaIds.length === 0) return mapa;
 
   const supabase = await serverClient();
   const { data, error } = await supabase
     .from("faturasparcelas")
-    .select("fkFatura, total")
-    .eq("pago", true)
+    .select("fkFatura, total, pago, pagamentosxparcelas(valor)")
     .in("fkFatura", faturaIds);
 
   if (error) throw error;
 
   for (const l of data ?? []) {
     if (l.fkFatura == null) continue;
-    mapa.set(l.fkFatura, (mapa.get(l.fkFatura) ?? 0) + (l.total ?? 0));
+
+    // `as unknown` antes do tipo: o tipo gerado a mao nao declara a relacao
+    // entre parcela e pagamento, e o cliente do Supabase devolve um erro de tipo
+    // no lugar da lista. O mesmo desvio ja existe na leitura do detalhe.
+    const recebidoNaParcela = (
+      (l.pagamentosxparcelas ?? []) as unknown as { valor: number | null }[]
+    ).reduce((s, x) => s + (x.valor ?? 0), 0);
+
+    const atual = mapa.get(l.fkFatura) ?? { recebido: 0, saldo: 0 };
+
+    mapa.set(l.fkFatura, {
+      recebido: atual.recebido + recebidoNaParcela,
+      // Parcela paga sai da conta do saldo mesmo que tenha recebido menos que o
+      // valor dela: a diferenca foi desconto, e desconto nao se cobra.
+      saldo: atual.saldo + (l.pago ? 0 : Math.max(0, (l.total ?? 0) - recebidoNaParcela)),
+    });
   }
+
   return mapa;
 }
 
@@ -249,7 +277,10 @@ export async function buscarPorId(empresaId: number, id: number): Promise<Fatura
       data,
       proximo,
       tickets.length,
-      parcelas.filter((p) => p.pago).reduce((s, p) => s + p.total, 0),
+      {
+        recebido: totalRecebido(parcelas),
+        saldo: saldoAReceber(parcelas),
+      },
     ),
     observacoes: data.observacoes,
     rodape: data.rodape,
@@ -610,7 +641,7 @@ function paraDominioResumo(
   linha: LinhaFatura,
   proximoVencimento: DataISO | null,
   qtdTickets = 0,
-  pago = 0,
+  dinheiro: { recebido: number; saldo: number } = { recebido: 0, saldo: 0 },
 ): FaturaResumo {
   const cliente = linha.clientes as { razao: string | null; nomefantasia: string | null } | null;
   const status = normalizarStatus(linha.status);
@@ -632,7 +663,8 @@ function paraDominioResumo(
     total: doBanco(linha.total),
     qtdParcelas: linha.parcelas ?? 0,
     qtdTickets,
-    pago: doBanco(pago),
+    pago: doBanco(dinheiro.recebido),
+    saldo: doBanco(dinheiro.saldo),
   };
 }
 

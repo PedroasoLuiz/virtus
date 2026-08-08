@@ -418,7 +418,7 @@ function QuadroDeContas({
           </span>
           <span style={{ flex: 1 }} />
 
-          <ValorDaConta pago={f.pago} total={f.total} />
+          <ValorDaConta pago={f.pago} total={f.total} saldo={f.saldo} />
         </>
       )}
     />
@@ -433,8 +433,24 @@ function QuadroDeContas({
  *
  * Parcial, os dois numeros sao a informacao: o que entrou e o que falta chegar.
  */
-function ValorDaConta({ pago, total }: { pago: Centavos; total: Centavos }) {
-  const quitada = pago > 0 && pago >= total;
+function ValorDaConta({
+  pago,
+  total,
+  saldo,
+}: {
+  pago: Centavos;
+  total: Centavos;
+  saldo: Centavos;
+}) {
+  /*
+   * ⚠️ Quitada e SALDO ZERO, e nao "recebeu tudo".
+   *
+   * Uma conta de 1.500 baixada com 500 de desconto recebeu 1.000: comparando o
+   * recebido com o total, ela aparecia eternamente como parcial, com um "+1.000"
+   * verde ao lado de 1.500, e quem varria a lista via dinheiro a cobrar que nao
+   * existia.
+   */
+  const quitada = saldo === 0 && total > 0;
 
   return (
     <>

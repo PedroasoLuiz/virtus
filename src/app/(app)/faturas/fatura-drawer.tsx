@@ -22,7 +22,7 @@ import {
   Tr,
 } from "@/components/ui/kit";
 import { TicketDrawer } from "../tickets/ticket-drawer";
-import { proximaAReceber } from "@/shared/domain/parcelas";
+import { proximaAReceber, saldoAReceber, totalRecebido } from "@/shared/domain/parcelas";
 import { ehPessoaFisica } from "@/shared/domain/cadastro-pessoa";
 import { formatarDocumento } from "@/shared/domain/documento";
 import { formatarSemSimbolo, type Centavos } from "@/shared/utils/money";
@@ -210,9 +210,16 @@ function Conteudo({
     return () => controle.abort();
   }, [faturaId]);
 
-  // O recebido vem das parcelas baixadas, nao de um campo do cabecalho: e a
-  // parcela que carrega a verdade sobre o pagamento.
-  const pago = fatura ? fatura.parcelas.filter((p) => p.pago).reduce((s, p) => s + p.total, 0) : 0;
+  /*
+   * ⚠️ Os tres numeros saem das PARCELAS, e o "em aberto" nunca de uma subtracao.
+   *
+   * `total - recebido` ignora o desconto: uma conta de 1.500 baixada com 500 de
+   * desconto recebeu 1.000 e esta quitada, e a subtracao a mostrava com 500 em
+   * aberto para sempre. A parcela e quem carrega a verdade sobre o pagamento.
+   */
+  const pago = fatura ? totalRecebido(fatura.parcelas) : 0;
+  const emAberto = fatura ? saldoAReceber(fatura.parcelas) : 0;
+  const descontado = fatura ? fatura.parcelas.reduce((s, p) => s + p.desconto, 0) : 0;
   const temBaixa = fatura?.parcelas.some((p) => p.pago) ?? false;
 
   // A unica que pode receber agora. As de tras dela ficam com o "Dar baixa"
@@ -407,8 +414,20 @@ function Conteudo({
               <CampoBloqueado valor={formatarSemSimbolo(pago as Centavos)} />
             </Field>
 
+            {/*
+              ⚠️ O desconto só aparece quando existe, e existe para a conta
+              FECHAR: total menos desconto menos recebido é zero numa conta
+              quitada. Sem esta linha, quem confere via 1.500 cobrados e 1.000
+              recebidos, com nada em aberto, e procurava os 500 sumidos.
+            */}
+            {descontado > 0 && (
+              <Field label="Desconto">
+                <CampoBloqueado valor={formatarSemSimbolo(descontado as Centavos)} />
+              </Field>
+            )}
+
             <Field label="Em aberto">
-              <CampoBloqueado valor={formatarSemSimbolo((fatura.total - pago) as Centavos)} />
+              <CampoBloqueado valor={formatarSemSimbolo(emAberto as Centavos)} />
             </Field>
 
             {fatura.observacoes && (
