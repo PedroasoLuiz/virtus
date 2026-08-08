@@ -666,3 +666,37 @@ table td.col-avatar {
   width: 1%;
   white-space: nowrap;
 }
+
+/*
+ * O calendario de um campo de data DENTRO da tabela.
+ *
+ * ⚠️ O icone nativo mora encostado na borda direita do campo, e num campo que
+ * ocupa a celula inteira ele ficava a dez caracteres da data — lido como se fosse
+ * outra coluna. Encolhendo o campo ate a largura do conteudo, o icone volta para
+ * junto do que ele abre.
+ *
+ * ⚠️ O desenho e NOSSO, e nao o do sistema operacional. O nativo vem preto,
+ * grande e diferente em cada navegador; trocado por um SVG em `background`, ele
+ * fica no verde da marca e do mesmo tamanho dos outros icones da tabela.
+ */
+table td input[type="date"] {
+  width: max-content;
+  min-width: 0;
+}
+
+table td input[type="date"]::-webkit-calendar-picker-indicator {
+  width: 13px;
+  height: 13px;
+  padding: 0;
+  margin-left: 4px;
+  opacity: 1;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23006a28' stroke-width='2' stroke-linecap='round'><rect x='3.5' y='5' width='17' height='16' rx='2'/><path d='M8 3v4M16 3v4M3.5 10h17'/></svg>");
+  background-size: 13px 13px;
+  background-repeat: no-repeat;
+}
+
+/* No escuro o verde da marca clareia: o mesmo icone em #006a28 sumiria. */
+:root[data-theme="dark"] table td input[type="date"]::-webkit-calendar-picker-indicator {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2300bb47' stroke-width='2' stroke-linecap='round'><rect x='3.5' y='5' width='17' height='16' rx='2'/><path d='M8 3v4M16 3v4M3.5 10h17'/></svg>");
+}

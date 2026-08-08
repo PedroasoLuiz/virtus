@@ -18,6 +18,7 @@ import {
   GrupoDeCampos,
   inputStyle,
   inputDeCelula,
+  Pagination,
   PanelTabs,
   TableArea,
   TableHead,
@@ -925,6 +926,7 @@ function Parcelamento({
   const abertas = fatura.parcelas.filter((p) => !p.pago);
   const pagas = fatura.parcelas.filter((p) => p.pago);
 
+  const [pagina, setPagina] = useState(1);
   const [linhas, setLinhas] = useState<LinhaDoParcelamento[]>(() =>
     abertas.map((p) => ({
       id: p.id,
@@ -937,6 +939,43 @@ function Parcelamento({
   const somaPagas = pagas.reduce((s, p) => s + p.total, 0);
   const somaAbertas = linhas.reduce((s, l) => s + l.valor, 0);
   const diferenca = fatura.total - somaPagas - somaAbertas;
+
+  /*
+   * Os numeros que estas linhas terao depois de salvar.
+   *
+   * ⚠️ Repete a numeracao do dominio: paga nao troca de numero — o recibo que o
+   * cliente tem na mao diz "parcela 2" — e as em aberto pegam o que sobra, na
+   * ordem em que vencem.
+   */
+  const numeros = (() => {
+    const usados = new Set(pagas.map((p) => p.numero));
+    let proximo = 1;
+    const livre = () => {
+      while (usados.has(proximo)) proximo++;
+      return proximo++;
+    };
+
+    const ordem = linhas
+      .map((l, i) => ({ i, venc: l.vencimento }))
+      .sort((a, b) => (a.venc === b.venc ? a.i - b.i : a.venc < b.venc ? -1 : 1));
+
+    const saida: number[] = [];
+    for (const { i } of ordem) saida[i] = livre();
+    return saida;
+  })();
+
+  /*
+   * ⚠️ A tabela pagina; a CONTA nao.
+   *
+   * Um financiamento de 160 parcelas nao cabe na tela, e rolar cento e sessenta
+   * linhas para achar a que se quer mudar e pior do que virar pagina. O rodape
+   * continua somando o cronograma INTEIRO — paginar a soma seria mostrar um
+   * fechamento que nao fecha coisa nenhuma.
+   */
+  const totalPaginas = Math.max(1, Math.ceil(linhas.length / POR_PAGINA_NO_PARCELAMENTO));
+  const paginaAtual = Math.min(pagina, totalPaginas);
+  const primeira = (paginaAtual - 1) * POR_PAGINA_NO_PARCELAMENTO;
+  const visiveis = linhas.slice(primeira, primeira + POR_PAGINA_NO_PARCELAMENTO);
 
   const semData = linhas.some((l) => !l.vencimento);
   const semValor = linhas.some((l) => l.valor <= 0);
@@ -953,6 +992,10 @@ function Parcelamento({
    * de qualquer outra coisa.
    */
   function acrescentar() {
+    // A parcela nova nasce no fim; sem isto, quem esta na pagina 1 clica no mais
+    // e nao ve nada acontecer.
+    setPagina(Math.max(1, Math.ceil((linhas.length + 1) / POR_PAGINA_NO_PARCELAMENTO)));
+
     setLinhas((atual) => {
       const ultima = atual.at(-1);
       if (!ultima) return atual;
@@ -1041,6 +1084,15 @@ function Parcelamento({
               <Th minWidth={130}>Vence</Th>
               <Th minWidth={110}>Valor</Th>
               <Th minWidth={80}>%</Th>
+              {/*
+                ⚠️ "Paga" tem titulo, e a coluna de acoes nao.
+
+                A marca de paga e DADO: ela responde uma pergunta sobre a parcela,
+                e coluna de dado se nomeia. O botao de remover e ferramenta, e
+                ferramenta nao precisa de rotulo — o resto do sistema tambem deixa
+                essa coluna sem titulo.
+              */}
+              <Th minWidth={60}>Paga</Th>
               <Th> </Th>
             </TableHead>
 
@@ -1051,27 +1103,46 @@ function Parcelamento({
                 pareceria estar errando.
               */}
               {pagas.map((p) => (
-                <Tr key={p.id} dimmed>
+                /*
+                  ⚠️ Fundo um tom mais escuro, do mesmo cinza do hover.
+
+                  A linha paga nao se edita, e o texto apagado sozinho nao dizia
+                  isso: parecia dado sem importancia, e nao campo travado. Com o
+                  fundo, ela le como uma faixa fechada no alto da tabela, e os
+                  campos editaveis das outras linhas ganham contraste.
+                */
+                <Tr key={p.id} dimmed style={{ background: "var(--surface-hover)" }}>
                   <Td>{p.numero}</Td>
                   <Td>{p.vencimento ? curto(p.vencimento) : "—"}</Td>
                   <Td>{formatarSemSimbolo(p.total as Centavos)}</Td>
                   <Td>{porcentagem(p.total, fatura.total)}</Td>
                   <Td>
-                    <span style={{ fontSize: "var(--text-xs)", color: "var(--credito)" }}>
-                      recebida
-                    </span>
+                    <CheckPreenchido titulo="Parcela já recebida. Ela não se mexe." />
                   </Td>
+                  <Td />
                 </Tr>
               ))}
 
-              {linhas.map((l, i) => (
+              {/*
+                ⚠️ O indice usado nas edicoes e o ABSOLUTO, e nao o da pagina: ele
+                aponta para a linha dentro do cronograma inteiro. Com o indice da
+                fatia, digitar na pagina 2 mexeria na parcela da pagina 1.
+              */}
+              {visiveis.map((l, indiceNaPagina) => {
+                const i = primeira + indiceNaPagina;
+
+                return (
                 <Tr key={l.id ?? `nova-${i}`}>
-                  <Td style={{ color: "var(--text-tertiary)" }}>
-                    {/* O numero sai da ordem de vencimento, no servidor: mostrar
-                        um chute aqui seria dizer em voz alta um dado que o banco
-                        decide depois. */}
-                    {l.id ? (fatura.parcelas.find((p) => p.id === l.id)?.numero ?? "—") : "nova"}
-                  </Td>
+                  {/*
+                    ⚠️ O numero e o que a parcela VAI ter depois de salvar, e nao a
+                    posicao na tela.
+
+                    Quem numera e a ordem de vencimento, e a mesma regra roda aqui:
+                    mudando a data de uma parcela para depois da seguinte, os
+                    numeros se trocam na hora. Mostrando a posicao do array, a
+                    tabela diria "3" para a parcela que o banco vai gravar como 2.
+                  */}
+                  <Td>{numeros[i]}</Td>
 
                   <Td>
                     <input
@@ -1091,7 +1162,18 @@ function Parcelamento({
                         valor={l.valor}
                         aoMudar={(v) => mudar(i, { valor: v })}
                         escala={100}
-                        style={inputDeCelula}
+                        /*
+                          ⚠️ Parcela de zero nao existe: ela nao vence, nao cobra
+                          nada e nao fecha. O campo acusa em vermelho, e o salvar
+                          fica travado enquanto houver uma — antes, a soma podia
+                          ate fechar com uma linha zerada no meio, e o botao
+                          desligado nao dizia por que.
+                        */
+                        style={
+                          l.valor <= 0
+                            ? { ...inputDeCelula, color: "var(--danger-text)" }
+                            : inputDeCelula
+                        }
                       />
                     )}
                   </Td>
@@ -1118,6 +1200,13 @@ function Parcelamento({
                     )}
                   </Td>
 
+                  {/*
+                    Em aberto a celula fica vazia: um X ou um circulo vazado
+                    acusariam uma pendencia, e parcela que ainda nem venceu nao
+                    esta devendo nada.
+                  */}
+                  <Td />
+
                   <Td>
                     <AcoesDaLinha>
                       {!l.travada && linhas.length > 1 && (
@@ -1128,7 +1217,8 @@ function Parcelamento({
                     </AcoesDaLinha>
                   </Td>
                 </Tr>
-              ))}
+                );
+              })}
             </tbody>
 
             {/*
@@ -1140,51 +1230,101 @@ function Parcelamento({
               de qualquer jeito, escrita onde ela olharia.
             */}
             <tfoot>
+              {/*
+                ⚠️ A soma e a porcentagem tem o MESMO peso e a mesma cor: sao a
+                mesma conta dita de dois jeitos, e uma delas em cinza pareceria
+                nota de rodape da outra.
+
+                ⚠️ Corpo menor que o das linhas. Ela e conferencia, e nao mais um
+                dado da tabela: em negrito e no mesmo tamanho, competia com os
+                valores que ela existe para somar.
+              */}
               <tr style={{ borderTop: "1px solid var(--border-strong)" }}>
-                <td colSpan={2} style={{ height: 34, padding: "0 4px", color: "var(--text-tertiary)" }}>
-                  Soma das parcelas
-                </td>
                 <td
+                  colSpan={2}
                   style={{
-                    padding: "0 4px",
-                    fontWeight: "var(--fw-semi)",
-                    fontVariantNumeric: "tabular-nums",
+                    height: 32,
+                    fontSize: "var(--text-xs)",
+                    color: "var(--text-tertiary)",
                   }}
                 >
+                  Soma das parcelas
+                </td>
+                <td style={somaDaTabela}>
                   {formatarSemSimbolo((somaPagas + somaAbertas) as Centavos)}
                 </td>
-                <td style={{ padding: "0 4px", color: "var(--text-tertiary)" }}>
+                <td style={somaDaTabela}>
                   {porcentagem(somaPagas + somaAbertas, fatura.total)}
                 </td>
-                <td />
+                <td colSpan={2} />
               </tr>
 
               {/* A diferenca so existe enquanto ha diferenca. Uma linha "faltam
                   0,00" seria ruido permanente pedindo para ser ignorada. */}
+              {/*
+                ⚠️ O salvar travado precisa dizer POR QUE. A soma pode fechar com
+                uma linha zerada no meio — 5.000 + 0 num total de 5.000 —, e ai o
+                botao desligado seria um mistério.
+              */}
+              {(semValor || semData) && (
+                <tr style={{ color: "var(--danger-text)" }}>
+                  <td colSpan={6} style={{ height: 28, fontSize: "var(--text-xs)" }}>
+                    {semValor
+                      ? "Toda parcela precisa de um valor maior que zero."
+                      : "Toda parcela precisa de um vencimento."}
+                  </td>
+                </tr>
+              )}
+
               {diferenca !== 0 && (
                 <tr style={{ color: "var(--danger-text)" }}>
-                  <td colSpan={2} style={{ height: 30, padding: "0 4px" }}>
+                  <td colSpan={2} style={{ height: 28, fontSize: "var(--text-xs)" }}>
                     {diferenca > 0 ? "Falta distribuir" : "Passou do total em"}
                   </td>
-                  <td
-                    style={{
-                      padding: "0 4px",
-                      fontWeight: "var(--fw-semi)",
-                      fontVariantNumeric: "tabular-nums",
-                    }}
-                  >
+                  <td style={somaDaTabela}>
                     {formatarSemSimbolo(Math.abs(diferenca) as Centavos)}
                   </td>
-                  <td colSpan={2} />
+                  <td colSpan={3} />
                 </tr>
               )}
             </tfoot>
           </TableArea>
+
+          {linhas.length > POR_PAGINA_NO_PARCELAMENTO && (
+            <Pagination
+              page={paginaAtual}
+              totalPages={totalPaginas}
+              total={linhas.length}
+              pageSize={POR_PAGINA_NO_PARCELAMENTO}
+              onPage={setPagina}
+            />
+          )}
         </GrupoDeCampos>
       </Formulario>
     </FormDrawer>
   );
 }
+
+/**
+ * O corpo da conferencia: menor que a linha, e do mesmo peso nas duas colunas.
+ *
+ * ⚠️ SEM `padding` aqui. O recuo das celulas mora no CSS, e estilo em linha vence
+ * seletor: cravando um valor proprio, a soma saia alguns pixels fora da coluna
+ * que ela soma — que e justamente a unica coisa que ela precisa fazer certo.
+ */
+const somaDaTabela: React.CSSProperties = {
+  fontSize: "var(--text-xs)",
+  fontWeight: "var(--fw-semi)",
+  fontVariantNumeric: "tabular-nums",
+};
+
+/**
+ * Quantas parcelas cabem numa pagina do editor.
+ *
+ * Doze porque e o parcelamento mais comum que existe: um ano em doze vezes cabe
+ * inteiro na primeira pagina, e quem parcela em 3, 6 ou 10 nunca vira pagina.
+ */
+const POR_PAGINA_NO_PARCELAMENTO = 12;
 
 type LinhaDoParcelamento = {
   /** `null` numa parcela que ainda nao existe no banco. */
@@ -1220,6 +1360,37 @@ function somarUmMes(iso: string): string {
 }
 
 /**
+ * O circulo cheio com o check dentro.
+ *
+ * ⚠️ Cheio quer dizer "fechado, nao ha o que fazer aqui". O check solto lia como
+ * item de lista de tarefas, que e justamente o oposto: ali ainda ha o que fazer.
+ *
+ * Mora aqui e nao em dois lugares porque a parcela paga e a baixa conferida
+ * dizem a mesma coisa com o mesmo desenho — duas copias divergiriam no primeiro
+ * ajuste de tamanho.
+ */
+function CheckPreenchido({ titulo, cor }: { titulo: string; cor?: string }) {
+  return (
+    <span
+      title={titulo}
+      style={{ display: "inline-grid", placeItems: "center", color: cor ?? "var(--credito)" }}
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+        <circle cx="12" cy="12" r="9" />
+        <path
+          d="M8 12.4l2.6 2.6L16 9.6"
+          fill="none"
+          stroke="var(--surface)"
+          strokeWidth="2.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </span>
+  );
+}
+
+/**
  * A marca de conciliado de uma parcela.
  *
  * ⚠️ Três estados, e não dois. "Ainda não recebida" não é o mesmo que "recebida e
@@ -1250,24 +1421,7 @@ function MarcaDeConciliado({ parcela }: { parcela: Parcela }) {
       }}
     >
       {ok ? (
-        /*
-          ⚠️ Círculo PREENCHIDO com o check dentro, e não o check solto.
-
-          É a mesma marca do principal na ficha de pessoa: cheia quer dizer
-          "fechado, não há o que fazer aqui". O check solto lia como um item de
-          lista de tarefas, que é justamente o oposto.
-        */
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-          <circle cx="12" cy="12" r="9" />
-          <path
-            d="M8 12.4l2.6 2.6L16 9.6"
-            fill="none"
-            stroke="var(--surface)"
-            strokeWidth="2.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
+        <CheckPreenchido titulo="A baixa desta parcela já bateu com o extrato da conta." />
       ) : (
         <svg
           width="15"

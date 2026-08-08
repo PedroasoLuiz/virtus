@@ -2555,13 +2555,32 @@ export function CampoNumerico({
         ...inputStyle,
         textAlign: alinhar,
         fontVariantNumeric: "tabular-nums",
-        ...(sufixo ? { paddingRight: 34 } : null),
+        ...(sufixo && alinhar !== "left" ? { paddingRight: 34 } : null),
         ...style,
       }}
     />
   );
 
   if (!sufixo) return campo;
+
+  /*
+   * ⚠️ Alinhado a ESQUERDA, o sufixo anda junto do numero.
+   *
+   * Ele era ancorado na borda direita do campo, e num campo que ocupa a celula
+   * inteira o "%" ficava a dez caracteres do numero — lido como se fosse outra
+   * coluna. O `ch` acompanha o texto porque a fonte esta em `tabular-nums`: todo
+   * digito ocupa a mesma largura.
+   */
+  if (alinhar === "left") {
+    return (
+      <span style={{ display: "inline-flex", alignItems: "baseline", gap: 3 }}>
+        <span style={{ display: "inline-flex", width: `${Math.max(exibido.length, 1)}ch` }}>
+          {campo}
+        </span>
+        <span style={{ fontSize: "var(--text-xs)", color: "var(--text-tertiary)" }}>{sufixo}</span>
+      </span>
+    );
+  }
 
   return (
     <div style={{ position: "relative" }}>
