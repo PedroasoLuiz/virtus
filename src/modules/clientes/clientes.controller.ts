@@ -82,6 +82,7 @@ export async function atualizarContato({
   const empresaId = empresaObrigatoria(ctx);
 
   const contato = await service.atualizarContato(empresaId, params.id, params.contatoId, {
+    tipo: body.tipo,
     valor: body.valor,
     rotulo: body.rotulo?.trim() || null,
     responsavel: body.responsavel?.trim() || null,

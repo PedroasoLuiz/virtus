@@ -7,6 +7,7 @@ import {
   BotaoDeAcao,
   Button,
   EmptyRow,
+  Field,
   GrupoDeCampos,
   MarcaDePrincipal,
   PanelTabs,
@@ -18,6 +19,7 @@ import {
   inputStyle,
 } from "@/components/ui/kit";
 import type { ContatoDaPessoa } from "@/modules/clientes/clientes.types";
+import { analisarTelefone, mascararTelefone } from "@/shared/domain/telefone";
 
 /**
  * Telefones e e-mails da pessoa.
@@ -61,8 +63,8 @@ export function AbaDeContatos({
   return (
     <GrupoDeCampos
       primeiro
-      titulo="Contatos"
-      legenda="Todos os telefones e e-mails desta pessoa. O marcado como principal é o que a cobrança usa e o que casa esta pessoa com a conversa no WhatsApp; os demais ficam aqui para quem precisar falar com outro setor."
+      titulo="Por onde falar"
+      legenda="O marcado como principal é o que a cobrança usa e o que casa esta pessoa com a conversa no WhatsApp. Os demais ficam aqui para quem precisa falar com outro setor, e cada um guarda quem atende do outro lado."
       onIncluir={aberto ? undefined : () => setAberto("novo")}
       rotuloIncluir={tipo === "telefone" ? "Novo telefone" : "Novo e-mail"}
     >
@@ -172,7 +174,19 @@ function Lista({
 
               return (
                 <Tr key={c.id}>
-                  <Td>{c.valor}</Td>
+                  <Td>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      {c.valor}
+                      {/*
+                        ⚠️ Colado no e-mail, e não numa coluna própria.
+
+                        A marca é sobre AQUELE endereço: é por ele que a pessoa
+                        entra no portal. Numa coluna à parte, ela viraria mais um
+                        atributo da linha, e uma coluna quase sempre vazia.
+                      */}
+                      {c.usuario && <MarcaDeUsuario nome={c.usuario} />}
+                    </span>
+                  </Td>
                   <Td>{c.rotulo || <span style={{ color: "var(--text-disabled)" }}>—</span>}</Td>
                   <Td>
                     {c.responsavel || <span style={{ color: "var(--text-disabled)" }}>—</span>}
@@ -271,6 +285,18 @@ function Editor({
   const [responsavel, setResponsavel] = useState(contato?.responsavel ?? "");
   const [salvando, setSalvando] = useState(false);
 
+  /*
+   * ⚠️ O erro do telefone só aparece DEPOIS que o campo perde o foco.
+   *
+   * Conferindo a cada tecla, "(35) 9" já acusava "faltam dígitos" na segunda
+   * letra digitada: a tela reclamava do número enquanto a pessoa ainda o estava
+   * escrevendo. O servidor confere de novo de qualquer jeito.
+   */
+  const [tocado, setTocado] = useState(false);
+
+  const erro =
+    tocado && tipo === "telefone" && valor.trim() ? analisarTelefone(valor).erro : null;
+
   async function salvar() {
     const limpo = valor.trim();
     if (!limpo || salvando) return;
@@ -341,67 +367,148 @@ function Editor({
     onMudou();
   }
 
+  const rotuloDoValor = tipo === "telefone" ? "Número" : "E-mail";
+
   return (
-    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-      <input
-        autoFocus
-        value={valor}
-        onChange={(e) => setValor(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") void salvar();
-          if (e.key === "Escape") onFechar();
-        }}
-        placeholder={tipo === "telefone" ? "(00) 00000-0000" : "financeiro@empresa.com.br"}
-        type={tipo === "email" ? "email" : "text"}
-        style={{ ...inputStyle, flex: 2 }}
-      />
+    /*
+      ⚠️ O mesmo cartão de endereço e de conta bancária, e não uma fileira de
+      campos solta embaixo da tabela.
+
+      Solta, ela parecia uma linha da tabela em branco esperando ser preenchida,
+      e os três campos sem rótulo não diziam qual era qual até alguém clicar.
+      Cadastrar é um formulário, e formulário no sistema tem moldura, rótulo e
+      dois botões no rodapé.
+    */
+    <div
+      style={{
+        padding: 12,
+        border: "1px solid var(--border)",
+        borderRadius: "var(--radius-lg)",
+        background: "var(--surface-2)",
+        display: "flex",
+        flexDirection: "column",
+        gap: 10,
+      }}
+    >
+      <Field label={rotuloDoValor} error={erro ?? undefined} required>
+        <input
+          autoFocus
+          value={valor}
+          onChange={(e) =>
+            // ⚠️ A máscara só formata o que já foi digitado, e nunca completa: uma
+            // que insere o que falta empurra o cursor de quem está apagando.
+            setValor(tipo === "telefone" ? mascararTelefone(e.target.value) : e.target.value)
+          }
+          onBlur={() => setTocado(true)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void salvar();
+            if (e.key === "Escape") onFechar();
+          }}
+          placeholder={tipo === "telefone" ? "(00) 00000-0000" : "financeiro@empresa.com.br"}
+          type={tipo === "email" ? "email" : "text"}
+          style={inputStyle}
+        />
+      </Field>
 
       {/*
-        ⚠️ O setor não é obrigatório. "Financeiro", "Comercial", "Portaria" é o
-        que faz três telefones da mesma empresa deixarem de ser três números
-        iguais. Obrigatório, viraria uma caixa preenchida com qualquer coisa só
-        para o botão liberar.
+        ⚠️ Setor e responsável são OPCIONAIS, e ficam na mesma linha.
+
+        "Financeiro", "Comercial", "Portaria" é o que faz três telefones da mesma
+        empresa deixarem de ser três números iguais, e o responsável é quem
+        atende ali. Obrigatórios, virariam caixas preenchidas com qualquer coisa
+        só para o botão liberar.
       */}
-      <input
-        value={rotulo}
-        onChange={(e) => setRotulo(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") void salvar();
-          if (e.key === "Escape") onFechar();
-        }}
-        placeholder="Setor (opcional)"
-        style={{ ...inputStyle, flex: 1 }}
-      />
+      <Field label="Setor e responsável">
+        <div style={{ display: "flex", gap: 8 }}>
+          <input
+            value={rotulo}
+            onChange={(e) => setRotulo(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void salvar();
+              if (e.key === "Escape") onFechar();
+            }}
+            placeholder="Setor"
+            style={{ ...inputStyle, flex: 1 }}
+          />
 
-      <input
-        value={responsavel}
-        onChange={(e) => setResponsavel(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") void salvar();
-          if (e.key === "Escape") onFechar();
-        }}
-        placeholder="Responsável (opcional)"
-        style={{ ...inputStyle, flex: 1 }}
-      />
+          <input
+            value={responsavel}
+            onChange={(e) => setResponsavel(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void salvar();
+              if (e.key === "Escape") onFechar();
+            }}
+            placeholder="Quem atende"
+            style={{ ...inputStyle, flex: 1 }}
+          />
+        </div>
+      </Field>
 
-      {contato && podeExcluir && (
-        <BotaoDeAcao rotulo="Remover" perigo onClick={() => void remover()}>
-          <path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.6 8h4.8l.6-8" />
-        </BotaoDeAcao>
-      )}
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        {/* Excluir na outra ponta da linha: é a única ação daqui que não dá
+            para desfazer, e ao lado de "Salvar" ela vira erro de mira. */}
+        {contato && podeExcluir && (
+          <Button size="sm" variant="danger" onClick={() => void remover()}>
+            Excluir
+          </Button>
+        )}
 
-      <Button size="sm" variant="ghost" onClick={onFechar}>
-        Cancelar
-      </Button>
+        <div style={{ flex: 1 }} />
 
-      <Button
-        size="sm"
-        variant="secondary"
-        disabled={!valor.trim() || salvando}
-        onClick={() => void salvar()}
-      >
-        {contato ? "Salvar" : "Adicionar"}
-      </Button>
+        <Button size="sm" variant="ghost" onClick={onFechar}>
+          Cancelar
+        </Button>
+
+        <Button
+          size="sm"
+          variant="primary"
+          disabled={!valor.trim() || Boolean(erro) || salvando}
+          onClick={() => void salvar()}
+        >
+          {salvando ? "Salvando…" : contato ? "Salvar" : "Adicionar"}
+        </Button>
+      </div>
     </div>
+  );
+}
+
+/**
+ * O e-mail que também é porta de entrada no portal.
+ *
+ * ⚠️ Verde, e não cinza. Não é um aviso nem um estado a resolver: é uma coisa boa
+ * que aconteceu, o cliente tem gente vendo as próprias faturas. Cinza, a marca
+ * pareceria mais um ícone decorativo de tabela.
+ */
+function MarcaDeUsuario({ nome }: { nome: string }) {
+  return (
+    <span
+      title={`${nome} entra no portal com este e-mail`}
+      aria-label={`${nome} entra no portal com este e-mail`}
+      style={{
+        display: "inline-grid",
+        placeItems: "center",
+        width: 17,
+        height: 17,
+        flexShrink: 0,
+        borderRadius: "var(--radius-full)",
+        background: "var(--success-bg)",
+        color: "var(--success-text)",
+      }}
+    >
+      <svg
+        width="10"
+        height="10"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+      >
+        <circle cx="12" cy="8" r="3.4" />
+        <path d="M5.5 19.5c1-3.4 3.5-5 6.5-5s5.5 1.6 6.5 5" />
+      </svg>
+    </span>
   );
 }

@@ -1,4 +1,5 @@
-import { ConflictError, NotFoundError } from "@/shared/errors/app-error";
+import { BusinessRuleError, ConflictError, NotFoundError } from "@/shared/errors/app-error";
+import { dominioAceitaEmail } from "@/shared/email/dominio-existe";
 import type { Paginacao, Pagina } from "@/shared/utils/paginacao";
 import * as repo from "@/modules/clientes/clientes.repository";
 import type {
@@ -42,7 +43,42 @@ export async function contatosDaPessoa(
   clienteId: number,
 ): Promise<ContatoDaPessoa[]> {
   await obterCliente(empresaId, clienteId);
-  return repo.contatosDaPessoa(clienteId);
+
+  const [contatos, usuarios] = await Promise.all([
+    repo.contatosDaPessoa(clienteId),
+    repo.usuariosDaPessoa(clienteId),
+  ]);
+
+  /*
+   * ⚠️ Casa e-mail de contato com usuario do PORTAL.
+   *
+   * Quem tem acesso ao portal entra pelo e-mail, e sem esta marca a aba mostrava
+   * dois e-mails iguais sem dizer que um deles e a porta de entrada de alguem:
+   * apagar o errado tirava o contato e deixava o acesso apontando para o vazio.
+   */
+  const porEmail = new Map(
+    usuarios.filter((u) => u.email).map((u) => [u.email!.toLowerCase(), u.nome ?? u.email!]),
+  );
+
+  return contatos.map((c) =>
+    c.tipo === "email" ? { ...c, usuario: porEmail.get(c.valor.toLowerCase()) ?? null } : c,
+  );
+}
+
+/**
+ * ⚠️ So o e-mail passa por aqui, e so quando ele muda.
+ *
+ * A conferencia sai da maquina para perguntar ao DNS, e cobrar isso de todo
+ * salvar poria meio segundo de rede no caminho de quem so corrigiu o setor.
+ */
+async function conferirDominio(tipo: "telefone" | "email", valor: string): Promise<void> {
+  if (tipo !== "email") return;
+
+  if (!(await dominioAceitaEmail(valor))) {
+    throw new BusinessRuleError(
+      `O domínio de ${valor} não recebe e-mail. Confira o que vem depois do @`,
+    );
+  }
 }
 
 export async function criarContato(
@@ -57,6 +93,8 @@ export async function criarContato(
   },
 ): Promise<ContatoDaPessoa> {
   await obterCliente(empresaId, clienteId);
+  await conferirDominio(entrada.tipo, entrada.valor);
+
   return repo.criarContato(clienteId, usuarioId, entrada);
 }
 
@@ -73,9 +111,16 @@ export async function atualizarContato(
   empresaId: number,
   clienteId: number,
   contatoId: number,
-  entrada: { valor: string; rotulo: string | null; responsavel: string | null },
+  entrada: {
+    tipo: "telefone" | "email";
+    valor: string;
+    rotulo: string | null;
+    responsavel: string | null;
+  },
 ): Promise<ContatoDaPessoa> {
   await obterCliente(empresaId, clienteId);
+  await conferirDominio(entrada.tipo, entrada.valor);
+
   return repo.atualizarContato(clienteId, contatoId, entrada);
 }
 

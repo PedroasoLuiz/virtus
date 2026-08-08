@@ -116,6 +116,14 @@ export type ContatoDaPessoa = {
    * o que a listagem mostra e ordena.
    */
   responsavel: string | null;
+  /**
+   * O nome de quem entra no portal com este e-mail, quando ha alguem.
+   *
+   * ⚠️ Nao e coluna: sai do cruzamento com quem tem acesso a este cadastro. Vale
+   * so para e-mail, e a aba usa para marcar que aquela linha e a porta de
+   * entrada de alguem — apaga-la tira o contato e deixa o acesso sem destino.
+   */
+  usuario?: string | null;
 };
 
 /** Um endereco da pessoa. */

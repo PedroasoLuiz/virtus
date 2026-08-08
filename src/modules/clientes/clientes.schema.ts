@@ -7,6 +7,7 @@ import {
 } from "@/shared/validators/comuns";
 import { paginacaoSchema } from "@/shared/utils/paginacao";
 import { CLASSIFICACOES, REGIMES } from "@/modules/clientes/clientes.types";
+import { analisarTelefone } from "@/shared/domain/telefone";
 
 /** Contratos de entrada e saida do modulo clientes. */
 
@@ -164,25 +165,45 @@ export const contatoSchema = z.object({
   valor: z.string(),
   rotulo: z.string().nullable(),
   responsavel: z.string().nullable(),
+  /** Quem entra no portal com este e-mail. Ausente nos telefones. */
+  usuario: z.string().nullish(),
 });
 
 /**
- * ⚠️ O e-mail e validado como e-mail; o telefone, so pelo tamanho.
+ * O telefone e LIDO, e nao so medido pelo tamanho.
  *
- * Formato de telefone no Brasil e uma bagunca honesta — com DDI, sem DDI, com o
- * nono digito, ramal no fim —, e recusar o que a pessoa tem escrito na agenda
- * dela seria inventar uma regra que o cadastro nunca teve.
+ * ⚠️ Valida e normaliza no mesmo lugar: o que sai daqui e o numero ja formatado,
+ * do jeito que vai ser guardado e exibido. Antes o cadastro aceitava qualquer
+ * coisa com oito caracteres, e "3599845" ia para a coluna do principal e so
+ * falhava dias depois, na hora de mandar a cobranca, longe de quem digitou.
  */
+const telefoneSchema = z
+  .string()
+  .trim()
+  .max(30)
+  .transform((valor, ctx) => {
+    const analise = analisarTelefone(valor);
+
+    if (analise.erro) {
+      ctx.addIssue({ code: "custom", message: analise.erro });
+      return z.NEVER;
+    }
+
+    return analise.formatado;
+  });
+
 export const criarContatoBodySchema = z.discriminatedUnion("tipo", [
   z.object({
     tipo: z.literal("email"),
-    valor: emailSchema,
+    // Minusculo sempre: "Joao@" e "joao@" sao a mesma caixa, e guardando os dois
+    // o mesmo e-mail aparecia duas vezes na lista sem parecer repetido.
+    valor: emailSchema.transform((v) => v.toLowerCase()),
     rotulo: z.string().trim().max(40).nullish(),
     responsavel: textoCurtoSchema.nullish(),
   }),
   z.object({
     tipo: z.literal("telefone"),
-    valor: z.string().trim().min(8).max(30),
+    valor: telefoneSchema,
     rotulo: z.string().trim().max(40).nullish(),
     responsavel: textoCurtoSchema.nullish(),
   }),
