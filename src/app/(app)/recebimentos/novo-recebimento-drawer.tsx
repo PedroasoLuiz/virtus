@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Drawer } from "@/components/ui/drawer";
 import {
   Button,
+  CampoBloqueado,
   CampoNumerico,
   Field,
   Formulario,
@@ -408,12 +409,6 @@ export function NovoRecebimentoDrawer({
       open
       onClose={onClose}
       title="Baixa"
-      footer={
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <Totais abatido={abatido} acrescimo={acrescimo} total={total} />
-
-        </div>
-      }
       acoes={
         <Button
           size="xs"
@@ -577,6 +572,38 @@ export function NovoRecebimentoDrawer({
           >
             <CampoNumerico valor={taxa} aoMudar={setTaxa} escala={100} />
           </Field>
+        )}
+
+        {/*
+          ⚠️ Os tres numeros viraram CAMPO, e sairam do rodape.
+
+          No rodape eram numeros soltos com rotulo miudo, e o que entra no banco —
+          que e o unico que precisa bater com o extrato — ficava do tamanho de um
+          detalhe. Como campo, cada um tem o rotulo a esquerda como todo dado da
+          tela, da para copiar, e os tres ficam onde a leitura ja esta: logo
+          acima do que se digita por ultimo.
+
+          ⚠️ Dívida e acréscimo so aparecem quando ha acréscimo. Sem juros nem
+          multa, "entrando" e "dívida" sao o mesmo numero, e repetir e fazer
+          procurar a diferenca que nao existe.
+        */}
+        <Field
+          label="Entrando na conta"
+          hint="É este valor que vai aparecer no extrato do banco."
+        >
+          <CampoBloqueado valor={formatarSemSimbolo(total)} />
+        </Field>
+
+        {acrescimo > 0 && (
+          <>
+            <Field label="Abate de dívida">
+              <CampoBloqueado valor={formatarSemSimbolo(abatido)} />
+            </Field>
+
+            <Field label="Juros e multa">
+              <CampoBloqueado valor={formatarSemSimbolo(acrescimo)} />
+            </Field>
+          </>
         )}
 
         <Field label="Observações">
@@ -931,56 +958,3 @@ function Aviso({ children }: { children: React.ReactNode }) {
   );
 }
 
-/**
- * O que entrou no banco, com a composicao ao lado.
- *
- * O numero grande e o TOTAL, porque e ele que precisa bater com o extrato. O
- * abatimento e o acrescimo aparecem menores: explicam o total, nao competem com
- * ele.
- */
-function Totais({
-  abatido,
-  acrescimo,
-  total,
-}: {
-  abatido: Centavos;
-  acrescimo: Centavos;
-  total: Centavos;
-}) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0 }}>
-      <div>
-        <div className="rotulo" style={{ fontSize: "var(--text-xs)" }}>
-          Entrando
-        </div>
-        <div
-          style={{
-            fontSize: "var(--text-md)",
-            fontWeight: "var(--fw-semi)",
-            fontVariantNumeric: "tabular-nums",
-            color: total > 0 ? "var(--credito)" : "var(--text-tertiary)",
-          }}
-        >
-          {formatarSemSimbolo(total)}
-        </div>
-      </div>
-
-      {acrescimo > 0 && (
-        <div style={{ fontSize: "var(--text-sm)", color: "var(--text-tertiary)", lineHeight: 1.5 }}>
-          <div>
-            dívida{" "}
-            <strong style={{ fontVariantNumeric: "tabular-nums" }}>
-              {formatarSemSimbolo(abatido)}
-            </strong>
-          </div>
-          <div>
-            acréscimo{" "}
-            <strong style={{ fontVariantNumeric: "tabular-nums" }}>
-              {formatarSemSimbolo(acrescimo)}
-            </strong>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
