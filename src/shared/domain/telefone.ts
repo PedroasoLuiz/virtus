@@ -150,5 +150,10 @@ export function mascararTelefone(bruto: string): string {
   if (d.length <= 6) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
 
   const corte = d.length > 10 ? 7 : 6;
-  return `(${d.slice(0, 2)}) ${d.slice(2, corte)}-${d.slice(corte)}`;
+
+  /*
+   * ⚠️ Nunca termina em separador. Com seis digitos, o traco final ficava
+   * sozinho: o backspace tirava, a mascara devolvia, e o cursor nao passava dali.
+   */
+  return `(${d.slice(0, 2)}) ${d.slice(2, corte)}-${d.slice(corte)}`.replace(/[^0-9]+$/, "");
 }

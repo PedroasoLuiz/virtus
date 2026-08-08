@@ -5,6 +5,7 @@ import { useAvisos } from "@/components/ui/avisos";
 import { FormDrawer } from "@/components/ui/form-drawer";
 import { PanelTabs } from "@/components/ui/kit";
 import type { Cliente, PapelPessoa } from "@/modules/clientes/clientes.types";
+import { limparDocumento } from "@/shared/domain/documento";
 import { AbaDeInformacoes } from "./aba-informacoes";
 import { AbaDePapeis } from "./aba-papeis";
 import { AbaDeContatos } from "./aba-contatos";
@@ -104,8 +105,12 @@ export function PessoaDrawer({
   const set = <K extends keyof Form>(campo: K, valor: Form[K]) =>
     setForm((f) => ({ ...f, [campo]: valor }));
 
-  const digitos = form.cnpj.replace(/\D/g, "");
-  const fisica = digitos.length > 0 && digitos.length <= 11;
+  /*
+   * ⚠️ O documento limpo mantem LETRA: o CNPJ passou a aceitar nas doze primeiras
+   * posicoes em 31/07/2026, e um `replace(/\D/g, "")` apagaria metade dele.
+   */
+  const documento = limparDocumento(form.cnpj);
+  const fisica = documento.length > 0 && documento.length <= 11 && !/[A-Z]/.test(documento);
 
   /**
    * Grava o principal na hora, sem esperar o salvar do formulário.
@@ -176,7 +181,7 @@ export function PessoaDrawer({
         // Pessoa fisica nao tem fantasia: o campo nem aparece, e mandar o que
         // sobrou de um cadastro que era juridico gravaria lixo.
         nomeFantasia: fisica ? null : form.nomeFantasia.trim() || null,
-        cnpj: digitos || null,
+        cnpj: documento || null,
         dataNascimento: form.dataNascimento || null,
         inscricaoMunicipal: form.inscricaoMunicipal.trim() || null,
         inscricaoEstadual: form.inscricaoEstadual.trim() || null,

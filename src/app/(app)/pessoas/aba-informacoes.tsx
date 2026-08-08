@@ -12,8 +12,8 @@ import {
   selectStyle,
 } from "@/components/ui/kit";
 import { CLASSIFICACOES, REGIMES } from "@/modules/clientes/clientes.types";
-import { documentoValido } from "@/shared/domain/cadastro-pessoa";
-import { buscarCnpj, mascararDocumento } from "@/shared/domain/cnpj";
+import { buscarCnpj } from "@/shared/domain/cnpj";
+import { documentoValido, ehCpf, limparDocumento, mascararDocumento } from "@/shared/domain/documento";
 import { mascararTelefone } from "@/shared/domain/telefone";
 import type { Form } from "./pessoa-form";
 
@@ -59,8 +59,16 @@ export function AbaDeInformacoes({
    */
   const [jaExiste, setJaExiste] = useState<{ id: number; nome: string } | null>(null);
 
-  const digitos = form.cnpj.replace(/\D/g, "");
-  const fisica = digitos.length > 0 && digitos.length <= 11;
+  /*
+   * ⚠️ Fisica ou juridica sai do DOCUMENTO limpo, que agora pode ter LETRA.
+   *
+   * CPF continua com onze digitos; o CNPJ passou a aceitar letra nas doze
+   * primeiras posicoes em 31/07/2026. Enquanto o campo nao chega a onze
+   * caracteres, o formulario trata como fisica — e o caminho por onde quem digita
+   * um CNPJ passa.
+   */
+  const limpo = limparDocumento(form.cnpj);
+  const fisica = limpo.length > 0 && limpo.length <= 11 && !/[A-Z]/.test(limpo);
 
   /*
    * ⚠️ O rótulo do documento só AFIRMA quando o número já decidiu.
@@ -69,8 +77,7 @@ export function AbaDeInformacoes({
    * oferecer os dois. Trocando a cada tecla, o rótulo dizia "CPF" enquanto a
    * pessoa digitava um CNPJ e parecia estar recusando o que ela ia escrever.
    */
-  const rotuloDoDocumento =
-    digitos.length === 11 ? "CPF" : digitos.length === 14 ? "CNPJ" : "CNPJ / CPF";
+  const rotuloDoDocumento = ehCpf(limpo) ? "CPF" : limpo.length === 14 ? "CNPJ" : "CNPJ / CPF";
 
   /*
    * ⚠️ Só a pessoa JURÍDICA tem inscrição e regime.
@@ -119,7 +126,7 @@ export function AbaDeInformacoes({
      * CNPJ?). Em sequência, a tela ficaria parada o tempo das duas somadas para
      * responder coisas que não dependem uma da outra.
      */
-    const eCnpj = mascarado.replace(/\D/g, "").length === 14;
+    const eCnpj = limparDocumento(mascarado).length === 14;
 
     setBuscando(true);
     const [duplicado, achado] = await Promise.all([

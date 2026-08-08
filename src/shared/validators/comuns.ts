@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { documentoValido, limparDocumento } from "@/shared/domain/documento";
 import { ehDataISO } from "@/shared/utils/datas";
 
 /**
@@ -38,20 +39,21 @@ export const centavosPositivoSchema = centavosSchema.refine(
  * numero de onze ou catorze digitos deixaria passar erro de digitacao, que e a
  * unica coisa que esta validacao existe para pegar.
  */
+/**
+ * CPF ou CNPJ, ja limpo e conferido.
+ *
+ * ⚠️ A regra mora em `shared/domain/documento`, e nao aqui. O CNPJ virou
+ * alfanumerico em 31/07/2026, e ter a conta em dois lugares faria uma tela
+ * aceitar a letra e a outra recusar o mesmo cadastro.
+ */
 export const cpfCnpjSchema = z
   .string()
-  .transform((v) => v.replace(/\D/g, ""))
-  .refine((v) => v.length === 11 || v.length === 14, "Informe um CPF (11) ou CNPJ (14 digitos)")
-  .refine((v) => (v.length === 11 ? cpfValido(v) : cnpjValido(v)), "Documento invalido");
-
-/**
- * ⚠️ Mantido como apelido de `cpfCnpjSchema`.
- *
- * O nome `cnpjSchema` esta espalhado por outros modulos, e trocar todos de uma
- * vez arriscaria mexer em validacao de tela que nao esta sendo testada agora. O
- * comportamento e o novo: os dois documentos passam.
- */
-export const cnpjSchema = cpfCnpjSchema;
+  .transform(limparDocumento)
+  .refine(
+    (v) => v.length === 11 || v.length === 14,
+    "Informe um CPF (11) ou CNPJ (14 caracteres)",
+  )
+  .refine(documentoValido, "Documento invalido");
 
 export const emailSchema = z.email().max(255);
 
@@ -71,43 +73,3 @@ export function ordenacaoSchema<T extends readonly [string, ...string[]]>(campos
  * chave nao duplica efeito.
  */
 export const idempotencyKeySchema = z.string().min(8).max(128);
-
-/**
- * Os digitos verificadores do CPF.
- *
- * Mesma ideia do CNPJ com outros pesos: os nove primeiros digitos geram o
- * decimo, e os dez geram o decimo primeiro.
- */
-export function cpfValido(cpf: string): boolean {
-  // Todos iguais fecha a formula e nao existe: 111.111.111-11 passaria.
-  if (/^(\d)\1{10}$/.test(cpf)) return false;
-
-  const digito = (ate: number): number => {
-    let soma = 0;
-    for (let i = 0; i < ate; i++) soma += Number(cpf[i]) * (ate + 1 - i);
-
-    const resto = (soma * 10) % 11;
-    return resto === 10 ? 0 : resto;
-  };
-
-  return digito(9) === Number(cpf[9]) && digito(10) === Number(cpf[10]);
-}
-
-export function cnpjValido(cnpj: string): boolean {
-  if (/^(\d)\1{13}$/.test(cnpj)) return false;
-
-  const digito = (base: string, pesoInicial: number): number => {
-    let peso = pesoInicial;
-    let soma = 0;
-    for (const char of base) {
-      soma += Number(char) * peso;
-      peso = peso === 2 ? 9 : peso - 1;
-    }
-    const resto = soma % 11;
-    return resto < 2 ? 0 : 11 - resto;
-  };
-
-  const d1 = digito(cnpj.slice(0, 12), 5);
-  const d2 = digito(cnpj.slice(0, 13), 6);
-  return d1 === Number(cnpj[12]) && d2 === Number(cnpj[13]);
-}

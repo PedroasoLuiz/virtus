@@ -1,6 +1,7 @@
 import { serverClient } from "@/infra/supabase/client";
 import type { ClienteRow } from "@/infra/supabase/database.types";
 import { primeiroPreenchido } from "@/shared/utils/texto";
+import { limparDocumento } from "@/shared/domain/documento";
 import { intervalo, type Paginacao, type Pagina } from "@/shared/utils/paginacao";
 import type {
   CampoDeOrdem,
@@ -78,13 +79,15 @@ export async function listar(
   if (filtro.busca) {
     const termo = `%${filtro.busca}%`;
     /*
-     * ⚠️ Os digitos vao numa condicao PROPRIA. Quem digita "35 99845" procura um
-     * telefone, e o texto com pontuacao nunca casaria: o cadastro guarda
-     * "(35) 9 9845-6712". Sem isso, buscar por numero so funcionava se a pessoa
-     * acertasse a formatacao.
+     * ⚠️ O documento vai numa condicao PROPRIA, e limpo.
+     *
+     * Quem digita "35.123" procura um CNPJ, e o texto com pontuacao nunca casaria:
+     * a coluna guarda so os caracteres do documento. A limpeza mantem LETRA, que o
+     * CNPJ passou a aceitar em 31/07/2026 — tirando-a, buscar por um CNPJ novo
+     * devolveria a lista errada.
      */
-    const digitos = filtro.busca.replace(/\D/g, "");
-    const porDigito = digitos.length >= 3 ? `,cnpj.ilike.%${digitos}%` : "";
+    const documento = limparDocumento(filtro.busca);
+    const porDigito = documento.length >= 3 ? `,cnpj.ilike.%${documento}%` : "";
 
     query = query.or(
       `razao.ilike.${termo},nomefantasia.ilike.${termo},cnpj.ilike.${termo},` +

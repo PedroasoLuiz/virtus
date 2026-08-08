@@ -11,26 +11,11 @@
  * so mostra o mesmo aviso lendo a mesma funcao.
  */
 
-import { cnpjValido, cpfValido } from "@/shared/validators/comuns";
+import { documentoValido, ehCpf, limparDocumento } from "@/shared/domain/documento";
+
+export { documentoValido };
 
 export type PendenciaDoCadastro = "documento" | "data";
-
-/**
- * O documento e um documento de verdade?
- *
- * ⚠️ Confere os DIGITOS VERIFICADORES, e nao so o tamanho. O cadastro herdado tem
- * "00.000.000/0000-00" escrito em dois registros: catorze digitos, e nada. Pela
- * contagem, aquilo passava por CNPJ completo e liberava o faturamento de um
- * cliente sem documento nenhum.
- */
-export function documentoValido(bruto: string | null): boolean {
-  const d = (bruto ?? "").replace(/\D/g, "");
-
-  if (d.length === 11) return cpfValido(d);
-  if (d.length === 14) return cnpjValido(d);
-
-  return false;
-}
 
 export type CadastroConferivel = {
   cnpj: string | null;
@@ -49,7 +34,7 @@ export function pendenciasDoCadastro(p: CadastroConferivel): PendenciaDoCadastro
 
 /** Se a pessoa e fisica, para o texto pedir nascimento em vez de fundacao. */
 export function ehPessoaFisica(cnpj: string | null): boolean {
-  return (cnpj ?? "").replace(/\D/g, "").length === 11;
+  return ehCpf(limparDocumento(cnpj ?? ""));
 }
 
 /**

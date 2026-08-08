@@ -1,6 +1,6 @@
 import { z } from "zod";
 import {
-  cnpjSchema,
+  cpfCnpjSchema,
   emailSchema,
   idSchema,
   textoCurtoSchema,
@@ -8,6 +8,7 @@ import {
 import { paginacaoSchema } from "@/shared/utils/paginacao";
 import { CLASSIFICACOES, REGIMES } from "@/modules/clientes/clientes.types";
 import { analisarTelefone } from "@/shared/domain/telefone";
+import { limparDocumento } from "@/shared/domain/documento";
 
 /** Contratos de entrada e saida do modulo clientes. */
 
@@ -106,7 +107,7 @@ export const criarEnderecoBodySchema = z.object({
 export const criarClienteBodySchema = z.object({
   razao: textoCurtoSchema,
   nomeFantasia: textoCurtoSchema.nullish(),
-  cnpj: cnpjSchema.nullish(),
+  cnpj: cpfCnpjSchema.nullish(),
   dataNascimento: z.iso.date().nullish(),
   /*
    * ⚠️ O e-mail e o telefone daqui sao os PRINCIPAIS, e no cadastro novo eles
@@ -151,17 +152,14 @@ export const criarClienteComCanalSchema = criarClienteBodySchema.refine(
 );
 
 /**
- * ⚠️ Aceita o documento com pontuacao e devolve so os digitos.
+ * ⚠️ Aceita o documento pontuado e devolve o que e documento.
  *
- * A tela manda o que esta no campo, mascarado. Exigindo digito puro, ela teria de
- * limpar antes de perguntar, e a mesma limpeza existiria em dois lugares.
+ * A tela manda o que esta no campo, mascarado. Exigindo o valor limpo, ela teria
+ * de limpar antes de perguntar, e a mesma limpeza existiria em dois lugares. A
+ * limpeza mantem LETRA: o CNPJ passou a aceitar em 31/07/2026.
  */
 export const porDocumentoQuerySchema = z.object({
-  documento: z
-    .string()
-    .trim()
-    .max(20)
-    .transform((v) => v.replace(/\D/g, "")),
+  documento: z.string().trim().max(20).transform(limparDocumento),
 });
 
 export const idParamSchema = z.object({ id: idSchema });

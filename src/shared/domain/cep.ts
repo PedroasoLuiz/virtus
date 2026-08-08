@@ -21,6 +21,9 @@ export type EnderecoDoCep = {
 /** 00000-000, formatando so o que ja foi digitado. */
 export function mascararCep(bruto: string): string {
   const d = bruto.replace(/\D/g, "").slice(0, 8);
+
+  // O traco so entra depois do sexto digito: posto no quinto, ele ficaria
+  // sozinho no fim e prenderia o backspace.
   return d.length <= 5 ? d : `${d.slice(0, 5)}-${d.slice(5)}`;
 }
 

@@ -3,6 +3,7 @@
 import { Avatar } from "@/components/ui/avatar";
 import { AcoesDaLinha, BotaoDeAcao, Td, Tr } from "@/components/ui/kit";
 import type { Cliente } from "@/modules/clientes/clientes.types";
+import { formatarDocumento } from "@/shared/domain/documento";
 import { PAPEIS, type PapelVisual } from "./papeis-da-listagem";
 
 /**
@@ -164,14 +165,4 @@ function Flag({ papel, tem }: { papel: PapelVisual; tem: boolean }) {
 /** O traço do campo vazio. Célula em branco parece coluna quebrada. */
 function Vazio() {
   return <span style={{ color: "var(--text-disabled)" }}>—</span>;
-}
-
-/** CPF ou CNPJ, pela quantidade de dígitos. */
-function formatarDocumento(bruto: string): string {
-  const d = bruto.replace(/\D/g, "");
-
-  if (d.length === 11) return d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
-  if (d.length === 14) return d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
-
-  return bruto;
 }

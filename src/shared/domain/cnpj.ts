@@ -1,4 +1,5 @@
 import { analisarTelefone } from "@/shared/domain/telefone";
+import { limparDocumento } from "@/shared/domain/documento";
 
 /**
  * O que a Receita ja sabe sobre um CNPJ.
@@ -36,29 +37,15 @@ export type DadosDoCnpj = {
   endereco: EnderecoDoCnpj;
 };
 
-/**
- * A mascara do documento, enquanto se digita.
- *
- * ⚠️ Troca de forma no decimo segundo digito: ate onze e CPF, dali em diante e
- * CNPJ. E a mesma leitura que o resto do formulario faz, entao o campo nunca fica
- * com a pontuacao de um e o tamanho do outro.
- */
-export function mascararDocumento(bruto: string): string {
-  const d = bruto.replace(/\D/g, "").slice(0, 14);
-
-  if (d.length <= 11) {
-    if (d.length <= 3) return d;
-    if (d.length <= 6) return `${d.slice(0, 3)}.${d.slice(3)}`;
-    if (d.length <= 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`;
-    return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
-  }
-
-  return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
-}
-
 export async function buscarCnpj(bruto: string): Promise<DadosDoCnpj | null> {
+  /*
+   * ⚠️ So CNPJ NUMERICO. O formato alfanumerico comecou em 31/07/2026 e as bases
+   * publicas ainda respondem so pelos antigos: mandando um com letra, a consulta
+   * volta vazia e a tela mostraria "nao achei" para um documento que existe.
+   * Quem tem CNPJ novo preenche a mao, e nada trava.
+   */
   const digitos = bruto.replace(/\D/g, "");
-  if (digitos.length !== 14) return null;
+  if (digitos.length !== 14 || limparDocumento(bruto).length !== 14) return null;
 
   try {
     const r = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${digitos}`);
