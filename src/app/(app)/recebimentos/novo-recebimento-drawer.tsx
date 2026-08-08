@@ -642,16 +642,19 @@ export function NovoRecebimentoDrawer({
                 <Th minWidth={86}>Multa (R$)</Th>
                 <Th minWidth={96}>Desconto (R$)</Th>
                 {/*
-                  ⚠️ O valor NAO se digita: ele e o que estava em aberto menos o
-                  que foi perdoado. Digitavel, ele e o mesmo numero pedido duas
-                  vezes — e as duas podiam discordar.
+                  ⚠️ O TOTAL da linha, e nao o que abate a divida.
 
-                  Quem recebeu so uma parte clica nele: e o caso raro, e o clique
-                  e o que separa "recebi menos e o resto fica devendo" de "recebi
-                  menos porque perdoei".
+                  E o que o cliente pagou por esta parcela: o que abate, menos o
+                  perdoado, mais juros e multa. E o numero que vai bater com o
+                  extrato, e por isso ele se move a cada tecla nos tres campos ao
+                  lado — mostrando so o abatimento, digitar juros nao mudava nada
+                  na coluna e a pessoa procurava o dinheiro que tinha somado.
+
+                  Nunca se digita: seria o mesmo numero pedido duas vezes, e as
+                  duas podiam discordar.
                 */}
                 <Th align="right" minWidth={110}>
-                  Valor
+                  Total
                 </Th>
               </TableHead>
 
@@ -661,6 +664,12 @@ export function NovoRecebimentoDrawer({
                   const liberada = liberadas.has(p.parcelaId);
                   const atrasada = p.vencimento != null && p.vencimento < hoje();
                   const valor = valorDaLinha(estado, p.emAberto);
+                  /*
+                   * O que o cliente pagou por esta parcela: o que abate a divida
+                   * mais o acrescimo. Juros e multa NAO abatem — entram por cima
+                   * —, e e por isso que o total e maior que a divida quitada.
+                   */
+                  const totalDaLinha = estado.incluida ? valor + estado.juros + estado.multa : 0;
                   const sobra = estado.incluida
                     ? Math.max(0, p.emAberto - valor - estado.desconto)
                     : 0;
@@ -751,8 +760,55 @@ export function NovoRecebimentoDrawer({
                         {p.vencimento ? paraFormatoBR(p.vencimento as DataISO) : "—"}
                       </Td>
 
+                      {/*
+                        ⚠️ Clicar aqui e dizer "destes X, recebi so uma parte".
+
+                        E o caso raro — quase todo mundo paga a parcela —, e por
+                        isso e um clique e nao um campo aberto. Ele mora nesta
+                        coluna porque a pergunta e sobre a DIVIDA: quanto dela
+                        entrou. O total do fim continua sendo conta, nunca
+                        digitacao.
+                      */}
                       <Td>
-                        {formatarSemSimbolo(p.emAberto as Centavos)}
+                        {parcial === p.parcelaId ? (
+                          <CampoNumerico
+                            valor={valor}
+                            escala={100}
+                            style={inputDeCelula}
+                            aoMudar={(v) =>
+                              mudar(
+                                p.parcelaId,
+                                "recebido",
+                                Math.min(Math.max(0, v), p.emAberto - estado.desconto),
+                              )
+                            }
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={!liberada}
+                            title={
+                              liberada
+                                ? "Clique para receber só uma parte: o resto continua devendo"
+                                : "A parcela anterior desta conta ainda está em aberto"
+                            }
+                            onClick={() => setParcial(p.parcelaId)}
+                            style={{
+                              border: "none",
+                              background: "none",
+                              padding: 0,
+                              fontFamily: "var(--font)",
+                              fontSize: "var(--text-sm)",
+                              fontVariantNumeric: "tabular-nums",
+                              color: "inherit",
+                              textDecoration: liberada ? "underline dotted" : undefined,
+                              textUnderlineOffset: 3,
+                              cursor: liberada ? "pointer" : "default",
+                            }}
+                          >
+                            {formatarSemSimbolo(p.emAberto as Centavos)}
+                          </button>
+                        )}
 
                         {p.recebido > 0 && (
                           <div
@@ -807,51 +863,8 @@ export function NovoRecebimentoDrawer({
                         />
                       </Td>
 
-                      {/*
-                        ⚠️ O valor NAO se digita no caminho normal: ele e o que
-                        estava em aberto menos o que foi perdoado. Clicar abre o
-                        campo para o caso raro — o cliente pagou so uma parte e o
-                        resto continua devendo, que e diferente de perdoar.
-                      */}
-                      <Td style={tdNum}>
-                        {parcial === p.parcelaId ? (
-                          <CampoNumerico
-                            valor={valor}
-                            escala={100}
-                            alinhar="right"
-                            style={inputDeCelula}
-                            aoMudar={(v) =>
-                              mudar(
-                                p.parcelaId,
-                                "recebido",
-                                Math.min(Math.max(0, v), p.emAberto - estado.desconto),
-                              )
-                            }
-                          />
-                        ) : (
-                          <button
-                            type="button"
-                            disabled={!estado.incluida}
-                            title={
-                              estado.incluida
-                                ? "Clique para receber só uma parte: o resto continua devendo"
-                                : undefined
-                            }
-                            onClick={() => setParcial(p.parcelaId)}
-                            style={{
-                              border: "none",
-                              background: "none",
-                              padding: 0,
-                              fontFamily: "var(--font)",
-                              fontSize: "var(--text-sm)",
-                              fontVariantNumeric: "tabular-nums",
-                              color: "inherit",
-                              cursor: estado.incluida ? "pointer" : "default",
-                            }}
-                          >
-                            {formatarSemSimbolo(valor as Centavos)}
-                          </button>
-                        )}
+                      <Td style={{ ...tdNum, fontWeight: "var(--fw-medium)" }}>
+                        {formatarSemSimbolo(totalDaLinha as Centavos)}
 
                         {/* O que sobra depois desta baixa. So aparece quando
                             sobra: uma linha "ainda devendo 0,00" seria ruido. */}
@@ -860,6 +873,7 @@ export function NovoRecebimentoDrawer({
                             style={{
                               marginTop: 1,
                               fontSize: "var(--text-xs)",
+                              fontWeight: 400,
                               color: "var(--danger-text)",
                             }}
                           >
