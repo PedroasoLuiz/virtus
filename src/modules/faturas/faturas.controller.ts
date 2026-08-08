@@ -16,6 +16,7 @@ import {
   type EnviarParcelaWhatsappBody,
   type DividirParcelaBody,
   type IdParam,
+  type RedefinirParcelasBody,
   type ListarQuery,
   type ParcelaParam,
   type TipoDocumentoQuery,
@@ -79,6 +80,28 @@ export async function adicionarParcela({
     // a borda e o lugar de coloca-la.
     body && { ...body, valor: centavos(body.valor), vencimento: body.vencimento as DataISO },
   );
+  const fatura = await service.obterFatura(empresaId, params.id);
+  return ok(faturaSchema.parse(fatura));
+}
+
+export async function redefinirParcelas({
+  body,
+  params,
+  ctx,
+}: Entrada<RedefinirParcelasBody, undefined, IdParam>) {
+  const empresaId = empresaObrigatoria(ctx);
+
+  await service.redefinirParcelasDaFatura(
+    empresaId,
+    ctx.usuarioId,
+    params.id,
+    body.parcelas.map((p) => ({
+      id: p.id,
+      vencimento: p.vencimento as DataISO,
+      valor: centavos(p.valor),
+    })),
+  );
+
   const fatura = await service.obterFatura(empresaId, params.id);
   return ok(faturaSchema.parse(fatura));
 }

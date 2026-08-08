@@ -8,6 +8,7 @@ import { NovoRecebimentoDrawer } from "../recebimentos/novo-recebimento-drawer";
 import { Icon } from "@/components/layout/icones";
 import {
   AcoesDaLinha,
+  BotaoDeAcao,
   Button,
   CampoBloqueado,
   CampoNumerico,
@@ -17,7 +18,6 @@ import {
   GrupoDeCampos,
   inputStyle,
   PanelTabs,
-  selectStyle,
   TableArea,
   TableHead,
   Td,
@@ -634,9 +634,9 @@ function Conteudo({
                 descobre que existia.
               */
               onIncluir={pode?.parcelas.pode ? () => setDividindo(true) : undefined}
-              // O rótulo diz o que acontece, e não "adicionar": nenhuma parcela
-              // nova aumenta a conta, ela recorta uma que já existe.
-              rotuloIncluir="Dividir uma parcela"
+              // O rótulo diz o que acontece: a tela abre o cronograma inteiro,
+              // e nao acrescenta uma parcela solta.
+              rotuloIncluir="Mexer no parcelamento"
             >
               <TableArea minWidth={0}>
               <TableHead>
@@ -786,10 +786,10 @@ function Conteudo({
         />
       )}
 
-      {dividindo && fatura && (
-        <NovaParcela
-          faturaId={fatura.id}
-          parcelas={fatura.parcelas.filter((p) => pode?.porParcela[p.id]?.pode)}
+      {dividindo && fatura && pode && (
+        <Parcelamento
+          fatura={fatura}
+          pode={pode}
           onClose={() => setDividindo(false)}
           aoSalvar={() => {
             setDividindo(false);
@@ -891,173 +891,299 @@ function NovoVencimento({
 // ── Peças ───────────────────────────────────────────────────────────────────
 
 /**
- * Divide uma parcela em duas.
+ * O parcelamento inteiro numa tabela editavel.
  *
- * ⚠️ Ela nao adiciona dinheiro: RECORTA o que ja existe. O total da conta e o que
- * foi combinado com o cliente, e um botao que aumentasse a conta sem passar por
- * ticket faria a soma das parcelas deixar de bater com ela. Por isso a tela nao
- * fala em "adicionar": fala em tirar de uma e criar outra.
+ * ⚠️ Uma GRADE, e nao tres campos que dividem uma parcela ao meio. Quem vendeu
+ * 10.000 e combinou 2.000 num dia, 1.200 no outro e o resto depois precisa
+ * digitar o cronograma; chegar nele por divisoes sucessivas era trabalho manual
+ * para descrever uma coisa so.
  *
- * ⚠️ O resultado aparece ANTES de salvar, escrito por extenso. Com tres campos
- * soltos, quem digitava 400 num campo chamado "valor" nao sabia se estava criando
- * uma parcela de 400 ou deixando a origem com 400 — e so descobria depois de
- * gravar numa cobranca que talvez ja esteja com o cliente.
+ * ⚠️ A regra de ouro esta a vista: a soma tem de bater com o total da conta. O
+ * rodape mostra a diferenca enquanto ela existe e o salvar fica travado — o
+ * servidor confere de novo, mas ninguem deveria descobrir isso pela recusa.
  *
- * ⚠️ Drawer proprio, e nao edicao na linha: a mudanca sai na hora para o banco, e
- * um campo que salva ao perder o foco tornaria isso um acidente de clique.
+ * ⚠️ Da para digitar VALOR ou PORCENTAGEM, e os dois sao a mesma coisa vista de
+ * dois jeitos. Combinado "trinta por cento na entrada", ninguem quer fazer a
+ * conta de cabeca; combinado "dois mil na entrada", ninguem quer descobrir que
+ * isso da 20%.
+ *
+ * ⚠️ Parcela paga aparece e nao se edita. Ela conta para o total — sem mostra-la,
+ * a soma da tabela nunca bateria com a conta e a tela pareceria errada.
  */
-function NovaParcela({
-  faturaId,
-  parcelas,
+function Parcelamento({
+  fatura,
+  pode,
   onClose,
   aoSalvar,
 }: {
-  faturaId: number;
-  /** So as que a regra deixa mexer: paga e com documento ficam de fora. */
-  parcelas: Parcela[];
+  fatura: Fatura;
+  pode: ReturnType<typeof oQuePodeNaConta>;
   onClose: () => void;
   aoSalvar: () => void;
 }) {
-  const [origemId, setOrigemId] = useState(parcelas.at(-1)?.id ?? 0);
-  const [valor, setValor] = useState(0);
-  const [vencimento, setVencimento] = useState("");
+  const abertas = fatura.parcelas.filter((p) => !p.pago);
+  const pagas = fatura.parcelas.filter((p) => p.pago);
 
-  const origem = parcelas.find((p) => p.id === origemId) ?? null;
-  const sobra = origem ? Math.max(0, origem.total - valor) : 0;
+  const [linhas, setLinhas] = useState<LinhaDoParcelamento[]>(() =>
+    abertas.map((p) => ({
+      id: p.id,
+      vencimento: p.vencimento ?? "",
+      valor: p.total,
+      travada: !pode.porParcela[p.id]?.pode,
+    })),
+  );
 
-  /*
-   * ⚠️ As mesmas bordas que o dominio confere, ditas antes do clique.
+  const somaPagas = pagas.reduce((s, p) => s + p.total, 0);
+  const somaAbertas = linhas.reduce((s, l) => s + l.valor, 0);
+  const diferenca = fatura.total - somaPagas - somaAbertas;
+
+  const semData = linhas.some((l) => !l.vencimento);
+  const semValor = linhas.some((l) => l.valor <= 0);
+
+  function mudar(indice: number, mudanca: Partial<LinhaDoParcelamento>) {
+    setLinhas((atual) => atual.map((l, i) => (i === indice ? { ...l, ...mudanca } : l)));
+  }
+
+  /**
+   * O mais parte a ULTIMA parcela em duas.
    *
-   * O valor tem de caber na parcela de origem — igual a deixaria zerada, maior a
-   * deixaria negativa — e o vencimento novo tem de ser depois do dela, senao a
-   * ordem de recebimento passa a discordar da numeracao.
+   * ⚠️ Assim a soma continua batendo depois de acrescentar. Nascendo com valor
+   * zero, toda parcela nova deixaria a tabela em erro e obrigaria a digitar antes
+   * de qualquer outra coisa.
    */
-  const erroDoValor =
-    !origem || valor <= 0
-      ? null
-      : valor >= origem.total
-        ? `Tem de ser menos que ${formatarSemSimbolo(origem.total as Centavos)}, que é o que esta parcela vale hoje.`
-        : null;
+  function acrescentar() {
+    setLinhas((atual) => {
+      const ultima = atual.at(-1);
+      if (!ultima) return atual;
 
-  const erroDaData =
-    vencimento && origem?.vencimento && vencimento <= origem.vencimento
-      ? `Tem de ser depois de ${curto(origem.vencimento)}, o vencimento da parcela ${origem.numero}.`
-      : null;
+      const fica = Math.ceil(ultima.valor / 2);
+      const vai = ultima.valor - fica;
 
-  const pronto = Boolean(origem) && valor > 0 && Boolean(vencimento) && !erroDoValor && !erroDaData;
+      return [
+        ...atual.slice(0, -1),
+        { ...ultima, valor: fica },
+        {
+          id: null,
+          // Um mes depois da ultima: e o intervalo que todo parcelamento usa, e
+          // quem quiser outro dia muda ali mesmo.
+          vencimento: somarUmMes(ultima.vencimento),
+          valor: vai,
+          travada: false,
+        },
+      ];
+    });
+  }
+
+  /** Tirar uma parcela devolve o valor dela para a ultima que sobrar. */
+  function remover(indice: number) {
+    setLinhas((atual) => {
+      if (atual.length <= 1) return atual;
+
+      const fora = atual[indice];
+      const restantes = atual.filter((_, i) => i !== indice);
+      const ultima = restantes.at(-1)!;
+
+      return restantes.map((l) => (l === ultima ? { ...l, valor: l.valor + fora.valor } : l));
+    });
+  }
 
   return (
     <FormDrawer
       aberto
       nivel={2}
-      titulo="Dividir parcela"
+      titulo="Parcelamento"
       onClose={onClose}
       aoSalvar={aoSalvar}
-      url={`/api/v1/faturas/${faturaId}/parcelas`}
-      metodo="POST"
-      podeSalvar={pronto}
-      valores={() => ({ origemId, valor, vencimento })}
+      url={`/api/v1/faturas/${fatura.id}/parcelas`}
+      metodo="PUT"
+      podeSalvar={diferenca === 0 && !semData && !semValor}
+      valores={() => ({
+        parcelas: linhas.map((l) => ({ id: l.id, vencimento: l.vencimento, valor: l.valor })),
+      })}
     >
       <Formulario>
         <GrupoDeCampos
           primeiro
-          titulo="Adiar um pedaço do pagamento"
-          legenda="O valor da parcela nova sai de uma que já existe, então o total da conta continua o mesmo. É o que se faz quando o cliente pede para empurrar uma parte para a frente."
+          titulo="Como o pagamento se divide"
+          legenda="Digite o valor ou a porcentagem de cada parcela; um preenche o outro. A soma tem de fechar com o total da conta para salvar."
+          onIncluir={acrescentar}
+          rotuloIncluir="Mais uma parcela"
         >
-          <Field label="Tirar da parcela">
-            <select
-              style={selectStyle}
-              value={origemId}
-              onChange={(e) => setOrigemId(Number(e.target.value))}
-            >
-              {parcelas.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.numero} · {formatarSemSimbolo(p.total as Centavos)}
-                  {p.vencimento ? ` · vence ${curto(p.vencimento)}` : ""}
-                </option>
-              ))}
-            </select>
-          </Field>
-
-          <Field label="Quanto tirar" error={erroDoValor ?? undefined} required>
-            <CampoNumerico valor={valor} aoMudar={setValor} escala={100} />
-          </Field>
-
-          <Field label="A parte adiada vence em" error={erroDaData ?? undefined} required>
-            <input
-              type="date"
-              style={inputStyle}
-              value={vencimento}
-              min={origem?.vencimento?.slice(0, 10)}
-              onChange={(e) => setVencimento(e.target.value)}
-            />
-          </Field>
-        </GrupoDeCampos>
-
-        {/*
-          ⚠️ O resultado por extenso, e não uma linha de números.
-
-          É a frase que a pessoa leria em voz alta para conferir antes de gravar.
-          Sem ela, os três campos acima descrevem uma operação que só existe
-          inteira na cabeça de quem já sabe como o sistema funciona.
-        */}
-        <GrupoDeCampos
-          titulo="Como a conta fica"
-          legenda="Confira antes de salvar: é isto que o cliente vai ver na próxima cobrança."
-        >
-          {/*
-            ⚠️ TABELA, e não dois campos.
-
-            O que se compara aqui são duas linhas com as mesmas três informações,
-            e é isso que uma tabela faz melhor que qualquer outra coisa: pôr valor
-            embaixo de valor e data embaixo de data. É também a mesma anatomia da
-            tabela de parcelas que está logo atrás do drawer, então a leitura não
-            troca de gramática no meio do caminho.
-          */}
           <TableArea minWidth={0}>
             <TableHead>
-              <Th minWidth={90}>Parcela</Th>
-              <Th minWidth={110}>Vence</Th>
-              <Th align="right" minWidth={110}>
-                Valor
-              </Th>
+              <Th minWidth={44}>#</Th>
+              <Th minWidth={130}>Vence</Th>
+              <Th minWidth={110}>Valor</Th>
+              <Th minWidth={80}>%</Th>
+              <Th> </Th>
             </TableHead>
 
             <tbody>
-              {origem && pronto ? (
-                <>
-                  <Tr>
-                    <Td>{origem.numero}</Td>
-                    <Td>
-                      {origem.vencimento ? (
-                        curto(origem.vencimento)
-                      ) : (
-                        <span style={{ color: "var(--text-disabled)" }}>—</span>
-                      )}
-                    </Td>
-                    <Td style={tdNum}>{formatarSemSimbolo(sobra as Centavos)}</Td>
-                  </Tr>
+              {/*
+                ⚠️ As pagas vem primeiro e sem edicao. Elas contam para o total:
+                escondendo-as, a soma da tabela nunca bateria com a conta e a tela
+                pareceria estar errando.
+              */}
+              {pagas.map((p) => (
+                <Tr key={p.id} dimmed>
+                  <Td>{p.numero}</Td>
+                  <Td>{p.vencimento ? curto(p.vencimento) : "—"}</Td>
+                  <Td>{formatarSemSimbolo(p.total as Centavos)}</Td>
+                  <Td>{porcentagem(p.total, fatura.total)}</Td>
+                  <Td>
+                    <span style={{ fontSize: "var(--text-xs)", color: "var(--credito)" }}>
+                      recebida
+                    </span>
+                  </Td>
+                </Tr>
+              ))}
 
-                  <Tr>
-                    {/*
-                      A parcela nova não tem número ainda: quem dá é a ordem de
-                      vencimento, no servidor. Inventar um aqui seria adivinhar em
-                      voz alta um dado que o banco decide.
-                    */}
-                    <Td style={{ color: "var(--text-tertiary)" }}>nova</Td>
-                    <Td>{curto(vencimento)}</Td>
-                    <Td style={tdNum}>{formatarSemSimbolo(valor as Centavos)}</Td>
-                  </Tr>
-                </>
-              ) : (
-                <EmptyRow colSpan={3} message="Preencha quanto tirar e para quando." />
-              )}
+              {linhas.map((l, i) => (
+                <Tr key={l.id ?? `nova-${i}`}>
+                  <Td style={{ color: "var(--text-tertiary)" }}>
+                    {/* O numero sai da ordem de vencimento, no servidor: mostrar
+                        um chute aqui seria dizer em voz alta um dado que o banco
+                        decide depois. */}
+                    {l.id ? (fatura.parcelas.find((p) => p.id === l.id)?.numero ?? "—") : "nova"}
+                  </Td>
+
+                  <Td>
+                    <input
+                      type="date"
+                      disabled={l.travada}
+                      value={l.vencimento.slice(0, 10)}
+                      onChange={(e) => mudar(i, { vencimento: e.target.value })}
+                      style={{ ...inputStyle, height: 28, padding: "0 6px" }}
+                    />
+                  </Td>
+
+                  <Td>
+                    {l.travada ? (
+                      formatarSemSimbolo(l.valor as Centavos)
+                    ) : (
+                      <CampoNumerico
+                        valor={l.valor}
+                        aoMudar={(v) => mudar(i, { valor: v })}
+                        escala={100}
+                        style={{ height: 28 }}
+                      />
+                    )}
+                  </Td>
+
+                  <Td>
+                    {l.travada ? (
+                      porcentagem(l.valor, fatura.total)
+                    ) : (
+                      <CampoNumerico
+                        valor={Math.round((l.valor / fatura.total) * 10000)}
+                        /*
+                         * ⚠️ A porcentagem vira VALOR na hora, e nao fica guardada
+                         * ao lado dele. Guardadas as duas, elas divergem no
+                         * arredondamento e a tabela passa a mostrar 33,33% de uma
+                         * parcela que vale outra coisa.
+                         */
+                        aoMudar={(pct) =>
+                          mudar(i, { valor: Math.round((fatura.total * pct) / 10000) })
+                        }
+                        escala={100}
+                        sufixo="%"
+                        style={{ height: 28 }}
+                      />
+                    )}
+                  </Td>
+
+                  <Td>
+                    <AcoesDaLinha>
+                      {!l.travada && linhas.length > 1 && (
+                        <BotaoDeAcao rotulo="Tirar esta parcela" perigo onClick={() => remover(i)}>
+                          <path d="M3.5 8h9" />
+                        </BotaoDeAcao>
+                      )}
+                    </AcoesDaLinha>
+                  </Td>
+                </Tr>
+              ))}
             </tbody>
           </TableArea>
+
+          {/*
+            ⚠️ O fechamento fica embaixo da tabela, e nao numa mensagem de erro.
+
+            É a conferencia que a pessoa faz de qualquer jeito, somando com o
+            olho. Dizendo o quanto falta, ela sabe o que digitar; dizendo so "nao
+            confere", ela teria de refazer a soma para descobrir.
+          */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "baseline",
+              justifyContent: "space-between",
+              gap: 12,
+              marginTop: 12,
+              paddingTop: 10,
+              borderTop: "1px solid var(--border)",
+              fontSize: "var(--text-sm)",
+            }}
+          >
+            <span style={{ color: "var(--text-tertiary)" }}>
+              Soma das parcelas{" "}
+              <strong style={{ color: "var(--text-primary)", fontVariantNumeric: "tabular-nums" }}>
+                {formatarSemSimbolo((somaPagas + somaAbertas) as Centavos)}
+              </strong>{" "}
+              de {formatarSemSimbolo(fatura.total as Centavos)}
+            </span>
+
+            <span
+              style={{
+                fontWeight: "var(--fw-semi)",
+                fontVariantNumeric: "tabular-nums",
+                color: diferenca === 0 ? "var(--credito)" : "var(--danger-text)",
+              }}
+            >
+              {diferenca === 0
+                ? "fecha"
+                : diferenca > 0
+                  ? `faltam ${formatarSemSimbolo(diferenca as Centavos)}`
+                  : `sobram ${formatarSemSimbolo(-diferenca as Centavos)}`}
+            </span>
+          </div>
         </GrupoDeCampos>
       </Formulario>
     </FormDrawer>
   );
+}
+
+type LinhaDoParcelamento = {
+  /** `null` numa parcela que ainda nao existe no banco. */
+  id: number | null;
+  vencimento: string;
+  valor: number;
+  /** Paga ou com documento emitido: aparece, mas nao se mexe. */
+  travada: boolean;
+};
+
+/** Quanto esta parcela representa da conta. So leitura: o valor e quem manda. */
+function porcentagem(valor: number, total: number): string {
+  if (total <= 0) return "—";
+  return `${((valor / total) * 100).toFixed(2).replace(".", ",")}%`;
+}
+
+/**
+ * Um mes depois, sem estourar o fim do mes.
+ *
+ * ⚠️ Somar 30 dias faria uma parcela de janeiro cair em 31/01 e a seguinte em
+ * 02/03. Somando MES, o dia combinado se mantem, e dia 31 em mes de 30 recua para
+ * o ultimo dia — que e o que qualquer boleto faz.
+ */
+function somarUmMes(iso: string): string {
+  if (!iso) return "";
+
+  const [ano, mes, dia] = iso.slice(0, 10).split("-").map(Number);
+  const proximo = new Date(Date.UTC(ano, mes, 1));
+  const ultimoDia = new Date(Date.UTC(ano, mes + 1, 0)).getUTCDate();
+
+  proximo.setUTCDate(Math.min(dia, ultimoDia));
+  return proximo.toISOString().slice(0, 10);
 }
 
 /**

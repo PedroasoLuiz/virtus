@@ -519,3 +519,120 @@ function renumerar(parcelas: ParcelaEditavel[]): ParcelaEditavel[] {
   return [...pagas, ...abertas].sort((a, b) => a.numero - b.numero);
 }
 
+
+/**
+ * O parcelamento inteiro, do jeito que a tela desenhou.
+ *
+ * âš ï¸ Substitui `dividirParcela` como caminho principal. Dividir uma ao meio
+ * resolve um caso; quem vendeu 10.000 e combinou 2.000 num dia, 1.200 no outro e
+ * o resto depois precisa DIGITAR o cronograma, e nao chegar nele por divisoes
+ * sucessivas.
+ *
+ * âš ï¸ A regra de ouro e uma so: a soma tem de bater com o total da conta. O que a
+ * tela faz e mostrar a diferenca enquanto ela existe e travar o salvar; aqui ela
+ * e conferida de novo, porque o corpo chega pela rede.
+ */
+export type ItemDoParcelamento = {
+  /** `null` numa parcela que ainda nao existe. */
+  id: number | null;
+  vencimento: DataISO;
+  valor: Centavos;
+};
+
+export function redefinirParcelas(
+  existentes: ParcelaEditavel[],
+  itens: ItemDoParcelamento[],
+  totalDaConta: Centavos,
+): {
+  atualizar: { id: number; numero: number; vencimento: DataISO; valor: Centavos }[];
+  criar: Parcela[];
+  excluir: number[];
+} {
+  if (itens.length === 0) {
+    throw new BusinessRuleError("A conta precisa de ao menos uma parcela");
+  }
+
+  const pagas = existentes.filter((p) => p.pago);
+  const abertas = existentes.filter((p) => !p.pago);
+  const porId = new Map(abertas.map((p) => [p.id, p]));
+
+  for (const item of itens) {
+    if (item.valor <= 0) {
+      throw new BusinessRuleError("Toda parcela precisa de um valor maior que zero");
+    }
+
+    if (item.id == null) continue;
+
+    const atual = porId.get(item.id);
+    if (!atual) {
+      throw new BusinessRuleError("Parcela nao pertence a esta conta, ou ja foi recebida");
+    }
+
+    /*
+     * âš ï¸ Parcela com boleto ou nota emitidos nao muda de valor nem de data.
+     *
+     * Sao promessas que sairam com um numero escrito. O comprovante nao entra
+     * nessa conta: ele e prova de que o dinheiro entrou, e nao promessa.
+     */
+    if (atual.temDocumento && (atual.valor !== item.valor || atual.vencimento !== item.vencimento)) {
+      throw new BusinessRuleError(
+        `Ja saiu boleto ou nota da parcela ${atual.numero}; mudar o valor ou o vencimento deixaria o documento dizendo outra coisa`,
+      );
+    }
+  }
+
+  const somaPagas = pagas.reduce<Centavos>((s, p) => somar(s, p.valor), ZERO);
+  const somaItens = itens.reduce<Centavos>((s, i) => somar(s, i.valor), ZERO);
+
+  if (somar(somaPagas, somaItens) !== totalDaConta) {
+    throw new BusinessRuleError(
+      "A soma das parcelas nao bate com o total da conta",
+      { soma: somar(somaPagas, somaItens), total: totalDaConta },
+    );
+  }
+
+  // Sumiu do que a tela mandou: quem nao veio e para excluir. Parcela paga nunca
+  // chega aqui, entao nao ha como remover uma sem querer.
+  const vieram = new Set(itens.filter((i) => i.id != null).map((i) => i.id));
+  const excluir = abertas.filter((p) => !vieram.has(p.id)).map((p) => p.id);
+
+  for (const id of excluir) {
+    const p = porId.get(id)!;
+    if (p.temDocumento) {
+      throw new BusinessRuleError(
+        `A parcela ${p.numero} tem boleto ou nota emitidos e nao pode ser removida`,
+      );
+    }
+  }
+
+  /*
+   * A numeracao sai da ORDEM DE VENCIMENTO, e as pagas nao trocam de numero: o
+   * recibo que o cliente tem na mao diz "parcela 2".
+   */
+  const paraNumerar: ParcelaEditavel[] = [
+    ...pagas,
+    ...itens.map((i, indice) => ({
+      // Id negativo distingue a parcela nova sem confundir com id de banco, e o
+      // indice mantem duas parcelas do mesmo dia na ordem em que foram digitadas.
+      id: i.id ?? -(indice + 1),
+      numero: i.id ? (porId.get(i.id)?.numero ?? 0) : 0,
+      vencimento: i.vencimento,
+      valor: i.valor,
+      pago: false,
+      temDocumento: false,
+    })),
+  ];
+
+  const numeradas = renumerar(paraNumerar).filter((p) => !p.pago);
+
+  return {
+    atualizar: numeradas
+      .filter((p) => p.id > 0)
+      .map((p) => ({ id: p.id, numero: p.numero, vencimento: p.vencimento, valor: p.valor })),
+    criar: numeradas
+      .filter((p) => p.id < 0)
+      .map((p) => ({ numero: p.numero, vencimento: p.vencimento, valor: p.valor })),
+    excluir,
+  };
+}
+

@@ -80,6 +80,25 @@ export const dividirParcelaBodySchema = z
   })
   .optional();
 
+/**
+ * O parcelamento inteiro, como a tela desenhou.
+ *
+ * ⚠️ So as parcelas EM ABERTO. `id` nulo e parcela nova; parcela paga nao entra,
+ * porque nao se mexe — e o que nao pode mudar tambem nao viaja.
+ */
+export const redefinirParcelasBodySchema = z.object({
+  parcelas: z
+    .array(
+      z.object({
+        id: idSchema.nullable(),
+        vencimento: dataISOSchema,
+        valor: centavosPositivoSchema,
+      }),
+    )
+    .min(1, "A conta precisa de ao menos uma parcela")
+    .max(360),
+});
+
 export const idParamSchema = z.object({ id: idSchema });
 
 export const ticketParamSchema = z.object({ id: idSchema, ticketId: idSchema });
@@ -207,6 +226,7 @@ export type CriarFaturaBody = z.infer<typeof criarFaturaBodySchema>;
 export type AlterarStatusBody = z.infer<typeof alterarStatusBodySchema>;
 export type IdParam = z.infer<typeof idParamSchema>;
 export type DividirParcelaBody = z.infer<typeof dividirParcelaBodySchema>;
+export type RedefinirParcelasBody = z.infer<typeof redefinirParcelasBodySchema>;
 export type ParcelaParam = z.infer<typeof parcelaParamSchema>;
 
 export type TipoDocumentoQuery = z.infer<typeof tipoDocumentoQuerySchema>;

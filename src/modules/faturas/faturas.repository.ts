@@ -602,6 +602,80 @@ export async function definirCancelada(
   if (error) throw error;
 }
 
+/**
+ * Aplica um parcelamento novo PRESERVANDO as parcelas que continuam existindo.
+ *
+ * ⚠️ Nao apaga para recriar, e a diferenca e grave. Cada parcela carrega o
+ * boleto, a nota, o comprovante e o TOKEN do link publico de pagamento: apagando
+ * e reinserindo, os anexos ficam orfaos no storage e todo link ja enviado ao
+ * cliente para de abrir. Quem continua na lista e atualizado no lugar; so entra
+ * quem e novo e so sai quem a tela tirou.
+ */
+export async function aplicarParcelamento(
+  faturaId: number,
+  usuarioId: string,
+  plano: {
+    atualizar: { id: number; numero: number; vencimento: DataISO; valor: Centavos }[];
+    criar: Parcela[];
+    excluir: number[];
+  },
+): Promise<void> {
+  const supabase = await serverClient();
+
+  if (plano.excluir.length > 0) {
+    const { error } = await supabase
+      .from("faturasparcelas")
+      .delete()
+      .eq("fkFatura", faturaId)
+      // Guarda a mais: o servico ja recusou mexer em parcela paga, e uma
+      // condicao no proprio DELETE torna impossivel apagar uma por engano.
+      .eq("pago", false)
+      .in("id", plano.excluir);
+
+    if (error) throw error;
+  }
+
+  for (const p of plano.atualizar) {
+    const { error } = await supabase
+      .from("faturasparcelas")
+      .update({
+        numeroparcela: p.numero,
+        vencimento: p.vencimento,
+        valor: paraBanco(p.valor),
+        total: paraBanco(p.valor),
+        fkUserModificacao: usuarioId,
+      })
+      .eq("fkFatura", faturaId)
+      .eq("pago", false)
+      .eq("id", p.id);
+
+    if (error) throw error;
+  }
+
+  if (plano.criar.length > 0) {
+    const { error } = await supabase.from("faturasparcelas").insert(
+      plano.criar.map((p) => ({
+        fkFatura: faturaId,
+        fkUserCriacao: usuarioId,
+        numeroparcela: p.numero,
+        vencimento: p.vencimento,
+        valor: paraBanco(p.valor),
+        total: paraBanco(p.valor),
+        pago: false,
+      })),
+    );
+
+    if (error) throw error;
+  }
+}
+
+/**
+ * ⚠️ APAGA as parcelas em aberto e recria. Use so onde nao ha o que preservar.
+ *
+ * As recriadas nascem sem anexo e com token novo: qualquer link de pagamento ja
+ * enviado ao cliente para de abrir. Para mexer no cronograma de uma conta que ja
+ * existe, o caminho e `aplicarParcelamento`.
+ */
 export async function substituirParcelas(
   faturaId: number,
   usuarioId: string,

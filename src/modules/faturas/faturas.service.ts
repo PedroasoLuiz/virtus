@@ -13,6 +13,8 @@ import type { Paginacao, Pagina } from "@/shared/utils/paginacao";
 import {
   adicionarParcela,
   dividirParcela,
+  redefinirParcelas,
+  type ItemDoParcelamento,
   oQuePodeNaConta,
   type ParcelaEditavel,
   conferirTotal,
@@ -259,6 +261,33 @@ export async function cancelarFatura(
 }
 
 // ── Parcelas ────────────────────────────────────────────────────────────────
+
+/**
+ * Grava o parcelamento inteiro do jeito que a tela desenhou.
+ *
+ * ⚠️ A tela manda so as parcelas EM ABERTO. As pagas nao viajam pela rede: elas
+ * nao se mexem, e mandar o que nao pode mudar e abrir a porta para mudar.
+ */
+export async function redefinirParcelasDaFatura(
+  empresaId: number,
+  usuarioId: string,
+  faturaId: number,
+  itens: ItemDoParcelamento[],
+): Promise<void> {
+  const fatura = await obterFatura(empresaId, faturaId);
+  garantirPodeMexerNasParcelas(fatura);
+
+  const plano = redefinirParcelas(paraParcelasEditaveis(fatura), itens, fatura.total);
+
+  // Barato, e transforma um erro de centavos num 422 explicito em vez de num
+  // titulo silenciosamente errado no banco.
+  conferirTotal(
+    [...fatura.parcelas.filter((p) => p.pago), ...plano.atualizar, ...plano.criar],
+    fatura.total,
+  );
+
+  await repo.aplicarParcelamento(faturaId, usuarioId, plano);
+}
 
 /**
  * Cria uma parcela tirando valor de outra. O total da conta nao muda.
