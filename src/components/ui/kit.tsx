@@ -1803,6 +1803,94 @@ export function GrupoDeCampos({
 }
 
 /**
+ * O formulario que cadastra ou corrige um item da lista logo acima.
+ *
+ * ⚠️ SEM caixa, sem fundo e sem moldura. Ele ja foi um cartao cinza com borda, e
+ * dentro de um drawer que e todo branco aquilo virava um bloco pesado no meio de
+ * uma tela leve: uma segunda superficie por cima da superficie, para dizer
+ * apenas "estes campos estao juntos".
+ *
+ * O que separa e um FIO, do mesmo jeito que a tabela acima separa uma linha da
+ * outra. Um fio custa um pixel e diz a mesma coisa que a caixa dizia.
+ *
+ * ⚠️ O fio fica ABAIXO do titulo, e nao acima. Acima, ele separava o formulario
+ * do que veio antes; abaixo, ele sublinha o titulo e vira o comeco do bloco. E a
+ * mesma anatomia de todo cabecalho de secao do sistema.
+ *
+ * ⚠️ O titulo existe. Sem ele, os campos apareciam do nada embaixo da tabela e
+ * ninguem sabia se aquilo era um cadastro novo ou a linha que acabou de ser
+ * clicada.
+ */
+export function FormularioDaLista({
+  titulo,
+  children,
+  onExcluir,
+  onCancelar,
+  onSalvar,
+  rotuloSalvar = "Adicionar",
+  podeSalvar = true,
+  salvando = false,
+}: {
+  titulo: string;
+  children: React.ReactNode;
+  /** Ausente no cadastro novo, e tambem quando o item e o unico da lista. */
+  onExcluir?: () => void;
+  onCancelar: () => void;
+  onSalvar: () => void;
+  rotuloSalvar?: string;
+  podeSalvar?: boolean;
+  salvando?: boolean;
+}) {
+  return (
+    <div
+      style={{
+        marginTop: 18,
+        display: "flex",
+        flexDirection: "column",
+        gap: "var(--form-gap-campo)",
+      }}
+    >
+      <div
+        style={{
+          paddingBottom: 8,
+          marginBottom: "var(--form-gap-titulo)",
+          borderBottom: "1px solid var(--border)",
+          fontSize: "var(--text-base)",
+          fontWeight: "var(--fw-semi)",
+          color: "var(--text-primary)",
+        }}
+      >
+        {titulo}
+      </div>
+
+      {children}
+
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+        {/*
+          Excluir na outra ponta da linha: e a unica acao daqui que nao da para
+          desfazer, e ao lado de "Salvar" ela vira erro de mira.
+        */}
+        {onExcluir && (
+          <Button size="sm" variant="ghost" onClick={onExcluir}>
+            <span style={{ color: "var(--danger-text)" }}>Excluir</span>
+          </Button>
+        )}
+
+        <div style={{ flex: 1 }} />
+
+        <Button size="sm" variant="ghost" onClick={onCancelar}>
+          Cancelar
+        </Button>
+
+        <Button size="sm" variant="primary" disabled={!podeSalvar || salvando} onClick={onSalvar}>
+          {salvando ? "Salvando…" : rotuloSalvar}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/**
  * A caixa de marcacao, numa coluna de tabela.
  *
  * ⚠️ QUADRADA, e a do principal e redonda. E a distincao de sempre entre escolher

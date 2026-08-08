@@ -27,6 +27,7 @@ export function FormDrawer<T>({
   larguraDrawer = 540,
   podeSalvar = true,
   aoSalvar,
+  nivel,
 }: {
   aberto: boolean;
   titulo: string;
@@ -35,11 +36,19 @@ export function FormDrawer<T>({
   /** Corpo enviado. Montado pela tela a partir do seu proprio estado. */
   valores: () => T;
   url: string;
-  metodo: "POST" | "PATCH";
+  /** PUT existe para o filho que se corrige inteiro: endereco, conta bancaria. */
+  metodo: "POST" | "PATCH" | "PUT";
   children: React.ReactNode;
   larguraDrawer?: number;
   podeSalvar?: boolean;
   aoSalvar?: () => void;
+  /**
+   * Em que andar abrir.
+   *
+   * ⚠️ 2 para o formulario que nasce DE DENTRO de outro drawer — o endereco, que
+   * abre da ficha da pessoa. Sem isto ele nasceria atras de quem o abriu.
+   */
+  nivel?: 1 | 2 | 3;
 }) {
   const router = useRouter();
   const [salvando, setSalvando] = useState(false);
@@ -88,6 +97,7 @@ export function FormDrawer<T>({
       title={titulo}
       subtitle={subtitulo}
       width={larguraDrawer}
+      nivel={nivel}
       /*
        * ⚠️ O salvar sobe para o cabeçalho; o ERRO fica embaixo.
        *

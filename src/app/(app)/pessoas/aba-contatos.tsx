@@ -5,9 +5,9 @@ import { useAvisos } from "@/components/ui/avisos";
 import {
   AcoesDaLinha,
   BotaoDeAcao,
-  Button,
   EmptyRow,
   Field,
+  FormularioDaLista,
   GrupoDeCampos,
   MarcaDePrincipal,
   PanelTabs,
@@ -370,25 +370,18 @@ function Editor({
   const rotuloDoValor = tipo === "telefone" ? "Número" : "E-mail";
 
   return (
-    /*
-      ⚠️ O mesmo cartão de endereço e de conta bancária, e não uma fileira de
-      campos solta embaixo da tabela.
-
-      Solta, ela parecia uma linha da tabela em branco esperando ser preenchida,
-      e os três campos sem rótulo não diziam qual era qual até alguém clicar.
-      Cadastrar é um formulário, e formulário no sistema tem moldura, rótulo e
-      dois botões no rodapé.
-    */
-    <div
-      style={{
-        padding: 12,
-        border: "1px solid var(--border)",
-        borderRadius: "var(--radius-lg)",
-        background: "var(--surface-2)",
-        display: "flex",
-        flexDirection: "column",
-        gap: 10,
-      }}
+    <FormularioDaLista
+      titulo={
+        contato
+          ? `Editar ${tipo === "telefone" ? "telefone" : "e-mail"}`
+          : `Novo ${tipo === "telefone" ? "telefone" : "e-mail"}`
+      }
+      onExcluir={contato && podeExcluir ? () => void remover() : undefined}
+      onCancelar={onFechar}
+      onSalvar={() => void salvar()}
+      rotuloSalvar={contato ? "Salvar" : "Adicionar"}
+      podeSalvar={Boolean(valor.trim()) && !erro}
+      salvando={salvando}
     >
       <Field label={rotuloDoValor} error={erro ?? undefined} required>
         <input
@@ -411,64 +404,37 @@ function Editor({
       </Field>
 
       {/*
-        ⚠️ Setor e responsável são OPCIONAIS, e ficam na mesma linha.
-
-        "Financeiro", "Comercial", "Portaria" é o que faz três telefones da mesma
-        empresa deixarem de ser três números iguais, e o responsável é quem
-        atende ali. Obrigatórios, virariam caixas preenchidas com qualquer coisa
-        só para o botão liberar.
+        ⚠️ Setor e responsável são OPCIONAIS. "Financeiro", "Comercial",
+        "Portaria" é o que faz três telefones da mesma empresa deixarem de ser
+        três números iguais, e o responsável é quem atende ali. Obrigatórios,
+        virariam caixas preenchidas com qualquer coisa só para o botão liberar.
       */}
-      <Field label="Setor e responsável">
-        <div style={{ display: "flex", gap: 8 }}>
-          <input
-            value={rotulo}
-            onChange={(e) => setRotulo(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") void salvar();
-              if (e.key === "Escape") onFechar();
-            }}
-            placeholder="Setor"
-            style={{ ...inputStyle, flex: 1 }}
-          />
-
-          <input
-            value={responsavel}
-            onChange={(e) => setResponsavel(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") void salvar();
-              if (e.key === "Escape") onFechar();
-            }}
-            placeholder="Quem atende"
-            style={{ ...inputStyle, flex: 1 }}
-          />
-        </div>
+      <Field label="Setor">
+        <input
+          value={rotulo}
+          onChange={(e) => setRotulo(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void salvar();
+            if (e.key === "Escape") onFechar();
+          }}
+          placeholder="Financeiro, comercial, portaria"
+          style={inputStyle}
+        />
       </Field>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        {/* Excluir na outra ponta da linha: é a única ação daqui que não dá
-            para desfazer, e ao lado de "Salvar" ela vira erro de mira. */}
-        {contato && podeExcluir && (
-          <Button size="sm" variant="danger" onClick={() => void remover()}>
-            Excluir
-          </Button>
-        )}
-
-        <div style={{ flex: 1 }} />
-
-        <Button size="sm" variant="ghost" onClick={onFechar}>
-          Cancelar
-        </Button>
-
-        <Button
-          size="sm"
-          variant="primary"
-          disabled={!valor.trim() || Boolean(erro) || salvando}
-          onClick={() => void salvar()}
-        >
-          {salvando ? "Salvando…" : contato ? "Salvar" : "Adicionar"}
-        </Button>
-      </div>
-    </div>
+      <Field label="Quem atende">
+        <input
+          value={responsavel}
+          onChange={(e) => setResponsavel(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void salvar();
+            if (e.key === "Escape") onFechar();
+          }}
+          placeholder="Nome de quem responde por este contato"
+          style={inputStyle}
+        />
+      </Field>
+    </FormularioDaLista>
   );
 }
 
@@ -476,8 +442,11 @@ function Editor({
  * O e-mail que também é porta de entrada no portal.
  *
  * ⚠️ Verde, e não cinza. Não é um aviso nem um estado a resolver: é uma coisa boa
- * que aconteceu, o cliente tem gente vendo as próprias faturas. Cinza, a marca
- * pareceria mais um ícone decorativo de tabela.
+ * que aconteceu, o cliente tem gente vendo as próprias faturas.
+ *
+ * ⚠️ SEM fundo. A bolinha atrás dele fazia a marca parecer uma pastilha de
+ * status, do mesmo naipe das siglas de papel da listagem, e ela não é um estado:
+ * é um traço do endereço ao lado.
  */
 function MarcaDeUsuario({ nome }: { nome: string }) {
   return (
@@ -487,17 +456,13 @@ function MarcaDeUsuario({ nome }: { nome: string }) {
       style={{
         display: "inline-grid",
         placeItems: "center",
-        width: 17,
-        height: 17,
         flexShrink: 0,
-        borderRadius: "var(--radius-full)",
-        background: "var(--success-bg)",
         color: "var(--success-text)",
       }}
     >
       <svg
-        width="10"
-        height="10"
+        width="13"
+        height="13"
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"

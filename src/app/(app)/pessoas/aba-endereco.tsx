@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useAvisos } from "@/components/ui/avisos";
+import { FormDrawer } from "@/components/ui/form-drawer";
 import {
   AcoesDaLinha,
   BotaoDeAcao,
@@ -10,6 +11,7 @@ import {
   Field,
   GrupoDeCampos,
   MarcaDePrincipal,
+  MarcaDeUso,
   TableArea,
   TableHead,
   Td,
@@ -235,8 +237,6 @@ function Formulario({
   onFechar: () => void;
   onSalvou: () => void;
 }) {
-  const { avisar } = useAvisos();
-
   const [form, setForm] = useState({
     cep: endereco?.cep ?? "",
     logradouro: endereco?.logradouro ?? "",
@@ -248,72 +248,51 @@ function Formulario({
     principal: primeiro,
   });
 
-  const [salvando, setSalvando] = useState(false);
-
   const set = (campo: keyof typeof form, valor: string) =>
     setForm((f) => ({ ...f, [campo]: valor }));
 
-  async function salvar() {
-    if (salvando) return;
-    setSalvando(true);
-
-    const r = await fetch(
-      endereco
-        ? `/api/v1/clientes/${clienteId}/enderecos/${endereco.id}`
-        : `/api/v1/clientes/${clienteId}/enderecos`,
-      {
-        method: endereco ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          cep: form.cep.trim() || null,
-          logradouro: form.logradouro.trim() || null,
-          numero: form.numero.trim() || null,
-          complemento: form.complemento.trim() || null,
-          bairro: form.bairro.trim() || null,
-          cidade: form.cidade.trim() || null,
-          // Vazio vai como null: o schema exige exatamente duas letras, e "" seria
-          // recusado com uma mensagem sobre tamanho que não ajuda ninguém.
-          uf: form.uf.trim().toUpperCase() || null,
-          /*
-           * ⚠️ O `principal` só vai no CADASTRO. Na correção quem manda é a
-           * coluna da tabela: ele é exclusivo entre os endereços da pessoa, e
-           * mexer nele por aqui exigiria derrubar o anterior no mesmo salvar.
-           */
-          ...(endereco ? {} : { principal: form.principal }),
-        }),
-      },
-    );
-
-    setSalvando(false);
-
-    if (!r.ok) {
-      const corpo = await r.json().catch(() => null);
-      const detalhe = corpo?.error?.details?.[0];
-
-      avisar(
-        "atencao",
-        detalhe
-          ? `${detalhe.campo}: ${detalhe.mensagem}`
-          : (corpo?.error?.message ?? "Não foi possível salvar"),
-      );
-      return;
-    }
-
-    onSalvou();
-  }
-
   return (
-    <div
-      style={{
-        marginTop: 12,
-        padding: 12,
-        border: "1px solid var(--border)",
-        borderRadius: "var(--radius-lg)",
-        background: "var(--surface-2)",
-        display: "flex",
-        flexDirection: "column",
-        gap: 10,
-      }}
+    /*
+      ⚠️ DRAWER próprio, e não um formulário embaixo da tabela.
+
+      Endereço tem sete campos, e abertos na lista eles empurravam a tabela para
+      fora da tela: quem estava corrigindo o número da casa perdia de vista qual
+      dos três endereços tinha clicado. Num drawer por cima, a lista fica onde
+      estava e volta com um Esc.
+
+      ⚠️ Nível 2: ele nasce de dentro da ficha da pessoa, que é nível 1. Sem isso
+      abriria atrás de quem o abriu.
+    */
+    <FormDrawer
+      aberto
+      nivel={2}
+      larguraDrawer={460}
+      titulo={endereco ? "Editar endereço" : "Novo endereço"}
+      onClose={onFechar}
+      aoSalvar={onSalvou}
+      url={
+        endereco
+          ? `/api/v1/clientes/${clienteId}/enderecos/${endereco.id}`
+          : `/api/v1/clientes/${clienteId}/enderecos`
+      }
+      metodo={endereco ? "PUT" : "POST"}
+      valores={() => ({
+        cep: form.cep.trim() || null,
+        logradouro: form.logradouro.trim() || null,
+        numero: form.numero.trim() || null,
+        complemento: form.complemento.trim() || null,
+        bairro: form.bairro.trim() || null,
+        cidade: form.cidade.trim() || null,
+        // Vazio vai como null: o schema exige exatamente duas letras, e "" seria
+        // recusado com uma mensagem sobre tamanho que não ajuda ninguém.
+        uf: form.uf.trim().toUpperCase() || null,
+        /*
+         * ⚠️ O `principal` só vai no CADASTRO. Na correção quem manda é a coluna
+         * da tabela: ele é exclusivo entre os endereços da pessoa, e mexer nele
+         * por aqui exigiria derrubar o anterior no mesmo salvar.
+         */
+        ...(endereco ? {} : { principal: form.principal }),
+      })}
     >
       <Field label="CEP">
         <input
@@ -334,23 +313,22 @@ function Formulario({
         />
       </Field>
 
-      {/* Número e complemento na mesma linha: os dois são curtos, e separados
-          gastavam duas linhas para dizer meia. */}
       <Field label="Número">
-        <div style={{ display: "flex", gap: 8 }}>
-          <input
-            style={{ ...inputStyle, flex: 1 }}
-            value={form.numero}
-            onChange={(e) => set("numero", e.target.value)}
-            placeholder="Número"
-          />
-          <input
-            style={{ ...inputStyle, flex: 2 }}
-            value={form.complemento}
-            onChange={(e) => set("complemento", e.target.value)}
-            placeholder="Complemento"
-          />
-        </div>
+        <input
+          style={inputStyle}
+          value={form.numero}
+          onChange={(e) => set("numero", e.target.value)}
+          placeholder="Número"
+        />
+      </Field>
+
+      <Field label="Complemento">
+        <input
+          style={inputStyle}
+          value={form.complemento}
+          onChange={(e) => set("complemento", e.target.value)}
+          placeholder="Sala, bloco, galpão"
+        />
       </Field>
 
       <Field label="Bairro">
@@ -362,62 +340,60 @@ function Formulario({
         />
       </Field>
 
-      <Field label="Cidade / UF">
-        <div style={{ display: "flex", gap: 8 }}>
-          <input
-            style={{ ...inputStyle, flex: 3 }}
-            value={form.cidade}
-            onChange={(e) => set("cidade", e.target.value)}
-            placeholder="Cidade"
-          />
-          <input
-            style={{ ...inputStyle, flex: 1, textTransform: "uppercase" }}
-            value={form.uf}
-            onChange={(e) => set("uf", e.target.value.slice(0, 2))}
-            placeholder="UF"
-            maxLength={2}
-          />
-        </div>
+      <Field label="Cidade">
+        <input
+          style={inputStyle}
+          value={form.cidade}
+          onChange={(e) => set("cidade", e.target.value)}
+          placeholder="Cidade"
+        />
+      </Field>
+
+      <Field label="UF">
+        <input
+          style={{ ...inputStyle, textTransform: "uppercase" }}
+          value={form.uf}
+          onChange={(e) => set("uf", e.target.value.slice(0, 2))}
+          placeholder="UF"
+          maxLength={2}
+        />
       </Field>
 
       {!primeiro && !endereco && (
-        <label
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            fontSize: "var(--text-sm)",
-            color: "var(--text-secondary)",
-            cursor: "pointer",
-          }}
-        >
-          <input
-            type="checkbox"
-            checked={form.principal}
-            onChange={(e) => setForm((f) => ({ ...f, principal: e.target.checked }))}
-          />
-          Usar como principal
-        </label>
+        <Field label="Principal">
+          {/*
+            ⚠️ A mesma marca da coluna da tabela, e nao a caixa do navegador.
+            A nativa vinha com a cor e o tamanho do sistema operacional, e ficava
+            de outra familia no meio de campos que o kit desenha.
+          */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, height: "var(--h-input)" }}>
+            <MarcaDeUso
+              marcado={form.principal}
+              rotulo={form.principal ? "Deixa de ser o principal" : "Usar como principal"}
+              onClick={() => setForm((f) => ({ ...f, principal: !f.principal }))}
+            />
+            <span style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>
+              É este que sai na nota fiscal
+            </span>
+          </div>
+        </Field>
       )}
 
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        {/* Excluir na outra ponta da linha: é a única ação daqui que não dá
-            para desfazer, e ao lado de "Salvar" ela vira erro de mira. */}
-        {endereco && podeExcluir && (
-          <Button size="sm" variant="danger" onClick={() => onRemover(endereco.id)}>
-            Excluir
+
+      {/*
+        ⚠️ Excluir no FIM do formulário, e não ao lado do salvar do cabeçalho.
+
+        É a única ação daqui que não dá para desfazer. No topo, colada no
+        "Salvar", ela vira erro de mira; no fim, ela é a última coisa que se
+        encontra, o que é exatamente a frequência com que deve ser usada.
+      */}
+      {endereco && podeExcluir && (
+        <div style={{ marginTop: 10, paddingTop: 14, borderTop: "1px solid var(--border)" }}>
+          <Button size="sm" variant="ghost" onClick={() => onRemover(endereco.id)}>
+            <span style={{ color: "var(--danger-text)" }}>Excluir endereço</span>
           </Button>
-        )}
-
-        <div style={{ flex: 1 }} />
-
-        <Button size="sm" variant="ghost" onClick={onFechar}>
-          Cancelar
-        </Button>
-        <Button size="sm" variant="primary" disabled={salvando} onClick={() => void salvar()}>
-          {salvando ? "Salvando…" : endereco ? "Salvar" : "Adicionar"}
-        </Button>
-      </div>
-    </div>
+        </div>
+      )}
+    </FormDrawer>
   );
 }

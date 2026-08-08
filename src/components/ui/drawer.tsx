@@ -19,6 +19,18 @@ import { useEffect, useRef, useState } from "react";
  */
 const LARGURA_PADRAO = 620;
 
+/**
+ * Quais andares estao abertos agora.
+ *
+ * ⚠️ Existe por causa do ESC. Com um drawer aberto por cima de outro, os dois
+ * escutavam a tecla e fechavam juntos: quem apertava Esc para sair do endereco
+ * perdia tambem a ficha da pessoa que estava editando. Fecha so o de cima.
+ *
+ * Modulo, e nao contexto: sao no maximo tres, e um provider so para contar andar
+ * obrigaria toda tela a lembrar de embrulhar o drawer.
+ */
+const andaresAbertos = new Set<number>();
+
 export function Drawer({
   open,
   onClose,
@@ -70,11 +82,16 @@ export function Drawer({
   children: React.ReactNode;
 }) {
   const base = 300 + nivel * 100;
+
   useEffect(() => {
     if (!open) return;
 
+    andaresAbertos.add(nivel);
+
     const aoTeclar = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      // So o andar mais alto responde: os de baixo continuam abertos, e quem
+      // apertou Esc volta um passo em vez de perder tudo.
+      if (e.key === "Escape" && nivel === Math.max(...andaresAbertos)) onClose();
     };
     document.addEventListener("keydown", aoTeclar);
 
@@ -83,10 +100,11 @@ export function Drawer({
     document.body.style.overflow = "hidden";
 
     return () => {
+      andaresAbertos.delete(nivel);
       document.removeEventListener("keydown", aoTeclar);
       document.body.style.overflow = anterior;
     };
-  }, [open, onClose]);
+  }, [open, onClose, nivel]);
 
   if (!open) return null;
 

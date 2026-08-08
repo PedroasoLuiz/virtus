@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useAvisos } from "@/components/ui/avisos";
+import { FormDrawer } from "@/components/ui/form-drawer";
 import {
   AcoesDaLinha,
   BotaoDeAcao,
@@ -10,6 +11,7 @@ import {
   Field,
   GrupoDeCampos,
   MarcaDePrincipal,
+  MarcaDeUso,
   TableArea,
   TableHead,
   Td,
@@ -234,8 +236,6 @@ function Formulario({
   onFechar: () => void;
   onSalvou: () => void;
 }) {
-  const { avisar } = useAvisos();
-
   const [form, setForm] = useState({
     banco: dado?.banco ?? "",
     agencia: dado?.agencia ?? "",
@@ -248,73 +248,46 @@ function Formulario({
     principal: primeiro,
   });
 
-  const [salvando, setSalvando] = useState(false);
-
   const set = (campo: keyof typeof form, valor: string) =>
     setForm((f) => ({ ...f, [campo]: valor }));
 
-  async function salvar() {
-    if (salvando) return;
-    setSalvando(true);
-
-    const r = await fetch(
-      dado
-        ? `/api/v1/clientes/${clienteId}/bancarios/${dado.id}`
-        : `/api/v1/clientes/${clienteId}/bancarios`,
-      {
-        method: dado ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          banco: form.banco.trim() || null,
-          agencia: form.agencia.trim() || null,
-          conta: form.conta.trim() || null,
-          tipo: form.tipo || null,
-          titular: form.titular.trim() || null,
-          documento: form.documento.trim() || null,
-          // Sem chave não há tipo: o par só faz sentido junto, e gravar o tipo
-          // sozinho deixaria "PIX CPF" escrito sem CPF nenhum embaixo.
-          pixTipo: form.pixChave.trim() ? form.pixTipo || null : null,
-          pixChave: form.pixChave.trim() || null,
-          /*
-           * ⚠️ O `principal` só vai no CADASTRO. Ele é exclusivo entre as contas
-           * da pessoa, e mexer nele por aqui exigiria derrubar a anterior no
-           * mesmo salvar.
-           */
-          ...(dado ? {} : { principal: form.principal }),
-        }),
-      },
-    );
-
-    setSalvando(false);
-
-    if (!r.ok) {
-      const corpo = await r.json().catch(() => null);
-      const detalhe = corpo?.error?.details?.[0];
-
-      avisar(
-        "atencao",
-        detalhe
-          ? `${detalhe.campo}: ${detalhe.mensagem}`
-          : (corpo?.error?.message ?? "Não foi possível salvar"),
-      );
-      return;
-    }
-
-    onSalvou();
-  }
-
   return (
-    <div
-      style={{
-        marginTop: 12,
-        padding: 12,
-        border: "1px solid var(--border)",
-        borderRadius: "var(--radius-lg)",
-        background: "var(--surface-2)",
-        display: "flex",
-        flexDirection: "column",
-        gap: 10,
-      }}
+    /*
+      ⚠️ DRAWER próprio, e não um formulário embaixo da tabela. São oito campos:
+      abertos na lista, empurravam a tabela para fora da tela e quem corrigia uma
+      agência perdia de vista qual das contas tinha clicado.
+    */
+    <FormDrawer
+      aberto
+      nivel={2}
+      larguraDrawer={460}
+      titulo={dado ? "Editar conta" : "Nova conta"}
+      onClose={onFechar}
+      aoSalvar={onSalvou}
+      url={
+        dado
+          ? `/api/v1/clientes/${clienteId}/bancarios/${dado.id}`
+          : `/api/v1/clientes/${clienteId}/bancarios`
+      }
+      metodo={dado ? "PUT" : "POST"}
+      valores={() => ({
+        banco: form.banco.trim() || null,
+        agencia: form.agencia.trim() || null,
+        conta: form.conta.trim() || null,
+        tipo: form.tipo || null,
+        titular: form.titular.trim() || null,
+        documento: form.documento.trim() || null,
+        // Sem chave não há tipo: o par só faz sentido junto, e gravar o tipo
+        // sozinho deixaria "PIX CPF" escrito sem CPF nenhum embaixo.
+        pixTipo: form.pixChave.trim() ? form.pixTipo || null : null,
+        pixChave: form.pixChave.trim() || null,
+        /*
+         * ⚠️ O `principal` só vai no CADASTRO. Ele é exclusivo entre as contas da
+         * pessoa, e mexer nele por aqui exigiria derrubar a anterior no mesmo
+         * salvar.
+         */
+        ...(dado ? {} : { principal: form.principal }),
+      })}
     >
       <Field label="Banco">
         <input
@@ -326,55 +299,53 @@ function Formulario({
         />
       </Field>
 
-      <Field label="Agência / Conta">
-        <div style={{ display: "flex", gap: 8 }}>
-          <input
-            style={{ ...inputStyle, flex: 1 }}
-            value={form.agencia}
-            onChange={(e) => set("agencia", e.target.value)}
-            placeholder="Agência"
-          />
-          <input
-            style={{ ...inputStyle, flex: 2 }}
-            value={form.conta}
-            onChange={(e) => set("conta", e.target.value)}
-            placeholder="Conta com dígito"
-          />
-          <select
-            value={form.tipo}
-            onChange={(e) => set("tipo", e.target.value)}
-            style={{ ...selectStyle, flex: 1 }}
-            aria-label="Tipo de conta"
-          >
-            <option value="corrente">Corrente</option>
-            <option value="poupanca">Poupança</option>
-          </select>
-        </div>
+      <Field label="Agência">
+        <input
+          style={inputStyle}
+          value={form.agencia}
+          onChange={(e) => set("agencia", e.target.value)}
+          placeholder="Com o dígito, quando tiver"
+        />
       </Field>
 
-      <Field label="PIX">
-        <div style={{ display: "flex", gap: 8 }}>
-          <select
-            value={form.pixTipo}
-            onChange={(e) => set("pixTipo", e.target.value)}
-            style={{ ...selectStyle, flex: 1 }}
-            aria-label="Tipo da chave PIX"
-          >
-            <option value="">Tipo</option>
-            {PIX.map((p) => (
-              <option key={p.valor} value={p.valor}>
-                {p.rotulo}
-              </option>
-            ))}
-          </select>
+      <Field label="Conta">
+        <input
+          style={inputStyle}
+          value={form.conta}
+          onChange={(e) => set("conta", e.target.value)}
+          placeholder="Com o dígito"
+        />
+      </Field>
 
-          <input
-            style={{ ...inputStyle, flex: 2 }}
-            value={form.pixChave}
-            onChange={(e) => set("pixChave", e.target.value)}
-            placeholder="Chave"
-          />
-        </div>
+      <Field label="Tipo de conta">
+        <select value={form.tipo} onChange={(e) => set("tipo", e.target.value)} style={selectStyle}>
+          <option value="corrente">Corrente</option>
+          <option value="poupanca">Poupança</option>
+        </select>
+      </Field>
+
+      <Field label="Tipo da chave PIX">
+        <select
+          value={form.pixTipo}
+          onChange={(e) => set("pixTipo", e.target.value)}
+          style={selectStyle}
+        >
+          <option value="">Não informado</option>
+          {PIX.map((p) => (
+            <option key={p.valor} value={p.valor}>
+              {p.rotulo}
+            </option>
+          ))}
+        </select>
+      </Field>
+
+      <Field label="Chave PIX">
+        <input
+          style={inputStyle}
+          value={form.pixChave}
+          onChange={(e) => set("pixChave", e.target.value)}
+          placeholder="A chave, do jeito que ela é registrada"
+        />
       </Field>
 
       {/*
@@ -386,60 +357,58 @@ function Formulario({
         label="Titular"
         hint="Só quando a conta é de outra pessoa. Em branco, o titular é o próprio cadastro."
       >
-        <div style={{ display: "flex", gap: 8 }}>
-          <input
-            style={{ ...inputStyle, flex: 2 }}
-            value={form.titular}
-            onChange={(e) => set("titular", e.target.value)}
-            placeholder="Nome do titular"
-          />
-          <input
-            style={{ ...inputStyle, flex: 1 }}
-            value={form.documento}
-            onChange={(e) => set("documento", e.target.value)}
-            placeholder="CPF / CNPJ"
-          />
-        </div>
+        <input
+          style={inputStyle}
+          value={form.titular}
+          onChange={(e) => set("titular", e.target.value)}
+          placeholder="Nome do titular"
+        />
+      </Field>
+
+      <Field label="Documento do titular">
+        <input
+          style={inputStyle}
+          value={form.documento}
+          onChange={(e) => set("documento", e.target.value)}
+          placeholder="CPF ou CNPJ"
+        />
       </Field>
 
       {!primeiro && !dado && (
-        <label
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            fontSize: "var(--text-sm)",
-            color: "var(--text-secondary)",
-            cursor: "pointer",
-          }}
-        >
-          <input
-            type="checkbox"
-            checked={form.principal}
-            onChange={(e) => setForm((f) => ({ ...f, principal: e.target.checked }))}
-          />
-          Usar como principal
-        </label>
+        <Field label="Principal">
+          {/*
+            ⚠️ A mesma marca da coluna da tabela, e nao a caixa do navegador.
+            A nativa vinha com a cor e o tamanho do sistema operacional, e ficava
+            de outra familia no meio de campos que o kit desenha.
+          */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, height: "var(--h-input)" }}>
+            <MarcaDeUso
+              marcado={form.principal}
+              rotulo={form.principal ? "Deixa de ser o principal" : "Usar como principal"}
+              onClick={() => setForm((f) => ({ ...f, principal: !f.principal }))}
+            />
+            <span style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>
+              É para esta conta que o pagamento vai
+            </span>
+          </div>
+        </Field>
       )}
 
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        {/* Excluir na outra ponta da linha: é a única ação daqui que não dá
-            para desfazer, e ao lado de "Salvar" ela vira erro de mira. */}
-        {dado && podeExcluir && (
-          <Button size="sm" variant="danger" onClick={() => onRemover(dado.id)}>
-            Excluir
+
+      {/*
+        ⚠️ Excluir no FIM do formulário, e não ao lado do salvar do cabeçalho.
+
+        É a única ação daqui que não dá para desfazer. No topo, colada no
+        "Salvar", ela vira erro de mira; no fim, ela é a última coisa que se
+        encontra, o que é exatamente a frequência com que deve ser usada.
+      */}
+      {dado && podeExcluir && (
+        <div style={{ marginTop: 10, paddingTop: 14, borderTop: "1px solid var(--border)" }}>
+          <Button size="sm" variant="ghost" onClick={() => onRemover(dado.id)}>
+            <span style={{ color: "var(--danger-text)" }}>Excluir conta</span>
           </Button>
-        )}
-
-        <div style={{ flex: 1 }} />
-
-        <Button size="sm" variant="ghost" onClick={onFechar}>
-          Cancelar
-        </Button>
-        <Button size="sm" variant="primary" disabled={salvando} onClick={() => void salvar()}>
-          {salvando ? "Salvando…" : dado ? "Salvar" : "Adicionar"}
-        </Button>
-      </div>
-    </div>
+        </div>
+      )}
+    </FormDrawer>
   );
 }
