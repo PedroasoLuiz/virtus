@@ -7,6 +7,31 @@
  */
 export type PapelPessoa = "cliente" | "fornecedor" | "colaborador";
 
+/*
+ * ⚠️ Lista fechada, e nao texto livre.
+ *
+ * Sao os regimes que a Receita reconhece, e o valor daqui decide imposto na nota.
+ * Digitado a mao, "Simples", "simples nacional" e "SN" virariam tres regimes
+ * diferentes para o mesmo cadastro.
+ *
+ * ⚠️ Mora AQUI, e nao no schema: a tela precisa deles para desenhar o seletor, e
+ * importar o schema arrastaria o zod inteiro para o pacote do navegador.
+ */
+export const REGIMES = [
+  "Simples Nacional",
+  "MEI",
+  "Lucro Presumido",
+  "Lucro Real",
+  "Imune ou isento",
+] as const;
+
+/** Diante do ICMS. E o que decide se a nota destaca imposto para esta pessoa. */
+export const CLASSIFICACOES = [
+  "Contribuinte de ICMS",
+  "Contribuinte isento",
+  "Não contribuinte",
+] as const;
+
 export type Cliente = {
   id: number;
   razao: string;
@@ -20,6 +45,19 @@ export type Cliente = {
   /** Todo cliente tem um. O padrao e o "Geral" da empresa. */
   centroCustoId: number | null;
   centroCustoNome: string | null;
+  /**
+   * Nascimento da pessoa fisica, fundacao da juridica.
+   *
+   * ⚠️ Uma data so para os dois casos, em `aaaa-mm-dd`. E a mesma data na vida do
+   * cadastro, e duas colunas fariam a tela escolher qual ler a cada vez que o
+   * documento troca de tamanho.
+   */
+  dataNascimento: string | null;
+  inscricaoMunicipal: string | null;
+  inscricaoEstadual: string | null;
+  regimeTributario: string | null;
+  /** Diante do ICMS: contribuinte, isento ou nao contribuinte. */
+  classificacaoTributaria: string | null;
   ativo: boolean;
 };
 
@@ -34,6 +72,11 @@ export type ClienteNovo = {
   grupoId?: number | null;
   /** Omitido, o gatilho `trg_clientes_centro_padrao` preenche com o "Geral". */
   centroCustoId?: number | null;
+  dataNascimento?: string | null;
+  inscricaoMunicipal?: string | null;
+  inscricaoEstadual?: string | null;
+  regimeTributario?: string | null;
+  classificacaoTributaria?: string | null;
 };
 
 /**

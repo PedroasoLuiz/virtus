@@ -17,7 +17,9 @@ import {
   Th,
   Tr,
   inputStyle,
+  selectStyle,
 } from "@/components/ui/kit";
+import { CLASSIFICACOES, REGIMES } from "@/modules/clientes/clientes.types";
 import type { Cliente, ContatoDaPessoa, PapelPessoa } from "@/modules/clientes/clientes.types";
 import { AbaDeContatos } from "./aba-contatos";
 import { AbaDeEndereco } from "./aba-endereco";
@@ -71,9 +73,14 @@ type Form = {
   razao: string;
   nomeFantasia: string;
   cnpj: string;
+  dataNascimento: string;
   email: string;
   contato: string;
   responsavel: string;
+  inscricaoMunicipal: string;
+  inscricaoEstadual: string;
+  regimeTributario: string;
+  classificacaoTributaria: string;
   papeis: PapelPessoa[];
   ativo: boolean;
 };
@@ -83,9 +90,14 @@ function inicial(cliente: Cliente | null): Form {
     razao: cliente?.razao ?? "",
     nomeFantasia: cliente?.nomeFantasia ?? "",
     cnpj: cliente?.cnpj ?? "",
+    dataNascimento: cliente?.dataNascimento ?? "",
     email: cliente?.email ?? "",
     contato: cliente?.contato ?? "",
     responsavel: cliente?.responsavel ?? "",
+    inscricaoMunicipal: cliente?.inscricaoMunicipal ?? "",
+    inscricaoEstadual: cliente?.inscricaoEstadual ?? "",
+    regimeTributario: cliente?.regimeTributario ?? "",
+    classificacaoTributaria: cliente?.classificacaoTributaria ?? "",
     papeis: cliente?.papeis ?? ["cliente"],
     ativo: cliente?.ativo ?? true,
   };
@@ -147,6 +159,28 @@ export function PessoaDrawer({
   const digitos = form.cnpj.replace(/\D/g, "");
   const fisica = digitos.length > 0 && digitos.length <= 11;
 
+  /*
+   * ⚠️ O rotulo do documento só AFIRMA quando o número já decidiu.
+   *
+   * Com onze dígitos é CPF, com catorze é CNPJ, e no meio do caminho ele volta a
+   * oferecer os dois. Trocando a cada tecla, o rótulo dizia "CPF" enquanto a
+   * pessoa digitava um CNPJ e parecia estar recusando o que ela ia escrever.
+   */
+  const rotuloDoDocumento =
+    digitos.length === 11 ? "CPF" : digitos.length === 14 ? "CNPJ" : "CNPJ / CPF";
+
+  /*
+   * ⚠️ Só a pessoa JURÍDICA tem inscrição e regime.
+   *
+   * Inscrição municipal e estadual são registros de empresa, e regime é como a
+   * empresa apura imposto. Numa ficha de pessoa física, os três eram campos que
+   * ninguém preenche e que, preenchidos por engano, sujavam a nota.
+   *
+   * Sem documento nenhum o cadastro segue como jurídico, que é o mesmo caminho
+   * que a razão social e o nome fantasia já tomam.
+   */
+  const juridica = !fisica;
+
   const carregarContatos = useCallback(async () => {
     if (!cliente) return;
 
@@ -199,16 +233,29 @@ export function PessoaDrawer({
       larguraDrawer={620}
       url={editando ? `/api/v1/clientes/${cliente.id}` : "/api/v1/clientes"}
       metodo={editando ? "PATCH" : "POST"}
+      /*
+       * ⚠️ Documento e data NAO seguram o salvar.
+       *
+       * O cadastro nasce muitas vezes antes deles: um orcamento para quem ainda
+       * nao passou o CPF precisa de alguem para apontar. Travando aqui, o
+       * atendimento inventava documento para o botao liberar. Quem cobra a falta
+       * e o faturamento, quando o dado passa a ser necessario de verdade.
+       */
       podeSalvar={form.razao.trim().length > 0 && form.papeis.length > 0}
       valores={() => ({
         razao: form.razao.trim(),
         // Pessoa fisica nao tem fantasia: o campo nem aparece, e mandar o que
         // sobrou de um cadastro que era juridico gravaria lixo.
         nomeFantasia: fisica ? null : form.nomeFantasia.trim() || null,
-        // Campo opcional vazio vai como null: string vazia falharia na
-        // validacao de documento e no formato de e-mail.
         cnpj: digitos || null,
+        dataNascimento: form.dataNascimento || null,
+        // Campo opcional vazio vai como null: string vazia falharia na
+        // validacao de tamanho e no formato de e-mail.
         responsavel: form.responsavel.trim() || null,
+        inscricaoMunicipal: form.inscricaoMunicipal.trim() || null,
+        inscricaoEstadual: form.inscricaoEstadual.trim() || null,
+        regimeTributario: form.regimeTributario || null,
+        classificacaoTributaria: form.classificacaoTributaria || null,
         papeis: form.papeis,
         /*
          * ⚠️ `centroCustoId` NAO sai daqui. O salvar e um PATCH: fora do corpo,
@@ -336,7 +383,7 @@ export function PessoaDrawer({
                 </Field>
               )}
 
-              <Field label="CNPJ / CPF" hint="Somente números; deixe vazio se não tiver">
+              <Field label={rotuloDoDocumento} hint="Somente números">
                 <input
                   style={inputStyle}
                   value={form.cnpj}
@@ -370,13 +417,32 @@ export function PessoaDrawer({
                   />
                 </Field>
               )}
-            </GrupoDeCampos>
 
-            <GrupoDeCampos
-              titulo="Situação"
-              legenda="Inativo some da listagem e das buscas, mas o histórico continua inteiro. É o jeito de aposentar um cadastro sem perder o que passou por ele."
-            >
-              <Field label="Situação">
+              {/*
+                ⚠️ Uma data só para os dois casos. É a mesma data na vida do
+                cadastro, e dois campos fariam a tela decidir qual ler cada vez
+                que o documento troca de tamanho.
+              */}
+              <Field label={fisica ? "Data de nascimento" : "Data de fundação"}>
+                <input
+                  type="date"
+                  style={inputStyle}
+                  value={form.dataNascimento}
+                  onChange={(e) => set("dataNascimento", e.target.value)}
+                />
+              </Field>
+
+              {/*
+                ⚠️ Situação mora AQUI, e não numa seção só dela.
+
+                Ativo e inativo é estado do cadastro, do mesmo naipe do nome e do
+                documento. Sozinho num grupo, ele ganhava um título e uma legenda
+                do tamanho de um assunto para dizer o que um botão já diz.
+              */}
+              <Field
+                label="Situação"
+                hint="Inativo some da listagem e das buscas, e o histórico continua inteiro."
+              >
                 <div
                   style={{
                     display: "flex",
@@ -391,6 +457,85 @@ export function PessoaDrawer({
                   </span>
                 </div>
               </Field>
+            </GrupoDeCampos>
+
+            <GrupoDeCampos
+              titulo="Campos opcionais"
+              legenda="Nada aqui trava o cadastro. São dados que só aparecem na hora de emitir nota ou de falar com quem responde pela pessoa, e ficam guardados para quando essa hora chegar."
+            >
+              {/*
+                Temporário: o responsável vai virar coluna do CONTATO, porque
+                cada telefone e cada e-mail tem o seu. Enquanto isso ele fica
+                aqui, para não sumir do cadastro no meio do caminho.
+              */}
+              <Field label="Responsável">
+                <input
+                  style={inputStyle}
+                  value={form.responsavel}
+                  onChange={(e) => set("responsavel", e.target.value)}
+                  placeholder="Quem responde por este cadastro"
+                />
+              </Field>
+
+              {juridica && (
+                <>
+                  <Field label="Inscrição municipal">
+                    <input
+                      style={inputStyle}
+                      value={form.inscricaoMunicipal}
+                      onChange={(e) => set("inscricaoMunicipal", e.target.value)}
+                      placeholder="Somente números"
+                    />
+                  </Field>
+
+                  <Field label="Inscrição estadual">
+                    <input
+                      style={inputStyle}
+                      value={form.inscricaoEstadual}
+                      onChange={(e) => set("inscricaoEstadual", e.target.value)}
+                      placeholder="Somente números, ou ISENTO"
+                    />
+                  </Field>
+
+                  {/*
+                    ⚠️ Lista fechada, e não texto livre. O valor decide imposto
+                    na nota, e digitado à mão "Simples", "simples nacional" e
+                    "SN" virariam três regimes diferentes para o mesmo cadastro.
+                  */}
+                  <Field label="Regime de tributação">
+                    <select
+                      style={selectStyle}
+                      value={form.regimeTributario}
+                      onChange={(e) => set("regimeTributario", e.target.value)}
+                    >
+                      <option value="">Não informado</option>
+                      {REGIMES.map((r) => (
+                        <option key={r} value={r}>
+                          {r}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+
+                  <Field
+                    label="Classificação tributária"
+                    hint="Como a empresa figura diante do ICMS"
+                  >
+                    <select
+                      style={selectStyle}
+                      value={form.classificacaoTributaria}
+                      onChange={(e) => set("classificacaoTributaria", e.target.value)}
+                    >
+                      <option value="">Não informado</option>
+                      {CLASSIFICACOES.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                </>
+              )}
             </GrupoDeCampos>
           </Formulario>
         )}

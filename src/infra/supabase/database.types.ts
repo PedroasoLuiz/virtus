@@ -258,6 +258,12 @@ export type ClienteRow = Timestamps & {
   urlicon: string | null;
   fkGrupo: number | null;
   fkCentroCusto: number | null;
+  /** Nascimento da pessoa fisica ou fundacao da juridica: a mesma data. */
+  datanascimento: string | null;
+  inscricaomunicipal: string | null;
+  inscricaoestadual: string | null;
+  regimetributario: string | null;
+  classificacaotributaria: string | null;
   ativo: boolean | null;
   cliente: boolean | null;
   fornecedor: boolean | null;

@@ -17,6 +17,11 @@ import {
   gerarParcelas,
   type ParcelaExistente,
 } from "@/shared/domain/parcelas";
+import {
+  ehPessoaFisica,
+  pendenciasDoCadastro,
+  pendenciasEmPalavras,
+} from "@/shared/domain/cadastro-pessoa";
 import * as repo from "@/modules/faturas/faturas.repository";
 import { enviarEmail } from "@/shared/email/enviar";
 import { htmlDaFatura } from "@/shared/email/fatura-template";
@@ -84,6 +89,24 @@ export async function criarFatura(
   const origens = entrada.origens ?? [];
   if (origens.length === 0) {
     throw new BusinessRuleError("Escolha ao menos um ticket");
+  }
+
+  /*
+   * ⚠️ Cadastro incompleto NAO fatura.
+   *
+   * A pessoa pode nascer sem documento: um orcamento para quem ainda nao passou
+   * o CPF precisa de alguem para apontar. Mas a fatura vira nota e boleto, e os
+   * dois pedem o documento de quem paga. Este e o momento em que a falta passa a
+   * custar caro, e por isso e aqui que ela e cobrada.
+   */
+  const cadastro = await repo.cadastroDoCliente(entrada.clienteId);
+  if (!cadastro) throw new NotFoundError("Cliente nao encontrado");
+
+  const faltando = pendenciasDoCadastro(cadastro);
+  if (faltando.length > 0) {
+    throw new BusinessRuleError(
+      `Cadastro incompleto: falta ${pendenciasEmPalavras(faltando, ehPessoaFisica(cadastro.cnpj))}. Complete em Pessoas para poder faturar.`,
+    );
   }
   if (entrada.apuracaoFim < entrada.apuracaoInicio) {
     throw new BusinessRuleError("Fim da competencia anterior ao inicio");

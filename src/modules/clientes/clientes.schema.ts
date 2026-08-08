@@ -6,6 +6,7 @@ import {
   textoCurtoSchema,
 } from "@/shared/validators/comuns";
 import { paginacaoSchema } from "@/shared/utils/paginacao";
+import { CLASSIFICACOES, REGIMES } from "@/modules/clientes/clientes.types";
 
 /** Contratos de entrada e saida do modulo clientes. */
 
@@ -46,10 +47,23 @@ export const contagemSchema = z.object({
   colaborador: z.number(),
 });
 
+/**
+ * ⚠️ Documento e data NAO travam o cadastro.
+ *
+ * O cadastro nasce muitas vezes antes do documento: um orcamento para quem ainda
+ * nao passou o CPF precisa de alguem para apontar. Exigindo ali, o atendimento
+ * inventava documento para o botao liberar, e cadastro com CPF inventado e pior
+ * do que cadastro incompleto.
+ *
+ * ⚠️ Quem cobra a falta e o FATURAMENTO. O cadastro fica pendente e a fatura
+ * recusa nascer sem os dois: e o momento em que o dado passa a ser necessario de
+ * verdade, e ate la ninguem e obrigado a nada.
+ */
 export const criarClienteBodySchema = z.object({
   razao: textoCurtoSchema,
   nomeFantasia: textoCurtoSchema.nullish(),
   cnpj: cnpjSchema.nullish(),
+  dataNascimento: z.iso.date().nullish(),
   email: emailSchema.nullish(),
   contato: z.string().trim().max(40).nullish(),
   responsavel: textoCurtoSchema.nullish(),
@@ -57,6 +71,12 @@ export const criarClienteBodySchema = z.object({
   grupoId: idSchema.nullish(),
   /** Omitido, o banco preenche com o "Geral" da empresa. */
   centroCustoId: idSchema.nullish(),
+  inscricaoMunicipal: z.string().trim().max(30).nullish(),
+  inscricaoEstadual: z.string().trim().max(30).nullish(),
+  regimeTributario: z.enum(REGIMES).nullish(),
+  classificacaoTributaria: z.enum(CLASSIFICACOES).nullish(),
+  // As listas moram nos contratos do modulo: a tela usa as mesmas para desenhar
+  // o seletor, e importar este arquivo levaria o zod para o navegador.
 });
 
 export const idParamSchema = z.object({ id: idSchema });
@@ -183,6 +203,11 @@ export const clienteSchema = z.object({
   grupoId: z.number().nullable(),
   centroCustoId: z.number().nullable(),
   centroCustoNome: z.string().nullable(),
+  dataNascimento: z.string().nullable(),
+  inscricaoMunicipal: z.string().nullable(),
+  inscricaoEstadual: z.string().nullable(),
+  regimeTributario: z.string().nullable(),
+  classificacaoTributaria: z.string().nullable(),
   ativo: z.boolean(),
 });
 

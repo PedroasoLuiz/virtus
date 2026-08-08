@@ -18,7 +18,7 @@ import type {
 /** Unica porta de acesso aos dados de clientes. */
 
 const COLUNAS =
-  "id, razao, nomefantasia, cnpj, email, contato, responsavel, fkGrupo, fkCentroCusto, ativo, cliente, fornecedor, colaborador";
+  "id, razao, nomefantasia, cnpj, email, contato, responsavel, fkGrupo, fkCentroCusto, datanascimento, inscricaomunicipal, inscricaoestadual, regimetributario, classificacaotributaria, ativo, cliente, fornecedor, colaborador";
 
 /**
  * O nome do centro vem por join, nao copiado para `clientes`: renomear o centro
@@ -629,6 +629,11 @@ export async function criar(
       fkGrupo: entrada.grupoId ?? null,
       // Omitido, `trg_clientes_centro_padrao` preenche com o "Geral".
       fkCentroCusto: entrada.centroCustoId ?? null,
+      datanascimento: entrada.dataNascimento ?? null,
+      inscricaomunicipal: entrada.inscricaoMunicipal ?? null,
+      inscricaoestadual: entrada.inscricaoEstadual ?? null,
+      regimetributario: entrada.regimeTributario ?? null,
+      classificacaotributaria: entrada.classificacaoTributaria ?? null,
       ativo: true,
       cliente: entrada.papeis.includes("cliente"),
       fornecedor: entrada.papeis.includes("fornecedor"),
@@ -651,6 +656,11 @@ type Linha = {
   responsavel: string | null;
   fkGrupo: number | null;
   fkCentroCusto: number | null;
+  datanascimento: string | null;
+  inscricaomunicipal: string | null;
+  inscricaoestadual: string | null;
+  regimetributario: string | null;
+  classificacaotributaria: string | null;
   ativo: boolean | null;
   cliente: boolean | null;
   fornecedor: boolean | null;
@@ -676,6 +686,11 @@ function paraDominio(l: Linha): Cliente {
     grupoId: l.fkGrupo,
     centroCustoId: l.fkCentroCusto,
     centroCustoNome: (l.centrodecusto as { descricao: string | null } | null)?.descricao ?? null,
+    dataNascimento: l.datanascimento,
+    inscricaoMunicipal: l.inscricaomunicipal,
+    inscricaoEstadual: l.inscricaoestadual,
+    regimeTributario: l.regimetributario,
+    classificacaoTributaria: l.classificacaotributaria,
     ativo: l.ativo ?? true,
   };
 }
@@ -698,6 +713,13 @@ export async function atualizar(
   if (entrada.responsavel !== undefined) campos.responsavel = entrada.responsavel;
   if (entrada.grupoId !== undefined) campos.fkGrupo = entrada.grupoId;
   if (entrada.centroCustoId !== undefined) campos.fkCentroCusto = entrada.centroCustoId;
+  if (entrada.dataNascimento !== undefined) campos.datanascimento = entrada.dataNascimento;
+  if (entrada.inscricaoMunicipal !== undefined)
+    campos.inscricaomunicipal = entrada.inscricaoMunicipal;
+  if (entrada.inscricaoEstadual !== undefined) campos.inscricaoestadual = entrada.inscricaoEstadual;
+  if (entrada.regimeTributario !== undefined) campos.regimetributario = entrada.regimeTributario;
+  if (entrada.classificacaoTributaria !== undefined)
+    campos.classificacaotributaria = entrada.classificacaoTributaria;
   if (entrada.ativo !== undefined) campos.ativo = entrada.ativo;
   if (entrada.papeis !== undefined) {
     campos.cliente = entrada.papeis.includes("cliente");

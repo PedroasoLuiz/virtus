@@ -677,6 +677,30 @@ export async function gravarDocumentoDaParcela(
  * o envio usa, e carregar em toda abertura de conta pagaria dois joins por
  * nada.
  */
+/**
+ * O documento e a data do cadastro, para o faturamento conferir.
+ *
+ * ⚠️ Le `clientes` daqui em vez de chamar o modulo de pessoas. A leitura e de
+ * duas colunas e passa pela mesma RLS; puxar o servico do outro modulo criaria
+ * uma dependencia entre modulos para poupar uma consulta.
+ */
+export async function cadastroDoCliente(
+  clienteId: number,
+): Promise<{ cnpj: string | null; dataNascimento: string | null } | null> {
+  const supabase = await serverClient();
+
+  const { data, error } = await supabase
+    .from("clientes")
+    .select("cnpj, datanascimento")
+    .eq("id", clienteId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return null;
+
+  return { cnpj: data.cnpj, dataNascimento: data.datanascimento };
+}
+
 export async function destinatarioDaFatura(
   empresaId: number,
   clienteId: number | null,
