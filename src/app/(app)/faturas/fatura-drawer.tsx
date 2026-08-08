@@ -980,7 +980,7 @@ function NovaParcela({
           </Field>
 
           <Field label="Quanto tirar" error={erroDoValor ?? undefined} required>
-            <CampoNumerico valor={valor} aoMudar={setValor} escala={100} alinhar="right" />
+            <CampoNumerico valor={valor} aoMudar={setValor} escala={100} />
           </Field>
 
           <Field label="A parte adiada vence em" error={erroDaData ?? undefined} required>
@@ -1005,30 +1005,55 @@ function NovaParcela({
           titulo="Como a conta fica"
           legenda="Confira antes de salvar: é isto que o cliente vai ver na próxima cobrança."
         >
-          {origem && pronto ? (
-            <>
-              <Field label={`Parcela ${origem.numero}`}>
-                <CampoBloqueado
-                  valor={`${formatarSemSimbolo(sobra as Centavos)}${origem.vencimento ? ` · vence ${curto(origem.vencimento)}` : ""}`}
-                  titulo="O que sobra na parcela de origem depois do recorte."
-                />
-              </Field>
+          {/*
+            ⚠️ TABELA, e não dois campos.
 
-              <Field label="Parcela nova">
-                <CampoBloqueado
-                  valor={`${formatarSemSimbolo(valor as Centavos)} · vence ${curto(vencimento)}`}
-                  titulo="A parte adiada. O número dela é dado pela ordem de vencimento."
-                />
-              </Field>
-            </>
-          ) : (
-            <Field label="Resultado">
-              <CampoBloqueado
-                valor="Preencha o valor e a data"
-                titulo="O resumo aparece quando os dois campos acima estiverem preenchidos."
-              />
-            </Field>
-          )}
+            O que se compara aqui são duas linhas com as mesmas três informações,
+            e é isso que uma tabela faz melhor que qualquer outra coisa: pôr valor
+            embaixo de valor e data embaixo de data. É também a mesma anatomia da
+            tabela de parcelas que está logo atrás do drawer, então a leitura não
+            troca de gramática no meio do caminho.
+          */}
+          <TableArea minWidth={0}>
+            <TableHead>
+              <Th minWidth={90}>Parcela</Th>
+              <Th minWidth={110}>Vence</Th>
+              <Th align="right" minWidth={110}>
+                Valor
+              </Th>
+            </TableHead>
+
+            <tbody>
+              {origem && pronto ? (
+                <>
+                  <Tr>
+                    <Td>{origem.numero}</Td>
+                    <Td>
+                      {origem.vencimento ? (
+                        curto(origem.vencimento)
+                      ) : (
+                        <span style={{ color: "var(--text-disabled)" }}>—</span>
+                      )}
+                    </Td>
+                    <Td style={tdNum}>{formatarSemSimbolo(sobra as Centavos)}</Td>
+                  </Tr>
+
+                  <Tr>
+                    {/*
+                      A parcela nova não tem número ainda: quem dá é a ordem de
+                      vencimento, no servidor. Inventar um aqui seria adivinhar em
+                      voz alta um dado que o banco decide.
+                    */}
+                    <Td style={{ color: "var(--text-tertiary)" }}>nova</Td>
+                    <Td>{curto(vencimento)}</Td>
+                    <Td style={tdNum}>{formatarSemSimbolo(valor as Centavos)}</Td>
+                  </Tr>
+                </>
+              ) : (
+                <EmptyRow colSpan={3} message="Preencha quanto tirar e para quando." />
+              )}
+            </tbody>
+          </TableArea>
         </GrupoDeCampos>
       </Formulario>
     </FormDrawer>
