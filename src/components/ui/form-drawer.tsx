@@ -12,8 +12,10 @@ import { Button } from "@/components/ui/kit";
  * de erro da API e refresh da listagem ao fechar. A tela concreta so descreve
  * os campos.
  *
- * Largura 540 por padrao — mesma do SIC para formulario; 720 fica para tela de
- * detalhe, que tem tabela dentro.
+ * ⚠️ A largura e a MESMA de todo drawer do sistema, e nao uma so para formulario.
+ * Havia um 540 aqui contra os 620 do resto: abrir a ficha de uma pessoa e depois
+ * o endereco dela fazia a segunda tela nascer mais estreita que a primeira, sem
+ * nada que explicasse a diferenca. Quem quiser outra largura pede explicitamente.
  */
 export function FormDrawer<T>({
   aberto,
@@ -24,7 +26,7 @@ export function FormDrawer<T>({
   url,
   metodo,
   children,
-  larguraDrawer = 540,
+  larguraDrawer,
   podeSalvar = true,
   aoSalvar,
   nivel,

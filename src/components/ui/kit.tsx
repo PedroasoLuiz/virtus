@@ -1919,9 +1919,17 @@ export function MarcaDeUso({
       style={{
         width: 22,
         height: 22,
-        display: "grid",
+        /*
+         * ⚠️ `inline-grid`, e nao `grid` com margem automatica.
+         *
+         * A margem centralizava a marca na largura que sobrasse: na celula da
+         * tabela era o que se queria, mas dentro de um campo de formulario ela
+         * jogava o botao para o meio do drawer, longe do rotulo. Sendo inline,
+         * quem centraliza e o `text-align` da celula, e no formulario ela fica
+         * onde todo controle fica: no comeco da linha.
+         */
+        display: "inline-grid",
         placeItems: "center",
-        margin: "0 auto",
         border: "none",
         background: "transparent",
         cursor: desabilitado ? "default" : "pointer",
@@ -1990,9 +1998,17 @@ export function MarcaDePrincipal({
       style={{
         width: 22,
         height: 22,
-        display: "grid",
+        /*
+         * ⚠️ `inline-grid`, e nao `grid` com margem automatica.
+         *
+         * A margem centralizava a marca na largura que sobrasse: na celula da
+         * tabela era o que se queria, mas dentro de um campo de formulario ela
+         * jogava o botao para o meio do drawer, longe do rotulo. Sendo inline,
+         * quem centraliza e o `text-align` da celula, e no formulario ela fica
+         * onde todo controle fica: no comeco da linha.
+         */
+        display: "inline-grid",
         placeItems: "center",
-        margin: "0 auto",
         border: "none",
         background: "transparent",
         borderRadius: "var(--radius-full)",

@@ -10,12 +10,12 @@ import { useEffect, useRef, useState } from "react";
  */
 
 /**
- * Largura padrao de drawer de DETALHE — a mesma em conta a receber, conta a
- * pagar e ticket.
+ * A largura de TODO drawer do sistema.
  *
  * Mora aqui e nao repetida em cada tela: o numero solto em tres arquivos foi
- * exatamente o que deixou o ticket abrir mais largo que as contas. Formulario
- * usa 540, definido em `FormDrawer`.
+ * exatamente o que deixou o ticket abrir mais largo que as contas, e o
+ * formulario ter uma largura propria de 540 fazia o endereco nascer mais estreito
+ * que a ficha da pessoa que o abriu.
  */
 const LARGURA_PADRAO = 620;
 

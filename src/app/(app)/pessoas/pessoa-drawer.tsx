@@ -230,7 +230,6 @@ export function PessoaDrawer({
       aberto={aberto}
       onClose={onClose}
       titulo="Detalhes"
-      larguraDrawer={620}
       url={editando ? `/api/v1/clientes/${cliente.id}` : "/api/v1/clientes"}
       metodo={editando ? "PATCH" : "POST"}
       /*
