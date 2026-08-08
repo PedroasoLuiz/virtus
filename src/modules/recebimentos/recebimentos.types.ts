@@ -96,6 +96,32 @@ export type RecebimentoResumo = {
   qtdContas: number;
 };
 
+/**
+ * Os numeros do topo da listagem.
+ *
+ * ⚠️ Calculados no SERVIDOR, sobre tudo. A tela recebe uma pagina de baixas, e
+ * somar os cartoes sobre ela desenharia uma tendencia falsa: os meses mais
+ * antigos ficam de fora do que foi carregado e apareceriam encolhendo, sem nada
+ * dizer que a queda e do recorte e nao do faturamento.
+ */
+export type IndicadoresDeRecebimento = {
+  /** Do mais antigo para o mais recente. O ultimo e o mes corrente. */
+  meses: { mes: string; valor: Centavos; qtd: number }[];
+  /**
+   * Tudo que ainda ninguem conferiu no extrato, de qualquer epoca.
+   *
+   * ⚠️ Este numero e o total abaixo sao da MESMA janela: sempre tudo. O cartao
+   * mostrava um valor de todo o historico com um detalhe dos ultimos seis meses
+   * embaixo, e ninguem tinha como saber que "77" e "46" contavam coisas
+   * diferentes. Duas janelas no mesmo cartao nao se explicam sozinhas.
+   */
+  aConciliar: { valor: Centavos; qtd: number };
+  /** Quantas baixas existem ao todo, para a proporcao do detalhe. */
+  totalDeBaixas: number;
+  /** Quanto entrou por forma de recebimento no periodo, maior primeiro. */
+  porForma: { tipo: string; valor: Centavos }[];
+};
+
 export type DestinoDoRecebimento = {
   parcelaId: number;
   faturaId: number;

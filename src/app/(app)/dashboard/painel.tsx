@@ -1,4 +1,12 @@
-import { Badge, PageHeader, PageLayout, Panel, type Tom } from "@/components/ui/kit";
+import {
+  Badge,
+  FaixaDeIndicadores,
+  Indicador,
+  PageHeader,
+  PageLayout,
+  Panel,
+  type Tom,
+} from "@/components/ui/kit";
 import { formatar, somar, type Centavos, ZERO } from "@/shared/utils/money";
 import { STATUS_FATURA, type StatusFatura } from "@/modules/faturas/faturas.types";
 
@@ -25,18 +33,27 @@ export function Painel({ linhas }: { linhas: Linha[] }) {
         />
 
         <div style={{ padding: 16, overflowY: "auto" }}>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-            gap: 12,
-            marginBottom: 16,
-          }}
-        >
-          <Stat label="A receber" valor={aReceber} detalhe="Aberta + Faturada" tom="credito" />
-          <Stat label="Parcialmente paga" valor={parcial} detalhe="Com baixa parcial" />
-          <Stat label="Recebido" valor={recebido} detalhe="Pagas e baixadas" />
-          <Stat label="Conciliado" valor={baixado} detalhe="Conferidas no extrato" tom="credito" />
+        <div style={{ marginBottom: 16 }}>
+          <FaixaDeIndicadores>
+            <Indicador
+              label="A receber"
+              valor={formatar(aReceber)}
+              detalhe="Aberta + Faturada"
+              tom="credito"
+            />
+            <Indicador
+              label="Parcialmente paga"
+              valor={formatar(parcial)}
+              detalhe="Com baixa parcial"
+            />
+            <Indicador label="Recebido" valor={formatar(recebido)} detalhe="Pagas e baixadas" />
+            <Indicador
+              label="Conciliado"
+              valor={formatar(baixado)}
+              detalhe="Conferidas no extrato"
+              tom="credito"
+            />
+          </FaixaDeIndicadores>
         </div>
 
         <div
@@ -88,46 +105,6 @@ export function Painel({ linhas }: { linhas: Linha[] }) {
         </div>
       </Panel>
     </PageLayout>
-  );
-}
-
-function Stat({
-  label,
-  valor,
-  detalhe,
-  tom = "neutro",
-}: {
-  label: string;
-  valor: Centavos;
-  detalhe: string;
-  tom?: "neutro" | "credito";
-}) {
-  return (
-    <div
-      style={{
-        background: "var(--surface)",
-        border: "1px solid var(--border)",
-        borderRadius: "var(--radius-lg)",
-        padding: 16,
-      }}
-    >
-      <div className="rotulo">{label}</div>
-      <div
-        style={{
-          fontSize: "var(--text-3xl)",
-          fontWeight: "var(--fw-semi)",
-          letterSpacing: "var(--tracking-tight)",
-          fontVariantNumeric: "tabular-nums",
-          color: tom === "credito" ? "var(--credito)" : "var(--text-primary)",
-          marginTop: 6,
-        }}
-      >
-        {formatar(valor)}
-      </div>
-      <div style={{ fontSize: "var(--text-sm)", color: "var(--text-tertiary)", marginTop: 2 }}>
-        {detalhe}
-      </div>
-    </div>
   );
 }
 

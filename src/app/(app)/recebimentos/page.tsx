@@ -1,5 +1,9 @@
 import { sessaoUI } from "@/shared/auth/sessao-ui";
-import { listarRecebimentos } from "@/modules/recebimentos/recebimentos.service";
+import {
+  indicadoresDeRecebimento,
+  listarRecebimentos,
+} from "@/modules/recebimentos/recebimentos.service";
+import { hoje } from "@/shared/utils/datas";
 import { SemEmpresa } from "../sem-empresa";
 import { RecebimentosTabela } from "./recebimentos-tabela";
 
@@ -18,7 +22,17 @@ export default async function RecebimentosPage() {
    * vinte mil clientes ativos, sao vinte mil linhas no HTML para escolher uma.
    * O drawer pergunta ao servidor conforme se digita.
    */
-  const { itens } = await listarRecebimentos(ctx.empresaId, {}, { page: 1, perPage: 100 });
+  /*
+   * ⚠️ Os indicadores vem de consulta PROPRIA, e nao da lista acima.
+   *
+   * Somados sobre a pagina, os cartoes do topo mediriam o recorte e nao o
+   * negocio: com 119 baixas e 100 carregadas, os meses mais antigos apareceriam
+   * encolhendo e o grafico desenharia uma queda que nao existe.
+   */
+  const [{ itens }, indicadores] = await Promise.all([
+    listarRecebimentos(ctx.empresaId, {}, { page: 1, perPage: 100 }),
+    indicadoresDeRecebimento(ctx.empresaId, hoje()),
+  ]);
 
-  return <RecebimentosTabela recebimentos={itens} />;
+  return <RecebimentosTabela recebimentos={itens} indicadores={indicadores} />;
 }

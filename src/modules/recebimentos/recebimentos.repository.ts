@@ -4,8 +4,10 @@ import { primeiroPreenchido } from "@/shared/utils/texto";
 import { intervalo, type Pagina, type Paginacao } from "@/shared/utils/paginacao";
 import type { DataISO } from "@/shared/utils/datas";
 import { SEM_COBRANCA, type ParametrosDeCobranca } from "@/shared/domain/cobranca";
+import { nomeDaConta } from "@/shared/domain/conta-bancaria";
 import type {
   DestinoDoRecebimento,
+  IndicadoresDeRecebimento,
   FiltroRecebimentos,
   ParcelaEmAberto,
   Recebimento,
@@ -176,6 +178,115 @@ export async function listar(
   return { itens, total: count ?? 0 };
 }
 
+/**
+ * Os numeros dos cartoes do topo, sobre TUDO e nao sobre a pagina.
+ *
+ * ⚠️ Tres consultas, e nao uma. A serie mensal precisa da janela dos ultimos
+ * meses inteira; "a conciliar" e o total precisam de qualquer epoca, porque uma
+ * baixa de marco que ninguem conferiu continua sendo trabalho pendente hoje. Uma
+ * consulta so teria de trazer o historico inteiro para responder as tres, e as
+ * duas ultimas se resolvem com contagem, sem trazer linha nenhuma.
+ *
+ * ⚠️ Sem `pagamentosxparcelas!inner` aqui? Nao: ele fica. E o mesmo recorte da
+ * listagem — receita COM rateio e o que e baixa —, e sem ele os cartoes contariam
+ * dinheiro que entrou sem quitar conta nenhuma e nunca bateriam com a tabela
+ * logo abaixo.
+ */
+export async function indicadores(
+  empresaId: number,
+  desdeMes: string,
+  ateMes: string,
+): Promise<IndicadoresDeRecebimento> {
+  const supabase = await serverClient();
+
+  const [janela, pendentes, total] = await Promise.all([
+    supabase
+      .from("pagamentos")
+      .select("id, data, valor, tipo, conciliado, pagamentosxparcelas!inner(id)")
+      .eq("fkEmpresa", empresaId)
+      .ilike("natureza", RECEITA)
+      .gte("data", `${desdeMes}-01`),
+    supabase
+      .from("pagamentos")
+      .select("id, valor, pagamentosxparcelas!inner(id)")
+      .eq("fkEmpresa", empresaId)
+      .ilike("natureza", RECEITA)
+      .eq("conciliado", false),
+    supabase
+      .from("pagamentos")
+      .select("id, pagamentosxparcelas!inner(id)", { count: "exact", head: true })
+      .eq("fkEmpresa", empresaId)
+      .ilike("natureza", RECEITA),
+  ]);
+
+  if (janela.error) throw janela.error;
+  if (pendentes.error) throw pendentes.error;
+  if (total.error) throw total.error;
+
+  const linhas = janela.data ?? [];
+  const porMes = new Map<string, { valor: Centavos; qtd: number }>();
+  const porForma = new Map<string, Centavos>();
+
+  for (const l of linhas) {
+    const valor = doBanco(l.valor);
+    const mes = l.data ? l.data.slice(0, 7) : null;
+
+    if (mes) {
+      const atual = porMes.get(mes) ?? { valor: ZERO, qtd: 0 };
+      porMes.set(mes, { valor: somar(atual.valor, valor), qtd: atual.qtd + 1 });
+    }
+
+    // Sem forma preenchida vira "Outros": o legado tem lancamento antigo com o
+    // campo vazio, e uma fatia sem nome na barra nao se explica.
+    const tipo = l.tipo?.trim() || "Outros";
+    porForma.set(tipo, somar(porForma.get(tipo) ?? ZERO, valor));
+  }
+
+  return {
+    /*
+     * ⚠️ A serie sai COMPLETA, com o mes vazio valendo zero.
+     *
+     * Montada so com os meses que tem lancamento, ela pula o mes parado — e o
+     * cartao passa a comparar maio com marco escrevendo "mes passado". Zero e a
+     * resposta certa para "quanto entrou em abril": nada.
+     */
+    meses: mesesEntre(desdeMes, ateMes).map((mes) => ({
+      mes,
+      valor: porMes.get(mes)?.valor ?? ZERO,
+      qtd: porMes.get(mes)?.qtd ?? 0,
+    })),
+    aConciliar: {
+      valor: (pendentes.data ?? []).reduce<Centavos>((s, l) => somar(s, doBanco(l.valor)), ZERO),
+      qtd: (pendentes.data ?? []).length,
+    },
+    totalDeBaixas: total.count ?? 0,
+    porForma: [...porForma.entries()]
+      .map(([tipo, valor]) => ({ tipo, valor }))
+      .sort((a, b) => b.valor - a.valor),
+  };
+}
+
+/**
+ * Todo mes de "AAAA-MM" ate "AAAA-MM", inclusive.
+ *
+ * ⚠️ Aritmetica sobre o numero do mes, e nao sobre `Date`. O mes aqui e prefixo
+ * de uma coluna `date` sem hora; passando por `Date`, o fuso do servidor empurra
+ * o dia primeiro para o mes anterior e a janela abre um mes torta.
+ */
+function mesesEntre(de: string, ate: string): string[] {
+  const indice = (m: string) => {
+    const [ano, mes] = m.split("-").map(Number);
+    return ano * 12 + (mes - 1);
+  };
+
+  const meses: string[] = [];
+  for (let i = indice(de); i <= indice(ate); i++) {
+    meses.push(`${Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, "0")}`);
+  }
+
+  return meses;
+}
+
 export async function buscarPorId(empresaId: number, id: number): Promise<Recebimento | null> {
   const supabase = await serverClient();
 
@@ -315,11 +426,7 @@ function paraResumo(
     // Um pagamento e de UM pagador. Mais de um nome aqui so aconteceria com
     // dado herdado torto, e mostrar o primeiro e melhor que mostrar vazio.
     clienteNome: nomes[0] ?? null,
-    contaNome:
-      primeiroPreenchido(
-        conta?.apelido,
-        conta?.banco ? `${conta.banco}${conta.conta ? ` · ${conta.conta}` : ""}` : null,
-      ) ?? null,
+    contaNome: nomeDaConta(conta ?? {}) || null,
     conciliado: linha.conciliado ?? false,
     descricao: linha.descricao,
     qtdParcelas: destinos.length,

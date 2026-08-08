@@ -7,6 +7,7 @@ import type { ParametrosDeCobranca } from "@/shared/domain/cobranca";
 import * as repo from "@/modules/recebimentos/recebimentos.repository";
 import type {
   FiltroRecebimentos,
+  IndicadoresDeRecebimento,
   ParcelaEmAberto,
   Recebimento,
   RecebimentoNovo,
@@ -28,6 +29,36 @@ export async function listarRecebimentos(
   paginacao: Paginacao,
 ): Promise<Pagina<RecebimentoResumo>> {
   return repo.listar(empresaId, filtro, paginacao);
+}
+
+/**
+ * Os numeros dos cartoes do topo da listagem.
+ *
+ * A janela e de seis meses porque e o que o grafico mostra: menos que isso nao
+ * desenha tendencia, e mais aperta a linha a ponto de a variacao sumir.
+ */
+export async function indicadoresDeRecebimento(
+  empresaId: number,
+  hojeISO: string,
+): Promise<IndicadoresDeRecebimento> {
+  const mes = hojeISO.slice(0, 7);
+  return repo.indicadores(empresaId, mesesAtras(mes, MESES_DO_GRAFICO - 1), mes);
+}
+
+/** Quantos meses o cartao do topo desenha, contando o corrente. */
+export const MESES_DO_GRAFICO = 6;
+
+/**
+ * "AAAA-MM" recuado N meses.
+ *
+ * ⚠️ Sobre a string, e nao sobre `Date`. O mes aqui e prefixo do que o banco
+ * guarda em `data`, que nao tem hora; passando por `Date`, o fuso do servidor
+ * empurra o primeiro dia do mes para o mes anterior e a janela abre errada.
+ */
+function mesesAtras(mes: string, quantos: number): string {
+  const [ano, m] = mes.split("-").map(Number);
+  const total = ano * 12 + (m - 1) - quantos;
+  return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, "0")}`;
 }
 
 export async function obterRecebimento(empresaId: number, id: number): Promise<Recebimento> {

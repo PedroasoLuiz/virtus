@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Badge,
+  BotaoDeAcao,
   EmptyRow,
   FilterButton,
   FilterItem,
@@ -20,13 +20,17 @@ import {
   Th,
   Tr,
   inputStyle,
-  tdNum,
 } from "@/components/ui/kit";
+import { useAvisos } from "@/components/ui/avisos";
 import { NovoRecebimentoDrawer } from "./novo-recebimento-drawer";
 import { RecebimentoDrawer } from "./recebimento-drawer";
-import { formatarSemSimbolo, type Centavos } from "@/shared/utils/money";
+import { IndicadoresDeBaixa } from "./indicadores-de-baixa";
+import { formatarSemSimbolo } from "@/shared/utils/money";
 import { paraFormatoBR, type DataISO } from "@/shared/utils/datas";
-import type { RecebimentoResumo } from "@/modules/recebimentos/recebimentos.types";
+import type {
+  IndicadoresDeRecebimento,
+  RecebimentoResumo,
+} from "@/modules/recebimentos/recebimentos.types";
 
 /**
  * Listagem do dinheiro que entrou.
@@ -44,10 +48,13 @@ const PAGE_SIZE = 25;
 
 export function RecebimentosTabela({
   recebimentos,
+  indicadores,
 }: {
   recebimentos: RecebimentoResumo[];
+  indicadores: IndicadoresDeRecebimento;
 }) {
   const router = useRouter();
+  const { avisar, confirmar } = useAvisos();
   const [criando, setCriando] = useState(false);
   const [detalhe, setDetalhe] = useState<number | null>(null);
   const [busca, setBusca] = useState("");
@@ -70,6 +77,26 @@ export function RecebimentosTabela({
     });
   }, [recebimentos, busca, de, ate]);
 
+  /*
+   * O mesmo estorno do cabecalho do drawer, disparado da linha.
+   *
+   * ⚠️ Nao e duplicacao da regra: quem decide o que pode ser estornado e o
+   * servico, no DELETE. Aqui so se pergunta e se avisa — a tela apaga o botao
+   * do que ja foi conciliado para poupar a viagem, e o servidor recusa de novo.
+   */
+  async function estornar(id: number) {
+    const r = await fetch(`/api/v1/recebimentos/${id}`, { method: "DELETE" });
+
+    if (!r.ok) {
+      const dados = await r.json().catch(() => null);
+      avisar("atencao", dados?.error?.message ?? "Não foi possível estornar");
+      return;
+    }
+
+    avisar("sucesso", "Recebimento estornado", "As parcelas voltaram a ficar em aberto.");
+    router.refresh();
+  }
+
   const totalPaginas = Math.max(1, Math.ceil(filtrados.length / PAGE_SIZE));
   const paginaAtual = Math.min(pagina, totalPaginas);
   const visiveis = filtrados.slice((paginaAtual - 1) * PAGE_SIZE, paginaAtual * PAGE_SIZE);
@@ -77,10 +104,7 @@ export function RecebimentosTabela({
   return (
     <PageLayout>
       <Panel>
-        <PageHeader
-          title="Baixas"
-          description="Cada dinheiro que entrou e as parcelas que ele quitou. Um PIX que fecha três contas é uma baixa só: é assim que o extrato do banco vê."
-        >
+        <PageHeader title="Baixas">
           <FilterButton
             activeCount={(de ? 1 : 0) + (ate ? 1 : 0)}
             onClear={() => {
@@ -122,31 +146,54 @@ export function RecebimentosTabela({
           <IncluirButton onClick={() => setCriando(true)} />
         </PageHeader>
 
+        {/*
+          ⚠️ Os cartoes ficam FORA do `TableFrame`.
+
+          O recuo lateral de 16 mora no frame porque ha um cartao em volta da
+          tabela; os indicadores tem cartao proprio, e dentro do frame ganhariam
+          o recuo duas vezes. Aqui eles usam o mesmo recuo, na altura certa:
+          entre a barra de busca e a tabela.
+        */}
+        <div style={{ padding: "0 16px 14px" }}>
+          <IndicadoresDeBaixa dados={indicadores} />
+        </div>
+
         <TableFrame>
           <TableArea minWidth={900}>
             <TableHead>
+              <Th minWidth={64}>#</Th>
+              {/*
+                ⚠️ Conciliado abre a linha, antes da data.
+
+                E o estado do registro, e nao um dado dele: a pergunta de quem
+                varre a lista e "o que ainda falta conferir?". No fim da linha,
+                responder isso exigia atravessar cinco colunas de dado por vez.
+
+                ⚠️ TUDO a esquerda, inclusive o dinheiro e as acoes. E a regra da
+                conta a receber, e ela existe para o olho nao refazer o percurso
+                a cada tela: com uma coluna puxada para a direita, a leitura
+                salta o vao vazio do meio e volta.
+              */}
+              <Th minWidth={80}>Conciliado</Th>
               <Th minWidth={90}>Data</Th>
               <Th>Cliente</Th>
               <Th minWidth={110}>Forma</Th>
-              <Th minWidth={140}>Conta</Th>
+              <Th minWidth={190}>Conta</Th>
               <Th minWidth={130}>Destino</Th>
-              <Th align="center" minWidth={100}>
-                Conciliado
-              </Th>
-              <Th align="right" minWidth={100}>
-                Acréscimo
-              </Th>
-              <Th align="right" minWidth={110}>
-                Valor
-              </Th>
+              <Th minWidth={110}>Valor</Th>
+              <Th minWidth={80}>Ações</Th>
             </TableHead>
             <tbody>
-              {visiveis.length === 0 && <EmptyRow colSpan={8} />}
+              {visiveis.length === 0 && <EmptyRow colSpan={9} />}
               {visiveis.map((r, i) => (
                 <Tr key={r.id} delay={Math.min(i * 20, 150)} onClick={() => setDetalhe(r.id)}>
-                  <Td style={{ whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
-                    {r.data ? paraFormatoBR(r.data as DataISO) : "—"}
+                  <Td style={NUM}>{r.id}</Td>
+                  <Td>
+                    {/* Conciliado e gesto humano: significa "conferi no extrato".
+                        Por isso nasce pendente e nada no sistema o marca sozinho. */}
+                    <MarcaDeConciliacao conciliado={r.conciliado} />
                   </Td>
+                  <Td style={NUM}>{r.data ? paraFormatoBR(r.data as DataISO) : "—"}</Td>
                   <Td style={{ maxWidth: 240 }}>
                     <span
                       style={{
@@ -159,25 +206,65 @@ export function RecebimentosTabela({
                       {r.clienteNome ?? "—"}
                     </span>
                   </Td>
-                  <Td style={{ color: "var(--text-secondary)" }}>{r.tipo ?? "—"}</Td>
-                  <Td style={{ color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
-                    {r.contaNome ?? "—"}
-                  </Td>
-                  <Td style={{ color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
-                    {destino(r)}
-                  </Td>
-                  <Td style={{ textAlign: "center" }}>
-                    {/* Conciliado e gesto humano: significa "conferi no extrato".
-                        Por isso nasce pendente e nada no sistema o marca sozinho. */}
-                    <Badge tom={r.conciliado ? "success" : "warning"}>
-                      {r.conciliado ? "Sim" : "Pendente"}
-                    </Badge>
-                  </Td>
-                  <Td style={tdNum}>
-                    <Acrescimo juros={r.juros} multa={r.multa} />
-                  </Td>
-                  <Td style={{ ...tdNum, fontWeight: "var(--fw-medium)", color: "var(--credito)" }}>
-                    {formatarSemSimbolo(r.valor)}
+                  {/*
+                    ⚠️ Todas as celulas no mesmo peso e na mesma cor.
+
+                    Forma, conta e destino eram `--text-secondary` e o valor era
+                    verde e semibold. Tres pesos numa linha so criam uma
+                    hierarquia que nao existe no dado: numa lista de dinheiro que
+                    entrou, TODO valor e credito, e pintar todos de verde nao
+                    distingue nada — so tira a cor de circulacao para quando ela
+                    tiver algo a dizer.
+                  */}
+                  <Td>{r.tipo ?? "—"}</Td>
+                  <Td style={{ whiteSpace: "nowrap" }}>{r.contaNome ?? "—"}</Td>
+                  <Td style={{ whiteSpace: "nowrap" }}>{destino(r)}</Td>
+                  <Td style={NUM}>{formatarSemSimbolo(r.valor)}</Td>
+                  <Td>
+                    {/*
+                      ⚠️ Nao e o `AcoesDaLinha` do kit: ele empurra para a
+                      direita, e nesta tabela tudo alinha a esquerda.
+                    */}
+                    <span style={{ display: "inline-flex", gap: 4 }}>
+                      <BotaoDeAcao rotulo="Abrir este recebimento" onClick={() => setDetalhe(r.id)}>
+                        {/* Olho: ver sem mexer, que e o que o drawer faz. */}
+                        <path d="M1.3 8s2.4-4.5 6.7-4.5S14.7 8 14.7 8s-2.4 4.5-6.7 4.5S1.3 8 1.3 8z" />
+                        <circle cx="8" cy="8" r="1.9" />
+                      </BotaoDeAcao>
+
+                      {/*
+                        ⚠️ Estornar, e nao editar.
+
+                        Recebimento gravado ja abateu parcela e pode ter recibo
+                        emitido: mudar o valor por cima deixaria a parcela dizendo
+                        uma coisa e o extrato outra. A correcao e desfazer e
+                        lancar de novo, que e o mesmo gesto do cabecalho do
+                        drawer. Desabilitado com o motivo quando ja foi
+                        conciliado, e nao escondido: sumir faria parecer que o
+                        sistema nao sabe estornar.
+                      */}
+                      <BotaoDeAcao
+                        rotulo={
+                          r.conciliado
+                            ? "Não dá para estornar: este recebimento já foi conciliado no extrato"
+                            : "Estornar este recebimento"
+                        }
+                        perigo
+                        desabilitado={r.conciliado}
+                        onClick={() =>
+                          confirmar(
+                            `Estornar o recebimento ${r.id}?`,
+                            "Estornar",
+                            () => estornar(r.id),
+                            "O lançamento é apagado e as parcelas voltam a ficar em aberto. O desconto dado na baixa volta a ser devido.",
+                          )
+                        }
+                      >
+                        {/* Seta circular anti-horária: desfazer. Grade de 16. */}
+                        <path d="M2.7 8a5.3 5.3 0 1 0 1.55-3.75L2.7 5.8" />
+                        <path d="M2.7 2.7v3.3h3.3" />
+                      </BotaoDeAcao>
+                    </span>
                   </Td>
                 </Tr>
               ))}
@@ -213,6 +300,12 @@ export function RecebimentosTabela({
   );
 }
 
+/** Numero em coluna: tabular e sem quebra, para o digito alinhar com o de cima. */
+const NUM: React.CSSProperties = {
+  whiteSpace: "nowrap",
+  fontVariantNumeric: "tabular-nums",
+};
+
 /** "3 parcelas · 2 contas". Com uma conta so, dizer isso e ruido. */
 function destino(r: RecebimentoResumo): string {
   const parcelas = r.qtdParcelas === 1 ? "1 parcela" : `${r.qtdParcelas} parcelas`;
@@ -220,22 +313,60 @@ function destino(r: RecebimentoResumo): string {
 }
 
 /**
- * Juros e multa somados, com o detalhe no hover.
+ * Conferido no extrato, ou ainda esperando.
  *
- * Somados porque a coluna responde "teve acrescimo?", que e a pergunta de
- * relance; a divisao entre os dois so importa quando a resposta e sim, e ai o
- * drawer mostra separado.
+ * ⚠️ Icone, e nao a pastilha com "Sim" e "Pendente". A coluna e binaria e se le
+ * de relance varrendo a lista de cima a baixo; pastilha carrega uma palavra que
+ * muda de largura de linha para linha, e o olho passa a ler texto onde bastava
+ * distinguir duas formas. O relogio diz o que a pastilha "Pendente" dizia:
+ * ninguem conferiu ainda.
  */
-function Acrescimo({ juros, multa }: { juros: number; multa: number }) {
-  const total = juros + multa;
-  if (total <= 0) return <span style={{ color: "var(--text-disabled)" }}>—</span>;
+function MarcaDeConciliacao({ conciliado }: { conciliado: boolean }) {
+  const rotulo = conciliado
+    ? "Conferido no extrato do banco"
+    : "Ainda não conferido no extrato. Conciliar é gesto humano: nada no sistema marca sozinho.";
 
   return (
     <span
-      title={`Juros ${formatarSemSimbolo(juros as Centavos)} · multa ${formatarSemSimbolo(multa as Centavos)}`}
-      style={{ color: "var(--text-secondary)" }}
+      title={rotulo}
+      aria-label={rotulo}
+      style={{
+        display: "inline-flex",
+        // O amarelo solido, e nao o `--warning`: aquele e ambar escuro,
+        // calibrado para ler como TEXTO, e some quando vira um traco de 15px.
+        color: conciliado ? "var(--success)" : "var(--warning-solido)",
+      }}
     >
-      {formatarSemSimbolo(total as Centavos)}
+      {conciliado ? (
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
+          {/* Preenchido, e nao contornado: cheio, o certo fecha a pergunta. */}
+          <circle cx="8" cy="8" r="7" />
+          <path
+            d="M4.8 8.2l2.1 2.1 4.2-4.2"
+            fill="none"
+            stroke="var(--surface)"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      ) : (
+        <svg
+          width="15"
+          height="15"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          {/* Vazado de proposito: o que falta nao pode ter o mesmo peso do que
+              ja foi resolvido, senao as duas marcas competem na mesma coluna. */}
+          <circle cx="8" cy="8" r="6.4" />
+          <path d="M8 4.6V8l2.2 1.6" />
+        </svg>
+      )}
     </span>
   );
 }
