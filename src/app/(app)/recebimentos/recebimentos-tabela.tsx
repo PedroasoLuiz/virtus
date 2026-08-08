@@ -44,10 +44,8 @@ const PAGE_SIZE = 25;
 
 export function RecebimentosTabela({
   recebimentos,
-  clientes,
 }: {
   recebimentos: RecebimentoResumo[];
-  clientes: { id: number; nome: string }[];
 }) {
   const router = useRouter();
   const [criando, setCriando] = useState(false);
@@ -204,7 +202,6 @@ export function RecebimentosTabela({
 
       {criando && (
         <NovoRecebimentoDrawer
-          clientes={clientes}
           onClose={() => setCriando(false)}
           aoCriar={() => {
             setCriando(false);

@@ -2694,3 +2694,203 @@ function SeletorUnidade({ emHoras, aoTrocar }: { emHoras: boolean; aoTrocar: () 
     </button>
   );
 }
+
+/**
+ * Escolher um registro numa base grande, digitando.
+ *
+ * âš ï¸ Existe porque `<select>` NAO escala. Ele obriga a carregar tudo antes de
+ * mostrar qualquer coisa: com vinte mil clientes ativos, sao vinte mil linhas no
+ * HTML da pagina para escolher uma, e a tela trava antes de aparecer. Aqui a
+ * pergunta vai ao servidor com o que ja foi digitado, e volta um punhado.
+ *
+ * âš ï¸ Espera 250ms entre teclas. Sem isso, "construtora" sao onze consultas ao
+ * banco para responder a decima primeira.
+ *
+ * âš ï¸ Escolhido, ele mostra o NOME e nao o campo de busca. O campo aberto com o
+ * nome dentro convida a apagar sem querer; para trocar, o X limpa e devolve a
+ * busca â€” um gesto explicito.
+ */
+export function SeletorBuscavel({
+  valor,
+  rotulo,
+  aoEscolher,
+  buscar,
+  placeholder = "Digite para buscarâ€¦",
+  autoFocus,
+  desabilitado,
+}: {
+  /** `null` quando nada foi escolhido ainda. */
+  valor: number | null;
+  /** O que aparece quando ha escolha. Vem de fora: quem escolheu ja sabe o nome. */
+  rotulo: string | null;
+  aoEscolher: (opcao: { id: number; nome: string } | null) => void;
+  buscar: (termo: string) => Promise<{ id: number; nome: string }[]>;
+  placeholder?: string;
+  autoFocus?: boolean;
+  desabilitado?: boolean;
+}) {
+  const [termo, setTermo] = useState("");
+  const [opcoes, setOpcoes] = useState<{ id: number; nome: string }[]>([]);
+  const [aberto, setAberto] = useState(false);
+  const [buscando, setBuscando] = useState(false);
+  const caixa = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!aberto) return;
+
+    const fora = (e: MouseEvent) => {
+      if (caixa.current && !caixa.current.contains(e.target as Node)) setAberto(false);
+    };
+
+    document.addEventListener("mousedown", fora);
+    return () => document.removeEventListener("mousedown", fora);
+  }, [aberto]);
+
+  useEffect(() => {
+    if (!aberto) return;
+
+    const t = setTimeout(() => {
+      setBuscando(true);
+      buscar(termo)
+        .then(setOpcoes)
+        .catch(() => setOpcoes([]))
+        .finally(() => setBuscando(false));
+    }, 250);
+
+    return () => clearTimeout(t);
+  }, [termo, aberto, buscar]);
+
+  if (valor != null && rotulo) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <div style={{ ...inputStyle, display: "flex", alignItems: "center", minWidth: 0 }}>
+          <span
+            style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+            title={rotulo}
+          >
+            {rotulo}
+          </span>
+        </div>
+
+        {!desabilitado && (
+          <button
+            type="button"
+            onClick={() => {
+              aoEscolher(null);
+              setTermo("");
+            }}
+            title="Escolher outro"
+            aria-label="Escolher outro"
+            style={{
+              width: 26,
+              height: 26,
+              flexShrink: 0,
+              display: "grid",
+              placeItems: "center",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius-sm)",
+              background: "var(--surface)",
+              cursor: "pointer",
+              color: "var(--text-secondary)",
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div ref={caixa} style={{ position: "relative" }}>
+      <input
+        value={termo}
+        autoFocus={autoFocus}
+        disabled={desabilitado}
+        placeholder={placeholder}
+        onFocus={() => setAberto(true)}
+        onChange={(e) => {
+          setTermo(e.target.value);
+          setAberto(true);
+        }}
+        style={inputStyle}
+      />
+
+      {aberto && (
+        <div
+          style={{
+            position: "absolute",
+            top: "calc(100% + 4px)",
+            left: 0,
+            right: 0,
+            zIndex: 20,
+            maxHeight: 240,
+            overflowY: "auto",
+            padding: 4,
+            border: "1px solid var(--border)",
+            borderRadius: "var(--radius-md)",
+            background: "var(--surface)",
+            boxShadow: "var(--shadow-md)",
+          }}
+        >
+          {buscando && opcoes.length === 0 ? (
+            <Recado>Buscandoâ€¦</Recado>
+          ) : opcoes.length === 0 ? (
+            <Recado>{termo ? "Nada encontrado." : "Digite para buscar."}</Recado>
+          ) : (
+            opcoes.map((o) => (
+              <ItemDaBusca
+                key={o.id}
+                nome={o.nome}
+                onClick={() => {
+                  aoEscolher(o);
+                  setAberto(false);
+                  setTermo("");
+                }}
+              />
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Recado({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ padding: "8px 10px", fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>
+      {children}
+    </div>
+  );
+}
+
+function ItemDaBusca({ nome, onClick }: { nome: string; onClick: () => void }) {
+  const [hover, setHover] = useState(false);
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: "block",
+        width: "100%",
+        padding: "7px 10px",
+        border: "none",
+        borderRadius: "var(--radius-sm)",
+        background: hover ? "var(--surface-2)" : "transparent",
+        color: "var(--text-primary)",
+        fontSize: "var(--text-sm)",
+        fontFamily: "var(--font)",
+        textAlign: "left",
+        cursor: "pointer",
+      }}
+    >
+      {nome}
+    </button>
+  );
+}
+

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Drawer } from "@/components/ui/drawer";
 import {
   Button,
@@ -8,8 +8,16 @@ import {
   Field,
   Formulario,
   GrupoDeCampos,
+  inputDeCelula,
   inputStyle,
+  Pagination,
   selectStyle,
+  SeletorBuscavel,
+  TableArea,
+  TableHead,
+  Td,
+  Th,
+  Tr,
 } from "@/components/ui/kit";
 import { useAvisos } from "@/components/ui/avisos";
 import { filaDeRecebimento } from "@/shared/domain/parcelas";
@@ -46,6 +54,15 @@ type Valores = Record<number, { valor: number; juros: number; multa: number; qui
 const VAZIO = { valor: 0, juros: 0, multa: 0, quitar: false };
 
 /**
+ * Quantas parcelas cabem numa pagina da baixa.
+ *
+ * Dez porque a lista aqui e o meio, e nao o fim: quem baixa esta olhando o total
+ * la embaixo, e uma tabela mais alta que a tela empurra o total para fora
+ * justamente na hora de conferir.
+ */
+const POR_PAGINA_NA_BAIXA = 10;
+
+/**
  * A linha preenchida: tudo o que falta, mais o acréscimo que a política sugere.
  *
  * O juros entra calculado e não zerado porque digitar é o passo em que se erra:
@@ -75,7 +92,14 @@ export function NovoRecebimentoDrawer({
   aoCriar,
   onClose,
 }: {
-  clientes: { id: number; nome: string }[];
+  /**
+   * Quem ja veio decidido de fora, com o nome.
+   *
+   * ⚠️ Nao e mais a lista inteira: o seletor busca no servidor. Isto existe so
+   * para o caso em que o drawer abre de dentro de uma conta, onde o pagador ja
+   * esta escolhido e a tela precisa saber como chama-lo.
+   */
+  clientes?: { id: number; nome: string }[];
   /** Já vem escolhido quando o drawer abre a partir de uma conta. */
   clienteInicial?: number;
   /**
@@ -91,12 +115,37 @@ export function NovoRecebimentoDrawer({
 }) {
   const { avisar } = useAvisos();
 
+
+  /**
+   * Os clientes que casam com o que foi digitado.
+   *
+   * ⚠️ So os ATIVOS e so quem e cliente: fornecedor e cadastro aposentado nao
+   * recebem dinheiro, e ocupariam a lista curta que a busca devolve.
+   */
+  const buscarClientes = useCallback(async (termo: string) => {
+    const p = new URLSearchParams({ perPage: "15", papel: "cliente", ativo: "true" });
+    if (termo.trim()) p.set("busca", termo.trim());
+
+    const r = await fetch(`/api/v1/clientes?${p.toString()}`);
+    if (!r.ok) return [];
+
+    const corpo = await r.json();
+
+    return ((corpo.data ?? []) as { id: number; razao: string; nomeFantasia: string | null }[]).map(
+      (c) => ({ id: c.id, nome: c.nomeFantasia?.trim() || c.razao }),
+    );
+  }, []);
+
   const [clienteId, setClienteId] = useState(clienteInicial ? String(clienteInicial) : "");
   const [data, setData] = useState<string>(hoje());
   const [tipo, setTipo] = useState<string>("PIX");
   const [contaId, setContaId] = useState("");
   const [observacoes, setObservacoes] = useState("");
+  const [nomeDoCliente, setNomeDoCliente] = useState<string | null>(
+    () => clientes?.find((c) => c.id === clienteInicial)?.nome ?? null,
+  );
   const [taxa, setTaxa] = useState(0);
+  const [paginaDeParcelas, setPaginaDeParcelas] = useState(1);
   const [dataCredito, setDataCredito] = useState(() =>
     previsaoDeCredito("PIX", hoje()),
   );
@@ -134,6 +183,13 @@ export function NovoRecebimentoDrawer({
     [carga, clienteId],
   );
   const carregando = clienteId !== "" && carga.de !== clienteId;
+
+  const totalPaginas = Math.max(1, Math.ceil(parcelas.length / POR_PAGINA_NA_BAIXA));
+  const paginaAtual = Math.min(paginaDeParcelas, totalPaginas);
+  const visiveis = parcelas.slice(
+    (paginaAtual - 1) * POR_PAGINA_NA_BAIXA,
+    paginaAtual * POR_PAGINA_NA_BAIXA,
+  );
 
   useEffect(() => {
     const controle = new AbortController();
@@ -285,7 +341,6 @@ export function NovoRecebimentoDrawer({
     aoCriar();
   }
 
-  const contasDaLista = [...new Set(parcelas.map((p) => p.faturaId))];
 
   return (
     <Drawer
@@ -329,26 +384,35 @@ export function NovoRecebimentoDrawer({
           titulo="O dinheiro que entrou"
           legenda="Um pagamento é de um pagador só, e pode quitar parcelas de contas diferentes. É assim que o extrato do banco vê: uma linha só."
         >
-        <Field label="Cliente" required hint="De quem veio o dinheiro. Um pagamento é de um pagador só.">
-          {/* Trocar de cliente zera a distribuicao: as parcelas sao outras, e um
-              valor digitado para a parcela de outro cliente nao significa nada
-              aqui. Fica no onChange e nao num efeito porque o reset e
-              consequencia do gesto, nao do render. */}
-          <select
-            value={clienteId}
-            onChange={(e) => {
-              setClienteId(e.target.value);
+        {/*
+          ⚠️ BUSCA, e nao lista pronta.
+
+          Um `<select>` carrega tudo antes de mostrar qualquer coisa: numa base
+          com vinte mil clientes ativos, sao vinte mil linhas no HTML da pagina
+          para escolher uma, e a tela trava antes de aparecer. Aqui a pergunta vai
+          ao servidor com o que ja foi digitado.
+        */}
+        <Field
+          label="Cliente"
+          required
+          hint="De quem veio o dinheiro. Um pagamento é de um pagador só."
+        >
+          <SeletorBuscavel
+            valor={clienteId ? Number(clienteId) : null}
+            rotulo={nomeDoCliente}
+            // Vindo de uma conta, o pagador ja esta decidido: trocar aqui abriria
+            // parcelas de outro cliente na tela que existe para baixar ESTA.
+            desabilitado={clienteInicial != null}
+            buscar={buscarClientes}
+            aoEscolher={(c) => {
+              setClienteId(c ? String(c.id) : "");
+              setNomeDoCliente(c?.nome ?? null);
+              /* Trocar de cliente zera a distribuicao: as parcelas sao outras, e
+                 um valor digitado para a parcela de outro cliente nao significa
+                 nada aqui. */
               setValores({});
             }}
-            style={selectStyle}
-          >
-            <option value="">Escolher…</option>
-            {clientes.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.nome}
-              </option>
-            ))}
-          </select>
+          />
         </Field>
 
         <Field
@@ -482,65 +546,228 @@ export function NovoRecebimentoDrawer({
           */}
           <GrupoDeCampos
             titulo="Para onde foi"
-            legenda="Dentro de cada conta a ordem é a do vencimento: a parcela seguinte abre quando a anterior fecha."
+            legenda="Dentro de cada conta a ordem é a do vencimento: a parcela seguinte abre quando a anterior fecha. Clicar no que está em aberto preenche a linha inteira."
           >
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            {contasDaLista.map((faturaId) => (
-              <div key={faturaId}>
-                {/* O numero da conta encabeca o bloco: sem ele "parcela 1"
-                    apareceria tres vezes na lista sem nada que as distinga. */}
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    marginBottom: 6,
-                    paddingBottom: 5,
-                    borderBottom: "1px solid var(--section-border)",
-                  }}
-                >
-                  <span
-                    style={{
-                      fontSize: "var(--text-xs)",
-                      fontWeight: "var(--fw-semi)",
-                      letterSpacing: "var(--tracking-wide)",
-                      color: "var(--section-title)",
-                    }}
-                  >
-                    CONTA {faturaId}
-                  </span>
-                  <span style={{ fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>
-                    {formatarSemSimbolo(
-                      parcelas
-                        .filter((p) => p.faturaId === faturaId)
-                        .reduce((s, p) => s + p.emAberto, 0) as Centavos,
-                    )}{" "}
-                    em aberto
-                  </span>
-                </div>
+            {/*
+              ⚠️ TABELA, e nao um cartao por parcela.
 
-                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  {parcelas
-                    .filter((p) => p.faturaId === faturaId)
-                    .map((p) => (
-                      <LinhaParcela
-                        key={p.parcelaId}
-                        parcela={p}
-                        estado={valores[p.parcelaId] ?? VAZIO}
-                        liberada={liberadas.has(p.parcelaId)}
-                        aoMudar={(campo, v) => mudar(p.parcelaId, campo, v)}
-                        aoPreencher={() =>
-                          setValores((atual) => ({
-                            ...atual,
-                            [p.parcelaId]: preencher(p, carga.cobranca, data),
-                          }))
+              Sao seis numeros por linha — em aberto, recebido, juros, multa,
+              desconto — e cartao empilhado punha cada um num lugar diferente da
+              tela: conferir se a soma bate exigia ler quinze blocos em vez de
+              varrer uma coluna. Aqui valor fica embaixo de valor.
+            */}
+            <TableArea minWidth={0}>
+              <TableHead>
+                <Th minWidth={110}>Conta</Th>
+                <Th minWidth={100}>Vence</Th>
+                <Th minWidth={110}>Em aberto</Th>
+                <Th minWidth={110}>Recebi</Th>
+                {/*
+                  ⚠️ A unidade no rotulo, e nao so no campo.
+
+                  Juros e multa se falam em porcentagem no dia a dia — "dois por
+                  cento de multa" —, e um campo chamado so "Juros" convida a
+                  digitar 2 querendo dizer 2%. Aqui o que entra e o dinheiro que
+                  o cliente pagou a mais, e o rotulo diz isso antes do erro.
+                */}
+                <Th minWidth={100}>Juros (R$)</Th>
+                <Th minWidth={100}>Multa (R$)</Th>
+                <Th minWidth={110}>Desconto (R$)</Th>
+              </TableHead>
+
+              <tbody>
+                {visiveis.map((p) => {
+                  const estado = valores[p.parcelaId] ?? VAZIO;
+                  const liberada = liberadas.has(p.parcelaId);
+                  const atrasada = p.vencimento != null && p.vencimento < hoje();
+                  // O desconto e o que falta para fechar a parcela, e so conta
+                  // quando alguem decidiu perdoar.
+                  const desconto = estado.quitar ? Math.max(0, p.emAberto - estado.valor) : 0;
+
+                  return (
+                    <Tr
+                      key={p.parcelaId}
+                      /*
+                        A parcela que ainda nao chegou na fila aparece apagada, e
+                        nao escondida: some, e ninguem entende por que a conta tem
+                        tres parcelas e a tela mostra uma.
+                      */
+                      dimmed={!liberada}
+                    >
+                      <Td>
+                        {p.faturaNumero}
+                        <div
+                          style={{
+                            marginTop: 1,
+                            fontSize: "var(--text-xs)",
+                            color: "var(--text-tertiary)",
+                          }}
+                        >
+                          parcela {p.numero}
+                          {p.totalParcelas > 0 && ` de ${p.totalParcelas}`}
+                        </div>
+                      </Td>
+
+                      <Td
+                        style={
+                          atrasada
+                            ? { color: "var(--danger-text)", fontWeight: "var(--fw-medium)" }
+                            : undefined
                         }
-                      />
-                    ))}
-                </div>
-              </div>
-            ))}
-          </div>
+                      >
+                        {p.vencimento ? paraFormatoBR(p.vencimento as DataISO) : "—"}
+                      </Td>
+
+                      <Td>
+                        {/*
+                          O valor em aberto e um BOTAO: clicar preenche a linha
+                          com tudo o que falta mais o acrescimo sugerido. E o caso
+                          comum — o cliente pagou a parcela inteira —, e digitar o
+                          numero que ja esta escrito ao lado seria trabalho de
+                          copia.
+                        */}
+                        <button
+                          type="button"
+                          disabled={!liberada}
+                          title={
+                            liberada
+                              ? "Preencher com tudo o que falta"
+                              : "A parcela anterior desta conta ainda está em aberto"
+                          }
+                          onClick={() =>
+                            setValores((atual) => ({
+                              ...atual,
+                              [p.parcelaId]: preencher(p, carga.cobranca, data),
+                            }))
+                          }
+                          style={{
+                            border: "none",
+                            background: "none",
+                            padding: 0,
+                            fontSize: "var(--text-sm)",
+                            fontFamily: "var(--font)",
+                            fontVariantNumeric: "tabular-nums",
+                            color: "inherit",
+                            textDecoration: liberada ? "underline dotted" : undefined,
+                            textUnderlineOffset: 3,
+                            cursor: liberada ? "pointer" : "not-allowed",
+                          }}
+                        >
+                          {formatarSemSimbolo(p.emAberto as Centavos)}
+                        </button>
+
+                        {p.recebido > 0 && (
+                          <div
+                            style={{
+                              marginTop: 1,
+                              fontSize: "var(--text-xs)",
+                              color: "var(--text-tertiary)",
+                            }}
+                          >
+                            já entrou {formatarSemSimbolo(p.recebido as Centavos)}
+                          </div>
+                        )}
+                      </Td>
+
+                      <Td>
+                        <CampoNumerico
+                          valor={estado.valor}
+                          escala={100}
+                          style={inputDeCelula}
+                          aoMudar={(v) =>
+                            mudar(p.parcelaId, "valor", liberada ? Math.min(v, p.emAberto) : 0)
+                          }
+                        />
+                      </Td>
+
+                      {/*
+                        ⚠️ Juros e multa NAO abatem a divida: entram no caixa por
+                        cima do valor. Por isso ficam depois do "Recebi", e nunca
+                        somados a ele.
+                      */}
+                      <Td>
+                        <CampoNumerico
+                          valor={estado.juros}
+                          escala={100}
+                          style={inputDeCelula}
+                          aoMudar={(v) => mudar(p.parcelaId, "juros", v)}
+                        />
+                      </Td>
+
+                      <Td>
+                        <CampoNumerico
+                          valor={estado.multa}
+                          escala={100}
+                          style={inputDeCelula}
+                          aoMudar={(v) => mudar(p.parcelaId, "multa", v)}
+                        />
+                      </Td>
+
+                      {/*
+                        ⚠️ A pergunta que o sistema nao pode responder sozinho.
+
+                        Recebi 500 de 510: os 10 continuam devidos, ou eu abri
+                        mao? As duas respostas sao legitimas, e so quem recebeu
+                        sabe. O padrao e deixar em aberto — perdoar divida por
+                        omissao seria a escolha errada de fazer sozinho.
+                      */}
+                      {/*
+                        ⚠️ O desconto se DIGITA, e o recebido se ajusta sozinho.
+
+                        Recebi 500 de 510: os 10 continuam devidos, ou eu abri
+                        mao? As duas respostas sao legitimas, e so quem recebeu
+                        sabe. Antes era uma caixa de "quitar" que perdoava a
+                        diferenca inteira — o que servia para 10 e nao para quem
+                        perdoa 50 de uma parcela que ainda vai ser cobrada.
+
+                        Digitando aqui, o campo diz quanto se abre mao, e o
+                        "Recebi" vira o que sobra. Zero significa que nada foi
+                        perdoado, e a diferenca continua a cobrar.
+                      */}
+                      <Td>
+                        <CampoNumerico
+                          valor={desconto}
+                          escala={100}
+                          style={inputDeCelula}
+                          aoMudar={(v) => {
+                            const perdoado = Math.min(Math.max(0, v), p.emAberto);
+
+                            setValores((atual) => ({
+                              ...atual,
+                              [p.parcelaId]: {
+                                ...(atual[p.parcelaId] ?? VAZIO),
+                                valor: (p.emAberto - perdoado) as number,
+                                // Perdoar significa fechar a parcela com menos:
+                                // sem isto, a diferenca voltaria a ser cobrada.
+                                quitar: perdoado > 0,
+                              },
+                            }));
+                          }}
+                        />
+                      </Td>
+                    </Tr>
+                  );
+                })}
+              </tbody>
+            </TableArea>
+
+            {/*
+              ⚠️ Pagina, e a soma do rodape continua sendo do TODO.
+
+              Um cliente com trinta parcelas em aberto nao cabe na tela, e rolar
+              trinta linhas para achar a que se quer baixar e pior do que virar
+              pagina. O que ja foi digitado nas outras paginas continua valendo:
+              o estado e da baixa inteira, e nao da pagina.
+            */}
+            {parcelas.length > POR_PAGINA_NA_BAIXA && (
+              <Pagination
+                page={paginaAtual}
+                totalPages={totalPaginas}
+                total={parcelas.length}
+                pageSize={POR_PAGINA_NA_BAIXA}
+                onPage={setPaginaDeParcelas}
+              />
+            )}
           </GrupoDeCampos>
         </>
       )}
@@ -564,181 +791,6 @@ function Aviso({ children }: { children: React.ReactNode }) {
       }}
     >
       {children}
-    </div>
-  );
-}
-
-/**
- * Uma parcela candidata a receber.
- *
- * Juros e multa so aparecem depois que a linha tem valor: com quinze parcelas na
- * tela, tres campos em cada uma viram um paredao, e o acrescimo e a excecao, nao
- * a regra. Assim que a pessoa se compromete com a linha, os tres campos estao la.
- */
-function LinhaParcela({
-  parcela,
-  estado,
-  liberada,
-  aoMudar,
-  aoPreencher,
-}: {
-  parcela: ParcelaEmAberto;
-  estado: { valor: number; juros: number; multa: number; quitar: boolean };
-  liberada: boolean;
-  aoMudar: (campo: "valor" | "juros" | "multa" | "quitar", v: number | boolean) => void;
-  /** Preenche a linha inteira: o que falta mais o acréscimo sugerido. */
-  aoPreencher: () => void;
-}) {
-  const atrasada = parcela.vencimento != null && parcela.vencimento < hoje();
-  const diferenca = estado.valor > 0 ? parcela.emAberto - estado.valor : 0;
-
-  return (
-    <div
-      style={{
-        padding: "10px 12px",
-        borderRadius: "var(--radius-md)",
-        border: "1px solid var(--border)",
-        background: liberada ? "var(--surface)" : "var(--surface-2)",
-        opacity: liberada ? 1 : 0.55,
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <span
-          style={{
-            fontSize: "var(--text-xs)",
-            fontWeight: "var(--fw-semi)",
-            letterSpacing: "var(--tracking-wide)",
-            color: "var(--text-secondary)",
-          }}
-        >
-          PARCELA {parcela.numero}
-          {parcela.totalParcelas > 0 && ` DE ${parcela.totalParcelas}`}
-        </span>
-
-        <span
-          style={{
-            fontSize: "var(--text-sm)",
-            color: atrasada ? "var(--danger-text)" : "var(--text-tertiary)",
-            fontWeight: atrasada ? "var(--fw-medium)" : 400,
-          }}
-        >
-          vence {parcela.vencimento ? paraFormatoBR(parcela.vencimento as DataISO) : "—"}
-        </span>
-
-        <span style={{ flex: 1 }} />
-
-        {parcela.recebido > 0 && (
-          <span style={{ fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>
-            já entrou {formatarSemSimbolo(parcela.recebido as Centavos)}
-          </span>
-        )}
-      </div>
-
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
-        <button
-          type="button"
-          disabled={!liberada}
-          title={
-            liberada
-              ? "Preencher com tudo o que falta"
-              : "A parcela anterior desta conta ainda está em aberto"
-          }
-          onClick={aoPreencher}
-          style={{
-            border: "none",
-            background: "none",
-            padding: 0,
-            fontSize: "var(--text-sm)",
-            color: "var(--text-secondary)",
-            fontFamily: "var(--font)",
-            cursor: liberada ? "pointer" : "not-allowed",
-          }}
-        >
-          Em aberto{" "}
-          <strong style={{ fontVariantNumeric: "tabular-nums" }}>
-            {formatarSemSimbolo(parcela.emAberto as Centavos)}
-          </strong>
-        </button>
-
-        <span style={{ flex: 1 }} />
-
-        <span style={{ fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>Recebi</span>
-        <div style={{ width: 130 }}>
-          <CampoNumerico
-            valor={estado.valor}
-            escala={100}
-            aoMudar={(v) => aoMudar("valor", liberada ? Math.min(v, parcela.emAberto) : 0)}
-          />
-        </div>
-      </div>
-
-      {estado.valor > 0 && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            marginTop: 8,
-            paddingTop: 8,
-            borderTop: "1px solid var(--border)",
-          }}
-        >
-          {/* Juros e multa NAO abatem a divida: entram no caixa por cima do
-              valor. Por isso ficam depois do "Recebi", e nao no lugar dele. */}
-          <span style={{ fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>Juros</span>
-          <div style={{ width: 100 }}>
-            <CampoNumerico valor={estado.juros} escala={100} aoMudar={(v) => aoMudar("juros", v)} />
-          </div>
-
-          <span style={{ fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>Multa</span>
-          <div style={{ width: 100 }}>
-            <CampoNumerico valor={estado.multa} escala={100} aoMudar={(v) => aoMudar("multa", v)} />
-          </div>
-
-          <span style={{ flex: 1 }} />
-
-          {(estado.juros > 0 || estado.multa > 0) && (
-            <span style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>
-              entra{" "}
-              <strong style={{ fontVariantNumeric: "tabular-nums" }}>
-                {formatarSemSimbolo((estado.valor + estado.juros + estado.multa) as Centavos)}
-              </strong>
-            </span>
-          )}
-        </div>
-      )}
-
-      {/*
-       * A pergunta que o sistema nao pode responder sozinho.
-       *
-       * Recebi 500 de 510: os 10 continuam devidos, ou eu abri mao? As duas
-       * respostas sao legitimas, e so quem recebeu sabe. O padrao e deixar em
-       * aberto — perdoar divida por omissao seria a escolha errada de fazer
-       * sozinho.
-       */}
-      {diferenca > 0 && (
-        <label
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            marginTop: 8,
-            paddingTop: 8,
-            borderTop: "1px solid var(--border)",
-            fontSize: "var(--text-sm)",
-            color: "var(--text-secondary)",
-            cursor: "pointer",
-          }}
-        >
-          <input
-            type="checkbox"
-            checked={estado.quitar}
-            onChange={(e) => aoMudar("quitar", e.target.checked)}
-            style={{ accentColor: "var(--primary)", cursor: "pointer" }}
-          />
-          Quitar e dar {formatarSemSimbolo(diferenca as Centavos)} de desconto
-        </label>
-      )}
     </div>
   );
 }
