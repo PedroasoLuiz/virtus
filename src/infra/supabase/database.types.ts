@@ -698,6 +698,25 @@ export type MenuFavoritoRow = {
 };
 
 /**
+ * Chave de idempotencia de escrita financeira.
+ *
+ * `http` nulo significa "ainda correndo": a linha e reservada antes de a rota
+ * rodar, e so ganha resposta quando ela termina bem.
+ */
+export type IdempotenciaRow = {
+  id: number;
+  created_at: string;
+  fkEmpresa: number;
+  chave: string;
+  rota: string;
+  /** Hash do corpo. Mesma chave com corpo diferente e erro, e nao reenvio. */
+  impressao: string;
+  resposta: unknown | null;
+  http: number | null;
+  concluido_em: string | null;
+};
+
+/**
  * Conversa do WhatsApp — uma por telefone dentro de um numero.
  *
  * ⚠️ `whatsappcontas` NAO tem tipo aqui de proposito: a tabela guarda o segredo
@@ -839,6 +858,7 @@ export type Database = {
       ordensservicoxservicosdespesas: { Row: TicketServicoDespesaRow; Insert: Partial<TicketServicoDespesaRow>; Update: Partial<TicketServicoDespesaRow>; Relationships: [] };
       ordensservicostatus: { Row: TicketStatusRow; Insert: Partial<TicketStatusRow>; Update: Partial<TicketStatusRow>; Relationships: [] };
       menufavoritos: { Row: MenuFavoritoRow; Insert: Partial<MenuFavoritoRow>; Update: Partial<MenuFavoritoRow>; Relationships: [] };
+      idempotencia: { Row: IdempotenciaRow; Insert: Partial<IdempotenciaRow>; Update: Partial<IdempotenciaRow>; Relationships: [] };
       assinaturas: { Row: AssinaturaRow; Insert: Partial<AssinaturaRow>; Update: Partial<AssinaturaRow>; Relationships: [] };
       whatsappconversas: { Row: WhatsappConversaRow; Insert: Partial<WhatsappConversaRow>; Update: Partial<WhatsappConversaRow>; Relationships: [] };
       whatsappmensagens: { Row: WhatsappMensagemRow; Insert: Partial<WhatsappMensagemRow>; Update: Partial<WhatsappMensagemRow>; Relationships: [] };

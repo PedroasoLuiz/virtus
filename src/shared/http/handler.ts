@@ -1,5 +1,6 @@
 import { ZodError, type ZodType } from "zod";
-import { AppError, UnauthorizedError, isAppError } from "@/shared/errors/app-error";
+import { AppError, ConflictError, UnauthorizedError, isAppError } from "@/shared/errors/app-error";
+import { concluir, liberar, reservar } from "@/shared/http/idempotencia";
 import { fail } from "@/shared/http/response";
 import { novoRequestId } from "@/shared/utils/ids";
 import { logger } from "@/shared/utils/logger";
@@ -43,6 +44,14 @@ type Opcoes<B, Q, P> = Schemas<B, Q, P> & {
   auth?: boolean;
   /** Modulo que o plano da empresa precisa incluir. Ver modules/plataforma. */
   requerModulo?: Modulo;
+  /**
+   * A rota grava dinheiro e aceita `Idempotency-Key`.
+   *
+   * ⚠️ Vale para escrita FINANCEIRA, e nao para todo POST. O preco da protecao
+   * e uma linha gravada por pedido; cobrar isso de um cadastro de contato, que
+   * no pior caso vira uma linha repetida que se apaga, seria caro a toa.
+   */
+  idempotente?: boolean;
 };
 
 /**
@@ -76,11 +85,82 @@ export function handler<B = undefined, Q = undefined, P = RouteParams>(
         opcoes.params ? opcoes.params.parse(paramsBrutos) : paramsBrutos
       ) as P;
 
-      return await controller({ body, query, params, ctx, requestId, req });
+      const entrada = { body, query, params, ctx, requestId, req };
+
+      /*
+       * ⚠️ A chave e OPCIONAL, e a rota funciona sem ela.
+       *
+       * Exigir o cabecalho quebraria todo consumidor que ja chama a API, e a
+       * protecao que ela da e do lado de quem chama: e o cliente que sabe que
+       * dois pedidos sao a mesma intencao. Sem chave, o comportamento e o de
+       * sempre.
+       */
+      const chave = opcoes.idempotente ? req.headers.get("Idempotency-Key")?.trim() : null;
+
+      if (!chave || ctx.empresaId == null) return await controller(entrada);
+
+      return await comIdempotencia(chave, ctx.empresaId, req, body, () => controller(entrada));
     } catch (err) {
       return tratarErro(err, requestId, req);
     }
   };
+}
+
+/**
+ * Roda a rota uma vez por chave, e devolve a mesma resposta no reenvio.
+ *
+ * ⚠️ A resposta e LIDA para ser guardada, e por isso o clone. `Response` traz
+ * um corpo de leitura unica: consumindo o original, o que chegaria ao navegador
+ * seria um corpo ja esvaziado.
+ */
+async function comIdempotencia(
+  chave: string,
+  empresaId: number,
+  req: Request,
+  body: unknown,
+  executar: () => Promise<Response>,
+): Promise<Response> {
+  const rota = new URL(req.url).pathname;
+  const reserva = await reservar(empresaId, chave, rota, body);
+
+  if (reserva.tipo === "repetido") {
+    return new Response(JSON.stringify(reserva.corpo), {
+      status: reserva.http,
+      headers: { "Content-Type": "application/json", "Idempotency-Replayed": "true" },
+    });
+  }
+
+  if (reserva.tipo === "em_andamento") {
+    throw new ConflictError(
+      "Este mesmo envio ainda está sendo processado. Aguarde antes de tentar de novo.",
+    );
+  }
+
+  let resposta: Response;
+  try {
+    resposta = await executar();
+  } catch (err) {
+    // Falhou antes de responder: a chave sai do caminho para o proximo envio.
+    await liberar(reserva.id);
+    throw err;
+  }
+
+  /*
+   * ⚠️ So o SUCESSO e guardado.
+   *
+   * Uma recusa de regra de negocio e um pedido que nao gravou nada, e guardar
+   * significaria devolver o mesmo "nao" para sempre — inclusive depois de a
+   * pessoa corrigir o valor e reenviar com a mesma chave.
+   */
+  if (resposta.status >= 400) {
+    await liberar(reserva.id);
+    return resposta;
+  }
+
+  const copia = resposta.clone();
+  await concluir(reserva.id, resposta.status, await copia.json().catch(() => null));
+
+  return resposta;
 }
 
 async function lerJson(req: Request): Promise<unknown> {

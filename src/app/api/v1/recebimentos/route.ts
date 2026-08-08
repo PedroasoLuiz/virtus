@@ -18,7 +18,15 @@ export const GET = handler(
   controller.listar,
 );
 
+/*
+ * ⚠️ `idempotente`: esta rota mexe em dinheiro.
+ *
+ * Mandando `Idempotency-Key`, o mesmo envio grava uma vez so. O caso real nao e
+ * o duplo clique — a tela trava o botao —, e sim a resposta que se perde depois
+ * de a baixa ja ter sido gravada: quem clica de novo estaria criando um segundo
+ * recebimento sobre as mesmas parcelas.
+ */
 export const POST = handler(
-  { body: criarRecebimentoBodySchema, requerModulo: "financeiro" },
+  { body: criarRecebimentoBodySchema, requerModulo: "financeiro", idempotente: true },
   controller.criar,
 );

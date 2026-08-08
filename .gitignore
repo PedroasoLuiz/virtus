@@ -22,3 +22,6 @@ docs/
 
 # Capturas soltas na raiz: sao referencia de conversa, nao codigo.
 /Captura de tela*.png
+
+# Referencia de conversa solta na raiz, como as capturas.
+/modelo*.png
