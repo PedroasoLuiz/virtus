@@ -21,6 +21,7 @@ import {
   selectStyle,
 } from "@/components/ui/kit";
 import type { DadoBancarioDaPessoa } from "@/modules/clientes/clientes.types";
+import { BANCOS } from "@/shared/domain/brasil";
 import { useRecursoDaPessoa, type CacheDoDrawer } from "./cache-do-drawer";
 
 /**
@@ -260,7 +261,6 @@ function Formulario({
     <FormDrawer
       aberto
       nivel={2}
-      larguraDrawer={460}
       titulo={dado ? "Editar conta" : "Nova conta"}
       onClose={onFechar}
       aoSalvar={onSalvou}
@@ -289,14 +289,28 @@ function Formulario({
         ...(dado ? {} : { principal: form.principal }),
       })}
     >
+      {/*
+        ⚠️ A lista SUGERE, e não obriga.
+
+        Sem ela, o mesmo banco entrava como "Itau", "ITAÚ" e "341" em três
+        cadastros da mesma pessoa. Fechando a lista, porém, cooperativa regional e
+        fintech nova travariam o cadastro até alguém mexer no código: aqui o campo
+        continua aceitando o que for digitado.
+      */}
       <Field label="Banco">
         <input
           style={inputStyle}
           value={form.banco}
           onChange={(e) => set("banco", e.target.value)}
           placeholder="Nome ou número do banco"
+          list="bancos-conhecidos"
           autoFocus
         />
+        <datalist id="bancos-conhecidos">
+          {BANCOS.map((b) => (
+            <option key={b} value={b} />
+          ))}
+        </datalist>
       </Field>
 
       <Field label="Agência">

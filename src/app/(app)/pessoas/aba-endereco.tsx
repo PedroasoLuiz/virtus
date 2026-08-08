@@ -18,8 +18,11 @@ import {
   Th,
   Tr,
   inputStyle,
+  selectStyle,
 } from "@/components/ui/kit";
 import type { EnderecoDaPessoa } from "@/modules/clientes/clientes.types";
+import { UFS } from "@/shared/domain/brasil";
+import { buscarCep, cepCompleto, mascararCep } from "@/shared/domain/cep";
 import { useRecursoDaPessoa, type CacheDoDrawer } from "./cache-do-drawer";
 
 /**
@@ -248,8 +251,39 @@ function Formulario({
     principal: primeiro,
   });
 
+  const [buscando, setBuscando] = useState(false);
+
   const set = (campo: keyof typeof form, valor: string) =>
     setForm((f) => ({ ...f, [campo]: valor }));
+
+  /**
+   * Digitou o CEP inteiro, o resto do endereço vem junto.
+   *
+   * ⚠️ O que a busca traz SOBRESCREVE o que estava escrito. Quem digita outro CEP
+   * está dizendo que o endereço é outro, e preservar a rua antiga misturaria dois
+   * endereços num só. Número e complemento ficam: eles são do imóvel, não do CEP.
+   */
+  async function aoDigitarCep(bruto: string) {
+    const mascarado = mascararCep(bruto);
+    set("cep", mascarado);
+
+    if (!cepCompleto(mascarado)) return;
+
+    setBuscando(true);
+    const achado = await buscarCep(mascarado);
+    setBuscando(false);
+
+    // Sem achado a tela não reclama: CEP é atalho, e o serviço é de terceiro.
+    if (!achado) return;
+
+    setForm((f) => ({
+      ...f,
+      logradouro: achado.logradouro || f.logradouro,
+      bairro: achado.bairro || f.bairro,
+      cidade: achado.cidade || f.cidade,
+      uf: achado.uf || f.uf,
+    }));
+  }
 
   return (
     /*
@@ -266,7 +300,6 @@ function Formulario({
     <FormDrawer
       aberto
       nivel={2}
-      larguraDrawer={460}
       titulo={endereco ? "Editar endereço" : "Novo endereço"}
       onClose={onFechar}
       aoSalvar={onSalvou}
@@ -294,12 +327,20 @@ function Formulario({
         ...(endereco ? {} : { principal: form.principal }),
       })}
     >
-      <Field label="CEP">
+      {/*
+        ⚠️ O CEP PREENCHE o resto, e por isso vem primeiro.
+
+        Oito dígitos respondem logradouro, bairro, cidade e UF: pedi-los antes do
+        CEP era pedir para digitar o que a busca ia trazer. Número e complemento
+        continuam a cargo de quem cadastra, porque o CEP não sabe deles.
+      */}
+      <Field label="CEP" hint={buscando ? "Buscando o endereço…" : undefined}>
         <input
           style={inputStyle}
           value={form.cep}
-          onChange={(e) => set("cep", e.target.value)}
+          onChange={(e) => aoDigitarCep(e.target.value)}
           placeholder="00000-000"
+          inputMode="numeric"
           autoFocus
         />
       </Field>
@@ -349,14 +390,20 @@ function Formulario({
         />
       </Field>
 
+      {/*
+        ⚠️ Lista, e não texto de duas letras. Digitado, o mesmo estado entrava
+        como "mg", "MG" e "Mg", e a nota fiscal recusa qualquer um que não seja a
+        sigla exata.
+      */}
       <Field label="UF">
-        <input
-          style={{ ...inputStyle, textTransform: "uppercase" }}
-          value={form.uf}
-          onChange={(e) => set("uf", e.target.value.slice(0, 2))}
-          placeholder="UF"
-          maxLength={2}
-        />
+        <select style={selectStyle} value={form.uf} onChange={(e) => set("uf", e.target.value)}>
+          <option value="">Não informada</option>
+          {UFS.map((uf) => (
+            <option key={uf} value={uf}>
+              {uf}
+            </option>
+          ))}
+        </select>
       </Field>
 
       {!primeiro && !endereco && (

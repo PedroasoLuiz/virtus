@@ -127,7 +127,18 @@ export function FormDrawer<T>({
         ) : undefined
       }
     >
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{children}</div>
+      {/*
+        ⚠️ O vao e o TOKEN do formulario, e nao um 8 escrito aqui.
+
+        Campos colados entre si (3), titulo colado no primeiro campo (12), e o vao
+        grande so entre um assunto e outro (22). O 8 daqui ficava no meio do
+        caminho entre os tres e desmanchava a divisao que eles desenham.
+      */}
+      <div
+        style={{ display: "flex", flexDirection: "column", gap: "var(--form-gap-campo)" }}
+      >
+        {children}
+      </div>
     </Drawer>
   );
 }
