@@ -144,14 +144,23 @@ export function PessoaDrawer({
       url={editando ? `/api/v1/clientes/${cliente.id}` : "/api/v1/clientes"}
       metodo={editando ? "PATCH" : "POST"}
       /*
-       * ⚠️ Documento e data NAO seguram o salvar.
+       * ⚠️ Documento e data NAO seguram o salvar; um CANAL segura, e so no
+       * cadastro novo.
        *
-       * O cadastro nasce muitas vezes antes deles: um orcamento para quem ainda
-       * nao passou o CPF precisa de alguem para apontar. Travando aqui, o
-       * atendimento inventava documento para o botao liberar. Quem cobra a falta
-       * e o faturamento, quando o dado passa a ser necessario de verdade.
+       * O cadastro nasce muitas vezes antes do documento: um orcamento para quem
+       * ainda nao passou o CPF precisa de alguem para apontar, e travando ali o
+       * atendimento inventava numero para o botao liberar. Um jeito de falar com
+       * a pessoa e outra conversa: sem isso o que entra e um nome solto, e a
+       * primeira cobranca descobre que nao ha para onde mandar.
+       *
+       * Na edicao a regra nao vale: o canal mora na aba de contatos, que ja
+       * impede tirar o ultimo.
        */
-      podeSalvar={form.razao.trim().length > 0 && form.papeis.length > 0}
+      podeSalvar={
+        form.razao.trim().length > 0 &&
+        form.papeis.length > 0 &&
+        (editando || Boolean(form.contato.trim() || form.email.trim()))
+      }
       valores={() => ({
         razao: form.razao.trim(),
         // Pessoa fisica nao tem fantasia: o campo nem aparece, e mandar o que
@@ -165,13 +174,27 @@ export function PessoaDrawer({
         classificacaoTributaria: form.classificacaoTributaria || null,
         papeis: form.papeis,
         /*
+         * ⚠️ Contato, e-mail e endereco so vao no NASCIMENTO.
+         *
+         * Depois disso eles pertencem as abas: o principal e marcado numa coluna
+         * que grava sozinha, e o endereco tem drawer proprio. Mandando-os em todo
+         * salvar da ficha, um PATCH de nome desfaria o principal que a aba de
+         * contatos acabou de gravar.
+         */
+        ...(editando
+          ? { ativo: form.ativo }
+          : {
+              contato: form.contato.trim() || null,
+              email: form.email.trim() || null,
+              endereco: form.endereco,
+            }),
+        /*
          * ⚠️ `responsavel` e `centroCustoId` NAO saem daqui.
          *
          * O responsavel mora no contato agora, e a coluna de `clientes` e copia
          * do responsavel do principal. O centro tem gatilho no banco. Mandando os
          * dois, todo salvar de nome desfaria o que outra tela acabou de gravar.
          */
-        ...(editando ? { ativo: form.ativo } : {}),
       })}
     >
       {/*
@@ -211,6 +234,7 @@ export function PessoaDrawer({
           <AbaDeInformacoes
             form={form}
             set={set}
+            aplicar={(mudanca) => setForm((f) => ({ ...f, ...mudanca }))}
             clienteId={cliente?.id ?? null}
             novoCadastro={!editando}
           />

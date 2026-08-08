@@ -88,6 +88,15 @@ export type ClienteNovo = {
   inscricaoEstadual?: string | null;
   regimeTributario?: string | null;
   classificacaoTributaria?: string | null;
+  /**
+   * O endereco que nasce junto com a pessoa.
+   *
+   * ⚠️ So no CADASTRO. Depois disso, endereco se mexe na aba dele: aqui ele
+   * existe porque a consulta do CNPJ traz um pronto, e pedir para a pessoa
+   * salvar, abrir a aba e digitar de novo o que a Receita ja entregou seria
+   * jogar fora o unico motivo de a consulta existir.
+   */
+  endereco?: Omit<EnderecoDaPessoa, "id" | "principal"> | null;
 };
 
 /**

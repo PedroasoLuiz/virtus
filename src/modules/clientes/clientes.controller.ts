@@ -264,6 +264,21 @@ export async function criar({ body, ctx }: Entrada<CriarClienteBody, undefined, 
   const cliente = await service.criarCliente(empresaId, ctx.usuarioId, {
     ...body,
     papeis: body.papeis,
+    /*
+     * O endereco vem com os campos opcionais do schema, e o dominio quer texto ou
+     * nada. A traducao acontece aqui, que e o lugar de traduzir HTTP em dominio.
+     */
+    endereco: body.endereco
+      ? {
+          cep: body.endereco.cep?.trim() || null,
+          logradouro: body.endereco.logradouro?.trim() || null,
+          numero: body.endereco.numero?.trim() || null,
+          complemento: body.endereco.complemento?.trim() || null,
+          bairro: body.endereco.bairro?.trim() || null,
+          cidade: body.endereco.cidade?.trim() || null,
+          uf: body.endereco.uf?.trim().toUpperCase() || null,
+        }
+      : null,
   });
   return created(clienteSchema.parse(cliente));
 }

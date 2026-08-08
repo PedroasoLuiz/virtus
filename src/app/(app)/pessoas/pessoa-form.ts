@@ -26,6 +26,21 @@ export type Form = {
   classificacaoTributaria: string;
   papeis: PapelPessoa[];
   ativo: boolean;
+  /**
+   * O endereco que a consulta do CNPJ trouxe.
+   *
+   * ⚠️ So no cadastro NOVO, e so por causa dela. Depois que a pessoa existe, o
+   * endereco se mexe na aba dele, que sabe de principal, de varios e de exclusao.
+   */
+  endereco: {
+    cep: string;
+    logradouro: string;
+    numero: string;
+    complemento: string;
+    bairro: string;
+    cidade: string;
+    uf: string;
+  } | null;
 };
 
 export function inicial(cliente: Cliente | null): Form {
@@ -42,6 +57,7 @@ export function inicial(cliente: Cliente | null): Form {
     classificacaoTributaria: cliente?.classificacaoTributaria ?? "",
     papeis: cliente?.papeis ?? ["cliente"],
     ativo: cliente?.ativo ?? true,
+    endereco: null,
   };
 }
 

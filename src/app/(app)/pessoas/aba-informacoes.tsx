@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   ActiveToggle,
   CampoBloqueado,
@@ -10,6 +11,8 @@ import {
   selectStyle,
 } from "@/components/ui/kit";
 import { CLASSIFICACOES, REGIMES } from "@/modules/clientes/clientes.types";
+import { buscarCnpj, mascararDocumento } from "@/shared/domain/cnpj";
+import { mascararTelefone } from "@/shared/domain/telefone";
 import type { Form } from "./pessoa-form";
 
 /**
@@ -23,15 +26,20 @@ import type { Form } from "./pessoa-form";
 export function AbaDeInformacoes({
   form,
   set,
+  aplicar,
   clienteId,
   novoCadastro,
 }: {
   form: Form;
   set: <K extends keyof Form>(campo: K, valor: Form[K]) => void;
+  /** Mexe em vários campos de uma vez: é o que a consulta do CNPJ faz. */
+  aplicar: (mudanca: Partial<Form>) => void;
   /** `null` num cadastro que ainda não nasceu. */
   clienteId: number | null;
   novoCadastro: boolean;
 }) {
+  const [buscando, setBuscando] = useState(false);
+
   const digitos = form.cnpj.replace(/\D/g, "");
   const fisica = digitos.length > 0 && digitos.length <= 11;
 
@@ -56,6 +64,43 @@ export function AbaDeInformacoes({
    * que a razão social e o nome fantasia já tomam.
    */
   const juridica = !fisica;
+
+  /**
+   * Digitou o CNPJ inteiro, a Receita responde o resto.
+   *
+   * ⚠️ Só preenche o que está VAZIO, com uma exceção: a razão social e a data,
+   * que são o cadastro oficial e não opinião de quem digita. Sobrescrevendo tudo,
+   * quem corrigiu o nome fantasia à mão veria a correção sumir ao conferir o
+   * documento; preservando tudo, um cadastro começado errado nunca se acertaria.
+   *
+   * ⚠️ O ENDEREÇO fica guardado no formulário e nasce junto com a pessoa. Ele não
+   * tem campo aqui de propósito: endereço tem aba própria, com principal e vários.
+   * Aparece só a linha dizendo o que veio, para ninguém salvar sem saber.
+   */
+  async function aoDigitarDocumento(bruto: string) {
+    const mascarado = mascararDocumento(bruto);
+    set("cnpj", mascarado);
+
+    // Só CNPJ: pessoa física não tem cadastro público para consultar.
+    if (!novoCadastro || mascarado.replace(/\D/g, "").length !== 14) return;
+
+    setBuscando(true);
+    const achado = await buscarCnpj(mascarado);
+    setBuscando(false);
+
+    // Sem achado a tela não reclama: a consulta é atalho, e o serviço é de fora.
+    if (!achado) return;
+
+    aplicar({
+      razao: achado.razaoSocial || form.razao,
+      dataNascimento: achado.dataAbertura || form.dataNascimento,
+      nomeFantasia: form.nomeFantasia || achado.nomeFantasia,
+      contato: form.contato || achado.telefone,
+      email: form.email || achado.email,
+      regimeTributario: form.regimeTributario || achado.regime,
+      endereco: achado.endereco,
+    });
+  }
 
   return (
     /*
@@ -95,12 +140,22 @@ export function AbaDeInformacoes({
           </Field>
         )}
 
-        <Field label={rotuloDoDocumento} hint="Somente números">
+        <Field
+          label={rotuloDoDocumento}
+          hint={
+            buscando
+              ? "Buscando na Receita…"
+              : novoCadastro
+                ? "Com o CNPJ completo, o resto vem preenchido"
+                : undefined
+          }
+        >
           <input
             style={inputStyle}
             value={form.cnpj}
-            onChange={(e) => set("cnpj", e.target.value)}
+            onChange={(e) => void aoDigitarDocumento(e.target.value)}
             placeholder="00.000.000/0000-00"
+            inputMode="numeric"
           />
         </Field>
 
@@ -165,6 +220,74 @@ export function AbaDeInformacoes({
           </div>
         </Field>
       </GrupoDeCampos>
+
+      {/*
+        ⚠️ Telefone e e-mail SÓ no cadastro novo, e um deles é obrigatório.
+
+        Depois que a pessoa existe, os dois viram lista na aba de contatos, com
+        setor, responsável e a escolha de qual é o principal. Aqui eles são a
+        pergunta mínima: um nome sem jeito de falar com ele é um cadastro que a
+        primeira cobrança descobre estar vazio.
+
+        O que for digitado aqui nasce como o principal E como a primeira linha da
+        aba de contatos, para os dois nunca discordarem.
+      */}
+      {novoCadastro && (
+        <GrupoDeCampos
+          titulo="Como falar com esta pessoa"
+          legenda="Ao menos um dos dois. Depois de salvar, os demais telefones e e-mails entram na aba de contatos, cada um com o setor e quem atende."
+        >
+          <Field label="Telefone" required={!form.email.trim()}>
+            <input
+              style={inputStyle}
+              value={form.contato}
+              onChange={(e) => set("contato", mascararTelefone(e.target.value))}
+              placeholder="(00) 00000-0000"
+              inputMode="tel"
+            />
+          </Field>
+
+          <Field label="E-mail" required={!form.contato.trim()}>
+            <input
+              type="email"
+              style={inputStyle}
+              value={form.email}
+              onChange={(e) => set("email", e.target.value)}
+              placeholder="financeiro@empresa.com.br"
+            />
+          </Field>
+
+          {/*
+            ⚠️ O endereço não tem campo, mas tem AVISO.
+
+            Ele veio da Receita e vai nascer junto com a pessoa; sem esta linha,
+            um endereço apareceria do nada na aba depois de salvar, e ninguém
+            saberia de onde. Corrigir se faz lá, onde endereço se edita.
+          */}
+          {form.endereco && (
+            <Field label="Endereço">
+              <div
+                style={{
+                  minHeight: "var(--h-input)",
+                  display: "flex",
+                  alignItems: "center",
+                  fontSize: "var(--text-sm)",
+                  color: "var(--text-tertiary)",
+                  lineHeight: "var(--lh-snug)",
+                }}
+              >
+                {[
+                  [form.endereco.logradouro, form.endereco.numero].filter(Boolean).join(", "),
+                  form.endereco.bairro,
+                  [form.endereco.cidade, form.endereco.uf].filter(Boolean).join(" / "),
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </div>
+            </Field>
+          )}
+        </GrupoDeCampos>
+      )}
 
       {/*
         ⚠️ O grupo inteiro some na pessoa física, e não só os campos.

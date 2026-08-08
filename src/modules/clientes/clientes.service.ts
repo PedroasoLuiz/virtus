@@ -284,6 +284,42 @@ export async function criarCliente(
   }
 
   const id = await repo.criar(empresaId, usuarioId, entrada);
+
+  /*
+   * ⚠️ O telefone e o e-mail do cadastro tambem viram CONTATO.
+   *
+   * As colunas de `clientes` guardam o principal, e a aba de contatos le a tabela
+   * filha: gravando so a coluna, a pessoa cadastrava um telefone e abria a aba de
+   * contatos vazia, sem entender para onde ele tinha ido.
+   *
+   * ⚠️ Falha aqui NAO derruba o cadastro. A pessoa ja existe, e devolver erro
+   * depois de gravar faria a tela mandar tudo de novo e criar a segunda. O que se
+   * perde no pior caso e a copia na tabela filha, que a aba de contatos permite
+   * refazer.
+   */
+  await Promise.allSettled([
+    entrada.contato
+      ? contatosRepo.criarContato(id, usuarioId, {
+          tipo: "telefone",
+          valor: entrada.contato,
+          rotulo: null,
+          responsavel: null,
+        })
+      : null,
+    entrada.email
+      ? contatosRepo.criarContato(id, usuarioId, {
+          tipo: "email",
+          valor: entrada.email,
+          rotulo: null,
+          responsavel: null,
+        })
+      : null,
+    // Primeiro da pessoa: o repositorio ja o marca como principal sozinho.
+    entrada.endereco
+      ? enderecosRepo.criarEndereco(id, usuarioId, { ...entrada.endereco, principal: true })
+      : null,
+  ]);
+
   return obterCliente(empresaId, id);
 }
 

@@ -11,6 +11,29 @@ import { analisarTelefone } from "@/shared/domain/telefone";
 
 /** Contratos de entrada e saida do modulo clientes. */
 
+/**
+ * O telefone e LIDO, e nao so medido pelo tamanho.
+ *
+ * ⚠️ Valida e normaliza no mesmo lugar: o que sai daqui e o numero ja formatado,
+ * do jeito que vai ser guardado e exibido. Antes o cadastro aceitava qualquer
+ * coisa com oito caracteres, e "3599845" ia para a coluna do principal e so
+ * falhava dias depois, na hora de mandar a cobranca, longe de quem digitou.
+ */
+const telefoneSchema = z
+  .string()
+  .trim()
+  .max(30)
+  .transform((valor, ctx) => {
+    const analise = analisarTelefone(valor);
+
+    if (analise.erro) {
+      ctx.addIssue({ code: "custom", message: analise.erro });
+      return z.NEVER;
+    }
+
+    return analise.formatado;
+  });
+
 export const papelSchema = z.enum([
   "cliente",
   "fornecedor",
@@ -68,13 +91,39 @@ export const contagemSchema = z.object({
  * recusa nascer sem os dois: e o momento em que o dado passa a ser necessario de
  * verdade, e ate la ninguem e obrigado a nada.
  */
+export const criarEnderecoBodySchema = z.object({
+  cep: z.string().trim().max(12).nullish(),
+  logradouro: z.string().trim().max(160).nullish(),
+  numero: z.string().trim().max(20).nullish(),
+  complemento: z.string().trim().max(80).nullish(),
+  bairro: z.string().trim().max(80).nullish(),
+  cidade: z.string().trim().max(80).nullish(),
+  /** Duas letras. Estado por extenso quebraria a nota fiscal na hora de emitir. */
+  uf: z.string().trim().length(2).nullish(),
+  principal: z.boolean().default(false),
+});
+
 export const criarClienteBodySchema = z.object({
   razao: textoCurtoSchema,
   nomeFantasia: textoCurtoSchema.nullish(),
   cnpj: cnpjSchema.nullish(),
   dataNascimento: z.iso.date().nullish(),
+  /*
+   * ⚠️ O e-mail e o telefone daqui sao os PRINCIPAIS, e no cadastro novo eles
+   * tambem viram linha em `clientescontatos`. Sao a mesma coisa dita duas vezes
+   * de proposito: a coluna e o que a cobranca le sem join, a tabela e onde os
+   * outros telefones da empresa vao morar.
+   */
   email: emailSchema.nullish(),
-  contato: z.string().trim().max(40).nullish(),
+  contato: telefoneSchema.nullish(),
+  /**
+   * O endereco que nasce junto, quando a consulta do CNPJ trouxe um.
+   *
+   * ⚠️ Vem no mesmo corpo em vez de virar um segundo POST. Os dois numa ida so
+   * nascem juntos ou nao nascem: com duas chamadas, a segunda falhando deixava
+   * uma pessoa cadastrada com o endereco perdido e ninguem sabendo disso.
+   */
+  endereco: criarEnderecoBodySchema.omit({ principal: true }).nullish(),
   papeis: z.array(papelSchema).min(1, "Informe ao menos um papel"),
   grupoId: idSchema.nullish(),
   /** Omitido, o banco preenche com o "Geral" da empresa. */
@@ -86,6 +135,20 @@ export const criarClienteBodySchema = z.object({
   // As listas moram nos contratos do modulo: a tela usa as mesmas para desenhar
   // o seletor, e importar este arquivo levaria o zod para o navegador.
 });
+
+/**
+ * ⚠️ Cadastro NOVO precisa de um canal: telefone ou e-mail.
+ *
+ * Documento e data podem faltar, porque o cadastro nasce antes deles. Um jeito de
+ * falar com a pessoa, nao: sem isso o que entra e um nome solto, e a primeira
+ * cobranca descobre que nao ha para onde mandar. Na EDICAO a regra nao vale — o
+ * canal mora na aba de contatos, e quem tira o ultimo telefone de la ja e
+ * impedido por outra regra.
+ */
+export const criarClienteComCanalSchema = criarClienteBodySchema.refine(
+  (c) => Boolean(c.contato) || Boolean(c.email),
+  { message: "Informe ao menos um telefone ou um e-mail", path: ["contato"] },
+);
 
 export const idParamSchema = z.object({ id: idSchema });
 
@@ -101,18 +164,6 @@ export const enderecoSchema = z.object({
   cidade: z.string().nullable(),
   uf: z.string().nullable(),
   principal: z.boolean(),
-});
-
-export const criarEnderecoBodySchema = z.object({
-  cep: z.string().trim().max(12).nullish(),
-  logradouro: z.string().trim().max(160).nullish(),
-  numero: z.string().trim().max(20).nullish(),
-  complemento: z.string().trim().max(80).nullish(),
-  bairro: z.string().trim().max(80).nullish(),
-  cidade: z.string().trim().max(80).nullish(),
-  /** Duas letras. Estado por extenso quebraria a nota fiscal na hora de emitir. */
-  uf: z.string().trim().length(2).nullish(),
-  principal: z.boolean().default(false),
 });
 
 export const bancarioSchema = z.object({
@@ -168,29 +219,6 @@ export const contatoSchema = z.object({
   /** Quem entra no portal com este e-mail. Ausente nos telefones. */
   usuario: z.string().nullish(),
 });
-
-/**
- * O telefone e LIDO, e nao so medido pelo tamanho.
- *
- * ⚠️ Valida e normaliza no mesmo lugar: o que sai daqui e o numero ja formatado,
- * do jeito que vai ser guardado e exibido. Antes o cadastro aceitava qualquer
- * coisa com oito caracteres, e "3599845" ia para a coluna do principal e so
- * falhava dias depois, na hora de mandar a cobranca, longe de quem digitou.
- */
-const telefoneSchema = z
-  .string()
-  .trim()
-  .max(30)
-  .transform((valor, ctx) => {
-    const analise = analisarTelefone(valor);
-
-    if (analise.erro) {
-      ctx.addIssue({ code: "custom", message: analise.erro });
-      return z.NEVER;
-    }
-
-    return analise.formatado;
-  });
 
 export const criarContatoBodySchema = z.discriminatedUnion("tipo", [
   z.object({
@@ -258,7 +286,13 @@ export type CriarClienteBody = z.infer<typeof criarClienteBodySchema>;
 export type IdParam = z.infer<typeof idParamSchema>;
 
 /** Edicao: tudo opcional — o cliente envia so o que mudou. */
+/*
+ * ⚠️ `endereco` fica de FORA da edicao. Ele so existe no nascimento, para
+ * aproveitar o que a consulta do CNPJ trouxe; depois disso quem manda e a aba de
+ * enderecos, que sabe de principal, de varios e de exclusao.
+ */
 export const atualizarClienteBodySchema = criarClienteBodySchema
+  .omit({ endereco: true })
   .partial()
   .extend({ ativo: z.boolean().optional() });
 
