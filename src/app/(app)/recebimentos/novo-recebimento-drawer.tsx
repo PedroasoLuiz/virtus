@@ -10,12 +10,14 @@ import {
   GrupoDeCampos,
   inputDeCelula,
   inputStyle,
+  MarcaDeUso,
   Pagination,
   selectStyle,
   SeletorBuscavel,
   TableArea,
   TableHead,
   Td,
+  tdNum,
   Th,
   Tr,
 } from "@/components/ui/kit";
@@ -49,9 +51,39 @@ import type { ParcelaEmAberto } from "@/modules/recebimentos/recebimentos.types"
  * especifica, e um acrescimo no total nao saberia de qual.
  */
 
-type Valores = Record<number, { valor: number; juros: number; multa: number; quitar: boolean }>;
+type Valores = Record<number, EstadoDaLinha>;
 
-const VAZIO = { valor: 0, juros: 0, multa: 0, quitar: false };
+/**
+ * O que a tela guarda de cada parcela da baixa.
+ *
+ * ⚠️ `recebido` e o que se DIGITA quando o cliente pagou so uma parte. Vazio, o
+ * valor sai da conta: o que estava em aberto menos o que foi perdoado. E o caso
+ * comum — quem paga, paga a parcela — e digitar de novo um numero que ja esta na
+ * linha ao lado seria trabalho de copia.
+ */
+const VAZIO: EstadoDaLinha = {
+  incluida: false,
+  juros: 0,
+  multa: 0,
+  desconto: 0,
+  recebido: null,
+};
+
+type EstadoDaLinha = {
+  /** Esta parcela entra nesta baixa. Sem isto, toda a lista entraria sozinha. */
+  incluida: boolean;
+  juros: number;
+  multa: number;
+  desconto: number;
+  /** `null` = o valor e calculado. Numero = pagamento parcial digitado a mao. */
+  recebido: number | null;
+};
+
+/** O que abate divida nesta linha: o digitado, ou o que sobra do desconto. */
+function valorDaLinha(estado: EstadoDaLinha, emAberto: number): number {
+  if (!estado.incluida) return 0;
+  return estado.recebido ?? Math.max(0, emAberto - estado.desconto);
+}
 
 /**
  * Quantas parcelas cabem numa pagina da baixa.
@@ -82,7 +114,11 @@ function preencher(
     cobranca,
   );
 
-  return { valor: parcela.emAberto, juros, multa, quitar: false };
+  /*
+   * O acrescimo sugerido pela regra de cobranca; o valor fica calculado, e nao
+   * digitado: ele e o que esta em aberto menos o que for perdoado.
+   */
+  return { incluida: true, juros, multa, desconto: 0, recebido: null };
 }
 
 export function NovoRecebimentoDrawer({
@@ -146,6 +182,14 @@ export function NovoRecebimentoDrawer({
   );
   const [taxa, setTaxa] = useState(0);
   const [paginaDeParcelas, setPaginaDeParcelas] = useState(1);
+  /*
+   * A parcela cujo valor esta sendo digitado a mao.
+   *
+   * ⚠️ Uma de cada vez, e por clique. Receber menos e o caso raro, e um campo
+   * aberto em toda linha convidaria a digitar o numero que ja esta calculado ao
+   * lado — com as duas versoes podendo discordar.
+   */
+  const [parcial, setParcial] = useState<number | null>(null);
   const [dataCredito, setDataCredito] = useState(() =>
     previsaoDeCredito("PIX", hoje()),
   );
@@ -270,9 +314,10 @@ export function NovoRecebimentoDrawer({
         livres.add(p.id);
 
         const preenchido = valores[p.id] ?? VAZIO;
-        const sobra = p.total - p.recebido - preenchido.valor;
+        const emAberto = p.total - p.recebido;
+        const sobra = emAberto - valorDaLinha(preenchido, emAberto) - preenchido.desconto;
         // Esta ainda nao fechou: as seguintes continuam travadas.
-        if (sobra > 0 && !preenchido.quitar) break;
+        if (sobra > 0) break;
       }
     }
 
@@ -281,23 +326,39 @@ export function NovoRecebimentoDrawer({
 
   const destinos = parcelas
     .map((p) => ({ p, v: valores[p.parcelaId] ?? VAZIO }))
-    .filter(({ v }) => v.valor > 0)
+    .filter(({ v }) => v.incluida)
     .map(({ p, v }) => ({
       parcelaId: p.parcelaId,
-      valor: v.valor,
+      valor: valorDaLinha(v, p.emAberto),
       juros: v.juros,
       multa: v.multa,
-      quitar: v.quitar,
-    }));
+      /*
+       * ⚠️ `quitar` e DEDUZIDO, e nao mais uma caixa que alguem marca.
+       *
+       * Ele diz ao servidor "feche a parcela mesmo recebendo menos", e isso e
+       * exatamente o que acontece quando ha desconto: o que se perdoa e a
+       * diferenca. Sem desconto e com valor menor, a parcela continua devendo o
+       * resto, que e o pagamento parcial.
+       */
+      quitar: v.desconto > 0,
+    }))
+    .filter((d) => d.valor > 0);
 
   const abatido = destinos.reduce((s, d) => s + d.valor, 0) as Centavos;
   const acrescimo = destinos.reduce((s, d) => s + d.juros + d.multa, 0) as Centavos;
   const total = (abatido + acrescimo) as Centavos;
 
-  function mudar(parcelaId: number, campo: keyof typeof VAZIO, valor: number | boolean) {
+  /**
+   * Mexe num campo de uma linha.
+   *
+   * ⚠️ Mexer INCLUI a parcela. Digitar juros numa linha que ninguem marcou seria
+   * um numero guardado que nao vai a lugar nenhum, e a pessoa so descobriria
+   * conferindo o total no fim.
+   */
+  function mudar(parcelaId: number, campo: keyof EstadoDaLinha, valor: number | boolean | null) {
     setValores((atual) => ({
       ...atual,
-      [parcelaId]: { ...(atual[parcelaId] ?? VAZIO), [campo]: valor },
+      [parcelaId]: { ...(atual[parcelaId] ?? VAZIO), incluida: true, [campo]: valor },
     }));
   }
 
@@ -558,10 +619,17 @@ export function NovoRecebimentoDrawer({
             */}
             <TableArea minWidth={0}>
               <TableHead>
+                {/*
+                  ⚠️ A marca de INCLUIR abre a linha.
+
+                  Sem ela, com o valor recebido saindo de uma conta, toda parcela
+                  da lista entraria na baixa sozinha: abrir a tela de um cliente
+                  com seis parcelas em aberto significaria receber as seis.
+                */}
+                <Th minWidth={54}>Recebi</Th>
                 <Th minWidth={110}>Conta</Th>
                 <Th minWidth={100}>Vence</Th>
                 <Th minWidth={110}>Em aberto</Th>
-                <Th minWidth={110}>Recebi</Th>
                 {/*
                   ⚠️ A unidade no rotulo, e nao so no campo.
 
@@ -573,6 +641,18 @@ export function NovoRecebimentoDrawer({
                 <Th minWidth={100}>Juros (R$)</Th>
                 <Th minWidth={100}>Multa (R$)</Th>
                 <Th minWidth={110}>Desconto (R$)</Th>
+                {/*
+                  ⚠️ O valor NAO se digita: ele e o que estava em aberto menos o
+                  que foi perdoado. Digitavel, ele e o mesmo numero pedido duas
+                  vezes — e as duas podiam discordar.
+
+                  Quem recebeu so uma parte clica nele: e o caso raro, e o clique
+                  e o que separa "recebi menos e o resto fica devendo" de "recebi
+                  menos porque perdoei".
+                */}
+                <Th align="right" minWidth={120}>
+                  Valor
+                </Th>
               </TableHead>
 
               <tbody>
@@ -580,9 +660,10 @@ export function NovoRecebimentoDrawer({
                   const estado = valores[p.parcelaId] ?? VAZIO;
                   const liberada = liberadas.has(p.parcelaId);
                   const atrasada = p.vencimento != null && p.vencimento < hoje();
-                  // O desconto e o que falta para fechar a parcela, e so conta
-                  // quando alguem decidiu perdoar.
-                  const desconto = estado.quitar ? Math.max(0, p.emAberto - estado.valor) : 0;
+                  const valor = valorDaLinha(estado, p.emAberto);
+                  const sobra = estado.incluida
+                    ? Math.max(0, p.emAberto - valor - estado.desconto)
+                    : 0;
 
                   return (
                     <Tr
@@ -594,6 +675,39 @@ export function NovoRecebimentoDrawer({
                       */
                       dimmed={!liberada}
                     >
+                      <Td>
+                        <MarcaDeUso
+                          marcado={estado.incluida}
+                          desabilitado={!liberada}
+                          rotulo={
+                            !liberada
+                              ? "A parcela anterior desta conta ainda está em aberto"
+                              : estado.incluida
+                                ? "Tirar esta parcela da baixa"
+                                : "Recebi esta parcela"
+                          }
+                          onClick={() =>
+                            setValores((atual) => {
+                              const antes = atual[p.parcelaId] ?? VAZIO;
+
+                              return {
+                                ...atual,
+                                [p.parcelaId]: antes.incluida
+                                  ? VAZIO
+                                  : /*
+                                      Marcar ja traz o acrescimo sugerido pela
+                                      regra de cobranca: quem baixa uma parcela
+                                      atrasada quase sempre cobra o juro, e
+                                      calcula-lo de cabeca era o trabalho que a
+                                      tela existe para poupar.
+                                    */
+                                    { ...preencher(p, carga.cobranca, data), incluida: true },
+                              };
+                            })
+                          }
+                        />
+                      </Td>
+
                       <Td>
                         {p.faturaNumero}
                         <div
@@ -619,42 +733,7 @@ export function NovoRecebimentoDrawer({
                       </Td>
 
                       <Td>
-                        {/*
-                          O valor em aberto e um BOTAO: clicar preenche a linha
-                          com tudo o que falta mais o acrescimo sugerido. E o caso
-                          comum — o cliente pagou a parcela inteira —, e digitar o
-                          numero que ja esta escrito ao lado seria trabalho de
-                          copia.
-                        */}
-                        <button
-                          type="button"
-                          disabled={!liberada}
-                          title={
-                            liberada
-                              ? "Preencher com tudo o que falta"
-                              : "A parcela anterior desta conta ainda está em aberto"
-                          }
-                          onClick={() =>
-                            setValores((atual) => ({
-                              ...atual,
-                              [p.parcelaId]: preencher(p, carga.cobranca, data),
-                            }))
-                          }
-                          style={{
-                            border: "none",
-                            background: "none",
-                            padding: 0,
-                            fontSize: "var(--text-sm)",
-                            fontFamily: "var(--font)",
-                            fontVariantNumeric: "tabular-nums",
-                            color: "inherit",
-                            textDecoration: liberada ? "underline dotted" : undefined,
-                            textUnderlineOffset: 3,
-                            cursor: liberada ? "pointer" : "not-allowed",
-                          }}
-                        >
-                          {formatarSemSimbolo(p.emAberto as Centavos)}
-                        </button>
+                        {formatarSemSimbolo(p.emAberto as Centavos)}
 
                         {p.recebido > 0 && (
                           <div
@@ -669,21 +748,10 @@ export function NovoRecebimentoDrawer({
                         )}
                       </Td>
 
-                      <Td>
-                        <CampoNumerico
-                          valor={estado.valor}
-                          escala={100}
-                          style={inputDeCelula}
-                          aoMudar={(v) =>
-                            mudar(p.parcelaId, "valor", liberada ? Math.min(v, p.emAberto) : 0)
-                          }
-                        />
-                      </Td>
-
                       {/*
                         ⚠️ Juros e multa NAO abatem a divida: entram no caixa por
-                        cima do valor. Por isso ficam depois do "Recebi", e nunca
-                        somados a ele.
+                        cima do valor. Por isso ficam antes dele na leitura, e
+                        nunca somados a ele.
                       */}
                       <Td>
                         <CampoNumerico
@@ -704,46 +772,81 @@ export function NovoRecebimentoDrawer({
                       </Td>
 
                       {/*
-                        ⚠️ A pergunta que o sistema nao pode responder sozinho.
-
-                        Recebi 500 de 510: os 10 continuam devidos, ou eu abri
-                        mao? As duas respostas sao legitimas, e so quem recebeu
-                        sabe. O padrao e deixar em aberto — perdoar divida por
-                        omissao seria a escolha errada de fazer sozinho.
-                      */}
-                      {/*
-                        ⚠️ O desconto se DIGITA, e o recebido se ajusta sozinho.
-
-                        Recebi 500 de 510: os 10 continuam devidos, ou eu abri
-                        mao? As duas respostas sao legitimas, e so quem recebeu
-                        sabe. Antes era uma caixa de "quitar" que perdoava a
-                        diferenca inteira — o que servia para 10 e nao para quem
-                        perdoa 50 de uma parcela que ainda vai ser cobrada.
-
-                        Digitando aqui, o campo diz quanto se abre mao, e o
-                        "Recebi" vira o que sobra. Zero significa que nada foi
-                        perdoado, e a diferenca continua a cobrar.
+                        ⚠️ O desconto e a resposta a uma pergunta que o sistema
+                        nao pode responder sozinho: recebi 500 de 510, os 10
+                        continuam devidos ou eu abri mao? Digitando aqui, a pessoa
+                        diz que abriu mao — e o valor ao lado se ajusta.
                       */}
                       <Td>
                         <CampoNumerico
-                          valor={desconto}
+                          valor={estado.desconto}
                           escala={100}
                           style={inputDeCelula}
-                          aoMudar={(v) => {
-                            const perdoado = Math.min(Math.max(0, v), p.emAberto);
-
-                            setValores((atual) => ({
-                              ...atual,
-                              [p.parcelaId]: {
-                                ...(atual[p.parcelaId] ?? VAZIO),
-                                valor: (p.emAberto - perdoado) as number,
-                                // Perdoar significa fechar a parcela com menos:
-                                // sem isto, a diferenca voltaria a ser cobrada.
-                                quitar: perdoado > 0,
-                              },
-                            }));
-                          }}
+                          aoMudar={(v) =>
+                            mudar(p.parcelaId, "desconto", Math.min(Math.max(0, v), p.emAberto))
+                          }
                         />
+                      </Td>
+
+                      {/*
+                        ⚠️ O valor NAO se digita no caminho normal: ele e o que
+                        estava em aberto menos o que foi perdoado. Clicar abre o
+                        campo para o caso raro — o cliente pagou so uma parte e o
+                        resto continua devendo, que e diferente de perdoar.
+                      */}
+                      <Td style={tdNum}>
+                        {parcial === p.parcelaId ? (
+                          <CampoNumerico
+                            valor={valor}
+                            escala={100}
+                            alinhar="right"
+                            style={inputDeCelula}
+                            aoMudar={(v) =>
+                              mudar(
+                                p.parcelaId,
+                                "recebido",
+                                Math.min(Math.max(0, v), p.emAberto - estado.desconto),
+                              )
+                            }
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={!estado.incluida}
+                            title={
+                              estado.incluida
+                                ? "Clique para receber só uma parte: o resto continua devendo"
+                                : undefined
+                            }
+                            onClick={() => setParcial(p.parcelaId)}
+                            style={{
+                              border: "none",
+                              background: "none",
+                              padding: 0,
+                              fontFamily: "var(--font)",
+                              fontSize: "var(--text-sm)",
+                              fontVariantNumeric: "tabular-nums",
+                              color: "inherit",
+                              cursor: estado.incluida ? "pointer" : "default",
+                            }}
+                          >
+                            {formatarSemSimbolo(valor as Centavos)}
+                          </button>
+                        )}
+
+                        {/* O que sobra depois desta baixa. So aparece quando
+                            sobra: uma linha "ainda devendo 0,00" seria ruido. */}
+                        {sobra > 0 && (
+                          <div
+                            style={{
+                              marginTop: 1,
+                              fontSize: "var(--text-xs)",
+                              color: "var(--danger-text)",
+                            }}
+                          >
+                            ainda devendo {formatarSemSimbolo(sobra as Centavos)}
+                          </div>
+                        )}
                       </Td>
                     </Tr>
                   );
