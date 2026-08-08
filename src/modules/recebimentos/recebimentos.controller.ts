@@ -57,6 +57,18 @@ export async function criar({ body, ctx }: Entrada<CriarRecebimentoBody, undefin
     data: body.data,
     tipo: body.tipo,
     contaBancariaId: body.contaBancariaId,
+    /*
+     * ⚠️ `dataCredito` e `taxa` PRECISAM ser repassadas.
+     *
+     * Elas existiam no schema e no servico, e o controller nao as copiava: o
+     * corpo chegava completo e era descartado no meio do caminho. O efeito era
+     * silencioso e caro. Quem corrigia o dia do credito para o prazo do proprio
+     * contrato via o valor voltar para o D+30 da tabela, e a taxa da adquirente
+     * nunca virava despesa — o resultado ficava inflado pelo que a maquininha
+     * reteve, em toda venda no cartao.
+     */
+    dataCredito: body.dataCredito,
+    taxa: centavos(body.taxa),
     observacoes: body.observacoes,
     destinos: body.destinos.map((d) => ({
       parcelaId: d.parcelaId,
