@@ -6,16 +6,31 @@ import { useAvisos } from "@/components/ui/avisos";
 import { NovoRecebimentoDrawer } from "../recebimentos/novo-recebimento-drawer";
 import { Icon } from "@/components/layout/icones";
 import {
+  AcoesDaLinha,
   Button,
   CampoBloqueado,
+  EmptyRow,
   Field,
+  GrupoDeCampos,
   inputStyle,
   PanelTabs,
+  TableArea,
+  TableHead,
+  Td,
+  tdNum,
+  Th,
+  Tr,
 } from "@/components/ui/kit";
 import { TicketDrawer } from "../tickets/ticket-drawer";
 import { proximaAReceber } from "@/shared/domain/parcelas";
+import { ehPessoaFisica } from "@/shared/domain/cadastro-pessoa";
+import { formatarDocumento } from "@/shared/domain/documento";
 import { formatarSemSimbolo, type Centavos } from "@/shared/utils/money";
-import { hoje, paraFormatoBR, type DataISO } from "@/shared/utils/datas";
+import { paraFormatoBR, type DataISO } from "@/shared/utils/datas";
+import type { Fatura } from "./fatura-tipos";
+import { curto, periodo, vencida } from "./fatura-datas";
+import { AnexarDocumento, Documentos } from "./fatura-documentos";
+import { ItemDoMenu, MenuDeLinha } from "./fatura-menu";
 
 /**
  * Detalhe da conta a receber.
@@ -32,66 +47,6 @@ import { hoje, paraFormatoBR, type DataISO } from "@/shared/utils/datas";
  * texto solto: a tela ainda nao edita nada, e o cadeado explica por que.
  */
 
-
-type Parcela = {
-  id: number;
-  numero: number;
-  vencimento: string | null;
-  valor: number;
-  acrescimo: number;
-  desconto: number;
-  total: number;
-  pago: boolean;
-  /** Preenchido quando a baixa foi conciliada. E o que trava a edicao. */
-  pagamentoId: number | null;
-  /** Data da baixa. E o fato que o recibo comprova — nao e o vencimento. */
-  pagoEm: string | null;
-  /** Quanto ja entrou nesta parcela, de um pagamento ou de varios. */
-  recebido: number;
-  nfs: string | null;
-  boleto: string | null;
-  comprovante: string | null;
-};
-
-type TicketDaFatura = {
-  ticketId: number;
-  numero: number;
-  valor: number;
-  titulo: string;
-  status: string;
-  clienteNome: string | null;
-  encerradoEm: string | null;
-};
-
-type Fatura = {
-  id: number;
-  numero: number;
-  clienteId: number | null;
-  clienteNome: string | null;
-  /** Coluna própria no banco, não um status: a conta guarda em que estado foi cancelada. */
-  cancelada: boolean;
-  apuracaoInicio: string | null;
-  apuracaoFim: string | null;
-  situacao: string;
-  total: number;
-  observacoes: string | null;
-  rodape: string | null;
-  parcelas: Parcela[];
-  tickets: TicketDaFatura[];
-  clienteDoc: string | null;
-  emitente: {
-    razaoSocial: string | null;
-    endereco: string | null;
-    cnpj: string | null;
-    logo: string | null;
-  };
-  historico: {
-    criadoEm: string | null;
-    criadoPor: string | null;
-    editadoEm: string | null;
-    editadoPor: string | null;
-  };
-};
 
 export function FaturaDrawer({
   faturaId,
@@ -269,7 +224,12 @@ function Conteudo({
     <Drawer
       open
       onClose={onClose}
-      title={fatura ? `Conta a receber ${fatura.numero}` : "Conta a receber"}
+      /*
+        ⚠️ O título não carrega mais o número. Ele virou o campo "Código" logo no
+        alto da ficha, onde dá para copiar; repetido no título, era o mesmo dado
+        duas vezes na mesma tela, e ainda empurrava os botões do cabeçalho.
+      */
+      title="Conta a receber"
       headerExtra={
         fatura ? (
           <>
@@ -338,23 +298,13 @@ function Conteudo({
             </BotaoDeCabecalho>
 
             <BotaoHistorico
-            criadoEm={fatura.historico.criadoEm}
-            criadoPor={fatura.historico.criadoPor}
-            editadoEm={fatura.historico.editadoEm}
-            editadoPor={fatura.historico.editadoPor}
+              criadoEm={fatura.historico.criadoEm}
+              criadoPor={fatura.historico.criadoPor}
+              editadoEm={fatura.historico.editadoEm}
+              editadoPor={fatura.historico.editadoPor}
             />
           </>
         ) : null
-      }
-      footer={
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {/* Os totais vivem no rodape, na linha do botao: e o ultimo lugar em
-              que a pessoa olha antes de agir, e no topo eles empurravam para
-              baixo os campos que se le primeiro. */}
-          {fatura && <Totais total={fatura.total} pago={pago} />}
-
-          <span style={{ flex: 1 }} />
-        </div>
       }
     >
       {erro && (
@@ -377,17 +327,88 @@ function Conteudo({
 
       {fatura && (
         <>
-          <div style={{ display: "flex", flexDirection: "column", gap: 3, marginBottom: 18 }}>
-            <Field label="Cliente">
-              <CampoBloqueado valor={fatura.clienteNome ?? "—"} />
+          {/*
+            ⚠️ O ritmo é o do FORMULÁRIO, o mesmo da ficha de pessoa: campos
+            colados entre si, título colado no primeiro campo, e o vão grande só
+            entre um assunto e outro. Antes havia um `gap: 3` escrito aqui, que
+            acertava o vão dos campos por acaso e errava todo o resto.
+
+            ⚠️ Os campos são BLOQUEADOS, com cadeado. A conta não se edita: ela é
+            o retrato do que foi combinado nos tickets, e o que muda são as
+            parcelas, na aba delas.
+          */}
+          {/*
+            ⚠️ Sem título nem legenda aqui.
+
+            O que está em cima da tabela é a identificação da conta, e ela não
+            precisa se apresentar: o drawer já se chama "Conta a receber" e traz o
+            número. Cada aba tem o próprio título logo acima da tabela dela, que é
+            onde o assunto realmente muda.
+          */}
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "var(--form-gap-campo)",
+            }}
+          >
+              {/*
+                ⚠️ O código vem PRIMEIRO, e é campo com cadeado como os outros.
+
+                Ele é o que se dita ao telefone e o que o cliente cita ao pagar:
+                escrito só no título do drawer, some quando a pessoa rola a
+                tabela, e não dá para copiar.
+              */}
+              <Field label="Código">
+                <CampoBloqueado
+                  valor={String(fatura.numero)}
+                  titulo="O número é dado pelo sistema quando a conta nasce."
+                />
+              </Field>
+
+              <Field label="Cliente">
+                <CampoBloqueado valor={fatura.clienteNome ?? "—"} />
+              </Field>
+
+              {/*
+                ⚠️ O documento aparece LOGO ABAIXO do nome, e não noutra seção.
+
+                Dois clientes com nome parecido são a hora exata em que alguém
+                confere o CNPJ, e é a mesma hora em que ele precisa ser copiado
+                para o boleto ou para a nota.
+              */}
+              <Field label={ehPessoaFisica(fatura.clienteDoc) ? "CPF" : "CNPJ"}>
+                <CampoBloqueado
+                  valor={fatura.clienteDoc ? formatarDocumento(fatura.clienteDoc) : "—"}
+                />
+              </Field>
+
+              <Field label="Apuração">
+                <CampoBloqueado valor={periodo(fatura.apuracaoInicio, fatura.apuracaoFim)} />
+              </Field>
+
+              <Field label="Situação">
+                <CampoBloqueado valor={fatura.situacao} />
+              </Field>
+
+            {/*
+              ⚠️ Os três valores viraram CAMPO, um por linha, e saíram do rodapé.
+
+              No rodapé eles eram uma linha de números soltos, com rótulo miúdo, e
+              o "em aberto" — que é o que decide se ainda há o que cobrar — tinha
+              o mesmo peso do resto. Como campo, cada um tem o rótulo à esquerda
+              como todo dado da ficha, e dá para copiar o valor.
+            */}
+            <Field label="Total">
+              <CampoBloqueado valor={formatarSemSimbolo(fatura.total as Centavos)} />
             </Field>
 
-            <Field label="Apuração">
-              <CampoBloqueado valor={periodo(fatura.apuracaoInicio, fatura.apuracaoFim)} />
+            <Field label="Recebido">
+              <CampoBloqueado valor={formatarSemSimbolo(pago as Centavos)} />
             </Field>
 
-            <Field label="Situação">
-              <CampoBloqueado valor={fatura.situacao} />
+            <Field label="Em aberto">
+              <CampoBloqueado valor={formatarSemSimbolo((fatura.total - pago) as Centavos)} />
             </Field>
 
             {fatura.observacoes && (
@@ -396,6 +417,14 @@ function Conteudo({
               </Field>
             )}
           </div>
+
+          {/*
+            ⚠️ O vão antes das abas é o dos GRUPOS do formulário (22).
+
+            Sem ele, as abas encostavam no último campo e pareciam pertencer a
+            ele; elas começam outro assunto, e o respiro é o que diz isso.
+          */}
+          <div style={{ marginTop: "var(--form-gap-grupo)" }} />
 
           <PanelTabs
             tabs={[
@@ -416,17 +445,63 @@ function Conteudo({
           />
 
           {aba === "tickets" ? (
-            <Tabela
-              cabecalho={["Ticket", "Encerrado", "Valor", "Ações"]}
-              vazio="Nenhum ticket vinculado a esta conta."
-              linhas={fatura.tickets.map((t) => [
-                <span key="t" style={{ fontVariantNumeric: "tabular-nums" }}>
-                  {t.numero}
-                </span>,
-                t.encerradoEm ? paraFormatoBR(t.encerradoEm as DataISO) : "—",
-                formatarSemSimbolo(t.valor as Centavos),
-                <MenuDeLinha key="a">
-                  {(fechar) => (
+            <GrupoDeCampos
+              primeiro
+              titulo="Tickets"
+              legenda="O que está sendo cobrado nesta conta. O total é a soma do que foi tirado de cada ticket, e o detalhe do serviço mora dentro dele."
+            >
+              <TableArea minWidth={0}>
+              <TableHead>
+                <Th minWidth={70}>Ticket</Th>
+                <Th>Serviço</Th>
+                <Th minWidth={110}>Encerrado</Th>
+                <Th align="right" minWidth={110}>
+                  Valor
+                </Th>
+                <Th> </Th>
+              </TableHead>
+
+              <tbody>
+                {fatura.tickets.length === 0 && (
+                  <EmptyRow colSpan={5} message="Nenhum ticket vinculado a esta conta." />
+                )}
+
+                {fatura.tickets.map((t) => (
+                  <Tr key={t.ticketId}>
+                    <Td style={{ fontVariantNumeric: "tabular-nums" }}>{t.numero}</Td>
+
+                    {/*
+                      O título do ticket entra aqui: era o que faltava para saber
+                      o que se está cobrando sem abrir cada um.
+                    */}
+                    <Td style={{ maxWidth: 200 }}>
+                      <span
+                        title={t.titulo}
+                        style={{
+                          display: "block",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {t.titulo}
+                      </span>
+                    </Td>
+
+                    <Td>
+                      {t.encerradoEm ? (
+                        paraFormatoBR(t.encerradoEm as DataISO)
+                      ) : (
+                        <span style={{ color: "var(--text-disabled)" }}>—</span>
+                      )}
+                    </Td>
+
+                    <Td style={tdNum}>{formatarSemSimbolo(t.valor as Centavos)}</Td>
+
+                    <Td>
+                      <AcoesDaLinha>
+                        <MenuDeLinha>
+                          {(fechar) => (
                     <>
                       <ItemDoMenu
                         rotulo="Abrir ticket"
@@ -460,11 +535,16 @@ function Conteudo({
                       >
                         <path d="M12 4L4 12M4 4l8 8" />
                       </ItemDoMenu>
-                    </>
-                  )}
-                </MenuDeLinha>,
-              ])}
-            />
+                            </>
+                          )}
+                        </MenuDeLinha>
+                      </AcoesDaLinha>
+                    </Td>
+                  </Tr>
+                ))}
+                </tbody>
+              </TableArea>
+            </GrupoDeCampos>
           ) : aba === "produtos" ? (
             /*
              * Ainda sem implementacao — a aba existe para nao esquecer.
@@ -474,74 +554,142 @@ function Conteudo({
              * parcial fechar. Com produto, o total passa a ser tickets +
              * produtos, e a conferencia de origem precisa de outra regra.
              */
-            <div
-              style={{
-                padding: "28px 16px",
-                textAlign: "center",
-                border: "1px dashed var(--border-strong)",
-                borderRadius: "var(--radius-lg)",
-                color: "var(--text-tertiary)",
-                fontSize: "var(--text-base)",
-                lineHeight: 1.6,
-              }}
+            /*
+              ⚠️ A tabela vazia do sistema, e não uma caixa tracejada.
+
+              O tracejado dizia "área em construção", que é linguagem de
+              protótipo; a tabela vazia diz a mesma coisa com o desenho que todas
+              as outras listas usam quando não têm o que mostrar.
+            */
+            <GrupoDeCampos
+              primeiro
+              titulo="Produtos"
+              legenda="Peça, material ou licença cobrados junto do serviço. Ainda não entram na conta: eles mexem no total, e o total hoje é exatamente o que veio dos tickets."
             >
-              Produtos da conta entram aqui.
-              <br />
-              <span style={{ fontSize: "var(--text-sm)" }}>
-                Ainda não implementado: mexe no total, e o total hoje vem dos tickets.
-              </span>
-            </div>
+              <TableArea minWidth={0}>
+              <TableHead>
+                <Th>Produto</Th>
+                <Th align="right" minWidth={90}>
+                  Quantidade
+                </Th>
+                <Th align="right" minWidth={110}>
+                  Valor
+                </Th>
+              </TableHead>
+
+              <tbody>
+                <EmptyRow colSpan={3} message="Nenhum produto nesta conta." />
+              </tbody>
+              </TableArea>
+            </GrupoDeCampos>
           ) : (
-            <Tabela
-              cabecalho={["#", "Vencimento", "Valor", "Documentos", "Ações"]}
-              vazio="Nenhuma parcela gerada."
-              realce={(li) => vencida(fatura.parcelas[li])}
-              linhas={fatura.parcelas.map((p) => [
-                <span key="n" style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
-                  <Bolinha parcela={p} />
-                  {p.numero}
-                </span>,
-                p.vencimento ? curto(p.vencimento) : "—",
-                <span key="v" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                  {formatarSemSimbolo(p.total as Centavos)}
-                  {/* Desconto dado na baixa: sem mostrar aqui, a soma das
-                      parcelas nao fecha com o total e parece erro de conta. */}
-                  {p.desconto > 0 && (
-                    <span
-                      title={`Desconto de ${formatarSemSimbolo(p.desconto as Centavos)}`}
-                      style={{ fontSize: "var(--text-xs)", color: "var(--credito)" }}
-                    >
-                      −{formatarSemSimbolo(p.desconto as Centavos)}
-                    </span>
-                  )}
-                </span>,
-                <Documentos
-                  key="d"
-                  faturaId={fatura.id}
-                  parcelaId={p.id}
-                  boleto={p.boleto}
-                  nfs={p.nfs}
-                  comprovante={p.comprovante}
-                  bloqueado={p.pagamentoId != null || fatura.situacao === "CANCELADA"}
-                  aoMudar={recarregar}
-                />,
-                <MenuDeLinha key="a">
-                  {(fechar) => (
-                    <AcoesDaParcela
-                      aoBaixar={() => setBaixando(p.id)}
-                      fatura={fatura}
-                      emitidoPor={emitidoPor}
-                      parcela={p}
-                      proxima={proxima}
-                      bloqueado={p.pagamentoId != null || fatura.situacao === "CANCELADA"}
-                      aoMudar={recarregar}
-                      aoProrrogar={() => setProrrogando(p)}
-                      fechar={fechar}
-                    />
-                  )}
-                </MenuDeLinha>,
-              ])}
-            />
+            <GrupoDeCampos
+              primeiro
+              titulo="Parcelas"
+              legenda="Cada parcela vence e é recebida por conta própria. A vencida aparece em vermelho, e o menu da linha é onde se dá baixa, prorroga o vencimento ou se emite o recibo."
+            >
+              <TableArea minWidth={0}>
+              <TableHead>
+                <Th minWidth={54}>#</Th>
+                <Th minWidth={110}>Vencimento</Th>
+                <Th align="right" minWidth={120}>
+                  Valor
+                </Th>
+                <Th minWidth={90}>Documentos</Th>
+                <Th> </Th>
+              </TableHead>
+
+              <tbody>
+                {fatura.parcelas.length === 0 && (
+                  <EmptyRow colSpan={5} message="Nenhuma parcela gerada." />
+                )}
+
+                {fatura.parcelas.map((p) => (
+                  <Tr
+                    key={p.id}
+                    /*
+                      ⚠️ Vencida pinta a LINHA toda. A data sozinha em vermelho se
+                      perde no meio da tabela, e atraso é o único estado aqui que
+                      pede ação hoje.
+                    */
+                    style={
+                      vencida(p)
+                        ? { background: "var(--danger-bg)", color: "var(--danger-text)" }
+                        : undefined
+                    }
+                  >
+                    <Td>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
+                        <Bolinha parcela={p} />
+                        {p.numero}
+                      </span>
+                    </Td>
+
+                    <Td>
+                      {p.vencimento ? (
+                        curto(p.vencimento)
+                      ) : (
+                        <span style={{ color: "var(--text-disabled)" }}>—</span>
+                      )}
+                    </Td>
+
+                    <Td style={tdNum}>
+                      {formatarSemSimbolo(p.total as Centavos)}
+
+                      {/* Desconto dado na baixa: sem mostrar aqui, a soma das
+                          parcelas não fecha com o total e parece erro de conta. */}
+                      {p.desconto > 0 && (
+                        <div
+                          title={`Desconto de ${formatarSemSimbolo(p.desconto as Centavos)}`}
+                          style={{
+                            marginTop: 1,
+                            fontSize: "var(--text-xs)",
+                            color: "var(--credito)",
+                          }}
+                        >
+                          −{formatarSemSimbolo(p.desconto as Centavos)}
+                        </div>
+                      )}
+                    </Td>
+
+                    <Td>
+                      <Documentos
+                        faturaId={fatura.id}
+                        parcelaId={p.id}
+                        boleto={p.boleto}
+                        nfs={p.nfs}
+                        comprovante={p.comprovante}
+                        bloqueado={p.pagamentoId != null || fatura.situacao === "CANCELADA"}
+                        aoMudar={recarregar}
+                      />
+                    </Td>
+
+                    <Td>
+                      <AcoesDaLinha>
+                        <MenuDeLinha>
+                          {(fechar) => (
+                            <AcoesDaParcela
+                              aoBaixar={() => setBaixando(p.id)}
+                              fatura={fatura}
+                              emitidoPor={emitidoPor}
+                              parcela={p}
+                              proxima={proxima}
+                              bloqueado={
+                                p.pagamentoId != null || fatura.situacao === "CANCELADA"
+                              }
+                              aoMudar={recarregar}
+                              aoProrrogar={() => setProrrogando(p)}
+                              fechar={fechar}
+                            />
+                          )}
+                        </MenuDeLinha>
+                      </AcoesDaLinha>
+                    </Td>
+                  </Tr>
+                ))}
+                </tbody>
+              </TableArea>
+            </GrupoDeCampos>
           )}
         </>
       )}
@@ -663,406 +811,13 @@ function NovoVencimento({
 
 // ── Peças ───────────────────────────────────────────────────────────────────
 
-function periodo(de: string | null, ate: string | null): string {
-  if (!de) return "—";
-  const fim = ate ?? de;
-  return fim !== de
-    ? `${paraFormatoBR(de as DataISO)} a ${paraFormatoBR(fim as DataISO)}`
-    : paraFormatoBR(de as DataISO);
-}
-
-
-
 /**
- * As bandeiras dos documentos ja anexados.
+ * O corpo do drawer enquanto a conta não chegou.
  *
- * Cada uma e um par: o rotulo baixa, o ✕ ao lado remove. Dois alvos dentro da
- * mesma moldura, e nao dois controles soltos — assim o ✕ pertence visivelmente
- * AQUELE documento, e nao a linha inteira.
- *
- * Anexar mora na coluna de acoes: e um gesto de escrita, e misturado as
- * bandeiras fazia a coluna significar "o que existe" e "o que da para fazer" ao
- * mesmo tempo.
+ * ⚠️ Barras cinzas do tamanho do que vem depois, e não um "Carregando…". A conta
+ * abre em cima da lista, e um texto solto no meio do vazio faz a tela parecer
+ * quebrada por um instante; as barras já desenham o formato que vai aparecer.
  */
-function Documentos({
-  faturaId,
-  parcelaId,
-  boleto,
-  nfs,
-  comprovante,
-  bloqueado,
-  aoMudar,
-}: {
-  faturaId: number;
-  parcelaId: number;
-  boleto: string | null;
-  nfs: string | null;
-  comprovante: string | null;
-  /** Parcela baixada ou conta cancelada: da para baixar, nao para remover. */
-  bloqueado: boolean;
-  aoMudar: () => void;
-}) {
-  if (!nfs && !boleto && !comprovante) return <span style={{ color: "var(--text-disabled)" }}>—</span>;
-
-  return (
-    <span style={{ display: "inline-flex", gap: 4 }}>
-      {nfs && (
-        <Bandeira
-          rotulo="NF"
-          tipo="nfs"
-          faturaId={faturaId}
-          parcelaId={parcelaId}
-          bloqueado={bloqueado}
-          aoMudar={aoMudar}
-        />
-      )}
-      {comprovante && (
-        <Bandeira
-          rotulo="Comprovante"
-          tipo="comprovante"
-          faturaId={faturaId}
-          parcelaId={parcelaId}
-          bloqueado={bloqueado}
-          aoMudar={aoMudar}
-        />
-      )}
-      {boleto && (
-        <Bandeira
-          rotulo="Boleto"
-          tipo="boleto"
-          faturaId={faturaId}
-          parcelaId={parcelaId}
-          bloqueado={bloqueado}
-          aoMudar={aoMudar}
-        />
-      )}
-    </span>
-  );
-}
-
-function Bandeira({
-  rotulo,
-  tipo,
-  faturaId,
-  parcelaId,
-  bloqueado,
-  aoMudar,
-}: {
-  rotulo: string;
-  tipo: "nfs" | "boleto" | "comprovante";
-  faturaId: number;
-  parcelaId: number;
-  bloqueado: boolean;
-  aoMudar: () => void;
-}) {
-  const { avisar, confirmar } = useAvisos();
-  const url = `/api/v1/faturas/${faturaId}/parcelas/${parcelaId}/documento?tipo=${tipo}`;
-
-  async function remover() {
-    const r = await fetch(url, { method: "DELETE" });
-    if (!r.ok) {
-      const dados = await r.json().catch(() => null);
-      avisar("atencao", dados?.error?.message ?? "Não foi possível remover");
-      return;
-    }
-    aoMudar();
-  }
-
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        height: 19,
-        borderRadius: "var(--radius-xs)",
-        border: "1px solid var(--primary-border)",
-        background: "var(--primary-subtle)",
-        overflow: "hidden",
-      }}
-    >
-      <a
-        href={url}
-        target="_blank"
-        rel="noreferrer noopener"
-        title={`Baixar ${rotulo}`}
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          padding: "0 6px",
-          fontSize: "var(--text-xs)",
-          fontWeight: "var(--fw-medium)",
-          color: "var(--primary)",
-          textDecoration: "none",
-        }}
-      >
-        {rotulo}
-      </a>
-
-      {/* Baixada, da para baixar mas nao para remover: nota e boleto sao o que
-          se manda para RECEBER, e trocar depois muda o que o cliente tem em maos
-          sobre uma cobranca encerrada. */}
-      {!bloqueado && (
-      <button
-        type="button"
-        title={`Remover ${rotulo}`}
-        aria-label={`Remover ${rotulo}`}
-        onClick={() =>
-          confirmar(`Remover ${rotulo} desta parcela?`, "Remover", remover, "O arquivo é apagado.")
-        }
-        style={{
-          display: "inline-grid",
-          placeItems: "center",
-          width: 16,
-          height: 19,
-          border: "none",
-          borderLeft: "1px solid var(--primary-border)",
-          background: "transparent",
-          padding: 0,
-          color: "var(--primary)",
-          cursor: "pointer",
-          fontSize: 9,
-        }}
-      >
-        ✕
-      </button>
-      )}
-    </span>
-  );
-}
-
-const MOLDURA_DE_ACAO: React.CSSProperties = {
-  display: "inline-grid",
-  placeItems: "center",
-  width: 24,
-  height: 24,
-  border: "1px solid var(--border)",
-  borderRadius: "var(--radius-sm)",
-  background: "var(--surface)",
-  padding: 0,
-  cursor: "pointer",
-};
-
-/**
- * Total no rodape, com o resto atras de um clique.
- *
- * Total e a pergunta de sempre; pago e saldo so importam quando ha pagamento
- * pela metade. Os tres sempre visiveis faziam a linha do botao competir com o
- * botao.
- */
-function Totais({ total, pago }: { total: number; pago: number }) {
-  const [aberto, setAberto] = useState(false);
-  const saldo = total - pago;
-
-  return (
-    <div style={{ position: "relative" }}>
-      <button
-        type="button"
-        onClick={() => setAberto((v) => !v)}
-        aria-expanded={aberto}
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 6,
-          border: "none",
-          background: "none",
-          padding: 0,
-          cursor: "pointer",
-          fontFamily: "var(--font)",
-        }}
-      >
-        <span className="rotulo" style={{ fontSize: "var(--text-xs)" }}>
-          Total
-        </span>
-        <span
-          style={{
-            fontSize: "var(--text-md)",
-            fontWeight: "var(--fw-semi)",
-            fontVariantNumeric: "tabular-nums",
-            color: "var(--text-primary)",
-          }}
-        >
-          {formatarSemSimbolo(total as Centavos)}
-        </span>
-        <svg
-          width="11"
-          height="11"
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="var(--text-tertiary)"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          style={{
-            transform: aberto ? "rotate(180deg)" : undefined,
-            transition: "transform var(--dur) var(--ease)",
-          }}
-        >
-          <path d="M4 6l4 4 4-4" />
-        </svg>
-      </button>
-
-      {aberto && (
-        <div
-          style={{
-            position: "absolute",
-            bottom: "calc(100% + 8px)",
-            left: 0,
-            minWidth: 190,
-            padding: "10px 12px",
-            borderRadius: "var(--radius-md)",
-            background: "var(--surface)",
-            boxShadow: "var(--shadow-md)",
-            zIndex: 5,
-          }}
-        >
-          <Linha rotulo="Recebido" valor={pago} cor="var(--credito)" />
-          <Linha rotulo="Em aberto" valor={saldo} />
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Linha({ rotulo, valor, cor }: { rotulo: string; valor: number; cor?: string }) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        gap: 16,
-        padding: "3px 0",
-        fontSize: "var(--text-sm)",
-      }}
-    >
-      <span style={{ color: "var(--text-tertiary)" }}>{rotulo}</span>
-      <span style={{ fontWeight: "var(--fw-medium)", fontVariantNumeric: "tabular-nums", color: cor }}>
-        {formatarSemSimbolo(valor as Centavos)}
-      </span>
-    </div>
-  );
-}
-
-/**
- * Tabela do drawer. Tudo alinhado a ESQUERDA, inclusive numero.
- *
- * Alinhamento por coluna deixava cada tabela com um desenho: valor a direita
- * aqui, situacao ao centro ali, e o olho refazia o percurso a cada aba. Com uma
- * regra so, a leitura comeca sempre na mesma margem.
- */
-function Tabela({
-  cabecalho,
-  linhas,
-  vazio,
-  realce,
-  aoClicarLinha,
-}: {
-  cabecalho: string[];
-  linhas: React.ReactNode[][];
-  vazio: string;
-  /** Pinta a linha inteira de vermelho. Hoje: parcela vencida. */
-  realce?: (indice: number) => boolean;
-  aoClicarLinha?: (indice: number) => void;
-}) {
-  return (
-    /*
-     * ⚠️ Sem `overflow: hidden`.
-     *
-     * Ele arredondava os cantos, mas RECORTAVA o cartao do menu de acoes: na
-     * ultima linha o cartao abre para baixo, e sumia inteiro. A aba de tickets,
-     * que costuma ter uma linha so, nunca mostrava o menu.
-     *
-     * Os cantos agora sao arredondados nas proprias celulas das pontas.
-     */
-    <div
-      style={{
-        border: "1px solid var(--border)",
-        borderRadius: "var(--radius-lg)",
-      }}
-    >
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "var(--text-sm)" }}>
-        <thead>
-          <tr style={{ background: "var(--surface-2)" }}>
-            {cabecalho.map((c, ci) => (
-              <th
-                key={c}
-                className="rotulo"
-                style={{
-                  height: 32,
-                  padding: "0 12px",
-                  // `th` centraliza por padrao no navegador e `td` nao: sem esta
-                  // linha o cabecalho fica deslocado da coluna que ele nomeia.
-                  textAlign: "left",
-                  borderBottom: "1px solid var(--border)",
-                  whiteSpace: "nowrap",
-                  borderTopLeftRadius: ci === 0 ? "var(--radius-lg)" : undefined,
-                  borderTopRightRadius: ci === cabecalho.length - 1 ? "var(--radius-lg)" : undefined,
-                }}
-              >
-                {c}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {linhas.length === 0 && (
-            <tr>
-              <td
-                colSpan={cabecalho.length}
-                style={{ padding: "20px 12px", textAlign: "center", color: "var(--text-tertiary)" }}
-              >
-                {vazio}
-              </td>
-            </tr>
-          )}
-          {linhas.map((celulas, li) => (
-            <tr
-              key={li}
-              onClick={aoClicarLinha ? () => aoClicarLinha(li) : undefined}
-              style={{
-                borderTop: li === 0 ? undefined : "1px solid var(--border)",
-                cursor: aoClicarLinha ? "pointer" : undefined,
-                // Vencida pinta a linha toda: a data sozinha em vermelho se
-                // perde na tabela, e atraso e o unico estado que pede acao ja.
-                background: realce?.(li) ? "var(--danger-bg)" : undefined,
-                color: realce?.(li) ? "var(--danger-text)" : undefined,
-              }}
-              onMouseEnter={(e) => {
-                if (aoClicarLinha && !realce?.(li)) {
-                  e.currentTarget.style.background = "var(--surface-hover)";
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (aoClicarLinha && !realce?.(li)) {
-                  e.currentTarget.style.background = "transparent";
-                }
-              }}
-            >
-              {celulas.map((c, ci) => (
-                <td
-                  key={ci}
-                  style={{
-                    height: 34,
-                    padding: "0 12px",
-                    fontVariantNumeric: "tabular-nums",
-                    borderBottomLeftRadius:
-                      li === linhas.length - 1 && ci === 0 ? "var(--radius-lg)" : undefined,
-                    borderBottomRightRadius:
-                      li === linhas.length - 1 && ci === celulas.length - 1
-                        ? "var(--radius-lg)"
-                        : undefined,
-                  }}
-                >
-                  {c}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
 function Esqueleto() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -1082,243 +837,6 @@ function Esqueleto() {
   );
 }
 
-/**
- * Anexar um documento, como item do menu.
- *
- * E um `<label>` e nao um `<button>`: o `<input type="file">` precisa de um
- * rotulo para ser acionado, e assim o clique no item inteiro abre o seletor.
- */
-function AnexarDocumento({
-  tipo,
-  rotulo,
-  faturaId,
-  parcelaId,
-  aoMudar,
-  children,
-}: {
-  tipo: "nfs" | "boleto" | "comprovante";
-  rotulo: string;
-  faturaId: number;
-  parcelaId: number;
-  aoMudar: () => void;
-  children: React.ReactNode;
-}) {
-  const { avisar } = useAvisos();
-  const [enviando, setEnviando] = useState(false);
-  const [hover, setHover] = useState(false);
-
-  async function subir(arquivo: File) {
-    const corpo = new FormData();
-    corpo.append("arquivo", arquivo);
-
-    setEnviando(true);
-    const r = await fetch(
-      `/api/v1/faturas/${faturaId}/parcelas/${parcelaId}/documento?tipo=${tipo}`,
-      { method: "POST", body: corpo },
-    );
-    const dados = await r.json().catch(() => null);
-    setEnviando(false);
-
-    if (!r.ok) {
-      avisar("atencao", dados?.error?.message ?? "Não foi possível enviar o arquivo");
-      return;
-    }
-    aoMudar();
-  }
-
-  return (
-    <label
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 9,
-        padding: "7px 10px",
-        borderRadius: "var(--radius-sm)",
-        background: hover ? "var(--surface-2)" : "transparent",
-        color: "var(--text-primary)",
-        fontSize: "var(--text-sm)",
-        whiteSpace: "nowrap",
-        cursor: enviando ? "wait" : "pointer",
-        opacity: enviando ? 0.5 : 1,
-      }}
-    >
-      <span style={{ display: "inline-grid", placeItems: "center", width: 16, flexShrink: 0 }}>
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          {children}
-        </svg>
-      </span>
-      {enviando ? "Enviando…" : rotulo}
-      <input
-        type="file"
-        accept="application/pdf,image/*"
-        disabled={enviando}
-        onChange={(e) => {
-          const arquivo = e.target.files?.[0];
-          // Zerado para que escolher o MESMO arquivo de novo, depois de um erro,
-          // ainda dispare o `change`.
-          e.target.value = "";
-          if (arquivo) void subir(arquivo);
-        }}
-        style={{ display: "none" }}
-      />
-    </label>
-  );
-}
-
-/**
- * Menu de acoes da linha: "⋯" que abre um cartao flutuante.
- *
- * Tres icones soltos na celula viravam tres alvos de 24px numa linha de 34, e
- * cada acao nova estreitava as colunas de dado. Com o menu, a coluna tem a
- * largura de um botao e cabe quantas acoes precisarem.
- *
- * O filho recebe `fechar` porque toda acao daqui termina o menu: deixar aberto
- * depois do clique faz parecer que nao aconteceu nada.
- */
-function MenuDeLinha({ children }: { children: (fechar: () => void) => React.ReactNode }) {
-  const [aberto, setAberto] = useState(false);
-
-  return (
-    <span style={{ position: "relative", display: "inline-flex" }}>
-      <button
-        type="button"
-        title="Ações"
-        aria-label="Ações"
-        aria-expanded={aberto}
-        onClick={(e) => {
-          // A linha pode ter clique proprio; a acao nao dispara os dois.
-          e.stopPropagation();
-          setAberto((v) => !v);
-        }}
-        style={{ ...MOLDURA_DE_ACAO, color: "var(--text-secondary)" }}
-      >
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-          <circle cx="3.5" cy="8" r="1.3" />
-          <circle cx="8" cy="8" r="1.3" />
-          <circle cx="12.5" cy="8" r="1.3" />
-        </svg>
-      </button>
-
-      {aberto && (
-        <>
-          {/* Camada invisivel que fecha ao clicar fora — sem ela o cartao so
-              sairia clicando de novo no proprio botao. */}
-          <span
-            onClick={(e) => {
-              e.stopPropagation();
-              setAberto(false);
-            }}
-            style={{ position: "fixed", inset: 0, zIndex: 40 }}
-          />
-          <span
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              position: "absolute",
-              top: "calc(100% + 4px)",
-              right: 0,
-              zIndex: 41,
-              padding: 4,
-              borderRadius: "var(--radius-md)",
-              background: "var(--surface)",
-              boxShadow: "var(--shadow-md)",
-              display: "flex",
-              flexDirection: "column",
-            }}
-          >
-            {children(() => setAberto(false))}
-          </span>
-        </>
-      )}
-    </span>
-  );
-}
-
-/** Uma linha do menu. `icone` vem pronto; sem ele, `children` sao os tracos. */
-function ItemDoMenu({
-  rotulo,
-  perigo,
-  desabilitado,
-  motivo,
-  icone,
-  onClick,
-  children,
-}: {
-  rotulo: string;
-  perigo?: boolean;
-  desabilitado?: boolean;
-  motivo?: string;
-  icone?: React.ReactNode;
-  onClick: () => void;
-  children?: React.ReactNode;
-}) {
-  const [hover, setHover] = useState(false);
-
-  return (
-    <button
-      type="button"
-      disabled={desabilitado}
-      title={motivo}
-      onClick={onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 9,
-        width: "100%",
-        padding: "7px 10px",
-        border: "none",
-        borderRadius: "var(--radius-sm)",
-        background: hover && !desabilitado ? "var(--surface-2)" : "transparent",
-        color: desabilitado
-          ? "var(--text-disabled)"
-          : perigo
-            ? "var(--danger)"
-            : "var(--text-primary)",
-        fontSize: "var(--text-sm)",
-        fontFamily: "var(--font)",
-        textAlign: "left",
-        whiteSpace: "nowrap",
-        cursor: desabilitado ? "not-allowed" : "pointer",
-      }}
-    >
-      <span style={{ display: "inline-grid", placeItems: "center", width: 16, flexShrink: 0 }}>
-        {icone ?? (
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 16 16"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            {children}
-          </svg>
-        )}
-      </span>
-      {rotulo}
-    </button>
-  );
-}
-
-/**
- * O que da para fazer com uma parcela.
- *
- * Anexar so aparece enquanto NAO ha o documento; depois de baixada, nem isso.
- */
 function AcoesDaParcela({
   aoBaixar,
   fatura,
@@ -1631,12 +1149,3 @@ function Bolinha({
   );
 }
 
-function vencida(parcela: { pago: boolean; vencimento: string | null }): boolean {
-  return !parcela.pago && parcela.vencimento != null && parcela.vencimento < hoje();
-}
-
-/** dd/mm/aa. O seculo nao muda nada aqui, e a coluna encolhe um terco. */
-function curto(data: string): string {
-  const [ano, mes, dia] = data.slice(0, 10).split("-");
-  return `${dia}/${mes}/${ano.slice(2)}`;
-}
