@@ -13,6 +13,7 @@ import {
   CampoNumerico,
   EmptyRow,
   Field,
+  Formulario,
   GrupoDeCampos,
   inputStyle,
   PanelTabs,
@@ -633,7 +634,9 @@ function Conteudo({
                 descobre que existia.
               */
               onIncluir={pode?.parcelas.pode ? () => setDividindo(true) : undefined}
-              rotuloIncluir="Nova parcela"
+              // O rótulo diz o que acontece, e não "adicionar": nenhuma parcela
+              // nova aumenta a conta, ela recorta uma que já existe.
+              rotuloIncluir="Dividir uma parcela"
             >
               <TableArea minWidth={0}>
               <TableHead>
@@ -650,9 +653,7 @@ function Conteudo({
                   colunas respondem "em que pé está esta parcela", e o resto é o
                   conteúdo dela.
                 */}
-                <Th align="center" minWidth={90}>
-                  Conciliado
-                </Th>
+                <Th minWidth={90}>Conciliado</Th>
                 <Th minWidth={110}>Vencimento</Th>
                 <Th align="right" minWidth={120}>
                   Valor
@@ -687,7 +688,7 @@ function Conteudo({
                       </span>
                     </Td>
 
-                    <Td style={{ textAlign: "center" }}>
+                    <Td>
                       <MarcaDeConciliado parcela={p} />
                     </Td>
 
@@ -890,15 +891,20 @@ function NovoVencimento({
 // ── Peças ───────────────────────────────────────────────────────────────────
 
 /**
- * Cria uma parcela tirando valor de outra.
+ * Divide uma parcela em duas.
  *
- * ⚠️ A parcela nova nao adiciona dinheiro: ela DIVIDE o que ja existe. O total da
- * conta e o que foi combinado com o cliente, e um botao que aumentasse a conta
- * sem passar por ticket faria a soma das parcelas deixar de bater com ela.
+ * ⚠️ Ela nao adiciona dinheiro: RECORTA o que ja existe. O total da conta e o que
+ * foi combinado com o cliente, e um botao que aumentasse a conta sem passar por
+ * ticket faria a soma das parcelas deixar de bater com ela. Por isso a tela nao
+ * fala em "adicionar": fala em tirar de uma e criar outra.
  *
- * ⚠️ Drawer proprio, e nao edicao na linha. A mudanca sai na hora para o banco e
- * mexe numa cobranca que pode ja estar com o cliente; um campo que salva ao
- * perder o foco tornaria isso um acidente de clique.
+ * ⚠️ O resultado aparece ANTES de salvar, escrito por extenso. Com tres campos
+ * soltos, quem digitava 400 num campo chamado "valor" nao sabia se estava criando
+ * uma parcela de 400 ou deixando a origem com 400 — e so descobria depois de
+ * gravar numa cobranca que talvez ja esteja com o cliente.
+ *
+ * ⚠️ Drawer proprio, e nao edicao na linha: a mudanca sai na hora para o banco, e
+ * um campo que salva ao perder o foco tornaria isso um acidente de clique.
  */
 function NovaParcela({
   faturaId,
@@ -917,6 +923,7 @@ function NovaParcela({
   const [vencimento, setVencimento] = useState("");
 
   const origem = parcelas.find((p) => p.id === origemId) ?? null;
+  const sobra = origem ? Math.max(0, origem.total - valor) : 0;
 
   /*
    * ⚠️ As mesmas bordas que o dominio confere, ditas antes do clique.
@@ -925,66 +932,105 @@ function NovaParcela({
    * deixaria negativa — e o vencimento novo tem de ser depois do dela, senao a
    * ordem de recebimento passa a discordar da numeracao.
    */
-  const erro =
+  const erroDoValor =
     !origem || valor <= 0
       ? null
       : valor >= origem.total
-        ? `O valor tem de ser menor que ${formatarSemSimbolo(origem.total as Centavos)}: é o que sai desta parcela que vira a nova.`
-        : vencimento && origem.vencimento && vencimento <= origem.vencimento
-          ? "O vencimento tem de ser depois do da parcela de origem."
-          : null;
+        ? `Tem de ser menos que ${formatarSemSimbolo(origem.total as Centavos)}, que é o que esta parcela vale hoje.`
+        : null;
+
+  const erroDaData =
+    vencimento && origem?.vencimento && vencimento <= origem.vencimento
+      ? `Tem de ser depois de ${curto(origem.vencimento)}, o vencimento da parcela ${origem.numero}.`
+      : null;
+
+  const pronto = Boolean(origem) && valor > 0 && Boolean(vencimento) && !erroDoValor && !erroDaData;
 
   return (
     <FormDrawer
       aberto
       nivel={2}
-      titulo="Nova parcela"
-      subtitulo="O valor sai de uma parcela que já existe. O total da conta não muda."
+      titulo="Dividir parcela"
       onClose={onClose}
       aoSalvar={aoSalvar}
       url={`/api/v1/faturas/${faturaId}/parcelas`}
       metodo="POST"
-      podeSalvar={Boolean(origem) && valor > 0 && Boolean(vencimento) && !erro}
+      podeSalvar={pronto}
       valores={() => ({ origemId, valor, vencimento })}
     >
-      <Field label="Tirar de">
-        <select
-          style={selectStyle}
-          value={origemId}
-          onChange={(e) => setOrigemId(Number(e.target.value))}
+      <Formulario>
+        <GrupoDeCampos
+          primeiro
+          titulo="Adiar um pedaço do pagamento"
+          legenda="O valor da parcela nova sai de uma que já existe, então o total da conta continua o mesmo. É o que se faz quando o cliente pede para empurrar uma parte para a frente."
         >
-          {parcelas.map((p) => (
-            <option key={p.id} value={p.id}>
-              Parcela {p.numero}
-              {p.vencimento ? ` · vence ${curto(p.vencimento)}` : ""} ·{" "}
-              {formatarSemSimbolo(p.total as Centavos)}
-            </option>
-          ))}
-        </select>
-      </Field>
+          <Field label="Tirar da parcela">
+            <select
+              style={selectStyle}
+              value={origemId}
+              onChange={(e) => setOrigemId(Number(e.target.value))}
+            >
+              {parcelas.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.numero} · {formatarSemSimbolo(p.total as Centavos)}
+                  {p.vencimento ? ` · vence ${curto(p.vencimento)}` : ""}
+                </option>
+              ))}
+            </select>
+          </Field>
 
-      <Field
-        label="Valor da parcela nova"
-        error={erro ?? undefined}
-        hint={
-          origem
-            ? `A parcela ${origem.numero} fica com ${formatarSemSimbolo(Math.max(0, origem.total - valor) as Centavos)}`
-            : undefined
-        }
-        required
-      >
-        <CampoNumerico valor={valor} aoMudar={setValor} escala={100} alinhar="right" />
-      </Field>
+          <Field label="Quanto tirar" error={erroDoValor ?? undefined} required>
+            <CampoNumerico valor={valor} aoMudar={setValor} escala={100} alinhar="right" />
+          </Field>
 
-      <Field label="Vence em" required>
-        <input
-          type="date"
-          style={inputStyle}
-          value={vencimento}
-          min={origem?.vencimento?.slice(0, 10)}
-          onChange={(e) => setVencimento(e.target.value)}
-        />
-      </Field>
+          <Field label="A parte adiada vence em" error={erroDaData ?? undefined} required>
+            <input
+              type="date"
+              style={inputStyle}
+              value={vencimento}
+              min={origem?.vencimento?.slice(0, 10)}
+              onChange={(e) => setVencimento(e.target.value)}
+            />
+          </Field>
+        </GrupoDeCampos>
+
+        {/*
+          ⚠️ O resultado por extenso, e não uma linha de números.
+
+          É a frase que a pessoa leria em voz alta para conferir antes de gravar.
+          Sem ela, os três campos acima descrevem uma operação que só existe
+          inteira na cabeça de quem já sabe como o sistema funciona.
+        */}
+        <GrupoDeCampos
+          titulo="Como a conta fica"
+          legenda="Confira antes de salvar: é isto que o cliente vai ver na próxima cobrança."
+        >
+          {origem && pronto ? (
+            <>
+              <Field label={`Parcela ${origem.numero}`}>
+                <CampoBloqueado
+                  valor={`${formatarSemSimbolo(sobra as Centavos)}${origem.vencimento ? ` · vence ${curto(origem.vencimento)}` : ""}`}
+                  titulo="O que sobra na parcela de origem depois do recorte."
+                />
+              </Field>
+
+              <Field label="Parcela nova">
+                <CampoBloqueado
+                  valor={`${formatarSemSimbolo(valor as Centavos)} · vence ${curto(vencimento)}`}
+                  titulo="A parte adiada. O número dela é dado pela ordem de vencimento."
+                />
+              </Field>
+            </>
+          ) : (
+            <Field label="Resultado">
+              <CampoBloqueado
+                valor="Preencha o valor e a data"
+                titulo="O resumo aparece quando os dois campos acima estiverem preenchidos."
+              />
+            </Field>
+          )}
+        </GrupoDeCampos>
+      </Formulario>
     </FormDrawer>
   );
 }
