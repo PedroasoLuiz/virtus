@@ -626,10 +626,10 @@ export function NovoRecebimentoDrawer({
                   da lista entraria na baixa sozinha: abrir a tela de um cliente
                   com seis parcelas em aberto significaria receber as seis.
                 */}
-                <Th minWidth={54}>Recebi</Th>
-                <Th minWidth={110}>Conta</Th>
-                <Th minWidth={100}>Vence</Th>
-                <Th minWidth={110}>Em aberto</Th>
+                <Th minWidth={54}>Baixar</Th>
+                <Th minWidth={150}>Conta</Th>
+                <Th minWidth={96}>Vence</Th>
+                <Th minWidth={96}>Em aberto</Th>
                 {/*
                   ⚠️ A unidade no rotulo, e nao so no campo.
 
@@ -638,9 +638,9 @@ export function NovoRecebimentoDrawer({
                   digitar 2 querendo dizer 2%. Aqui o que entra e o dinheiro que
                   o cliente pagou a mais, e o rotulo diz isso antes do erro.
                 */}
-                <Th minWidth={100}>Juros (R$)</Th>
-                <Th minWidth={100}>Multa (R$)</Th>
-                <Th minWidth={110}>Desconto (R$)</Th>
+                <Th minWidth={86}>Juros (R$)</Th>
+                <Th minWidth={86}>Multa (R$)</Th>
+                <Th minWidth={96}>Desconto (R$)</Th>
                 {/*
                   ⚠️ O valor NAO se digita: ele e o que estava em aberto menos o
                   que foi perdoado. Digitavel, ele e o mesmo numero pedido duas
@@ -650,7 +650,7 @@ export function NovoRecebimentoDrawer({
                   e o que separa "recebi menos e o resto fica devendo" de "recebi
                   menos porque perdoei".
                 */}
-                <Th align="right" minWidth={120}>
+                <Th align="right" minWidth={110}>
                   Valor
                 </Th>
               </TableHead>
@@ -674,6 +674,25 @@ export function NovoRecebimentoDrawer({
                         tres parcelas e a tela mostra uma.
                       */
                       dimmed={!liberada}
+                      /*
+                        ⚠️ Duas cores, duas coisas diferentes.
+
+                        Vencida e vermelho claro: e o unico estado que pede acao
+                        hoje, e a data sozinha em vermelho se perde no meio da
+                        tabela. Travada e o cinza esverdiado das linhas que nao se
+                        editam, o mesmo da parcela paga no parcelamento — ela
+                        aparece para explicar a conta, e nao para ser mexida.
+
+                        Travada ganha do vermelho: nao adianta chamar para uma
+                        acao que a fila ainda nao liberou.
+                      */
+                      style={
+                        !liberada
+                          ? { background: "var(--surface-hover)" }
+                          : atrasada
+                            ? { background: "var(--danger-bg)" }
+                            : undefined
+                      }
                     >
                       <Td>
                         <MarcaDeUso

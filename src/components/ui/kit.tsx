@@ -2708,14 +2708,14 @@ function SeletorUnidade({ emHoras, aoTrocar }: { emHoras: boolean; aoTrocar: () 
  *
  * âš ï¸ Escolhido, ele mostra o NOME e nao o campo de busca. O campo aberto com o
  * nome dentro convida a apagar sem querer; para trocar, o X limpa e devolve a
- * busca â€” um gesto explicito.
+ * busca — um gesto explicito.
  */
 export function SeletorBuscavel({
   valor,
   rotulo,
   aoEscolher,
   buscar,
-  placeholder = "Digite para buscarâ€¦",
+  placeholder = "Digite para buscar…",
   autoFocus,
   desabilitado,
 }: {
@@ -2836,7 +2836,7 @@ export function SeletorBuscavel({
           }}
         >
           {buscando && opcoes.length === 0 ? (
-            <Recado>Buscandoâ€¦</Recado>
+            <Recado>Buscando…</Recado>
           ) : opcoes.length === 0 ? (
             <Recado>{termo ? "Nada encontrado." : "Digite para buscar."}</Recado>
           ) : (

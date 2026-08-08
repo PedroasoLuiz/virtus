@@ -295,7 +295,7 @@ function ordenar(parcelas: ParcelaExistente[]): ParcelaExistente[] {
   return [...parcelas].sort((a, b) => a.numero - b.numero);
 }
 
-// â”€â”€ O que da para fazer nesta conta â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── O que da para fazer nesta conta ─────────────────────────────────────────
 
 /**
  * Uma parcela, do ponto de vista de quem quer MEXER nela.
@@ -348,7 +348,7 @@ export function oQuePodeNaConta(conta: {
   parcelas: ParcelaEditavel[];
 }): OQuePodeNaConta {
   if (conta.cancelada) {
-    const negado = { pode: false, motivo: "Esta conta estÃ¡ cancelada." };
+    const negado = { pode: false, motivo: "Esta conta está cancelada." };
 
     return {
       tickets: negado,
@@ -364,13 +364,13 @@ export function oQuePodeNaConta(conta: {
     ? {
         pode: false,
         motivo:
-          "Esta conta jÃ¡ recebeu. Mexer no total agora faria o boleto e a nota que saÃ­ram divergirem dela: o caminho Ã© uma conta a receber nova.",
+          "Esta conta já recebeu. Mexer no total agora faria o boleto e a nota que saíram divergirem dela: o caminho é uma conta a receber nova.",
       }
     : LIBERADO;
 
   const parcelas: Permissao =
     emAberto.length === 0
-      ? { pode: false, motivo: "Todas as parcelas jÃ¡ foram recebidas." }
+      ? { pode: false, motivo: "Todas as parcelas já foram recebidas." }
       : LIBERADO;
 
   return {
@@ -380,12 +380,12 @@ export function oQuePodeNaConta(conta: {
       conta.parcelas.map((p) => [
         p.id,
         p.pago
-          ? { pode: false, motivo: "Parcela jÃ¡ recebida." }
+          ? { pode: false, motivo: "Parcela já recebida." }
           : p.temDocumento
             ? {
                 pode: false,
                 motivo:
-                  "JÃ¡ saiu boleto ou nota desta parcela. Mudar o valor ou o vencimento deixaria o documento dizendo outra coisa.",
+                  "Já saiu boleto ou nota desta parcela. Mudar o valor ou o vencimento deixaria o documento dizendo outra coisa.",
               }
             : LIBERADO,
       ]),
@@ -397,8 +397,8 @@ export function oQuePodeNaConta(conta: {
  * Tira um pedaco de uma parcela e faz dele uma parcela nova. Preserva o total.
  *
  * âš ï¸ Diferente de `adicionarParcela`, que parte a ultima ao meio: aqui quem
- * cadastra diz QUANTO e para QUANDO. E o que o cliente pede ao telefone â€” "tira
- * mil dessa e joga para o mes que vem" â€”, e partir ao meio nunca era o numero
+ * cadastra diz QUANTO e para QUANDO. E o que o cliente pede ao telefone — "tira
+ * mil dessa e joga para o mes que vem" —, e partir ao meio nunca era o numero
  * combinado.
  *
  * âš ï¸ O vencimento novo tem de ser DEPOIS do da parcela de origem. Antes, a conta
