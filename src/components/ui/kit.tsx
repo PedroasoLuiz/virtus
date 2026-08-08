@@ -518,7 +518,7 @@ export function BotaoDeAcao({
 }) {
   const [hover, setHover] = useState(false);
 
-  return (
+  const botao = (
     <button
       type="button"
       title={rotulo}
@@ -565,6 +565,89 @@ export function BotaoDeAcao({
         {children}
       </svg>
     </button>
+  );
+
+  /*
+   * ⚠️ Desabilitado, o `title` vai para um SPAN em volta.
+   *
+   * Navegador nao dispara evento de mouse em `button:disabled`, e a dica nativa
+   * depende desse evento: o `title` estava no botao e simplesmente nunca
+   * aparecia — justamente no unico estado em que ele tem algo a dizer, que e
+   * explicar POR QUE a acao esta bloqueada. O span recebe o hover no lugar dele.
+   */
+  return desabilitado ? (
+    <span title={rotulo} style={{ display: "inline-flex" }}>
+      {botao}
+    </span>
+  ) : (
+    botao
+  );
+}
+
+/**
+ * Um numero em destaque, com o que ele significa embaixo.
+ *
+ * ⚠️ Mora no kit porque tem dois donos. Nasceu no painel do dashboard e a
+ * listagem de baixas precisou do mesmo cartao; copiado, o segundo ja nasceria
+ * livre para divergir no raio, no recuo e no corpo do numero.
+ *
+ * ⚠️ O `detalhe` explica o RECORTE, e nao repete o rotulo. Um numero de dinheiro
+ * sozinho nao diz de que periodo e nem sobre quantos lancamentos: "Recebido"
+ * seguido de 12.400 deixa quem le sem saber se e o mes, o ano ou tudo.
+ */
+export function Indicador({
+  label,
+  valor,
+  detalhe,
+  tom = "neutro",
+}: {
+  label: string;
+  /** Ja formatado por quem chama: o kit nao decide moeda nem casas. */
+  valor: string;
+  detalhe: string;
+  tom?: "neutro" | "credito";
+}) {
+  return (
+    <div
+      style={{
+        background: "var(--surface)",
+        border: "1px solid var(--border)",
+        borderRadius: "var(--radius-lg)",
+        padding: 16,
+      }}
+    >
+      <div className="rotulo">{label}</div>
+      <div
+        style={{
+          fontSize: "var(--text-3xl)",
+          fontWeight: "var(--fw-semi)",
+          letterSpacing: "var(--tracking-tight)",
+          fontVariantNumeric: "tabular-nums",
+          color: tom === "credito" ? "var(--credito)" : "var(--text-primary)",
+          marginTop: 6,
+        }}
+      >
+        {valor}
+      </div>
+      <div style={{ fontSize: "var(--text-sm)", color: "var(--text-tertiary)", marginTop: 2 }}>
+        {detalhe}
+      </div>
+    </div>
+  );
+}
+
+/** A faixa de indicadores. Quebra sozinha: cada cartao pede 200px e divide o resto. */
+export function FaixaDeIndicadores({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+        gap: 12,
+      }}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -994,11 +1077,22 @@ export function SearchInput({
   onSearch,
   placeholder = "Pesquisar",
   width = "var(--toolbar-search-w)",
+  sublinhado,
 }: {
   value: string;
   onSearch: (v: string) => void;
   placeholder?: string;
   width?: string | number;
+  /**
+   * O fio de baixo, sem caixa.
+   *
+   * ⚠️ Existe para a busca que mora DENTRO de um formulario, e nao na barra de
+   * uma listagem. Na barra, a caixa e o que separa o campo do fundo cinza da
+   * area de trabalho; dentro de um drawer branco, cercado de campos que ja tem
+   * moldura, mais uma caixa faz o filtro parecer um dado a preencher. O fio diz
+   * "escreva aqui" sem prometer que isto vai para o banco.
+   */
+  sublinhado?: boolean;
 }) {
   const [local, setLocal] = useState(value);
   const limpar = () => {
@@ -1008,22 +1102,25 @@ export function SearchInput({
 
   return (
     <div style={{ position: "relative", width }}>
-      <div
-        style={{
-          position: "absolute",
-          left: 10,
-          top: "50%",
-          transform: "translateY(-50%)",
-          color: "var(--text-tertiary)",
-          pointerEvents: "none",
-          display: "flex",
-        }}
-      >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-          <circle cx="11" cy="11" r="8" />
-          <path d="M21 21l-4.35-4.35" />
-        </svg>
-      </div>
+      {/*
+        A lupa da esquerda so existe na versao com caixa: sem recuo lateral, ela
+        ficaria em cima da primeira letra do que se digita.
+      */}
+      {!sublinhado && (
+        <div
+          style={{
+            position: "absolute",
+            left: 10,
+            top: "50%",
+            transform: "translateY(-50%)",
+            color: "var(--text-tertiary)",
+            pointerEvents: "none",
+            display: "flex",
+          }}
+        >
+          <LupaIcon />
+        </div>
+      )}
       <input
         value={local}
         onChange={(e) => setLocal(e.target.value)}
@@ -1035,42 +1132,76 @@ export function SearchInput({
         style={{
           height: "var(--toolbar-input-h)",
           width: "100%",
-          padding: "0 52px 0 32px",
-          borderRadius: "var(--radius-md)",
-          border: "1px solid var(--border)",
-          backgroundColor: "var(--surface)",
           color: "var(--input-color)",
-          fontSize: "var(--text-base)",
           outline: "none",
           fontFamily: "var(--font)",
+          ...(sublinhado
+            ? {
+                padding: "0 22px 0 0",
+                borderRadius: 0,
+                border: "none",
+                borderBottom: "1px solid var(--border)",
+                backgroundColor: "transparent",
+                fontSize: "var(--text-sm)",
+              }
+            : {
+                padding: "0 52px 0 32px",
+                borderRadius: "var(--radius-md)",
+                border: "1px solid var(--border)",
+                backgroundColor: "var(--surface)",
+                fontSize: "var(--text-base)",
+              }),
         }}
       />
       {!local ? (
-        <span
-          style={{
-            position: "absolute",
-            right: 8,
-            top: "50%",
-            transform: "translateY(-50%)",
-            fontSize: 9,
-            color: "var(--kbd-color)",
-            background: "var(--kbd-bg)",
-            border: "1px solid var(--kbd-border)",
-            borderRadius: 3,
-            padding: "1px 4px",
-            lineHeight: 1.4,
-            pointerEvents: "none",
-          }}
-        >
-          Enter
-        </span>
+        /*
+          ⚠️ Sublinhado troca a marca do Enter pela LUPA, no mesmo canto.
+
+          O aviso de tecla e a promessa de uma busca que vai ao servidor e custa
+          espera. Aqui o campo peneira o que ja esta na tela, e um "Enter" em
+          caixinha pede cerimonia para um gesto que nao tem nenhuma.
+        */
+        sublinhado ? (
+          <span
+            style={{
+              position: "absolute",
+              right: 2,
+              top: "50%",
+              transform: "translateY(-50%)",
+              color: "var(--text-tertiary)",
+              pointerEvents: "none",
+              display: "flex",
+            }}
+          >
+            <LupaIcon />
+          </span>
+        ) : (
+          <span
+            style={{
+              position: "absolute",
+              right: 8,
+              top: "50%",
+              transform: "translateY(-50%)",
+              fontSize: 9,
+              color: "var(--kbd-color)",
+              background: "var(--kbd-bg)",
+              border: "1px solid var(--kbd-border)",
+              borderRadius: 3,
+              padding: "1px 4px",
+              lineHeight: 1.4,
+              pointerEvents: "none",
+            }}
+          >
+            Enter
+          </span>
+        )
       ) : (
         <button
           onClick={limpar}
           aria-label="Limpar busca"
           style={{
             position: "absolute",
-            right: 8,
+            right: sublinhado ? 0 : 8,
             top: "50%",
             transform: "translateY(-50%)",
             background: "none",
@@ -1086,6 +1217,24 @@ export function SearchInput({
         </button>
       )}
     </div>
+  );
+}
+
+/** A lupa das duas versoes do campo de busca. */
+function LupaIcon() {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+    >
+      <circle cx="11" cy="11" r="8" />
+      <path d="M21 21l-4.35-4.35" />
+    </svg>
   );
 }
 
