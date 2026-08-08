@@ -4,6 +4,7 @@ import { useState } from "react";
 import {
   ActiveToggle,
   CampoBloqueado,
+  CampoDeTexto,
   Field,
   Formulario,
   GrupoDeCampos,
@@ -11,6 +12,7 @@ import {
   selectStyle,
 } from "@/components/ui/kit";
 import { CLASSIFICACOES, REGIMES } from "@/modules/clientes/clientes.types";
+import { documentoValido } from "@/shared/domain/cadastro-pessoa";
 import { buscarCnpj, mascararDocumento } from "@/shared/domain/cnpj";
 import { mascararTelefone } from "@/shared/domain/telefone";
 import type { Form } from "./pessoa-form";
@@ -29,6 +31,7 @@ export function AbaDeInformacoes({
   aplicar,
   clienteId,
   novoCadastro,
+  onDuplicado,
 }: {
   form: Form;
   set: <K extends keyof Form>(campo: K, valor: Form[K]) => void;
@@ -37,8 +40,24 @@ export function AbaDeInformacoes({
   /** `null` num cadastro que ainda não nasceu. */
   clienteId: number | null;
   novoCadastro: boolean;
+  /**
+   * Avisa o drawer que o documento é de outro cadastro.
+   *
+   * ⚠️ Sobe porque quem segura o salvar é o drawer. O servidor também recusa,
+   * mas deixar o botão aceso convida a mandar e esperar a recusa voltar.
+   */
+  onDuplicado: (duplicado: boolean) => void;
 }) {
   const [buscando, setBuscando] = useState(false);
+
+  /**
+   * Quem ja tem este documento, quando ha alguem.
+   *
+   * ⚠️ A conferencia acontece ao DIGITAR, e nao no salvar. O servidor tambem
+   * recusa duplicidade, mas ali a pessoa ja preencheu a ficha inteira: descobrir
+   * no fim que aquele cliente ja existia joga fora o trabalho todo.
+   */
+  const [jaExiste, setJaExiste] = useState<{ id: number; nome: string } | null>(null);
 
   const digitos = form.cnpj.replace(/\D/g, "");
   const fisica = digitos.length > 0 && digitos.length <= 11;
@@ -81,12 +100,36 @@ export function AbaDeInformacoes({
     const mascarado = mascararDocumento(bruto);
     set("cnpj", mascarado);
 
-    // Só CNPJ: pessoa física não tem cadastro público para consultar.
-    if (!novoCadastro || mascarado.replace(/\D/g, "").length !== 14) return;
+    /*
+     * ⚠️ Documento incompleto limpa o aviso em vez de manter o anterior.
+     *
+     * Sem isto, apagar um dígito do documento repetido deixava o campo vermelho
+     * acusando duplicidade de um número que já não estava mais escrito ali.
+     */
+    if (!documentoValido(mascarado)) {
+      setJaExiste(null);
+      onDuplicado(false);
+      return;
+    }
+
+    /*
+     * ⚠️ As duas perguntas vão JUNTAS, e não uma depois da outra.
+     *
+     * Uma é nossa (já existe este cadastro?) e a outra é da Receita (quem é este
+     * CNPJ?). Em sequência, a tela ficaria parada o tempo das duas somadas para
+     * responder coisas que não dependem uma da outra.
+     */
+    const eCnpj = mascarado.replace(/\D/g, "").length === 14;
 
     setBuscando(true);
-    const achado = await buscarCnpj(mascarado);
+    const [duplicado, achado] = await Promise.all([
+      conferirDuplicidade(mascarado),
+      eCnpj && novoCadastro ? buscarCnpj(mascarado) : Promise.resolve(null),
+    ]);
     setBuscando(false);
+
+    setJaExiste(duplicado);
+    onDuplicado(duplicado != null);
 
     // Sem achado a tela não reclama: a consulta é atalho, e o serviço é de fora.
     if (!achado) return;
@@ -100,6 +143,22 @@ export function AbaDeInformacoes({
       regimeTributario: form.regimeTributario || achado.regime,
       endereco: achado.endereco,
     });
+  }
+
+  /**
+   * Pergunta ao nosso cadastro quem ja tem este documento.
+   *
+   * ⚠️ O proprio registro em edicao nao conta. Sem isto, abrir uma ficha e mexer
+   * no documento acusaria que ele "ja existe" — apontando para ela mesma.
+   */
+  async function conferirDuplicidade(documento: string) {
+    const r = await fetch(`/api/v1/clientes/documento?documento=${encodeURIComponent(documento)}`);
+    if (!r.ok) return null;
+
+    const corpo = await r.json();
+    const achado = corpo.data as { id: number; nome: string } | null;
+
+    return achado && achado.id !== clienteId ? achado : null;
   }
 
   return (
@@ -140,20 +199,31 @@ export function AbaDeInformacoes({
           </Field>
         )}
 
+        {/*
+          ⚠️ O aviso de "já existe" mora NO CAMPO: borda vermelha e o alerta no
+          canto, com a frase no hover.
+
+          Toast passa, e este é um impedimento; escrita embaixo do campo, a frase
+          empurrava os campos seguintes a cada tecla. No canto do campo é onde
+          este sistema já fala sobre o próprio campo, ao lado do número que
+          causou o problema.
+        */}
         <Field
           label={rotuloDoDocumento}
           hint={
             buscando
-              ? "Buscando na Receita…"
+              ? "Conferindo…"
               : novoCadastro
                 ? "Com o CNPJ completo, o resto vem preenchido"
                 : undefined
           }
         >
-          <input
-            style={inputStyle}
-            value={form.cnpj}
-            onChange={(e) => void aoDigitarDocumento(e.target.value)}
+          <CampoDeTexto
+            valor={form.cnpj}
+            onMudar={(v) => void aoDigitarDocumento(v)}
+            alerta={
+              jaExiste ? `Já existe um cadastro com este documento: ${jaExiste.nome}` : null
+            }
             placeholder="00.000.000/0000-00"
             inputMode="numeric"
           />
@@ -266,24 +336,22 @@ export function AbaDeInformacoes({
           */}
           {form.endereco && (
             <Field label="Endereço">
-              <div
-                style={{
-                  minHeight: "var(--h-input)",
-                  display: "flex",
-                  alignItems: "center",
-                  fontSize: "var(--text-sm)",
-                  color: "var(--text-tertiary)",
-                  lineHeight: "var(--lh-snug)",
-                }}
-              >
-                {[
+              {/*
+                ⚠️ `CampoBloqueado` do kit, e não um texto solto. Ele é dado que
+                veio de fora e não se edita aqui: o cadeado à direita diz isso
+                sem precisar de uma frase, e é o mesmo desenho de toda tela que
+                mostra dado derivado.
+              */}
+              <CampoBloqueado
+                valor={[
                   [form.endereco.logradouro, form.endereco.numero].filter(Boolean).join(", "),
                   form.endereco.bairro,
                   [form.endereco.cidade, form.endereco.uf].filter(Boolean).join(" / "),
                 ]
                   .filter(Boolean)
                   .join(" · ")}
-              </div>
+                titulo="Veio da Receita com o CNPJ. Nasce como o endereço principal, e se corrige na aba de endereços."
+              />
             </Field>
           )}
         </GrupoDeCampos>

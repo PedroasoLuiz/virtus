@@ -24,6 +24,7 @@ import {
   type FilhoIdParam,
   type IdParam,
   type ListarQuery,
+  type PorDocumentoQuery,
 } from "@/modules/clientes/clientes.schema";
 
 /** Traduz HTTP <-> servico. */
@@ -257,6 +258,18 @@ export async function obter({ params, ctx }: Entrada<undefined, undefined, IdPar
   const empresaId = empresaObrigatoria(ctx);
   const cliente = await service.obterCliente(empresaId, params.id);
   return ok(clienteSchema.parse(cliente));
+}
+
+export async function porDocumento({
+  query,
+  ctx,
+}: Entrada<undefined, PorDocumentoQuery, unknown>) {
+  const empresaId = empresaObrigatoria(ctx);
+  const achado = await service.porDocumento(empresaId, query.documento);
+
+  // `null` no corpo, e nao 404: "nao existe ninguem com este documento" e uma
+  // resposta boa, e a tela nao tem por que tratar isso como erro.
+  return ok(achado);
 }
 
 export async function criar({ body, ctx }: Entrada<CriarClienteBody, undefined, unknown>) {

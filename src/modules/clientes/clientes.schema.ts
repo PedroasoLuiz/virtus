@@ -79,18 +79,6 @@ export const contagemSchema = z.object({
   corretor: z.number(),
 });
 
-/**
- * ⚠️ Documento e data NAO travam o cadastro.
- *
- * O cadastro nasce muitas vezes antes do documento: um orcamento para quem ainda
- * nao passou o CPF precisa de alguem para apontar. Exigindo ali, o atendimento
- * inventava documento para o botao liberar, e cadastro com CPF inventado e pior
- * do que cadastro incompleto.
- *
- * ⚠️ Quem cobra a falta e o FATURAMENTO. O cadastro fica pendente e a fatura
- * recusa nascer sem os dois: e o momento em que o dado passa a ser necessario de
- * verdade, e ate la ninguem e obrigado a nada.
- */
 export const criarEnderecoBodySchema = z.object({
   cep: z.string().trim().max(12).nullish(),
   logradouro: z.string().trim().max(160).nullish(),
@@ -103,6 +91,18 @@ export const criarEnderecoBodySchema = z.object({
   principal: z.boolean().default(false),
 });
 
+/**
+ * ⚠️ Documento e data NAO travam o cadastro.
+ *
+ * O cadastro nasce muitas vezes antes do documento: um orcamento para quem ainda
+ * nao passou o CPF precisa de alguem para apontar. Exigindo ali, o atendimento
+ * inventava documento para o botao liberar, e cadastro com CPF inventado e pior
+ * do que cadastro incompleto.
+ *
+ * ⚠️ Quem cobra a falta e o FATURAMENTO. O cadastro fica pendente e a fatura
+ * recusa nascer sem os dois: e o momento em que o dado passa a ser necessario de
+ * verdade, e ate la ninguem e obrigado a nada.
+ */
 export const criarClienteBodySchema = z.object({
   razao: textoCurtoSchema,
   nomeFantasia: textoCurtoSchema.nullish(),
@@ -149,6 +149,20 @@ export const criarClienteComCanalSchema = criarClienteBodySchema.refine(
   (c) => Boolean(c.contato) || Boolean(c.email),
   { message: "Informe ao menos um telefone ou um e-mail", path: ["contato"] },
 );
+
+/**
+ * ⚠️ Aceita o documento com pontuacao e devolve so os digitos.
+ *
+ * A tela manda o que esta no campo, mascarado. Exigindo digito puro, ela teria de
+ * limpar antes de perguntar, e a mesma limpeza existiria em dois lugares.
+ */
+export const porDocumentoQuerySchema = z.object({
+  documento: z
+    .string()
+    .trim()
+    .max(20)
+    .transform((v) => v.replace(/\D/g, "")),
+});
 
 export const idParamSchema = z.object({ id: idSchema });
 
@@ -284,6 +298,7 @@ export type AtualizarEnderecoBody = z.infer<typeof atualizarEnderecoBodySchema>;
 export type AtualizarBancarioBody = z.infer<typeof atualizarBancarioBodySchema>;
 export type CriarClienteBody = z.infer<typeof criarClienteBodySchema>;
 export type IdParam = z.infer<typeof idParamSchema>;
+export type PorDocumentoQuery = z.infer<typeof porDocumentoQuerySchema>;
 
 /** Edicao: tudo opcional — o cliente envia so o que mudou. */
 /*

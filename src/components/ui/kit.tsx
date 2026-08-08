@@ -2240,6 +2240,83 @@ export function CampoBloqueado({
   );
 }
 
+/**
+ * Campo de texto que pode acusar um problema DENTRO dele.
+ *
+ * ⚠️ O alerta fica onde o cadeado do `CampoBloqueado` fica, e por isso existe.
+ * Aquele canto do campo ja e o lugar onde este sistema diz algo sobre o proprio
+ * campo: um icone solto ao lado do rotulo, ou um X vermelho a esquerda, seriam um
+ * terceiro vocabulario para a mesma conversa.
+ *
+ * ⚠️ A borda vermelha vem junto do icone, nunca sozinha. Cor sozinha nao serve a
+ * quem nao distingue vermelho de cinza, e o icone sozinho passa desapercebido num
+ * campo que ainda esta sendo digitado.
+ *
+ * ⚠️ A frase do problema vive no HOVER do icone, como o "i" das dicas. Escrita
+ * embaixo do campo, ela empurrava os campos seguintes para baixo a cada tecla e
+ * fazia o formulario inteiro pular enquanto alguem digitava um documento.
+ */
+export function CampoDeTexto({
+  valor,
+  onMudar,
+  alerta,
+  ...resto
+}: {
+  valor: string;
+  onMudar: (valor: string) => void;
+  /** A frase do problema. Vazio ou ausente, o campo e um campo comum. */
+  alerta?: string | null;
+} & Omit<React.InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "style">) {
+  const comAlerta = Boolean(alerta);
+
+  return (
+    <div style={{ position: "relative" }}>
+      <input
+        {...resto}
+        value={valor}
+        onChange={(e) => onMudar(e.target.value)}
+        aria-invalid={comAlerta || undefined}
+        style={{
+          ...inputStyle,
+          ...(comAlerta
+            ? { borderColor: "var(--danger)", paddingRight: 28 }
+            : {}),
+        }}
+      />
+
+      {comAlerta && (
+        <span
+          title={alerta ?? undefined}
+          style={{
+            position: "absolute",
+            right: 8,
+            top: "50%",
+            transform: "translateY(-50%)",
+            display: "flex",
+            // Recebe o mouse: e ele que carrega a frase do problema.
+            cursor: "help",
+            color: "var(--danger)",
+          }}
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.1"
+            strokeLinecap="round"
+            aria-hidden
+          >
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 7.5v6M12 16.6v.2" />
+          </svg>
+        </span>
+      )}
+    </div>
+  );
+}
+
 /** Abas de conteudo dentro de um drawer. Mesmo padrao do SIC. */
 export function PanelTabs({
   tabs,

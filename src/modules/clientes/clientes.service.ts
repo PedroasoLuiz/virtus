@@ -1,5 +1,6 @@
 import { BusinessRuleError, ConflictError, NotFoundError } from "@/shared/errors/app-error";
 import { dominioAceitaEmail } from "@/shared/email/dominio-existe";
+import { documentoValido } from "@/shared/domain/cadastro-pessoa";
 import type { Paginacao, Pagina } from "@/shared/utils/paginacao";
 import * as repo from "@/modules/clientes/clientes.repository";
 import * as contatosRepo from "@/modules/clientes/contatos.repository";
@@ -261,6 +262,25 @@ export async function definirUsuariosDaPessoa(
 ): Promise<void> {
   await conferirPosse(empresaId, clienteId);
   await acessoRepo.definirUsuariosDaPessoa(clienteId, usuarioId, usuarios);
+}
+
+/**
+ * Quem ja tem este documento nesta empresa.
+ *
+ * ⚠️ Devolve `null` para documento incompleto em vez de procurar. Com tres digitos
+ * a resposta seria sempre "nao existe", e a tela mostraria "documento livre"
+ * antes de a pessoa terminar de digitar.
+ */
+export async function porDocumento(
+  empresaId: number,
+  documento: string,
+): Promise<{ id: number; nome: string } | null> {
+  if (!documentoValido(documento)) return null;
+
+  const achado = await repo.buscarPorCnpj(empresaId, documento);
+  if (!achado) return null;
+
+  return { id: achado.id, nome: achado.nomeFantasia?.trim() || achado.razao };
 }
 
 export async function obterCliente(empresaId: number, id: number): Promise<Cliente> {

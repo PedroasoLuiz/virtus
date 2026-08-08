@@ -78,7 +78,7 @@ export const idempotencyKeySchema = z.string().min(8).max(128);
  * Mesma ideia do CNPJ com outros pesos: os nove primeiros digitos geram o
  * decimo, e os dez geram o decimo primeiro.
  */
-function cpfValido(cpf: string): boolean {
+export function cpfValido(cpf: string): boolean {
   // Todos iguais fecha a formula e nao existe: 111.111.111-11 passaria.
   if (/^(\d)\1{10}$/.test(cpf)) return false;
 
@@ -93,7 +93,7 @@ function cpfValido(cpf: string): boolean {
   return digito(9) === Number(cpf[9]) && digito(10) === Number(cpf[10]);
 }
 
-function cnpjValido(cnpj: string): boolean {
+export function cnpjValido(cnpj: string): boolean {
   if (/^(\d)\1{13}$/.test(cnpj)) return false;
 
   const digito = (base: string, pesoInicial: number): number => {

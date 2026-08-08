@@ -11,7 +11,26 @@
  * so mostra o mesmo aviso lendo a mesma funcao.
  */
 
+import { cnpjValido, cpfValido } from "@/shared/validators/comuns";
+
 export type PendenciaDoCadastro = "documento" | "data";
+
+/**
+ * O documento e um documento de verdade?
+ *
+ * ⚠️ Confere os DIGITOS VERIFICADORES, e nao so o tamanho. O cadastro herdado tem
+ * "00.000.000/0000-00" escrito em dois registros: catorze digitos, e nada. Pela
+ * contagem, aquilo passava por CNPJ completo e liberava o faturamento de um
+ * cliente sem documento nenhum.
+ */
+export function documentoValido(bruto: string | null): boolean {
+  const d = (bruto ?? "").replace(/\D/g, "");
+
+  if (d.length === 11) return cpfValido(d);
+  if (d.length === 14) return cnpjValido(d);
+
+  return false;
+}
 
 export type CadastroConferivel = {
   cnpj: string | null;
@@ -21,15 +40,7 @@ export type CadastroConferivel = {
 export function pendenciasDoCadastro(p: CadastroConferivel): PendenciaDoCadastro[] {
   const pendencias: PendenciaDoCadastro[] = [];
 
-  /*
-   * ⚠️ Conta DIGITO, e nao caracteres.
-   *
-   * O legado guarda documento formatado, com ponto e barra, e um cadastro antigo
-   * chega a ter a palavra "Nao informado" escrita na coluna. Onze ou catorze
-   * digitos e a unica leitura que separa documento de recado.
-   */
-  const digitos = (p.cnpj ?? "").replace(/\D/g, "");
-  if (digitos.length !== 11 && digitos.length !== 14) pendencias.push("documento");
+  if (!documentoValido(p.cnpj)) pendencias.push("documento");
 
   if (!p.dataNascimento) pendencias.push("data");
 

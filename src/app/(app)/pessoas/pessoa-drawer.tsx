@@ -91,6 +91,15 @@ export function PessoaDrawer({
    */
   const cache = useCacheDoDrawer();
 
+  /*
+   * O documento digitado ja pertence a outro cadastro.
+   *
+   * ⚠️ Mora aqui, e nao na aba, porque quem segura o salvar e este componente. A
+   * aba confere ao digitar e avisa; o servidor recusa de novo, mas deixar o botao
+   * aceso convida a mandar e esperar a recusa voltar.
+   */
+  const [documentoDuplicado, setDocumentoDuplicado] = useState(false);
+
   const editando = cliente !== null;
   const set = <K extends keyof Form>(campo: K, valor: Form[K]) =>
     setForm((f) => ({ ...f, [campo]: valor }));
@@ -159,6 +168,7 @@ export function PessoaDrawer({
       podeSalvar={
         form.razao.trim().length > 0 &&
         form.papeis.length > 0 &&
+        !documentoDuplicado &&
         (editando || Boolean(form.contato.trim() || form.email.trim()))
       }
       valores={() => ({
@@ -237,6 +247,7 @@ export function PessoaDrawer({
             aplicar={(mudanca) => setForm((f) => ({ ...f, ...mudanca }))}
             clienteId={cliente?.id ?? null}
             novoCadastro={!editando}
+            onDuplicado={setDocumentoDuplicado}
           />
         )}
       </div>
