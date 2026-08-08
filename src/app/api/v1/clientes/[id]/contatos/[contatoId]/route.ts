@@ -1,6 +1,9 @@
 import { handler } from "@/shared/http/handler";
 import * as controller from "@/modules/clientes/clientes.controller";
-import { contatoIdParamSchema } from "@/modules/clientes/clientes.schema";
+import {
+  atualizarContatoBodySchema,
+  contatoIdParamSchema,
+} from "@/modules/clientes/clientes.schema";
 
 /**
  * /api/v1/clientes/{id}/contatos/{contatoId}
@@ -9,6 +12,15 @@ import { contatoIdParamSchema } from "@/modules/clientes/clientes.schema";
  * aparece numa conversa antiga do WhatsApp e num envio de cobranca de tres meses
  * atras: apagando, aquele historico perde a referencia de quem era.
  */
+
+export const PUT = handler(
+  {
+    params: contatoIdParamSchema,
+    body: atualizarContatoBodySchema,
+    requerModulo: "financeiro",
+  },
+  controller.atualizarContato,
+);
 
 export const DELETE = handler(
   { params: contatoIdParamSchema, requerModulo: "financeiro" },

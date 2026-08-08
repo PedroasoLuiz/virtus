@@ -35,7 +35,15 @@ export function AbaDeEndereco({
   cache: CacheDoDrawer;
 }) {
   const { avisar } = useAvisos();
-  const [novo, setNovo] = useState(false);
+
+  /**
+   * O que o formulário está fazendo: nada, cadastrando, ou corrigindo um id.
+   *
+   * ⚠️ Um estado só para os dois. Com um `novo` e um `editando` separados, os
+   * dois podiam estar ligados ao mesmo tempo e o formulário ficava sem saber se
+   * salvava por cima ou criava outro.
+   */
+  const [aberto, setAberto] = useState<null | "novo" | { id: number }>(null);
 
   const { dados: itens, recarregar: carregar } = useRecursoDaPessoa<EnderecoDaPessoa[]>(
     cache,
@@ -62,6 +70,9 @@ export function AbaDeEndereco({
       return;
     }
 
+    // Fecha antes de recarregar: o formulário lê o registro pelo id da lista, e
+    // com o registro fora dela ele viraria um cadastro novo em branco.
+    setAberto(null);
     void carregar();
   }
 
@@ -70,13 +81,17 @@ export function AbaDeEndereco({
       <GrupoDeCampos
         primeiro
         titulo="Endereços"
-        legenda="O principal é o que sai na nota fiscal. Os demais servem para entrega, obra ou filial — o primeiro cadastrado já nasce principal."
-        onIncluir={novo ? undefined : () => setNovo(true)}
+        legenda="O principal é o que sai na nota fiscal. Os demais servem para entrega, obra ou filial, e o primeiro cadastrado já nasce principal."
+        onIncluir={aberto ? undefined : () => setAberto("novo")}
         rotuloIncluir="Novo endereço"
       >
         <TableArea minWidth={0}>
           <TableHead>
-            <Th>Endereço</Th>
+            {/*
+              ⚠️ "Logradouro", e não "Endereço". A aba já se chama Endereço e o
+              título da seção também: a terceira repetição não informa nada.
+            */}
+            <Th>Logradouro</Th>
             <Th minWidth={150}>Cidade</Th>
             <Th align="center" minWidth={90}>
               Principal
@@ -90,19 +105,37 @@ export function AbaDeEndereco({
             ) : itens.length === 0 ? (
               <EmptyRow colSpan={4} message="Nenhum endereço cadastrado." />
             ) : (
-              itens.map((e) => <Linha key={e.id} endereco={e} onPrincipal={() => void promover(e.id)} onRemover={() => void remover(e.id)} />)
+              itens.map((e) => (
+                <Linha
+                  key={e.id}
+                  endereco={e}
+                  onPrincipal={() => void promover(e.id)}
+                  onEditar={() => setAberto({ id: e.id })}
+                />
+              ))
             )}
           </tbody>
         </TableArea>
       </GrupoDeCampos>
 
-      {novo && (
+      {aberto && (
         <Formulario
+          // Trocar de linha remonta o formulário, então os campos já nascem do
+          // registro certo sem efeito para sincronizar.
+          key={aberto === "novo" ? "novo" : aberto.id}
           clienteId={clienteId}
+          endereco={aberto === "novo" ? null : ((itens ?? []).find((e) => e.id === aberto.id) ?? null)}
           primeiro={(itens ?? []).length === 0}
-          onFechar={() => setNovo(false)}
+          /*
+           * ⚠️ Só dá para excluir com mais de um cadastrado. Zerando a lista, a
+           * nota fiscal fica sem endereço e a tela não tem onde avisar disso.
+           * Quem quer trocar o único que existe corrige o que está ali.
+           */
+          podeExcluir={(itens ?? []).length > 1}
+          onRemover={(id) => void remover(id)}
+          onFechar={() => setAberto(null)}
           onSalvou={() => {
-            setNovo(false);
+            setAberto(null);
             void carregar();
           }}
         />
@@ -114,11 +147,11 @@ export function AbaDeEndereco({
 function Linha({
   endereco,
   onPrincipal,
-  onRemover,
+  onEditar,
 }: {
   endereco: EnderecoDaPessoa;
   onPrincipal: () => void;
-  onRemover: () => void;
+  onEditar: () => void;
 }) {
   const rua = [endereco.logradouro, endereco.numero].filter(Boolean).join(", ");
   const cidade = [endereco.cidade, endereco.uf].filter(Boolean).join(" / ");
@@ -168,9 +201,14 @@ function Linha({
       </Td>
 
       <Td>
+        {/*
+          ⚠️ A linha tem EDITAR, e não a lixeira. Excluir é a ação rara e a
+          irreversível; à mão numa lista que se abre para conferir um endereço,
+          ela convida o clique errado. Mora dentro da edição.
+        */}
         <AcoesDaLinha>
-          <BotaoDeAcao rotulo="Remover" perigo onClick={onRemover}>
-            <path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.6 8h4.8l.6-8" />
+          <BotaoDeAcao rotulo="Editar" onClick={onEditar}>
+            <path d="M11.6 2.6a1.6 1.6 0 0 1 2.3 2.3L5.6 13.2l-3 .7.7-3z" />
           </BotaoDeAcao>
         </AcoesDaLinha>
       </Td>
@@ -180,26 +218,33 @@ function Linha({
 
 function Formulario({
   clienteId,
+  endereco,
   primeiro,
+  podeExcluir,
+  onRemover,
   onFechar,
   onSalvou,
 }: {
   clienteId: number;
+  /** `null` = cadastro novo. */
+  endereco: EnderecoDaPessoa | null;
   /** Primeiro da pessoa: ele nasce principal, e a tela diz isso. */
   primeiro: boolean;
+  podeExcluir: boolean;
+  onRemover: (id: number) => void;
   onFechar: () => void;
   onSalvou: () => void;
 }) {
   const { avisar } = useAvisos();
 
   const [form, setForm] = useState({
-    cep: "",
-    logradouro: "",
-    numero: "",
-    complemento: "",
-    bairro: "",
-    cidade: "",
-    uf: "",
+    cep: endereco?.cep ?? "",
+    logradouro: endereco?.logradouro ?? "",
+    numero: endereco?.numero ?? "",
+    complemento: endereco?.complemento ?? "",
+    bairro: endereco?.bairro ?? "",
+    cidade: endereco?.cidade ?? "",
+    uf: endereco?.uf ?? "",
     principal: primeiro,
   });
 
@@ -212,22 +257,32 @@ function Formulario({
     if (salvando) return;
     setSalvando(true);
 
-    const r = await fetch(`/api/v1/clientes/${clienteId}/enderecos`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        cep: form.cep.trim() || null,
-        logradouro: form.logradouro.trim() || null,
-        numero: form.numero.trim() || null,
-        complemento: form.complemento.trim() || null,
-        bairro: form.bairro.trim() || null,
-        cidade: form.cidade.trim() || null,
-        // Vazio vai como null: o schema exige exatamente duas letras, e "" seria
-        // recusado com uma mensagem sobre tamanho que não ajuda ninguém.
-        uf: form.uf.trim().toUpperCase() || null,
-        principal: form.principal,
-      }),
-    });
+    const r = await fetch(
+      endereco
+        ? `/api/v1/clientes/${clienteId}/enderecos/${endereco.id}`
+        : `/api/v1/clientes/${clienteId}/enderecos`,
+      {
+        method: endereco ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cep: form.cep.trim() || null,
+          logradouro: form.logradouro.trim() || null,
+          numero: form.numero.trim() || null,
+          complemento: form.complemento.trim() || null,
+          bairro: form.bairro.trim() || null,
+          cidade: form.cidade.trim() || null,
+          // Vazio vai como null: o schema exige exatamente duas letras, e "" seria
+          // recusado com uma mensagem sobre tamanho que não ajuda ninguém.
+          uf: form.uf.trim().toUpperCase() || null,
+          /*
+           * ⚠️ O `principal` só vai no CADASTRO. Na correção quem manda é a
+           * coluna da tabela: ele é exclusivo entre os endereços da pessoa, e
+           * mexer nele por aqui exigiria derrubar o anterior no mesmo salvar.
+           */
+          ...(endereco ? {} : { principal: form.principal }),
+        }),
+      },
+    );
 
     setSalvando(false);
 
@@ -325,7 +380,7 @@ function Formulario({
         </div>
       </Field>
 
-      {!primeiro && (
+      {!primeiro && !endereco && (
         <label
           style={{
             display: "flex",
@@ -345,12 +400,22 @@ function Formulario({
         </label>
       )}
 
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        {/* Excluir na outra ponta da linha: é a única ação daqui que não dá
+            para desfazer, e ao lado de "Salvar" ela vira erro de mira. */}
+        {endereco && podeExcluir && (
+          <Button size="sm" variant="danger" onClick={() => onRemover(endereco.id)}>
+            Excluir
+          </Button>
+        )}
+
+        <div style={{ flex: 1 }} />
+
         <Button size="sm" variant="ghost" onClick={onFechar}>
           Cancelar
         </Button>
         <Button size="sm" variant="primary" disabled={salvando} onClick={() => void salvar()}>
-          {salvando ? "Salvando…" : "Adicionar"}
+          {salvando ? "Salvando…" : endereco ? "Salvar" : "Adicionar"}
         </Button>
       </div>
     </div>

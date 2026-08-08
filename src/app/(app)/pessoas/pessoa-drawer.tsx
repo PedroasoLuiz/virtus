@@ -9,7 +9,13 @@ import {
   Field,
   Formulario,
   GrupoDeCampos,
+  MarcaDeUso,
   PanelTabs,
+  TableArea,
+  TableHead,
+  Td,
+  Th,
+  Tr,
   inputStyle,
 } from "@/components/ui/kit";
 import type { Cliente, ContatoDaPessoa, PapelPessoa } from "@/modules/clientes/clientes.types";
@@ -241,23 +247,43 @@ export function PessoaDrawer({
               titulo="Papéis"
               legenda="Decidem em que telas esta pessoa aparece. Uma transportadora que também compra é um cadastro só, com dois papéis marcados. É preciso ao menos um: sem papel, a pessoa não aparece em lugar nenhum."
             >
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                {PAPEIS.map((p) => (
-                  <Papel
-                    key={p.valor}
-                    papel={p}
-                    marcado={form.papeis.includes(p.valor)}
-                    onAlternar={() =>
-                      setForm((f) => ({
-                        ...f,
-                        papeis: f.papeis.includes(p.valor)
-                          ? f.papeis.filter((x) => x !== p.valor)
-                          : [...f.papeis, p.valor],
-                      }))
-                    }
-                  />
-                ))}
-              </div>
+              <TableArea minWidth={0}>
+                <TableHead>
+                  <Th>Papel</Th>
+                  <Th>Onde aparece</Th>
+                  <Th align="center" minWidth={70}>
+                    Usa
+                  </Th>
+                </TableHead>
+
+                <tbody>
+                  {PAPEIS.map((p) => {
+                    const marcado = form.papeis.includes(p.valor);
+
+                    return (
+                      <Tr key={p.valor}>
+                        <Td>{p.rotulo}</Td>
+                        <Td style={{ color: "var(--text-tertiary)" }}>{p.explica}</Td>
+
+                        <Td style={{ textAlign: "center" }}>
+                          <MarcaDeUso
+                            marcado={marcado}
+                            rotulo={marcado ? `Tirar ${p.rotulo}` : `Marcar ${p.rotulo}`}
+                            onClick={() =>
+                              setForm((f) => ({
+                                ...f,
+                                papeis: f.papeis.includes(p.valor)
+                                  ? f.papeis.filter((x) => x !== p.valor)
+                                  : [...f.papeis, p.valor],
+                              }))
+                            }
+                          />
+                        </Td>
+                      </Tr>
+                    );
+                  })}
+                </tbody>
+              </TableArea>
             </GrupoDeCampos>
           </Formulario>
         ) : editando && aba === ABA_ENDERECO ? (
@@ -370,72 +396,5 @@ export function PessoaDrawer({
         )}
       </div>
     </FormDrawer>
-  );
-}
-
-/**
- * Um papel, com o que ele significa na prática.
- *
- * ⚠️ Linha inteira clicável, e não uma pastilha com o nome. "Fornecedor" sozinho
- * não diz o que muda ao marcar — e o que muda é em que telas a pessoa passa a
- * aparecer, que é justamente a dúvida de quem cadastra pela primeira vez.
- */
-function Papel({
-  papel,
-  marcado,
-  onAlternar,
-}: {
-  papel: (typeof PAPEIS)[number];
-  marcado: boolean;
-  onAlternar: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onAlternar}
-      aria-pressed={marcado}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 9,
-        width: "100%",
-        padding: "7px 10px",
-        border: `1px solid ${marcado ? "var(--primary-border)" : "var(--border)"}`,
-        borderRadius: "var(--radius-md)",
-        background: marcado ? "var(--primary-subtle)" : "var(--surface)",
-        cursor: "pointer",
-        textAlign: "left",
-        fontFamily: "var(--font)",
-        transition: "background var(--dur-fast) var(--ease)",
-      }}
-    >
-      <span
-        aria-hidden
-        style={{
-          width: 15,
-          height: 15,
-          flexShrink: 0,
-          display: "grid",
-          placeItems: "center",
-          borderRadius: 4,
-          border: `1px solid ${marcado ? "var(--primary)" : "var(--border-strong)"}`,
-          background: marcado ? "var(--primary)" : "transparent",
-          color: "var(--primary-fg)",
-        }}
-      >
-        {marcado && (
-          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M4 12.5l5.5 5.5L20 6.5" />
-          </svg>
-        )}
-      </span>
-
-      <span style={{ minWidth: 0, fontSize: "var(--text-base)" }}>
-        <span style={{ fontWeight: marcado ? "var(--fw-semi)" : "var(--fw-normal)" }}>
-          {papel.rotulo}
-        </span>
-        <span style={{ color: "var(--text-tertiary)" }}> · {papel.explica}</span>
-      </span>
-    </button>
   );
 }

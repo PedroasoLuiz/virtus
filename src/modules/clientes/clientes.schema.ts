@@ -158,6 +158,19 @@ export const criarContatoBodySchema = z.discriminatedUnion("tipo", [
   }),
 ]);
 
+/**
+ * Edicao de um contato que ja existe.
+ *
+ * ⚠️ O `tipo` continua vindo: e ele que escolhe a regra do valor. Um e-mail
+ * corrigido sem dizer o tipo cairia na regra frouxa do telefone, e "joao@" seria
+ * aceito por ter oito caracteres.
+ */
+export const atualizarContatoBodySchema = criarContatoBodySchema;
+
+export const atualizarEnderecoBodySchema = criarEnderecoBodySchema.omit({ principal: true });
+
+export const atualizarBancarioBodySchema = criarBancarioBodySchema.omit({ principal: true });
+
 export const clienteSchema = z.object({
   id: z.number(),
   razao: z.string(),
@@ -181,6 +194,9 @@ export type CriarEnderecoBody = z.infer<typeof criarEnderecoBodySchema>;
 export type CriarBancarioBody = z.infer<typeof criarBancarioBodySchema>;
 export type DefinirUsuariosBody = z.infer<typeof definirUsuariosBodySchema>;
 export type CriarContatoBody = z.infer<typeof criarContatoBodySchema>;
+export type AtualizarContatoBody = z.infer<typeof atualizarContatoBodySchema>;
+export type AtualizarEnderecoBody = z.infer<typeof atualizarEnderecoBodySchema>;
+export type AtualizarBancarioBody = z.infer<typeof atualizarBancarioBodySchema>;
 export type CriarClienteBody = z.infer<typeof criarClienteBodySchema>;
 export type IdParam = z.infer<typeof idParamSchema>;
 

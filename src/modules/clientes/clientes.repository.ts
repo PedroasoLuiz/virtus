@@ -191,6 +191,38 @@ export async function criarContato(
 }
 
 /**
+ * Corrige um contato que ja existe.
+ *
+ * ⚠️ O TIPO nao muda. Um telefone digitado na aba de e-mail se resolve apagando e
+ * cadastrando do lado certo; deixar a linha trocar de lado faria o principal do
+ * cadastro apontar para um valor que sumiu da lista onde estava.
+ */
+export async function atualizarContato(
+  clienteId: number,
+  contatoId: number,
+  entrada: { valor: string; rotulo: string | null },
+): Promise<ContatoDaPessoa> {
+  const supabase = await serverClient();
+
+  const { data, error } = await supabase
+    .from("clientescontatos")
+    .update({ valor: entrada.valor, rotulo: entrada.rotulo })
+    .eq("fkCliente", clienteId)
+    .eq("id", contatoId)
+    .select("id, tipo, valor, rotulo")
+    .single();
+
+  if (error) throw error;
+
+  return {
+    id: data.id as number,
+    tipo: data.tipo as ContatoDaPessoa["tipo"],
+    valor: data.valor as string,
+    rotulo: (data.rotulo as string | null) || null,
+  };
+}
+
+/**
  * ⚠️ Desativa, e nao apaga.
  *
  * O telefone que saiu do cadastro e o mesmo que aparece numa conversa antiga do
@@ -302,6 +334,37 @@ async function limparPrincipalDeEndereco(clienteId: number): Promise<void> {
   if (error) throw error;
 }
 
+/**
+ * ⚠️ O `principal` NAO vem daqui.
+ *
+ * Ele e exclusivo entre os enderecos da pessoa, e mexer nele exige derrubar o
+ * anterior: quem cuida disso e `definirEnderecoPrincipal`. Aceitando o campo aqui,
+ * uma correcao de numero da casa poderia deixar dois principais.
+ */
+export async function atualizarEndereco(
+  clienteId: number,
+  enderecoId: number,
+  entrada: Omit<EnderecoDaPessoa, "id" | "principal">,
+): Promise<void> {
+  const supabase = await serverClient();
+
+  const { error } = await supabase
+    .from("clientesenderecos")
+    .update({
+      cep: entrada.cep,
+      logradouro: entrada.logradouro,
+      numero: entrada.numero,
+      complemento: entrada.complemento,
+      bairro: entrada.bairro,
+      cidade: entrada.cidade,
+      uf: entrada.uf,
+    })
+    .eq("fkCliente", clienteId)
+    .eq("id", enderecoId);
+
+  if (error) throw error;
+}
+
 export async function excluirEndereco(clienteId: number, enderecoId: number): Promise<void> {
   const supabase = await serverClient();
 
@@ -377,6 +440,32 @@ export async function criarBancario(
     principal,
     ativo: true,
   });
+
+  if (error) throw error;
+}
+
+/** ⚠️ Sem o `principal`, pelo mesmo motivo do endereco: ele e exclusivo. */
+export async function atualizarBancario(
+  clienteId: number,
+  bancarioId: number,
+  entrada: Omit<DadoBancarioDaPessoa, "id" | "principal">,
+): Promise<void> {
+  const supabase = await serverClient();
+
+  const { error } = await supabase
+    .from("clientesbancarios")
+    .update({
+      banco: entrada.banco,
+      agencia: entrada.agencia,
+      conta: entrada.conta,
+      tipo: entrada.tipo,
+      titular: entrada.titular,
+      documento: entrada.documento,
+      pix_tipo: entrada.pixTipo,
+      pix_chave: entrada.pixChave,
+    })
+    .eq("fkCliente", clienteId)
+    .eq("id", bancarioId);
 
   if (error) throw error;
 }

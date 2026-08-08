@@ -1,6 +1,9 @@
 import { handler } from "@/shared/http/handler";
 import * as controller from "@/modules/clientes/clientes.controller";
-import { filhoIdParamSchema } from "@/modules/clientes/clientes.schema";
+import {
+  atualizarEnderecoBodySchema,
+  filhoIdParamSchema,
+} from "@/modules/clientes/clientes.schema";
 
 /**
  * /api/v1/clientes/{id}/enderecos/{filhoId}
@@ -9,8 +12,19 @@ import { filhoIdParamSchema } from "@/modules/clientes/clientes.schema";
  * Endereco nao aparece em documento passado: a nota guarda o endereco que foi
  * impresso nela, e nao um ponteiro para este cadastro.
  *
- * O PATCH promove a principal. Sem corpo: e a unica coisa que ele faz.
+ * O PATCH promove a principal. Sem corpo: e a unica coisa que ele faz. Quem
+ * corrige o endereco e o PUT, e ele nao toca no `principal` justamente para os
+ * dois nao disputarem o mesmo campo.
  */
+
+export const PUT = handler(
+  {
+    params: filhoIdParamSchema,
+    body: atualizarEnderecoBodySchema,
+    requerModulo: "financeiro",
+  },
+  controller.atualizarEndereco,
+);
 
 export const PATCH = handler(
   { params: filhoIdParamSchema, requerModulo: "financeiro" },

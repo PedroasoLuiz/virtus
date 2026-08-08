@@ -1803,6 +1803,75 @@ export function GrupoDeCampos({
 }
 
 /**
+ * A caixa de marcacao, numa coluna de tabela.
+ *
+ * ⚠️ QUADRADA, e a do principal e redonda. E a distincao de sempre entre escolher
+ * varios e escolher um. Quando as duas aparecem lado a lado, com a mesma forma
+ * ninguem saberia qual delas aceita mais de uma marca.
+ */
+export function MarcaDeUso({
+  marcado,
+  rotulo,
+  desabilitado,
+  onClick,
+}: {
+  marcado: boolean;
+  rotulo: string;
+  desabilitado?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={desabilitado}
+      aria-pressed={marcado}
+      aria-label={rotulo}
+      title={rotulo}
+      style={{
+        width: 22,
+        height: 22,
+        display: "grid",
+        placeItems: "center",
+        margin: "0 auto",
+        border: "none",
+        background: "transparent",
+        cursor: desabilitado ? "default" : "pointer",
+      }}
+    >
+      <span
+        aria-hidden
+        style={{
+          width: 15,
+          height: 15,
+          display: "grid",
+          placeItems: "center",
+          borderRadius: 4,
+          border: `1px solid ${marcado ? "var(--primary)" : "var(--border-strong)"}`,
+          background: marcado ? "var(--primary)" : "transparent",
+          color: "var(--primary-fg)",
+        }}
+      >
+        {marcado && (
+          <svg
+            width="9"
+            height="9"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M4 12.5l5.5 5.5L20 6.5" />
+          </svg>
+        )}
+      </span>
+    </button>
+  );
+}
+
+/**
  * A marca do PRINCIPAL, numa coluna de tabela.
  *
  * ⚠️ Um unico controle para os dois estados, e nao "Principal" escrito de um

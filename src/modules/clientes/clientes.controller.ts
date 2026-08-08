@@ -10,7 +10,10 @@ import {
   contatoSchema,
   enderecoSchema,
   usuarioComAcessoSchema,
+  type AtualizarBancarioBody,
   type AtualizarClienteBody,
+  type AtualizarContatoBody,
+  type AtualizarEnderecoBody,
   type ContagemQuery,
   type ContatoIdParam,
   type CriarClienteBody,
@@ -70,6 +73,21 @@ export async function criarContato({
   return created(contatoSchema.parse(contato));
 }
 
+export async function atualizarContato({
+  body,
+  params,
+  ctx,
+}: Entrada<AtualizarContatoBody, undefined, ContatoIdParam>) {
+  const empresaId = empresaObrigatoria(ctx);
+
+  const contato = await service.atualizarContato(empresaId, params.id, params.contatoId, {
+    valor: body.valor,
+    rotulo: body.rotulo?.trim() || null,
+  });
+
+  return ok(contatoSchema.parse(contato));
+}
+
 export async function excluirContato({
   params,
   ctx,
@@ -121,6 +139,26 @@ export async function enderecoPrincipal({
   return ok({ id: params.filhoId });
 }
 
+export async function atualizarEndereco({
+  body,
+  params,
+  ctx,
+}: Entrada<AtualizarEnderecoBody, undefined, FilhoIdParam>) {
+  const empresaId = empresaObrigatoria(ctx);
+
+  await service.atualizarEndereco(empresaId, params.id, params.filhoId, {
+    cep: body.cep?.trim() || null,
+    logradouro: body.logradouro?.trim() || null,
+    numero: body.numero?.trim() || null,
+    complemento: body.complemento?.trim() || null,
+    bairro: body.bairro?.trim() || null,
+    cidade: body.cidade?.trim() || null,
+    uf: body.uf?.trim().toUpperCase() || null,
+  });
+
+  return ok({ id: params.filhoId });
+}
+
 export async function excluirEndereco({
   params,
   ctx,
@@ -161,6 +199,27 @@ export async function criarBancario({
   });
 
   return created({ id: params.id });
+}
+
+export async function atualizarBancario({
+  body,
+  params,
+  ctx,
+}: Entrada<AtualizarBancarioBody, undefined, FilhoIdParam>) {
+  const empresaId = empresaObrigatoria(ctx);
+
+  await service.atualizarBancario(empresaId, params.id, params.filhoId, {
+    banco: body.banco?.trim() || null,
+    agencia: body.agencia?.trim() || null,
+    conta: body.conta?.trim() || null,
+    tipo: body.tipo ?? null,
+    titular: body.titular?.trim() || null,
+    documento: body.documento?.replace(/\D/g, "") || null,
+    pixTipo: body.pixTipo ?? null,
+    pixChave: body.pixChave?.trim() || null,
+  });
+
+  return ok({ id: params.filhoId });
 }
 
 export async function excluirBancario({

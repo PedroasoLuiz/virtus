@@ -832,7 +832,18 @@ export type Database = {
           principal: boolean;
           ativo: boolean;
         }>;
-        Update: Partial<{ principal: boolean; ativo: boolean }>;
+        Update: Partial<{
+          banco: string | null;
+          agencia: string | null;
+          conta: string | null;
+          tipo: string | null;
+          titular: string | null;
+          documento: string | null;
+          pix_tipo: string | null;
+          pix_chave: string | null;
+          principal: boolean;
+          ativo: boolean;
+        }>;
         Relationships: [];
       };
       whatsappetiquetas: { Row: WhatsappEtiquetaRow; Insert: Partial<WhatsappEtiquetaRow>; Update: Partial<WhatsappEtiquetaRow>; Relationships: [] };

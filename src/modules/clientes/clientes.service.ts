@@ -64,6 +64,16 @@ export async function excluirContato(
   await repo.desativarContato(clienteId, contatoId);
 }
 
+export async function atualizarContato(
+  empresaId: number,
+  clienteId: number,
+  contatoId: number,
+  entrada: { valor: string; rotulo: string | null },
+): Promise<ContatoDaPessoa> {
+  await obterCliente(empresaId, clienteId);
+  return repo.atualizarContato(clienteId, contatoId, entrada);
+}
+
 /*
  * ⚠️ Toda funcao de aba confere a PESSOA antes de tocar na filha.
  *
@@ -100,6 +110,16 @@ export async function definirEnderecoPrincipal(
   await repo.definirEnderecoPrincipal(clienteId, enderecoId);
 }
 
+export async function atualizarEndereco(
+  empresaId: number,
+  clienteId: number,
+  enderecoId: number,
+  entrada: Omit<EnderecoDaPessoa, "id" | "principal">,
+): Promise<void> {
+  await obterCliente(empresaId, clienteId);
+  await repo.atualizarEndereco(clienteId, enderecoId, entrada);
+}
+
 export async function excluirEndereco(
   empresaId: number,
   clienteId: number,
@@ -125,6 +145,16 @@ export async function criarBancario(
 ): Promise<void> {
   await obterCliente(empresaId, clienteId);
   await repo.criarBancario(clienteId, usuarioId, entrada);
+}
+
+export async function atualizarBancario(
+  empresaId: number,
+  clienteId: number,
+  bancarioId: number,
+  entrada: Omit<DadoBancarioDaPessoa, "id" | "principal">,
+): Promise<void> {
+  await obterCliente(empresaId, clienteId);
+  await repo.atualizarBancario(clienteId, bancarioId, entrada);
 }
 
 export async function excluirBancario(

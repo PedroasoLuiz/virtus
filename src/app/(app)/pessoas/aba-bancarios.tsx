@@ -45,7 +45,15 @@ export function AbaDeBancarios({
   cache: CacheDoDrawer;
 }) {
   const { avisar } = useAvisos();
-  const [novo, setNovo] = useState(false);
+
+  /**
+   * O que o formulário está fazendo: nada, cadastrando, ou corrigindo um id.
+   *
+   * ⚠️ Um estado só para os dois. Com um `novo` e um `editando` separados, os
+   * dois podiam estar ligados ao mesmo tempo e o formulário ficava sem saber se
+   * salvava por cima ou criava outro.
+   */
+  const [aberto, setAberto] = useState<null | "novo" | { id: number }>(null);
 
   const { dados: itens, recarregar: carregar } = useRecursoDaPessoa<DadoBancarioDaPessoa[]>(
     cache,
@@ -61,6 +69,9 @@ export function AbaDeBancarios({
       return;
     }
 
+    // Fecha antes de recarregar: o formulário lê o registro pelo id da lista, e
+    // com o registro fora dela ele viraria um cadastro novo em branco.
+    setAberto(null);
     void carregar();
   }
 
@@ -70,7 +81,7 @@ export function AbaDeBancarios({
         primeiro
         titulo="Dados bancários"
         legenda="Para onde o pagamento sai, ou de onde a devolução vem. São dados de terceiro: não entram no fluxo de caixa nem na conciliação, servem para preencher o pagamento na hora certa."
-        onIncluir={novo ? undefined : () => setNovo(true)}
+        onIncluir={aberto ? undefined : () => setAberto("novo")}
         rotuloIncluir="Nova conta"
       >
         <TableArea minWidth={0}>
@@ -90,19 +101,32 @@ export function AbaDeBancarios({
             ) : itens.length === 0 ? (
               <EmptyRow colSpan={5} message="Nenhuma conta cadastrada." />
             ) : (
-              itens.map((d) => <Linha key={d.id} dado={d} onRemover={() => void remover(d.id)} />)
+              itens.map((d) => (
+                <Linha key={d.id} dado={d} onEditar={() => setAberto({ id: d.id })} />
+              ))
             )}
           </tbody>
         </TableArea>
       </GrupoDeCampos>
 
-      {novo && (
+      {aberto && (
         <Formulario
+          // Trocar de linha remonta o formulário, então os campos já nascem do
+          // registro certo sem efeito para sincronizar.
+          key={aberto === "novo" ? "novo" : aberto.id}
           clienteId={clienteId}
+          dado={aberto === "novo" ? null : ((itens ?? []).find((d) => d.id === aberto.id) ?? null)}
           primeiro={(itens ?? []).length === 0}
-          onFechar={() => setNovo(false)}
+          /*
+           * ⚠️ Só dá para excluir com mais de uma cadastrada. Zerando a lista, o
+           * pagamento fica sem destino e a tela não tem onde avisar disso. Quem
+           * quer trocar a única que existe corrige a que está ali.
+           */
+          podeExcluir={(itens ?? []).length > 1}
+          onRemover={(id) => void remover(id)}
+          onFechar={() => setAberto(null)}
           onSalvou={() => {
-            setNovo(false);
+            setAberto(null);
             void carregar();
           }}
         />
@@ -111,7 +135,7 @@ export function AbaDeBancarios({
   );
 }
 
-function Linha({ dado, onRemover }: { dado: DadoBancarioDaPessoa; onRemover: () => void }) {
+function Linha({ dado, onEditar }: { dado: DadoBancarioDaPessoa; onEditar: () => void }) {
   const conta = [dado.agencia && `Ag. ${dado.agencia}`, dado.conta].filter(Boolean).join(" · ");
 
   return (
@@ -177,9 +201,14 @@ function Linha({ dado, onRemover }: { dado: DadoBancarioDaPessoa; onRemover: () 
       </Td>
 
       <Td>
+        {/*
+          ⚠️ A linha tem EDITAR, e não a lixeira. Excluir é a ação rara e a
+          irreversível; à mão numa lista que se abre para conferir uma conta,
+          ela convida o clique errado. Mora dentro da edição.
+        */}
         <AcoesDaLinha>
-          <BotaoDeAcao rotulo="Remover" perigo onClick={onRemover}>
-            <path d="M3.5 4.5h9M6.5 4.5V3h3v1.5M5 4.5l.6 8h4.8l.6-8" />
+          <BotaoDeAcao rotulo="Editar" onClick={onEditar}>
+            <path d="M11.6 2.6a1.6 1.6 0 0 1 2.3 2.3L5.6 13.2l-3 .7.7-3z" />
           </BotaoDeAcao>
         </AcoesDaLinha>
       </Td>
@@ -189,26 +218,33 @@ function Linha({ dado, onRemover }: { dado: DadoBancarioDaPessoa; onRemover: () 
 
 function Formulario({
   clienteId,
+  dado,
   primeiro,
+  podeExcluir,
+  onRemover,
   onFechar,
   onSalvou,
 }: {
   clienteId: number;
+  /** `null` = cadastro novo. */
+  dado: DadoBancarioDaPessoa | null;
   primeiro: boolean;
+  podeExcluir: boolean;
+  onRemover: (id: number) => void;
   onFechar: () => void;
   onSalvou: () => void;
 }) {
   const { avisar } = useAvisos();
 
   const [form, setForm] = useState({
-    banco: "",
-    agencia: "",
-    conta: "",
-    tipo: "corrente",
-    titular: "",
-    documento: "",
-    pixTipo: "",
-    pixChave: "",
+    banco: dado?.banco ?? "",
+    agencia: dado?.agencia ?? "",
+    conta: dado?.conta ?? "",
+    tipo: dado?.tipo ?? "corrente",
+    titular: dado?.titular ?? "",
+    documento: dado?.documento ?? "",
+    pixTipo: dado?.pixTipo ?? "",
+    pixChave: dado?.pixChave ?? "",
     principal: primeiro,
   });
 
@@ -221,23 +257,33 @@ function Formulario({
     if (salvando) return;
     setSalvando(true);
 
-    const r = await fetch(`/api/v1/clientes/${clienteId}/bancarios`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        banco: form.banco.trim() || null,
-        agencia: form.agencia.trim() || null,
-        conta: form.conta.trim() || null,
-        tipo: form.tipo || null,
-        titular: form.titular.trim() || null,
-        documento: form.documento.trim() || null,
-        // Sem chave não há tipo: o par só faz sentido junto, e gravar o tipo
-        // sozinho deixaria "PIX CPF" escrito sem CPF nenhum embaixo.
-        pixTipo: form.pixChave.trim() ? form.pixTipo || null : null,
-        pixChave: form.pixChave.trim() || null,
-        principal: form.principal,
-      }),
-    });
+    const r = await fetch(
+      dado
+        ? `/api/v1/clientes/${clienteId}/bancarios/${dado.id}`
+        : `/api/v1/clientes/${clienteId}/bancarios`,
+      {
+        method: dado ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          banco: form.banco.trim() || null,
+          agencia: form.agencia.trim() || null,
+          conta: form.conta.trim() || null,
+          tipo: form.tipo || null,
+          titular: form.titular.trim() || null,
+          documento: form.documento.trim() || null,
+          // Sem chave não há tipo: o par só faz sentido junto, e gravar o tipo
+          // sozinho deixaria "PIX CPF" escrito sem CPF nenhum embaixo.
+          pixTipo: form.pixChave.trim() ? form.pixTipo || null : null,
+          pixChave: form.pixChave.trim() || null,
+          /*
+           * ⚠️ O `principal` só vai no CADASTRO. Ele é exclusivo entre as contas
+           * da pessoa, e mexer nele por aqui exigiria derrubar a anterior no
+           * mesmo salvar.
+           */
+          ...(dado ? {} : { principal: form.principal }),
+        }),
+      },
+    );
 
     setSalvando(false);
 
@@ -356,7 +402,7 @@ function Formulario({
         </div>
       </Field>
 
-      {!primeiro && (
+      {!primeiro && !dado && (
         <label
           style={{
             display: "flex",
@@ -376,12 +422,22 @@ function Formulario({
         </label>
       )}
 
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        {/* Excluir na outra ponta da linha: é a única ação daqui que não dá
+            para desfazer, e ao lado de "Salvar" ela vira erro de mira. */}
+        {dado && podeExcluir && (
+          <Button size="sm" variant="danger" onClick={() => onRemover(dado.id)}>
+            Excluir
+          </Button>
+        )}
+
+        <div style={{ flex: 1 }} />
+
         <Button size="sm" variant="ghost" onClick={onFechar}>
           Cancelar
         </Button>
         <Button size="sm" variant="primary" disabled={salvando} onClick={() => void salvar()}>
-          {salvando ? "Salvando…" : "Adicionar"}
+          {salvando ? "Salvando…" : dado ? "Salvar" : "Adicionar"}
         </Button>
       </div>
     </div>
