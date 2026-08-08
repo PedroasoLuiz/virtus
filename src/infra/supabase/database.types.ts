@@ -253,7 +253,6 @@ export type ClienteRow = Timestamps & {
   nomefantasia: string | null;
   cnpj: string | null;
   contato: string | null;
-  responsavel: string | null;
   email: string | null;
   urlicon: string | null;
   fkGrupo: number | null;
@@ -268,6 +267,21 @@ export type ClienteRow = Timestamps & {
   cliente: boolean | null;
   fornecedor: boolean | null;
   colaborador: boolean | null;
+  transportadora: boolean | null;
+  corretor: boolean | null;
+};
+
+/**
+ * A leitura da listagem de pessoas.
+ *
+ * ⚠️ Traz `responsavel` do CONTATO principal e o nome do centro ja resolvido.
+ * `clientes.responsavel` nao existe mais: o responsavel e de cada telefone e de
+ * cada e-mail, e a view escolhe o do principal para quem precisa de um so.
+ */
+export type ClienteListaRow = Omit<ClienteRow, "id"> & {
+  id: number;
+  responsavel: string | null;
+  centrocusto_nome: string | null;
 };
 
 export type FaturaRow = Timestamps & {
@@ -782,6 +796,7 @@ export type Database = {
       clientesxcentrocusto: { Row: ClienteCentroCustoRow; Insert: Partial<ClienteCentroCustoRow>; Update: Partial<ClienteCentroCustoRow>; Relationships: [] };
       clientesenderecos: { Row: ClienteEnderecoRow; Insert: Partial<ClienteEnderecoRow>; Update: Partial<ClienteEnderecoRow>; Relationships: [] };
       clientes: { Row: ClienteRow; Insert: Partial<ClienteRow>; Update: Partial<ClienteRow>; Relationships: [] };
+      vw_clientes_lista: { Row: ClienteListaRow; Insert: never; Update: never; Relationships: [] };
       clientescontatos: { Row: ClienteContatoRow; Insert: Partial<ClienteContatoRow>; Update: Partial<ClienteContatoRow>; Relationships: [] };
       faturas: { Row: FaturaRow; Insert: Partial<FaturaRow>; Update: Partial<FaturaRow>; Relationships: [] };
       pagamentos: { Row: PagamentoRow; Insert: Partial<PagamentoRow>; Update: Partial<PagamentoRow>; Relationships: [] };
@@ -969,6 +984,8 @@ export type Database = {
           cliente: number;
           fornecedor: number;
           colaborador: number;
+          transportadora: number;
+          corretor: number;
         }[];
       };
       whatsapp_contatos_para_conversa: {

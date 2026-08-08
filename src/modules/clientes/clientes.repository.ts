@@ -17,14 +17,21 @@ import type {
 
 /** Unica porta de acesso aos dados de clientes. */
 
-const COLUNAS =
-  "id, razao, nomefantasia, cnpj, email, contato, responsavel, fkGrupo, fkCentroCusto, datanascimento, inscricaomunicipal, inscricaoestadual, regimetributario, classificacaotributaria, ativo, cliente, fornecedor, colaborador";
-
 /**
- * O nome do centro vem por join, nao copiado para `clientes`: renomear o centro
- * tem de refletir em todo mundo que aponta para ele.
+ * A LEITURA passa pela view; a escrita continua indo na tabela.
+ *
+ * ⚠️ `responsavel` nao existe mais em `clientes`: ele e do CONTATO, e a view o
+ * traz do contato principal (telefone antes de e-mail). Sem ela, a listagem
+ * perderia a coluna, a ordem por responsavel e a busca por ele.
+ *
+ * ⚠️ O nome do centro tambem vem daqui, ja resolvido. Ele vinha por embed do
+ * PostgREST, e embed nao funciona a partir de view: view nao tem chave
+ * estrangeira para o PostgREST descobrir.
  */
-const RELACOES = "centrodecusto(descricao)";
+const LEITURA = "vw_clientes_lista";
+
+const COLUNAS =
+  "id, razao, nomefantasia, cnpj, email, contato, responsavel, fkGrupo, fkCentroCusto, centrocusto_nome, datanascimento, inscricaomunicipal, inscricaoestadual, regimetributario, classificacaotributaria, ativo, cliente, fornecedor, colaborador, transportadora, corretor";
 
 /** A coluna do BANCO de cada campo de ordem da tela. */
 const COLUNA_DA_ORDEM: Record<CampoDeOrdem, string> = {
@@ -58,8 +65,8 @@ export async function listar(
   const [de, ate] = intervalo(paginacao);
 
   let query = supabase
-    .from("clientes")
-    .select(`${COLUNAS}, ${RELACOES}`, { count: "exact" })
+    .from(LEITURA)
+    .select(COLUNAS, { count: "exact" })
     .eq("fkEmpresa", empresaId);
 
   if (filtro.ativo !== undefined) query = query.eq("ativo", filtro.ativo);
@@ -129,6 +136,8 @@ export async function contagemPorPapel(
     cliente: Number(l?.cliente ?? 0),
     fornecedor: Number(l?.fornecedor ?? 0),
     colaborador: Number(l?.colaborador ?? 0),
+    transportadora: Number(l?.transportadora ?? 0),
+    corretor: Number(l?.corretor ?? 0),
   };
 }
 
@@ -233,42 +242,6 @@ export async function atualizarContato(
     rotulo: (data.rotulo as string | null) || null,
     responsavel: (data.responsavel as string | null) || null,
   };
-}
-
-/**
- * Copia para `clientes.responsavel` o responsavel do contato PRINCIPAL.
- *
- * ⚠️ E a mesma denormalizacao que `contato` e `email` ja usam, e existe pela
- * listagem: ela ordena e busca por responsavel, e ler isso de uma tabela filha a
- * cada linha custaria uma consulta por pessoa da pagina.
- *
- * ⚠️ O telefone principal ganha do e-mail quando os dois tem responsavel. E uma
- * escolha, e nao uma verdade: alguem precisa aparecer na coluna, e o telefone e
- * por onde a cobranca fala primeiro.
- */
-export async function sincronizarResponsavelPrincipal(clienteId: number): Promise<void> {
-  const supabase = await serverClient();
-
-  const { data: pessoa, error: erroPessoa } = await supabase
-    .from("clientes")
-    .select("contato, email")
-    .eq("id", clienteId)
-    .maybeSingle();
-
-  if (erroPessoa) throw erroPessoa;
-  if (!pessoa) return;
-
-  const contatos = await contatosDaPessoa(clienteId);
-
-  const doTelefone = contatos.find((c) => c.tipo === "telefone" && c.valor === pessoa.contato);
-  const doEmail = contatos.find((c) => c.tipo === "email" && c.valor === pessoa.email);
-
-  const { error } = await supabase
-    .from("clientes")
-    .update({ responsavel: doTelefone?.responsavel ?? doEmail?.responsavel ?? null })
-    .eq("id", clienteId);
-
-  if (error) throw error;
 }
 
 /**
@@ -633,8 +606,8 @@ export async function buscarPorId(empresaId: number, id: number): Promise<Client
   const supabase = await serverClient();
 
   const { data, error } = await supabase
-    .from("clientes")
-    .select(`${COLUNAS}, ${RELACOES}`)
+    .from(LEITURA)
+    .select(COLUNAS)
     .eq("fkEmpresa", empresaId)
     .eq("id", id)
     .maybeSingle();
@@ -647,7 +620,7 @@ export async function buscarPorCnpj(empresaId: number, cnpj: string): Promise<Cl
   const supabase = await serverClient();
 
   const { data, error } = await supabase
-    .from("clientes")
+    .from(LEITURA)
     .select(COLUNAS)
     .eq("fkEmpresa", empresaId)
     .eq("cnpj", cnpj)
@@ -674,7 +647,6 @@ export async function criar(
       cnpj: entrada.cnpj ?? null,
       email: entrada.email ?? null,
       contato: entrada.contato ?? null,
-      responsavel: entrada.responsavel ?? null,
       fkGrupo: entrada.grupoId ?? null,
       // Omitido, `trg_clientes_centro_padrao` preenche com o "Geral".
       fkCentroCusto: entrada.centroCustoId ?? null,
@@ -687,6 +659,8 @@ export async function criar(
       cliente: entrada.papeis.includes("cliente"),
       fornecedor: entrada.papeis.includes("fornecedor"),
       colaborador: entrada.papeis.includes("colaborador"),
+      transportadora: entrada.papeis.includes("transportadora"),
+      corretor: entrada.papeis.includes("corretor"),
     })
     .select("id")
     .single();
@@ -705,6 +679,7 @@ type Linha = {
   responsavel: string | null;
   fkGrupo: number | null;
   fkCentroCusto: number | null;
+  centrocusto_nome: string | null;
   datanascimento: string | null;
   inscricaomunicipal: string | null;
   inscricaoestadual: string | null;
@@ -714,7 +689,8 @@ type Linha = {
   cliente: boolean | null;
   fornecedor: boolean | null;
   colaborador: boolean | null;
-  centrodecusto?: unknown;
+  transportadora: boolean | null;
+  corretor: boolean | null;
 };
 
 function paraDominio(l: Linha): Cliente {
@@ -722,6 +698,8 @@ function paraDominio(l: Linha): Cliente {
   if (l.cliente) papeis.push("cliente");
   if (l.fornecedor) papeis.push("fornecedor");
   if (l.colaborador) papeis.push("colaborador");
+  if (l.transportadora) papeis.push("transportadora");
+  if (l.corretor) papeis.push("corretor");
 
   return {
     id: l.id,
@@ -734,7 +712,7 @@ function paraDominio(l: Linha): Cliente {
     papeis,
     grupoId: l.fkGrupo,
     centroCustoId: l.fkCentroCusto,
-    centroCustoNome: (l.centrodecusto as { descricao: string | null } | null)?.descricao ?? null,
+    centroCustoNome: l.centrocusto_nome,
     dataNascimento: l.datanascimento,
     inscricaoMunicipal: l.inscricaomunicipal,
     inscricaoEstadual: l.inscricaoestadual,
@@ -759,7 +737,6 @@ export async function atualizar(
   if (entrada.cnpj !== undefined) campos.cnpj = entrada.cnpj;
   if (entrada.email !== undefined) campos.email = entrada.email;
   if (entrada.contato !== undefined) campos.contato = entrada.contato;
-  if (entrada.responsavel !== undefined) campos.responsavel = entrada.responsavel;
   if (entrada.grupoId !== undefined) campos.fkGrupo = entrada.grupoId;
   if (entrada.centroCustoId !== undefined) campos.fkCentroCusto = entrada.centroCustoId;
   if (entrada.dataNascimento !== undefined) campos.datanascimento = entrada.dataNascimento;
@@ -774,6 +751,8 @@ export async function atualizar(
     campos.cliente = entrada.papeis.includes("cliente");
     campos.fornecedor = entrada.papeis.includes("fornecedor");
     campos.colaborador = entrada.papeis.includes("colaborador");
+    campos.transportadora = entrada.papeis.includes("transportadora");
+    campos.corretor = entrada.papeis.includes("corretor");
   }
 
   const { error } = await supabase

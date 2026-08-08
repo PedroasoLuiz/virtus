@@ -10,7 +10,13 @@ import { CLASSIFICACOES, REGIMES } from "@/modules/clientes/clientes.types";
 
 /** Contratos de entrada e saida do modulo clientes. */
 
-export const papelSchema = z.enum(["cliente", "fornecedor", "colaborador"]);
+export const papelSchema = z.enum([
+  "cliente",
+  "fornecedor",
+  "colaborador",
+  "transportadora",
+  "corretor",
+]);
 
 export const campoDeOrdemSchema = z.enum([
   "id",
@@ -45,6 +51,8 @@ export const contagemSchema = z.object({
   cliente: z.number(),
   fornecedor: z.number(),
   colaborador: z.number(),
+  transportadora: z.number(),
+  corretor: z.number(),
 });
 
 /**
@@ -66,7 +74,6 @@ export const criarClienteBodySchema = z.object({
   dataNascimento: z.iso.date().nullish(),
   email: emailSchema.nullish(),
   contato: z.string().trim().max(40).nullish(),
-  responsavel: textoCurtoSchema.nullish(),
   papeis: z.array(papelSchema).min(1, "Informe ao menos um papel"),
   grupoId: idSchema.nullish(),
   /** Omitido, o banco preenche com o "Geral" da empresa. */
@@ -201,6 +208,7 @@ export const clienteSchema = z.object({
   cnpj: z.string().nullable(),
   email: z.string().nullable(),
   contato: z.string().nullable(),
+  /** Do contato principal: a coluna de `clientes` nao existe mais. */
   responsavel: z.string().nullable(),
   papeis: z.array(papelSchema),
   grupoId: z.number().nullable(),

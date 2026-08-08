@@ -39,11 +39,12 @@ import { PessoaDrawer } from "./pessoa-drawer";
  */
 
 /*
- * Os tres papeis, com a sigla e a cor de cada um.
+ * Os papeis, com a sigla e a cor de cada um.
  *
  * ⚠️ A cor segue o DINHEIRO, e nao um sorteio: cliente e entrada (verde),
- * fornecedor e saida (ambar), colaborador nao e nem uma coisa nem outra (azul).
- * Quem varre a coluna aprende a distinguir os tres sem ler as siglas.
+ * fornecedor, transportadora e corretor sao saida (ambar), colaborador nao e nem
+ * uma coisa nem outra (azul). Quem varre a coluna ve de que lado o dinheiro esta
+ * sem ler as siglas.
  */
 const PAPEIS: {
   valor: PapelPessoa;
@@ -73,13 +74,50 @@ const PAPEIS: {
     fundo: "var(--info-bg)",
     texto: "var(--info-text)",
   },
+  /*
+   * ⚠️ Transportadora e corretor repetem o AMBAR do fornecedor de proposito.
+   *
+   * A cor nao diz qual e o papel, diz de que lado o dinheiro esta: frete se paga
+   * e comissao se paga. Dando uma cor propria a cada um, a coluna viraria um
+   * mostruario de cinco cores e deixaria de responder "entra ou sai" numa
+   * olhada. Quem precisa do papel exato le a sigla, que fica sempre no mesmo
+   * lugar da linha.
+   */
+  {
+    valor: "transportadora",
+    rotulo: "Transportadoras",
+    sigla: "TRA",
+    fundo: "var(--warning-bg)",
+    texto: "var(--warning-text)",
+  },
+  {
+    valor: "corretor",
+    rotulo: "Corretores",
+    sigla: "COR",
+    fundo: "var(--warning-bg)",
+    texto: "var(--warning-text)",
+  },
 ];
 
 const POR_PAGINA = 25;
 
-type Contagem = { total: number; cliente: number; fornecedor: number; colaborador: number };
+type Contagem = {
+  total: number;
+  cliente: number;
+  fornecedor: number;
+  colaborador: number;
+  transportadora: number;
+  corretor: number;
+};
 
-const VAZIO: Contagem = { total: 0, cliente: 0, fornecedor: 0, colaborador: 0 };
+const VAZIO: Contagem = {
+  total: 0,
+  cliente: 0,
+  fornecedor: 0,
+  colaborador: 0,
+  transportadora: 0,
+  corretor: 0,
+};
 
 /*
  * Os campos de ordem sao os do BANCO, e nao os da tela.
@@ -293,7 +331,7 @@ export function PessoasTela() {
         </PageHeader>
 
         <TableFrame>
-          <TableArea minWidth={1090}>
+          <TableArea minWidth={1174}>
             <TableHead>
               {/*
                 O número vem PRIMEIRO, e a bolinha logo depois.
@@ -314,7 +352,7 @@ export function PessoasTela() {
               {/* Papéis não ordena: a coluna é um conjunto, e "CLI+FOR" não vem
                   antes nem depois de "COL" em ordem nenhuma que signifique algo.
                   Quem quer ver só um papel usa o filtro. */}
-              <Th minWidth={132}>Papéis</Th>
+              <Th minWidth={216}>Papéis</Th>
               <Th
                 minWidth={150}
                 ordem={daColuna("cnpj")}
@@ -431,10 +469,10 @@ export function PessoasTela() {
                   </Td>
 
                   {/*
-                    ⚠️ As três siglas ficam SEMPRE na mesma posição, e a que não
-                    vale aparece apagada. Mostrando só as que valem, "FOR" cairia
-                    ora na primeira coluna, ora na segunda, e a leitura vertical
-                    — que é para o que uma coluna de papel serve — sumiria.
+                    ⚠️ As cinco siglas ficam SEMPRE na mesma posição, e a que
+                    não vale aparece apagada. Mostrando só as que valem, "FOR"
+                    cairia ora na primeira coluna, ora na segunda, e a leitura
+                    vertical, que é para o que uma coluna de papel serve, sumiria.
                   */}
                   <Td>
                     <div style={{ display: "flex", gap: 4 }}>

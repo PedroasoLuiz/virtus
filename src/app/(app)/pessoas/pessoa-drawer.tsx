@@ -50,6 +50,8 @@ const PAPEIS: { valor: PapelPessoa; rotulo: string; explica: string }[] = [
   { valor: "cliente", rotulo: "Cliente", explica: "aparece em faturas e recebimentos" },
   { valor: "fornecedor", rotulo: "Fornecedor", explica: "aparece em contas a pagar" },
   { valor: "colaborador", rotulo: "Colaborador", explica: "aparece em despesas de equipe" },
+  { valor: "transportadora", rotulo: "Transportadora", explica: "leva a entrega, e cobra frete" },
+  { valor: "corretor", rotulo: "Corretor", explica: "traz negócio, e recebe comissão" },
 ];
 
 const ABA_INFO = "Informações";

@@ -5,7 +5,12 @@
  * (cliente / fornecedor / colaborador). O dominio expoe isso como uma lista de
  * papeis, que e como o negocio realmente pensa.
  */
-export type PapelPessoa = "cliente" | "fornecedor" | "colaborador";
+export type PapelPessoa =
+  | "cliente"
+  | "fornecedor"
+  | "colaborador"
+  | "transportadora"
+  | "corretor";
 
 /*
  * ⚠️ Lista fechada, e nao texto livre.
@@ -39,6 +44,13 @@ export type Cliente = {
   cnpj: string | null;
   email: string | null;
   contato: string | null;
+  /**
+   * ⚠️ LEITURA. E o responsavel do contato PRINCIPAL, resolvido pela view.
+   *
+   * A coluna de `clientes` foi apagada: responsavel e de cada telefone e de cada
+   * e-mail. Quem grava e a aba de contatos; aqui ele so aparece porque a
+   * listagem mostra, ordena e busca por ele.
+   */
   responsavel: string | null;
   papeis: PapelPessoa[];
   grupoId: number | null;
@@ -67,7 +79,6 @@ export type ClienteNovo = {
   cnpj?: string | null;
   email?: string | null;
   contato?: string | null;
-  responsavel?: string | null;
   papeis: PapelPessoa[];
   grupoId?: number | null;
   /** Omitido, o gatilho `trg_clientes_centro_padrao` preenche com o "Geral". */
@@ -163,6 +174,8 @@ export type ContagemPorPapel = {
   cliente: number;
   fornecedor: number;
   colaborador: number;
+  transportadora: number;
+  corretor: number;
 };
 
 export type FiltroClientes = {
