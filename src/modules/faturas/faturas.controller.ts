@@ -11,7 +11,6 @@ import {
   faturaSchema,
   type AlterarStatusBody,
   type CriarFaturaBody,
-  type AlterarVencimentoBody,
   type EnviarParcelaBody,
   type EnviarParcelaWhatsappBody,
   type DividirParcelaBody,
@@ -202,22 +201,6 @@ export async function enviarParcela({
       body.para,
     ),
   );
-}
-
-export async function alterarVencimento({
-  body,
-  params,
-  ctx,
-}: Entrada<AlterarVencimentoBody, undefined, ParcelaParam>) {
-  await service.alterarVencimentoDaParcela(
-    empresaObrigatoria(ctx),
-    ctx.usuarioId,
-    params.id,
-    params.parcelaId,
-    body.vencimento,
-  );
-
-  return ok({ id: params.parcelaId, vencimento: body.vencimento });
 }
 
 export async function enviarParcelaPorWhatsapp({

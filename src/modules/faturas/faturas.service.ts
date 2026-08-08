@@ -367,56 +367,6 @@ export async function excluirParcelaDaFatura(
 }
 
 /**
- * Prorroga ou antecipa uma parcela.
- *
- * ⚠️ So a data muda. Valor e numero ficam onde estao: renegociar prazo e uma
- * coisa, mexer no que foi cobrado e outra, e juntar as duas num botao so faria
- * o total da conta divergir do que o cliente ja recebeu.
- *
- * Parcela baixada nao entra. A data de vencimento de algo ja pago nao descreve
- * mais nada, e mexer nela reescreveria o passado que a conciliacao usa.
- */
-export async function alterarVencimentoDaParcela(
-  empresaId: number,
-  usuarioId: string,
-  faturaId: number,
-  parcelaId: number,
-  vencimento: DataISO,
-): Promise<void> {
-  const fatura = await obterFatura(empresaId, faturaId);
-  garantirPodeMexerNasParcelas(fatura);
-
-  const parcela = fatura.parcelas.find((p) => p.id === parcelaId);
-
-  if (!parcela) throw new NotFoundError("Parcela nao encontrada nesta conta");
-
-  if (parcela.boleto || parcela.nfs) {
-    throw new BusinessRuleError(
-      "Ja saiu boleto ou nota desta parcela; mudar o vencimento deixaria o documento dizendo outra coisa",
-    );
-  }
-
-  if (parcela.pagamentoId) {
-    throw new BusinessRuleError(
-      "Parcela conciliada com o extrato nao tem o vencimento alterado",
-    );
-  }
-
-  if (parcela.pago) {
-    throw new BusinessRuleError("Parcela ja baixada nao tem o vencimento alterado");
-  }
-
-  await repo.alterarVencimentoDaParcela(faturaId, parcelaId, usuarioId, vencimento);
-
-  logger.info("vencimento de parcela alterado", {
-    faturaId,
-    parcelaId,
-    de: parcela.vencimento,
-    para: vencimento,
-  });
-}
-
-/**
  * ⚠️ A guarda e a MESMA regra que a tela le, e nao uma copia dela.
  *
  * A tela apaga o que nao pode e diz por que; aqui a operacao e recusada de novo.
