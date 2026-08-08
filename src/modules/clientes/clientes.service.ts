@@ -2,6 +2,10 @@ import { BusinessRuleError, ConflictError, NotFoundError } from "@/shared/errors
 import { dominioAceitaEmail } from "@/shared/email/dominio-existe";
 import type { Paginacao, Pagina } from "@/shared/utils/paginacao";
 import * as repo from "@/modules/clientes/clientes.repository";
+import * as contatosRepo from "@/modules/clientes/contatos.repository";
+import * as enderecosRepo from "@/modules/clientes/enderecos.repository";
+import * as bancariosRepo from "@/modules/clientes/bancarios.repository";
+import * as acessoRepo from "@/modules/clientes/acesso.repository";
 import type {
   Cliente,
   ClienteNovo,
@@ -14,6 +18,24 @@ import type {
 } from "@/modules/clientes/clientes.types";
 
 /** Regra de negocio de clientes. */
+
+/**
+ * Confere que a pessoa e desta empresa, antes de mexer numa filha dela.
+ *
+ * ⚠️ A RLS das tabelas filhas ja barra o que e de outra empresa, mas devolvendo
+ * lista vazia — indistinguivel de "esta pessoa nao tem endereco". O 404 diz a
+ * verdade, e num POST evita gravar linha orfa apontando para um id que o usuario
+ * nao pode ver.
+ *
+ * ⚠️ Nao usa `obterCliente`. Aquilo traz o cadastro inteiro pela view, com as
+ * duas laterais do responsavel, so para responder "sim, e sua": um contato
+ * marcado como principal pagava isso duas vezes por clique.
+ */
+async function conferirPosse(empresaId: number, clienteId: number): Promise<void> {
+  if (!(await repo.pertenceAEmpresa(empresaId, clienteId))) {
+    throw new NotFoundError("Cliente nao encontrado");
+  }
+}
 
 export async function contagemPorPapel(
   empresaId: number,
@@ -42,11 +64,11 @@ export async function contatosDaPessoa(
   empresaId: number,
   clienteId: number,
 ): Promise<ContatoDaPessoa[]> {
-  await obterCliente(empresaId, clienteId);
+  await conferirPosse(empresaId, clienteId);
 
   const [contatos, usuarios] = await Promise.all([
-    repo.contatosDaPessoa(clienteId),
-    repo.usuariosDaPessoa(clienteId),
+    contatosRepo.contatosDaPessoa(clienteId),
+    acessoRepo.usuariosDaPessoa(clienteId),
   ]);
 
   /*
@@ -92,10 +114,10 @@ export async function criarContato(
     responsavel: string | null;
   },
 ): Promise<ContatoDaPessoa> {
-  await obterCliente(empresaId, clienteId);
+  await conferirPosse(empresaId, clienteId);
   await conferirDominio(entrada.tipo, entrada.valor);
 
-  return repo.criarContato(clienteId, usuarioId, entrada);
+  return contatosRepo.criarContato(clienteId, usuarioId, entrada);
 }
 
 export async function excluirContato(
@@ -103,8 +125,8 @@ export async function excluirContato(
   clienteId: number,
   contatoId: number,
 ): Promise<void> {
-  await obterCliente(empresaId, clienteId);
-  await repo.desativarContato(clienteId, contatoId);
+  await conferirPosse(empresaId, clienteId);
+  await contatosRepo.desativarContato(clienteId, contatoId);
 }
 
 export async function atualizarContato(
@@ -118,10 +140,10 @@ export async function atualizarContato(
     responsavel: string | null;
   },
 ): Promise<ContatoDaPessoa> {
-  await obterCliente(empresaId, clienteId);
+  await conferirPosse(empresaId, clienteId);
   await conferirDominio(entrada.tipo, entrada.valor);
 
-  return repo.atualizarContato(clienteId, contatoId, entrada);
+  return contatosRepo.atualizarContato(clienteId, contatoId, entrada);
 }
 
 /*
@@ -137,8 +159,8 @@ export async function enderecosDaPessoa(
   empresaId: number,
   clienteId: number,
 ): Promise<EnderecoDaPessoa[]> {
-  await obterCliente(empresaId, clienteId);
-  return repo.enderecosDaPessoa(clienteId);
+  await conferirPosse(empresaId, clienteId);
+  return enderecosRepo.enderecosDaPessoa(clienteId);
 }
 
 export async function criarEndereco(
@@ -147,8 +169,8 @@ export async function criarEndereco(
   clienteId: number,
   entrada: Omit<EnderecoDaPessoa, "id">,
 ): Promise<void> {
-  await obterCliente(empresaId, clienteId);
-  await repo.criarEndereco(clienteId, usuarioId, entrada);
+  await conferirPosse(empresaId, clienteId);
+  await enderecosRepo.criarEndereco(clienteId, usuarioId, entrada);
 }
 
 export async function definirEnderecoPrincipal(
@@ -156,8 +178,8 @@ export async function definirEnderecoPrincipal(
   clienteId: number,
   enderecoId: number,
 ): Promise<void> {
-  await obterCliente(empresaId, clienteId);
-  await repo.definirEnderecoPrincipal(clienteId, enderecoId);
+  await conferirPosse(empresaId, clienteId);
+  await enderecosRepo.definirEnderecoPrincipal(clienteId, enderecoId);
 }
 
 export async function atualizarEndereco(
@@ -166,8 +188,8 @@ export async function atualizarEndereco(
   enderecoId: number,
   entrada: Omit<EnderecoDaPessoa, "id" | "principal">,
 ): Promise<void> {
-  await obterCliente(empresaId, clienteId);
-  await repo.atualizarEndereco(clienteId, enderecoId, entrada);
+  await conferirPosse(empresaId, clienteId);
+  await enderecosRepo.atualizarEndereco(clienteId, enderecoId, entrada);
 }
 
 export async function excluirEndereco(
@@ -175,16 +197,16 @@ export async function excluirEndereco(
   clienteId: number,
   enderecoId: number,
 ): Promise<void> {
-  await obterCliente(empresaId, clienteId);
-  await repo.excluirEndereco(clienteId, enderecoId);
+  await conferirPosse(empresaId, clienteId);
+  await enderecosRepo.excluirEndereco(clienteId, enderecoId);
 }
 
 export async function bancariosDaPessoa(
   empresaId: number,
   clienteId: number,
 ): Promise<DadoBancarioDaPessoa[]> {
-  await obterCliente(empresaId, clienteId);
-  return repo.bancariosDaPessoa(clienteId);
+  await conferirPosse(empresaId, clienteId);
+  return bancariosRepo.bancariosDaPessoa(clienteId);
 }
 
 export async function criarBancario(
@@ -193,8 +215,8 @@ export async function criarBancario(
   clienteId: number,
   entrada: Omit<DadoBancarioDaPessoa, "id">,
 ): Promise<void> {
-  await obterCliente(empresaId, clienteId);
-  await repo.criarBancario(clienteId, usuarioId, entrada);
+  await conferirPosse(empresaId, clienteId);
+  await bancariosRepo.criarBancario(clienteId, usuarioId, entrada);
 }
 
 export async function atualizarBancario(
@@ -203,8 +225,8 @@ export async function atualizarBancario(
   bancarioId: number,
   entrada: Omit<DadoBancarioDaPessoa, "id" | "principal">,
 ): Promise<void> {
-  await obterCliente(empresaId, clienteId);
-  await repo.atualizarBancario(clienteId, bancarioId, entrada);
+  await conferirPosse(empresaId, clienteId);
+  await bancariosRepo.atualizarBancario(clienteId, bancarioId, entrada);
 }
 
 export async function excluirBancario(
@@ -212,22 +234,23 @@ export async function excluirBancario(
   clienteId: number,
   bancarioId: number,
 ): Promise<void> {
-  await obterCliente(empresaId, clienteId);
-  await repo.desativarBancario(clienteId, bancarioId);
+  await conferirPosse(empresaId, clienteId);
+  await bancariosRepo.desativarBancario(clienteId, bancarioId);
 }
 
+/**
+ * Quem ve esta pessoa pelo portal.
+ *
+ * ⚠️ NAO devolve mais a lista de "disponiveis". Ela varria todos os usuarios
+ * visiveis a cada abertura da aba para alimentar um seletor que nao existe mais:
+ * dar acesso e entregar dado financeiro de terceiro, e esse gesto mudou de lugar.
+ */
 export async function acessoDaPessoa(
   empresaId: number,
   clienteId: number,
-): Promise<{ comAcesso: UsuarioDaPessoa[]; disponiveis: UsuarioDaPessoa[] }> {
-  await obterCliente(empresaId, clienteId);
-
-  const [comAcesso, disponiveis] = await Promise.all([
-    repo.usuariosDaPessoa(clienteId),
-    repo.usuariosDisponiveis(),
-  ]);
-
-  return { comAcesso, disponiveis };
+): Promise<UsuarioDaPessoa[]> {
+  await conferirPosse(empresaId, clienteId);
+  return acessoRepo.usuariosDaPessoa(clienteId);
 }
 
 export async function definirUsuariosDaPessoa(
@@ -236,8 +259,8 @@ export async function definirUsuariosDaPessoa(
   clienteId: number,
   usuarios: string[],
 ): Promise<void> {
-  await obterCliente(empresaId, clienteId);
-  await repo.definirUsuariosDaPessoa(clienteId, usuarioId, usuarios);
+  await conferirPosse(empresaId, clienteId);
+  await acessoRepo.definirUsuariosDaPessoa(clienteId, usuarioId, usuarios);
 }
 
 export async function obterCliente(empresaId: number, id: number): Promise<Cliente> {
@@ -270,8 +293,9 @@ export async function atualizarCliente(
   id: number,
   entrada: Partial<ClienteNovo> & { ativo?: boolean },
 ): Promise<Cliente> {
-  // Garante que o registro e desta empresa antes de escrever.
-  await obterCliente(empresaId, id);
+  // Garante que o registro e desta empresa antes de escrever. O cadastro
+  // inteiro so e lido depois, uma vez, para voltar ja atualizado.
+  await conferirPosse(empresaId, id);
 
   if (entrada.cnpj) {
     const existente = await repo.buscarPorCnpj(empresaId, entrada.cnpj);

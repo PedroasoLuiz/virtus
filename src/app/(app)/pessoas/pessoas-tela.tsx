@@ -1,10 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Avatar } from "@/components/ui/avatar";
 import {
-  AcoesDaLinha,
-  BotaoDeAcao,
   EmptyRow,
   FilterButton,
   IncluirButton,
@@ -19,12 +16,12 @@ import {
   TableArea,
   TableFrame,
   TableHead,
-  Td,
   Th,
-  Tr,
 } from "@/components/ui/kit";
 import type { Cliente, PapelPessoa } from "@/modules/clientes/clientes.types";
 import { PessoaDrawer } from "./pessoa-drawer";
+import { LinhaDaPessoa } from "./pessoa-linha";
+import { PAPEIS } from "./papeis-da-listagem";
 
 /**
  * Pessoas: clientes, fornecedores e colaboradores no mesmo cadastro.
@@ -37,67 +34,6 @@ import { PessoaDrawer } from "./pessoa-drawer";
  * Ele já foi uma fileira de pastilhas acima da tabela: o recorte é o mesmo, mas
  * ali custava uma faixa da tela para algo que não se troca a todo instante.
  */
-
-/*
- * Os papeis, com a sigla e a cor de cada um.
- *
- * ⚠️ A cor segue o DINHEIRO, e nao um sorteio: cliente e entrada (verde),
- * fornecedor, transportadora e corretor sao saida (ambar), colaborador nao e nem
- * uma coisa nem outra (azul). Quem varre a coluna ve de que lado o dinheiro esta
- * sem ler as siglas.
- */
-const PAPEIS: {
-  valor: PapelPessoa;
-  rotulo: string;
-  sigla: string;
-  fundo: string;
-  texto: string;
-}[] = [
-  {
-    valor: "cliente",
-    rotulo: "Clientes",
-    sigla: "CLI",
-    fundo: "var(--success-bg)",
-    texto: "var(--success-text)",
-  },
-  {
-    valor: "fornecedor",
-    rotulo: "Fornecedores",
-    sigla: "FOR",
-    fundo: "var(--warning-bg)",
-    texto: "var(--warning-text)",
-  },
-  {
-    valor: "colaborador",
-    rotulo: "Colaboradores",
-    sigla: "COL",
-    fundo: "var(--info-bg)",
-    texto: "var(--info-text)",
-  },
-  /*
-   * ⚠️ Transportadora e corretor repetem o AMBAR do fornecedor de proposito.
-   *
-   * A cor nao diz qual e o papel, diz de que lado o dinheiro esta: frete se paga
-   * e comissao se paga. Dando uma cor propria a cada um, a coluna viraria um
-   * mostruario de cinco cores e deixaria de responder "entra ou sai" numa
-   * olhada. Quem precisa do papel exato le a sigla, que fica sempre no mesmo
-   * lugar da linha.
-   */
-  {
-    valor: "transportadora",
-    rotulo: "Transportadoras",
-    sigla: "TRA",
-    fundo: "var(--warning-bg)",
-    texto: "var(--warning-text)",
-  },
-  {
-    valor: "corretor",
-    rotulo: "Corretores",
-    sigla: "COR",
-    fundo: "var(--warning-bg)",
-    texto: "var(--warning-text)",
-  },
-];
 
 const POR_PAGINA = 25;
 
@@ -413,112 +349,12 @@ export function PessoasTela() {
               )}
 
               {visiveis.map((p, i) => (
-                <Tr
+                <LinhaDaPessoa
                   key={p.id}
-                  delay={Math.min(i * 20, 150)}
-                  dimmed={!p.ativo}
-                  onClick={() => setEdicao({ pessoa: p })}
-                >
-                  <Td style={{ fontVariantNumeric: "tabular-nums" }}>{p.id}</Td>
-
-                  {/*
-                    A bolinha das iniciais, a mesma do chat e das personas.
-
-                    ⚠️ Ela e o número fazem coisas DIFERENTES, e por isso ficam
-                    lado a lado: a cor estável faz reconhecer a linha certa sem
-                    ler, e o número é o que se dita ao telefone e o que aparece
-                    na fatura. Uma não substitui a outra.
-                  */}
-                  <Td className="col-avatar">
-                    <Avatar
-                      nome={p.nomeFantasia?.trim() || p.razao}
-                      semente={String(p.id)}
-                      tamanho={26}
-                    />
-                  </Td>
-
-                  <Td style={{ maxWidth: 320 }}>
-                    <div
-                      style={{
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {p.nomeFantasia?.trim() || p.razao}
-                    </div>
-
-                    {/* A razão social só entra quando ela NÃO é o que já está
-                        no nome acima. */}
-                    {p.nomeFantasia?.trim() && p.nomeFantasia.trim() !== p.razao && (
-                      <div
-                        style={{
-                          marginTop: 1,
-                          // Um degrau abaixo do resto da linha: e o nome formal,
-                          // que serve para conferir e nao para achar.
-                          fontSize: "var(--text-xs)",
-                          color: "var(--text-tertiary)",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {p.razao}
-                      </div>
-                    )}
-                  </Td>
-
-                  {/*
-                    ⚠️ As cinco siglas ficam SEMPRE na mesma posição, e a que
-                    não vale aparece apagada. Mostrando só as que valem, "FOR"
-                    cairia ora na primeira coluna, ora na segunda, e a leitura
-                    vertical, que é para o que uma coluna de papel serve, sumiria.
-                  */}
-                  <Td>
-                    <div style={{ display: "flex", gap: 4 }}>
-                      {PAPEIS.map((papel) => (
-                        <Flag
-                          key={papel.valor}
-                          papel={papel}
-                          tem={p.papeis.includes(papel.valor)}
-                        />
-                      ))}
-                    </div>
-                  </Td>
-
-                  <Td>{p.cnpj ? formatarDocumento(p.cnpj) : <Vazio />}</Td>
-                  <Td>{p.contato || <Vazio />}</Td>
-
-                  <Td style={{ maxWidth: 220 }}>
-                    <span
-                      title={p.email ?? undefined}
-                      style={{
-                        display: "block",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {p.email || <Vazio />}
-                    </span>
-                  </Td>
-
-                  <Td>{p.responsavel || <Vazio />}</Td>
-
-                  {/*
-                    ⚠️ A linha inteira já abre o cadastro, e o lápis fica assim
-                    mesmo. Sem ele, a única pista de que dá para editar é
-                    descobrir que a linha é clicável — e quem chega na tela pela
-                    primeira vez não descobre.
-                  */}
-                  <Td>
-                    <AcoesDaLinha>
-                      <BotaoDeAcao rotulo="Editar" onClick={() => setEdicao({ pessoa: p })}>
-                        <path d="M11.6 2.6a1.6 1.6 0 0 1 2.3 2.3L5.6 13.2l-3 .7.7-3z" />
-                      </BotaoDeAcao>
-                    </AcoesDaLinha>
-                  </Td>
-                </Tr>
+                  pessoa={p}
+                  atraso={Math.min(i * 20, 150)}
+                  onAbrir={() => setEdicao({ pessoa: p })}
+                />
               ))}
             </tbody>
           </TableArea>
@@ -555,40 +391,6 @@ export function PessoasTela() {
 }
 
 /**
- * A sigla de um papel.
- *
- * ⚠️ A que NÃO vale continua ocupando o lugar dela, apagada. Some, e a coluna
- * perde o alinhamento: "FOR" passa a cair ora na primeira posição, ora na
- * segunda, e ler a coluna de cima a baixo vira decifrar caso a caso.
- */
-function Flag({ papel, tem }: { papel: (typeof PAPEIS)[number]; tem: boolean }) {
-  return (
-    <span
-      title={tem ? papel.rotulo : undefined}
-      style={{
-        width: 34,
-        height: 17,
-        flexShrink: 0,
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        borderRadius: "var(--radius-xs)",
-        background: tem ? papel.fundo : "transparent",
-        color: tem ? papel.texto : "var(--text-disabled)",
-        fontSize: "var(--text-2xs)",
-        fontWeight: "var(--fw-semi)",
-        letterSpacing: "0.03em",
-        // Apagada quase some: ela existe para segurar a posição, não para ser
-        // lida. Legível demais, a linha vira três siglas competindo com o nome.
-        opacity: tem ? 1 : 0.3,
-      }}
-    >
-      {papel.sigla}
-    </span>
-  );
-}
-
-/**
  * A contagem, com teto.
  *
  * ⚠️ Para em 999. Acima disso o número deixa de ser informação e vira largura: a
@@ -598,19 +400,4 @@ function Flag({ papel, tem }: { papel: (typeof PAPEIS)[number]; tem: boolean }) 
  */
 function contado(total: number): string {
   return total > 999 ? "999+" : String(total);
-}
-
-/** O traço do campo vazio. Célula em branco parece coluna quebrada. */
-function Vazio() {
-  return <span style={{ color: "var(--text-disabled)" }}>—</span>;
-}
-
-/** CPF ou CNPJ, pela quantidade de dígitos. */
-function formatarDocumento(bruto: string): string {
-  const d = bruto.replace(/\D/g, "");
-
-  if (d.length === 11) return d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
-  if (d.length === 14) return d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
-
-  return bruto;
 }

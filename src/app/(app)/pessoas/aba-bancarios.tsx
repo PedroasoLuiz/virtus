@@ -147,13 +147,16 @@ function Linha({ dado, onEditar }: { dado: DadoBancarioDaPessoa; onEditar: () =>
         {dado.banco || <span style={{ color: "var(--text-disabled)" }}>Sem banco</span>}
 
         {/*
-          ⚠️ Titular só aparece quando é OUTRA pessoa, e em âmbar. Repetir o nome
-          do próprio cadastro em toda linha seria dizer o que já está no topo do
-          drawer — e o que importa é justamente o caso em que não bate, porque
-          banco recusa depósito com titular diferente.
+          ⚠️ Titular só aparece quando é OUTRA pessoa: repetir o nome do próprio
+          cadastro em toda linha seria dizer o que já está no topo do drawer.
+
+          ⚠️ E aparece no CINZA das linhas de apoio, não em âmbar. Âmbar é a cor
+          de "algo errado aqui", e conta de terceiro é combinado normal: a tabela
+          ficava com um alerta amarelo em toda linha de quem paga a um
+          escritório, sem nada para resolver.
         */}
         {dado.titular && (
-          <div style={{ marginTop: 1, fontSize: "var(--text-xs)", color: "var(--warning-text)" }}>
+          <div style={{ marginTop: 1, fontSize: "var(--text-xs)", color: "var(--text-tertiary)" }}>
             Titular: {dado.titular}
           </div>
         )}

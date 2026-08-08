@@ -237,12 +237,9 @@ export async function excluirBancario({
 
 export async function listarAcesso({ params, ctx }: Entrada<undefined, undefined, IdParam>) {
   const empresaId = empresaObrigatoria(ctx);
-  const { comAcesso, disponiveis } = await service.acessoDaPessoa(empresaId, params.id);
+  const comAcesso = await service.acessoDaPessoa(empresaId, params.id);
 
-  return ok({
-    comAcesso: comAcesso.map((u) => usuarioComAcessoSchema.parse(u)),
-    disponiveis: disponiveis.map((u) => usuarioComAcessoSchema.parse(u)),
-  });
+  return ok(comAcesso.map((u) => usuarioComAcessoSchema.parse(u)));
 }
 
 export async function definirAcesso({

@@ -5,17 +5,20 @@ import { intervalo, type Paginacao, type Pagina } from "@/shared/utils/paginacao
 import type {
   CampoDeOrdem,
   Cliente,
-  ContatoDaPessoa,
-  DadoBancarioDaPessoa,
-  EnderecoDaPessoa,
-  UsuarioDaPessoa,
   ClienteNovo,
   ContagemPorPapel,
   FiltroClientes,
   PapelPessoa,
 } from "@/modules/clientes/clientes.types";
 
-/** Unica porta de acesso aos dados de clientes. */
+/**
+ * A PESSOA em si: listagem, busca, cadastro e edicao.
+ *
+ * ⚠️ As filhas moram em arquivos proprios — `contatos`, `enderecos`, `bancarios`
+ * e `acesso`. Este arquivo ja teve oitocentas linhas com os cinco assuntos
+ * juntos, e mexer num telefone obrigava a rolar por tudo para achar as quarenta
+ * linhas que interessavam.
+ */
 
 /**
  * A LEITURA passa pela view; a escrita continua indo na tabela.
@@ -141,465 +144,32 @@ export async function contagemPorPapel(
   };
 }
 
-/**
- * Os telefones e e-mails de uma pessoa.
- *
- * ⚠️ A RLS de `clientescontatos` casa pela pessoa dona, entao ela ja recusa
- * cadastro de outra empresa. O `empresaId` nao entra na consulta por isso: ele
- * seria uma segunda regra de isolamento para manter em dia com a policy.
- */
-export async function contatosDaPessoa(clienteId: number): Promise<ContatoDaPessoa[]> {
-  const supabase = await serverClient();
 
-  const { data, error } = await supabase
-    .from("clientescontatos")
-    .select("id, tipo, valor, rotulo, responsavel")
-    .eq("fkCliente", clienteId)
-    .eq("ativo", true)
-    .order("tipo")
-    .order("id");
 
-  if (error) throw error;
 
-  return (data ?? []).map((l) => ({
-    id: l.id as number,
-    tipo: l.tipo as ContatoDaPessoa["tipo"],
-    valor: l.valor as string,
-    rotulo: (l.rotulo as string | null) || null,
-    responsavel: (l.responsavel as string | null) || null,
-  }));
-}
-
-export async function criarContato(
-  clienteId: number,
-  usuarioId: string,
-  entrada: {
-    tipo: "telefone" | "email";
-    valor: string;
-    rotulo: string | null;
-    responsavel: string | null;
-  },
-): Promise<ContatoDaPessoa> {
-  const supabase = await serverClient();
-
-  const { data, error } = await supabase
-    .from("clientescontatos")
-    .insert({
-      fkCliente: clienteId,
-      fkUserCriacao: usuarioId,
-      tipo: entrada.tipo,
-      valor: entrada.valor,
-      rotulo: entrada.rotulo,
-      responsavel: entrada.responsavel,
-      ativo: true,
-    })
-    .select("id, tipo, valor, rotulo, responsavel")
-    .single();
-
-  if (error) throw error;
-
-  return {
-    id: data.id as number,
-    tipo: data.tipo as ContatoDaPessoa["tipo"],
-    valor: data.valor as string,
-    rotulo: (data.rotulo as string | null) || null,
-    responsavel: (data.responsavel as string | null) || null,
-  };
-}
 
 /**
- * Corrige um contato que ja existe.
+ * Esta pessoa e desta empresa?
  *
- * ⚠️ O TIPO nao muda. Um telefone digitado na aba de e-mail se resolve apagando e
- * cadastrando do lado certo; deixar a linha trocar de lado faria o principal do
- * cadastro apontar para um valor que sumiu da lista onde estava.
+ * ⚠️ Le UMA coluna da TABELA, e nao a pessoa inteira da view.
+ *
+ * Toda escrita numa filha (contato, endereco, conta, acesso) precisa conferir a
+ * dona antes, e isso era feito com `obterCliente`, que traz dezoito colunas e
+ * ainda paga as duas laterais da view para resolver um responsavel que ninguem
+ * ia ler. Marcar um contato como principal virava tres consultas pesadas.
  */
-export async function atualizarContato(
-  clienteId: number,
-  contatoId: number,
-  entrada: { valor: string; rotulo: string | null; responsavel: string | null },
-): Promise<ContatoDaPessoa> {
+export async function pertenceAEmpresa(empresaId: number, id: number): Promise<boolean> {
   const supabase = await serverClient();
 
   const { data, error } = await supabase
-    .from("clientescontatos")
-    .update({
-      valor: entrada.valor,
-      rotulo: entrada.rotulo,
-      responsavel: entrada.responsavel,
-    })
-    .eq("fkCliente", clienteId)
-    .eq("id", contatoId)
-    .select("id, tipo, valor, rotulo, responsavel")
-    .single();
+    .from("clientes")
+    .select("id")
+    .eq("fkEmpresa", empresaId)
+    .eq("id", id)
+    .maybeSingle();
 
   if (error) throw error;
-
-  return {
-    id: data.id as number,
-    tipo: data.tipo as ContatoDaPessoa["tipo"],
-    valor: data.valor as string,
-    rotulo: (data.rotulo as string | null) || null,
-    responsavel: (data.responsavel as string | null) || null,
-  };
-}
-
-/**
- * ⚠️ Desativa, e nao apaga.
- *
- * O telefone que saiu do cadastro e o mesmo que aparece numa conversa antiga do
- * WhatsApp e num envio de cobranca de tres meses atras. Apagando, aquele
- * historico perde a referencia de quem era.
- */
-export async function desativarContato(clienteId: number, contatoId: number): Promise<void> {
-  const supabase = await serverClient();
-
-  const { error } = await supabase
-    .from("clientescontatos")
-    .update({ ativo: false })
-    .eq("fkCliente", clienteId)
-    .eq("id", contatoId);
-
-  if (error) throw error;
-}
-
-// ── Enderecos ───────────────────────────────────────────────────
-
-export async function enderecosDaPessoa(clienteId: number): Promise<EnderecoDaPessoa[]> {
-  const supabase = await serverClient();
-
-  const { data, error } = await supabase
-    .from("clientesenderecos")
-    .select("id, cep, logradouro, numero, complemento, bairro, cidade, uf, principal")
-    .eq("fkCliente", clienteId)
-    // O principal primeiro: e o que a nota fiscal usa, e o que se procura ao abrir.
-    .order("principal", { ascending: false })
-    .order("id");
-
-  if (error) throw error;
-
-  return (data ?? []).map((l) => ({
-    id: l.id as number,
-    cep: (l.cep as string | null) || null,
-    logradouro: (l.logradouro as string | null) || null,
-    numero: (l.numero as string | null) || null,
-    complemento: (l.complemento as string | null) || null,
-    bairro: (l.bairro as string | null) || null,
-    cidade: (l.cidade as string | null) || null,
-    uf: (l.uf as string | null) || null,
-    principal: Boolean(l.principal),
-  }));
-}
-
-export async function criarEndereco(
-  clienteId: number,
-  usuarioId: string,
-  entrada: Omit<EnderecoDaPessoa, "id">,
-): Promise<void> {
-  const supabase = await serverClient();
-
-  /*
-   * ⚠️ O primeiro endereco nasce PRINCIPAL, mesmo sem ninguem pedir.
-   *
-   * "Nenhum principal" e um estado que nao serve a ninguem: a nota fiscal
-   * precisa de um endereco, e com todos iguais o sistema escolheria sozinho de
-   * um jeito que a tela nao mostra.
-   */
-  const existentes = await enderecosDaPessoa(clienteId);
-  const principal = entrada.principal || existentes.length === 0;
-
-  if (principal) await limparPrincipalDeEndereco(clienteId);
-
-  const { error } = await supabase.from("clientesenderecos").insert({
-    fkCliente: clienteId,
-    fkUserCriacao: usuarioId,
-    cep: entrada.cep,
-    logradouro: entrada.logradouro,
-    numero: entrada.numero,
-    complemento: entrada.complemento,
-    bairro: entrada.bairro,
-    cidade: entrada.cidade,
-    uf: entrada.uf,
-    principal,
-  });
-
-  if (error) throw error;
-}
-
-export async function definirEnderecoPrincipal(
-  clienteId: number,
-  enderecoId: number,
-): Promise<void> {
-  const supabase = await serverClient();
-
-  await limparPrincipalDeEndereco(clienteId);
-
-  const { error } = await supabase
-    .from("clientesenderecos")
-    .update({ principal: true })
-    .eq("fkCliente", clienteId)
-    .eq("id", enderecoId);
-
-  if (error) throw error;
-}
-
-/** ⚠️ Um principal por pessoa: o anterior cai antes de o novo subir. */
-async function limparPrincipalDeEndereco(clienteId: number): Promise<void> {
-  const supabase = await serverClient();
-
-  const { error } = await supabase
-    .from("clientesenderecos")
-    .update({ principal: false })
-    .eq("fkCliente", clienteId)
-    .eq("principal", true);
-
-  if (error) throw error;
-}
-
-/**
- * ⚠️ O `principal` NAO vem daqui.
- *
- * Ele e exclusivo entre os enderecos da pessoa, e mexer nele exige derrubar o
- * anterior: quem cuida disso e `definirEnderecoPrincipal`. Aceitando o campo aqui,
- * uma correcao de numero da casa poderia deixar dois principais.
- */
-export async function atualizarEndereco(
-  clienteId: number,
-  enderecoId: number,
-  entrada: Omit<EnderecoDaPessoa, "id" | "principal">,
-): Promise<void> {
-  const supabase = await serverClient();
-
-  const { error } = await supabase
-    .from("clientesenderecos")
-    .update({
-      cep: entrada.cep,
-      logradouro: entrada.logradouro,
-      numero: entrada.numero,
-      complemento: entrada.complemento,
-      bairro: entrada.bairro,
-      cidade: entrada.cidade,
-      uf: entrada.uf,
-    })
-    .eq("fkCliente", clienteId)
-    .eq("id", enderecoId);
-
-  if (error) throw error;
-}
-
-export async function excluirEndereco(clienteId: number, enderecoId: number): Promise<void> {
-  const supabase = await serverClient();
-
-  const { error } = await supabase
-    .from("clientesenderecos")
-    .delete()
-    .eq("fkCliente", clienteId)
-    .eq("id", enderecoId);
-
-  if (error) throw error;
-}
-
-// ── Dados bancarios ─────────────────────────────────────────────
-
-export async function bancariosDaPessoa(clienteId: number): Promise<DadoBancarioDaPessoa[]> {
-  const supabase = await serverClient();
-
-  const { data, error } = await supabase
-    .from("clientesbancarios")
-    .select("id, banco, agencia, conta, tipo, titular, documento, pix_tipo, pix_chave, principal")
-    .eq("fkCliente", clienteId)
-    .eq("ativo", true)
-    .order("principal", { ascending: false })
-    .order("id");
-
-  if (error) throw error;
-
-  return (data ?? []).map((l) => ({
-    id: l.id as number,
-    banco: (l.banco as string | null) || null,
-    agencia: (l.agencia as string | null) || null,
-    conta: (l.conta as string | null) || null,
-    tipo: (l.tipo as string | null) || null,
-    titular: (l.titular as string | null) || null,
-    documento: (l.documento as string | null) || null,
-    pixTipo: (l.pix_tipo as string | null) || null,
-    pixChave: (l.pix_chave as string | null) || null,
-    principal: Boolean(l.principal),
-  }));
-}
-
-export async function criarBancario(
-  clienteId: number,
-  usuarioId: string,
-  entrada: Omit<DadoBancarioDaPessoa, "id">,
-): Promise<void> {
-  const supabase = await serverClient();
-
-  const existentes = await bancariosDaPessoa(clienteId);
-  const principal = entrada.principal || existentes.length === 0;
-
-  if (principal) {
-    const { error: erroLimpar } = await supabase
-      .from("clientesbancarios")
-      .update({ principal: false })
-      .eq("fkCliente", clienteId)
-      .eq("principal", true);
-
-    if (erroLimpar) throw erroLimpar;
-  }
-
-  const { error } = await supabase.from("clientesbancarios").insert({
-    fkCliente: clienteId,
-    fkUserCriacao: usuarioId,
-    banco: entrada.banco,
-    agencia: entrada.agencia,
-    conta: entrada.conta,
-    tipo: entrada.tipo,
-    titular: entrada.titular,
-    documento: entrada.documento,
-    pix_tipo: entrada.pixTipo,
-    pix_chave: entrada.pixChave,
-    principal,
-    ativo: true,
-  });
-
-  if (error) throw error;
-}
-
-/** ⚠️ Sem o `principal`, pelo mesmo motivo do endereco: ele e exclusivo. */
-export async function atualizarBancario(
-  clienteId: number,
-  bancarioId: number,
-  entrada: Omit<DadoBancarioDaPessoa, "id" | "principal">,
-): Promise<void> {
-  const supabase = await serverClient();
-
-  const { error } = await supabase
-    .from("clientesbancarios")
-    .update({
-      banco: entrada.banco,
-      agencia: entrada.agencia,
-      conta: entrada.conta,
-      tipo: entrada.tipo,
-      titular: entrada.titular,
-      documento: entrada.documento,
-      pix_tipo: entrada.pixTipo,
-      pix_chave: entrada.pixChave,
-    })
-    .eq("fkCliente", clienteId)
-    .eq("id", bancarioId);
-
-  if (error) throw error;
-}
-
-/**
- * ⚠️ Desativa, e nao apaga.
- *
- * A conta que saiu do cadastro e a que consta num pagamento ja feito. Apagando,
- * a consulta de "para onde este dinheiro foi" fica sem resposta.
- */
-export async function desativarBancario(clienteId: number, bancarioId: number): Promise<void> {
-  const supabase = await serverClient();
-
-  const { error } = await supabase
-    .from("clientesbancarios")
-    .update({ ativo: false })
-    .eq("fkCliente", clienteId)
-    .eq("id", bancarioId);
-
-  if (error) throw error;
-}
-
-// ── Usuarios com acesso ─────────────────────────────────────────
-
-/**
- * Quem pode ver os dados desta pessoa no portal.
- *
- * ⚠️ `usuarios` e visivel por `usuarios_visiveis()`: um usuario de outra empresa
- * volta sem nome em vez de vazar. A tela mostra o proprio uuid nesse caso, que e
- * feio e honesto.
- */
-export async function usuariosDaPessoa(clienteId: number): Promise<UsuarioDaPessoa[]> {
-  const supabase = await serverClient();
-
-  const { data, error } = await supabase
-    .from("usuariosxclientes")
-    .select("fkUser")
-    .eq("fkCliente", clienteId);
-
-  if (error) throw error;
-
-  const ids = (data ?? []).map((l) => l.fkUser as string);
-  if (ids.length === 0) return [];
-
-  const { data: pessoas, error: erroNomes } = await supabase
-    .from("usuarios")
-    .select("fkUser, nome, email")
-    .in("fkUser", ids);
-
-  if (erroNomes) throw erroNomes;
-
-  return ids.map((id) => {
-    const u = (pessoas ?? []).find((x) => x.fkUser === id);
-
-    return {
-      id,
-      nome: (u?.nome as string | null) || null,
-      email: (u?.email as string | null) || null,
-    };
-  });
-}
-
-/** Os usuarios que este administrador enxerga, para escolher a quem dar acesso. */
-export async function usuariosDisponiveis(): Promise<UsuarioDaPessoa[]> {
-  const supabase = await serverClient();
-
-  const { data, error } = await supabase
-    .from("usuarios")
-    .select("fkUser, nome, email")
-    .order("nome");
-
-  if (error) throw error;
-
-  return (data ?? []).map((u) => ({
-    id: u.fkUser as string,
-    nome: (u.nome as string | null) || null,
-    email: (u.email as string | null) || null,
-  }));
-}
-
-export async function definirUsuariosDaPessoa(
-  clienteId: number,
-  usuarioId: string,
-  usuarios: string[],
-): Promise<void> {
-  const supabase = await serverClient();
-
-  const tinha = (await usuariosDaPessoa(clienteId)).map((u) => u.id);
-  const sair = tinha.filter((id) => !usuarios.includes(id));
-  const entrar = usuarios.filter((id) => !tinha.includes(id));
-
-  if (sair.length > 0) {
-    const { error } = await supabase
-      .from("usuariosxclientes")
-      .delete()
-      .eq("fkCliente", clienteId)
-      .in("fkUser", sair);
-
-    if (error) throw error;
-  }
-
-  if (entrar.length > 0) {
-    const { error } = await supabase.from("usuariosxclientes").insert(
-      entrar.map((id) => ({
-        fkCliente: clienteId,
-        fkUser: id,
-        fkUserCriacao: usuarioId,
-      })),
-    );
-
-    if (error) throw error;
-  }
+  return data != null;
 }
 
 export async function buscarPorId(empresaId: number, id: number): Promise<Cliente | null> {

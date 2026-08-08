@@ -27,8 +27,6 @@ import { useRecursoDaPessoa, type CacheDoDrawer } from "./cache-do-drawer";
  * pessoa pode ver. Esta aba responde "quem está entrando hoje", e a única ação
  * que ela precisa é cortar quem não devia mais.
  */
-type Acesso = { comAcesso: UsuarioDaPessoa[]; disponiveis: UsuarioDaPessoa[] };
-
 export function AbaDeAcesso({
   clienteId,
   nome,
@@ -41,13 +39,12 @@ export function AbaDeAcesso({
   const { avisar } = useAvisos();
   const [salvando, setSalvando] = useState(false);
 
-  const { dados, recarregar: carregar } = useRecursoDaPessoa<Acesso>(
+  const { dados: comAcesso, recarregar: carregar } = useRecursoDaPessoa<UsuarioDaPessoa[]>(
     cache,
     "acesso",
     `/api/v1/clientes/${clienteId}/acesso`,
   );
 
-  const comAcesso = dados?.comAcesso ?? null;
   const atuais = (comAcesso ?? []).map((u) => u.id);
 
   async function desligar(usuarioId: string) {

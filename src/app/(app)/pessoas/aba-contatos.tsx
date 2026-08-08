@@ -19,6 +19,7 @@ import {
   inputStyle,
 } from "@/components/ui/kit";
 import type { ContatoDaPessoa } from "@/modules/clientes/clientes.types";
+import { useRecursoDaPessoa, type CacheDoDrawer } from "./cache-do-drawer";
 import { analisarTelefone, mascararTelefone } from "@/shared/domain/telefone";
 
 /**
@@ -39,22 +40,33 @@ const EMAILS = "E-mails";
 
 export function AbaDeContatos({
   clienteId,
-  contatos,
+  cache,
   principalTelefone,
   principalEmail,
-  onMudou,
   onPrincipal,
 }: {
   clienteId: number;
-  /** `null` enquanto carrega. Vem de fora: o drawer também usa. */
-  contatos: ContatoDaPessoa[] | null;
+  cache: CacheDoDrawer;
   principalTelefone: string;
   principalEmail: string;
-  onMudou: () => void;
   onPrincipal: (tipo: "telefone" | "email", valor: string) => void;
 }) {
   const [sub, setSub] = useState<string>(TELEFONES);
   const [aberto, setAberto] = useState<Aberto>(null);
+
+  /*
+   * ⚠️ A aba busca o PRÓPRIO dado, como as outras.
+   *
+   * A lista vinha do drawer, que a carregava na abertura: quem abria a ficha só
+   * para conferir o documento pagava uma consulta de contatos que nunca ia ver.
+   * Aqui ela sai na primeira vez que a aba aparece, e o cache do drawer segura o
+   * vaivém entre guias.
+   */
+  const { dados: contatos, recarregar: onMudou } = useRecursoDaPessoa<ContatoDaPessoa[]>(
+    cache,
+    "contatos",
+    `/api/v1/clientes/${clienteId}/contatos`,
+  );
 
   const tipo: "telefone" | "email" = sub === TELEFONES ? "telefone" : "email";
   const daVez = (contatos ?? []).filter((c) => c.tipo === tipo);
@@ -93,7 +105,7 @@ export function AbaDeContatos({
         principal={principal}
         aberto={aberto}
         onAbrir={setAberto}
-        onMudou={onMudou}
+        onMudou={() => void onMudou()}
         onPrincipal={(valor) => onPrincipal(tipo, valor)}
       />
     </GrupoDeCampos>
