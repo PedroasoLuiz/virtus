@@ -345,7 +345,17 @@ export type PagamentoRow = {
   fkUserModificacao: string | null;
   /** Conferido no extrato do banco. Gesto humano: nada marca sozinho. */
   conciliado: boolean | null;
+  /** Quando o dinheiro se moveu para o cliente: e ela que fecha a parcela. */
   data: string | null;
+  /**
+   * Quando o dinheiro CAI na conta.
+   *
+   * ⚠️ Nao e a mesma coisa que `data`. Cartao credita em D+30: o cliente nao deve
+   * mais desde o dia da compra, e o extrato so ve o dinheiro um mes depois.
+   */
+  data_credito: string | null;
+  /** O que a adquirente reteve. Vira lancamento de despesa proprio. */
+  taxa: number | null;
   tipo: string | null;
   natureza: string | null;
   descricao: string | null;

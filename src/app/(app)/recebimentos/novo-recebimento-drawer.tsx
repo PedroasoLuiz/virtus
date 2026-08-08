@@ -12,7 +12,12 @@ import {
 } from "@/shared/domain/cobranca";
 import { formatarSemSimbolo, type Centavos } from "@/shared/utils/money";
 import { hoje, paraFormatoBR, type DataISO } from "@/shared/utils/datas";
-import { TIPOS_DE_RECEBIMENTO } from "@/modules/faturas/faturas.types";
+import { TIPOS_DE_RECEBIMENTO, type TipoDeRecebimento } from "@/modules/faturas/faturas.types";
+import {
+  creditaNoMesmoDia,
+  previsaoDeCredito,
+  temTaxaDeCostume,
+} from "@/shared/domain/recebimento";
 import type { ParcelaEmAberto } from "@/modules/recebimentos/recebimentos.types";
 
 /**
@@ -83,6 +88,19 @@ export function NovoRecebimentoDrawer({
   const [tipo, setTipo] = useState<string>("PIX");
   const [contaId, setContaId] = useState("");
   const [observacoes, setObservacoes] = useState("");
+  const [taxa, setTaxa] = useState(0);
+  const [dataCredito, setDataCredito] = useState(() =>
+    previsaoDeCredito("PIX", hoje()),
+  );
+  /*
+   * A previsao para de seguir a forma depois que alguem a corrige.
+   *
+   * ⚠️ Sem isto, quem ajusta o credito para o dia certo do contrato ve a data
+   * voltar sozinha ao trocar qualquer outro campo, e nao entende por que.
+   */
+  const [creditoNaMao, setCreditoNaMao] = useState(false);
+
+  const tipoAtual = tipo as TipoDeRecebimento;
 
   const [contas, setContas] = useState<{ id: number; nome: string }[]>([]);
   const [valores, setValores] = useState<Valores>({});
@@ -230,6 +248,8 @@ export function NovoRecebimentoDrawer({
         data,
         tipo,
         contaBancariaId: Number(contaId),
+        dataCredito,
+        taxa,
         observacoes: observacoes.trim() || null,
         destinos,
       }),
@@ -313,8 +333,22 @@ export function NovoRecebimentoDrawer({
           </select>
         </Field>
 
-        <Field label="Data" required hint="Quando o dinheiro entrou, não quando você lançou.">
-          <input type="date" value={data} onChange={(e) => setData(e.target.value)} style={inputStyle} />
+        <Field
+          label="Cliente pagou em"
+          required
+          hint="O dia em que o cliente pagou. É ele que fecha a parcela, mesmo que o dinheiro só caia depois."
+        >
+          <input
+            type="date"
+            value={data}
+            onChange={(e) => {
+              setData(e.target.value);
+              // A previsao acompanha a data enquanto ninguem a corrigiu a mao:
+              // trocando o dia do pagamento, o credito anda junto.
+              if (!creditoNaMao) setDataCredito(previsaoDeCredito(tipoAtual, e.target.value as DataISO));
+            }}
+            style={inputStyle}
+          />
         </Field>
 
         <Field
@@ -322,7 +356,18 @@ export function NovoRecebimentoDrawer({
           required
           hint="Lista fechada de propósito: no legado o mesmo PIX aparece com quatro grafias diferentes, e nenhum relatório consegue agrupar."
         >
-          <select value={tipo} onChange={(e) => setTipo(e.target.value)} style={selectStyle}>
+          <select
+            value={tipo}
+            onChange={(e) => {
+              setTipo(e.target.value);
+              const novo = e.target.value as TipoDeRecebimento;
+              if (!creditoNaMao) setDataCredito(previsaoDeCredito(novo, data as DataISO));
+              // Trocar para uma forma que nao costuma reter zera a taxa: ela
+              // ficaria escondida e continuaria virando despesa em silencio.
+              if (!temTaxaDeCostume(novo)) setTaxa(0);
+            }}
+            style={selectStyle}
+          >
             {TIPOS_DE_RECEBIMENTO.map((t) => (
               <option key={t} value={t}>
                 {t}
@@ -341,6 +386,55 @@ export function NovoRecebimentoDrawer({
             ))}
           </select>
         </Field>
+
+        {/*
+          ⚠️ Duas datas, e nao uma.
+
+          O cliente passa o cartao no dia 20 e a parcela fecha ali: ele pagou, nao
+          deve mais. O dinheiro so aparece no extrato trinta dias depois, e ate la
+          nao esta na conta. Com uma data so, ou a cobranca fica aberta um mes
+          depois de paga, ou o caixa promete dinheiro que ainda nao existe.
+
+          A previsao vem preenchida pelo prazo da forma escolhida, e vira "na mao"
+          no primeiro toque: cada contrato com a adquirente tem o seu prazo, e
+          antecipacao muda tudo.
+        */}
+        <Field
+          label="Dinheiro cai em"
+          required
+          hint={
+            creditaNoMesmoDia(tipoAtual)
+              ? "Nesta forma o dinheiro entra no mesmo dia."
+              : "Cartão credita em D+30, boleto no dia útil seguinte. Corrija se o seu contrato for outro."
+          }
+        >
+          <input
+            type="date"
+            value={dataCredito}
+            min={data}
+            onChange={(e) => {
+              setCreditoNaMao(true);
+              setDataCredito(e.target.value);
+            }}
+            style={inputStyle}
+          />
+        </Field>
+
+        {/*
+          ⚠️ A taxa aparece só onde ela é o normal, e não em todo recebimento.
+
+          Perguntar taxa em cada PIX é pedir para preencher zero cinquenta vezes
+          por semana. Onde ela existe — cartão, boleto —, ela é a regra e o campo
+          já vem aberto.
+        */}
+        {temTaxaDeCostume(tipoAtual) && (
+          <Field
+            label="Taxa retida"
+            hint="O que a adquirente ou o banco ficou. Não é desconto: o cliente pagou o valor cheio, e isto vira uma despesa própria no seu resultado."
+          >
+            <CampoNumerico valor={taxa} aoMudar={setTaxa} escala={100} />
+          </Field>
+        )}
 
         <Field label="Observações">
           <textarea

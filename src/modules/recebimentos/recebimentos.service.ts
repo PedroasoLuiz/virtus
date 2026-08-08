@@ -1,4 +1,5 @@
 import { BusinessRuleError, NotFoundError } from "@/shared/errors/app-error";
+import { previsaoDeCredito } from "@/shared/domain/recebimento";
 import { formatarSemSimbolo, somar, subtrair, type Centavos, ZERO } from "@/shared/utils/money";
 import type { Pagina, Paginacao } from "@/shared/utils/paginacao";
 import { paradaNaFila, proximaAReceber } from "@/shared/domain/parcelas";
@@ -112,6 +113,32 @@ export async function registrarRecebimento(
   if (total <= 0) throw new BusinessRuleError("Informe o valor recebido");
 
   /*
+   * ⚠️ A taxa nao pode comer o recebimento inteiro.
+   *
+   * Uma taxa igual ou maior que o valor significa que o dinheiro nao entrou, e
+   * isso nao e recebimento: e digito trocado. Deixando passar, a conta fecharia
+   * como paga com zero no extrato.
+   */
+  const taxa = entrada.taxa ?? (ZERO as Centavos);
+  if (taxa < 0) throw new BusinessRuleError("A taxa nao pode ser negativa");
+  if (taxa >= total) {
+    throw new BusinessRuleError("A taxa nao pode ser igual nem maior que o valor recebido");
+  }
+
+  /*
+   * ⚠️ Quando o dinheiro CAI, que nao e quando o cliente pagou.
+   *
+   * Sem data informada, o prazo sai da forma de recebimento: cartao credita em
+   * D+30, boleto no dia util seguinte, PIX na hora. A tela sugere o mesmo numero,
+   * e quem cadastra corrige quando o contrato com a adquirente e outro.
+   */
+  const dataCredito = entrada.dataCredito ?? previsaoDeCredito(entrada.tipo, entrada.data);
+
+  if (dataCredito < entrada.data) {
+    throw new BusinessRuleError("O dinheiro nao pode cair antes de o cliente pagar");
+  }
+
+  /*
    * As parcelas sao conferidas contra o BANCO, e nao contra o que a tela mandou.
    *
    * O corpo vem do navegador e pode estar velho ou adulterado: sem esta
@@ -186,7 +213,8 @@ export async function registrarRecebimento(
   const id = await repo.criar(
     empresaId,
     usuarioId,
-    entrada,
+    // A data do credito ja resolvida: o repositorio grava, nao decide.
+    { ...entrada, dataCredito, taxa },
     total,
     /*
      * A linha que aparece no extrato.

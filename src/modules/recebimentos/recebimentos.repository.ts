@@ -33,6 +33,8 @@ import type {
  * codigo novo.
  */
 const RECEITA = "Receitas";
+/** A taxa da adquirente entra por aqui: ela e custo, e nao receita menor. */
+const DESPESA = "Despesas";
 
 /**
  * Marca de onde o lancamento veio. Puramente descritiva: nada filtra por ela.
@@ -394,6 +396,15 @@ export async function criar(
       fkUserCriacao: usuarioId,
       fkContaBancaria: entrada.contaBancariaId,
       data: entrada.data,
+      /*
+       * ⚠️ A data do CREDITO viaja junto, e nao substitui a do pagamento.
+       *
+       * Sao dois fatos: o cliente pagou no dia 20 (e a parcela fechou ali) e o
+       * dinheiro cai em D+30. Guardando so uma, ou a cobranca fica aberta um mes
+       * depois de paga, ou o caixa mostra dinheiro que ainda nao existe.
+       */
+      data_credito: entrada.dataCredito ?? entrada.data,
+      taxa: paraBanco(entrada.taxa ?? (0 as Centavos)),
       // O que o banco viu: parcelas + juros + multa. Guardar so o abatimento
       // faria o extrato divergir do lancamento real em todo atraso.
       valor: paraBanco(total),
@@ -412,6 +423,38 @@ export async function criar(
 
   if (error) throw error;
   const pagamentoId = data.id;
+
+  /*
+   * ⚠️ A taxa vira um lancamento de DESPESA proprio, e nao um valor menor na
+   * receita.
+   *
+   * O cliente pagou 1.000 e a adquirente creditou 970: a receita e 1.000 e o
+   * custo e 30. Gravando so os 970, a venda encolhe e a despesa financeira nunca
+   * aparece no resultado — e o saldo da conta, que soma receitas menos despesas,
+   * chega no mesmo lugar pelos numeros certos.
+   *
+   * Mesma data do credito: e quando os dois acontecem, juntos, no extrato.
+   */
+  const taxa = entrada.taxa ?? (0 as Centavos);
+
+  if (taxa > 0) {
+    const { error: erroTaxa } = await supabase.from("pagamentos").insert({
+      fkEmpresa: empresaId,
+      fkUserCriacao: usuarioId,
+      fkContaBancaria: entrada.contaBancariaId,
+      data: entrada.dataCredito ?? entrada.data,
+      data_credito: entrada.dataCredito ?? entrada.data,
+      valor: paraBanco(taxa),
+      tipo: entrada.tipo,
+      natureza: DESPESA,
+      origem: ORIGEM,
+      descricao: `Taxa de ${entrada.tipo.toLowerCase()} — recebimento ${pagamentoId}`,
+      nome: pagador,
+      conciliado: false,
+    });
+
+    if (erroTaxa) throw erroTaxa;
+  }
 
   try {
     const { error: erroRateio } = await supabase.from("pagamentosxparcelas").insert(

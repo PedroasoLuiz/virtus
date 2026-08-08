@@ -50,6 +50,10 @@ export const criarRecebimentoBodySchema = z.object({
   data: dataISOSchema,
   tipo: z.enum(TIPOS_DE_RECEBIMENTO),
   contaBancariaId: idSchema,
+  /** Omitida, o servidor calcula pelo prazo da forma de recebimento. */
+  dataCredito: dataISOSchema.nullish(),
+  /** Zero e o caso normal: so cartao e boleto costumam reter. */
+  taxa: centavosSchema.default(0),
   observacoes: textoLongoSchema.nullish(),
   destinos: z.array(destinoSchema).min(1, "Escolha ao menos uma parcela").max(200),
 });

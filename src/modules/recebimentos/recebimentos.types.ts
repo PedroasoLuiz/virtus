@@ -54,9 +54,26 @@ export type DestinoNovo = {
 
 export type RecebimentoNovo = {
   clienteId: number;
+  /** Quando o CLIENTE pagou. E este dia que fecha a parcela. */
   data: DataISO;
   tipo: TipoDeRecebimento;
   contaBancariaId: number;
+  /**
+   * Quando o dinheiro CAI na conta.
+   *
+   * ⚠️ Outro dia, e nao um detalhe. O cartao credita em D+30: o cliente nao deve
+   * mais desde o dia 20, mas o dinheiro so existe no extrato em setembro. Omitido,
+   * o servico calcula pela forma de recebimento.
+   */
+  dataCredito?: DataISO | null;
+  /**
+   * O que a adquirente ou o banco reteve.
+   *
+   * ⚠️ NAO e desconto. Desconto e abatimento dado ao cliente; aqui ele pagou o
+   * valor cheio e a diferenca ficou com quem processou. Ela vira lancamento de
+   * despesa proprio, senao a receita encolhe e o custo some.
+   */
+  taxa?: Centavos;
   observacoes?: string | null;
   destinos: DestinoNovo[];
 };
