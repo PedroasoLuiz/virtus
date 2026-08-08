@@ -52,6 +52,7 @@ export const BANCOS = [
   "376 - Banco J.P. Morgan",
   "380 - PicPay",
   "389 - Banco Mercantil do Brasil",
+  "403 - Cora",
   "422 - Banco Safra",
   "436 - Banco Sicoob",
   "473 - Banco Caixa Geral",
@@ -70,3 +71,37 @@ export const BANCOS = [
   "748 - Sicredi",
   "756 - Sicoob",
 ] as const;
+
+/**
+ * So o nome do banco, sem o codigo da Febraban.
+ *
+ * ⚠️ O campo guarda o rotulo inteiro da lista ("756 - Sicoob"), porque ele
+ * tambem aceita texto livre e separar codigo de nome em duas colunas obrigaria
+ * a inventar um codigo para a cooperativa que nao tem. Quem le a tela nao
+ * procura o numero: "916-393-0 | 756 - Sicoob" tem dois numeros disputando a
+ * mesma leitura, e o que identifica a conta e o primeiro.
+ *
+ * ⚠️ Devolve NULL quando o codigo nao esta na lista, e nao o proprio codigo.
+ *
+ * Os oito cadastros que existem guardam so o numero em `banco` — "403", "756" —
+ * e o nome mora no apelido. Devolvendo "403" como se fosse nome, a tela escrevia
+ * "4923909-0 | 403": dois numeros na mesma celula, nenhum dos dois dizendo de
+ * que banco e a conta. Nulo deixa quem chama cair no apelido, que ali e o nome
+ * de verdade.
+ */
+export function nomeDoBanco(bruto: string | null | undefined): string | null {
+  const texto = bruto?.trim();
+  if (!texto) return null;
+
+  const comCodigo = texto.match(/^(\d{3})\s*-\s*(.+)$/);
+  if (comCodigo) return comCodigo[2].trim();
+
+  if (/^\d{1,3}$/.test(texto)) {
+    const codigo = texto.padStart(3, "0");
+    const achado = BANCOS.find((b) => b.startsWith(`${codigo} - `));
+    return achado ? achado.slice(codigo.length + 3) : null;
+  }
+
+  // Texto livre: e o proprio nome, digitado por quem cadastrou.
+  return texto;
+}

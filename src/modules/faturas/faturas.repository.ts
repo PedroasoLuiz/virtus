@@ -18,6 +18,7 @@ import {
   type StatusFatura,
 } from "@/modules/faturas/faturas.types";
 import { saldoAReceber, totalRecebido, type Parcela } from "@/shared/domain/parcelas";
+import { nomeDaConta } from "@/shared/domain/conta-bancaria";
 
 /**
  * Unica porta de acesso aos dados de faturas.
@@ -963,10 +964,5 @@ export async function listarContasBancarias(empresaId: number): Promise<ContaBan
 
   if (error) throw error;
 
-  return (data ?? []).map((c) => ({
-    id: c.id,
-    nome:
-      primeiroPreenchido(c.apelido, c.banco ? `${c.banco}${c.conta ? ` · ${c.conta}` : ""}` : null) ??
-      `Conta ${c.id}`,
-  }));
+  return (data ?? []).map((c) => ({ id: c.id, nome: nomeDaConta(c) }));
 }

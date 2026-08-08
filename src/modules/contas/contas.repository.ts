@@ -1,7 +1,7 @@
 import { serverClient } from "@/infra/supabase/client";
 import { doBanco, paraBanco, somar, ZERO, type Centavos } from "@/shared/utils/money";
-import { primeiroPreenchido } from "@/shared/utils/texto";
 import type { DataISO } from "@/shared/utils/datas";
+import { nomeDaConta } from "@/shared/domain/conta-bancaria";
 import type {
   ContaBancaria,
   ContaNova,
@@ -305,11 +305,7 @@ function paraDominio(
     limite: doBanco(linha.limite),
     saldoInicial: doBanco(linha.saldoinicial),
     saldo,
-    nome:
-      primeiroPreenchido(
-        linha.apelido,
-        linha.banco ? `${linha.banco}${linha.conta ? ` · ${linha.conta}` : ""}` : null,
-      ) ?? `Conta ${linha.id}`,
+    nome: nomeDaConta(linha),
   };
 }
 
