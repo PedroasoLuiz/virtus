@@ -156,6 +156,7 @@ export const contatoSchema = z.object({
   tipo: z.enum(["telefone", "email"]),
   valor: z.string(),
   rotulo: z.string().nullable(),
+  responsavel: z.string().nullable(),
 });
 
 /**
@@ -170,11 +171,13 @@ export const criarContatoBodySchema = z.discriminatedUnion("tipo", [
     tipo: z.literal("email"),
     valor: emailSchema,
     rotulo: z.string().trim().max(40).nullish(),
+    responsavel: textoCurtoSchema.nullish(),
   }),
   z.object({
     tipo: z.literal("telefone"),
     valor: z.string().trim().min(8).max(30),
     rotulo: z.string().trim().max(40).nullish(),
+    responsavel: textoCurtoSchema.nullish(),
   }),
 ]);
 

@@ -49,10 +49,20 @@ export async function criarContato(
   empresaId: number,
   usuarioId: string,
   clienteId: number,
-  entrada: { tipo: "telefone" | "email"; valor: string; rotulo: string | null },
+  entrada: {
+    tipo: "telefone" | "email";
+    valor: string;
+    rotulo: string | null;
+    responsavel: string | null;
+  },
 ): Promise<ContatoDaPessoa> {
   await obterCliente(empresaId, clienteId);
-  return repo.criarContato(clienteId, usuarioId, entrada);
+  const contato = await repo.criarContato(clienteId, usuarioId, entrada);
+
+  // A listagem le o responsavel de `clientes`, e ele segue o contato principal.
+  await repo.sincronizarResponsavelPrincipal(clienteId);
+
+  return contato;
 }
 
 export async function excluirContato(
@@ -62,16 +72,21 @@ export async function excluirContato(
 ): Promise<void> {
   await obterCliente(empresaId, clienteId);
   await repo.desativarContato(clienteId, contatoId);
+  await repo.sincronizarResponsavelPrincipal(clienteId);
 }
 
 export async function atualizarContato(
   empresaId: number,
   clienteId: number,
   contatoId: number,
-  entrada: { valor: string; rotulo: string | null },
+  entrada: { valor: string; rotulo: string | null; responsavel: string | null },
 ): Promise<ContatoDaPessoa> {
   await obterCliente(empresaId, clienteId);
-  return repo.atualizarContato(clienteId, contatoId, entrada);
+  const contato = await repo.atualizarContato(clienteId, contatoId, entrada);
+
+  await repo.sincronizarResponsavelPrincipal(clienteId);
+
+  return contato;
 }
 
 /*
@@ -231,5 +246,18 @@ export async function atualizarCliente(
   }
 
   await repo.atualizar(empresaId, id, usuarioId, entrada);
+
+  /*
+   * ⚠️ Trocar o contato principal troca o responsavel da listagem.
+   *
+   * O responsavel mora no CONTATO, e `clientes.responsavel` e a copia do que
+   * pertence ao principal. Sem isto, marcar outro telefone como principal
+   * deixava a coluna mostrando o responsavel de um contato que nao e mais o de
+   * referencia.
+   */
+  if (entrada.contato !== undefined || entrada.email !== undefined) {
+    await repo.sincronizarResponsavelPrincipal(id);
+  }
+
   return obterCliente(empresaId, id);
 }

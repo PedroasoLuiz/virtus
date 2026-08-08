@@ -140,6 +140,12 @@ function Lista({
           <Th>{rotuloDoValor}</Th>
           <Th minWidth={110}>Setor</Th>
           {/*
+            ⚠️ O responsável é do CONTATO, e não do cadastro. Quem atende o
+            telefone do financeiro não é quem lê o e-mail do comercial, e um
+            nome só na ficha mandava todo mundo falar com a mesma pessoa.
+          */}
+          <Th minWidth={140}>Responsável</Th>
+          {/*
             ⚠️ A coluna é clicável, e o cabeçalho não diz "marcar". O que se lê
             é o estado; o clique se descobre no hover, como em toda linha
             clicável do sistema.
@@ -152,10 +158,10 @@ function Lista({
 
         <tbody>
           {itens == null ? (
-            <EmptyRow colSpan={4} message="Carregando…" />
+            <EmptyRow colSpan={5} message="Carregando…" />
           ) : itens.length === 0 ? (
             <EmptyRow
-              colSpan={4}
+              colSpan={5}
               message={
                 tipo === "telefone" ? "Nenhum telefone cadastrado." : "Nenhum e-mail cadastrado."
               }
@@ -168,6 +174,9 @@ function Lista({
                 <Tr key={c.id}>
                   <Td>{c.valor}</Td>
                   <Td>{c.rotulo || <span style={{ color: "var(--text-disabled)" }}>—</span>}</Td>
+                  <Td>
+                    {c.responsavel || <span style={{ color: "var(--text-disabled)" }}>—</span>}
+                  </Td>
 
                   <Td style={{ textAlign: "center" }}>
                     <MarcaDePrincipal
@@ -259,6 +268,7 @@ function Editor({
 
   const [valor, setValor] = useState(contato?.valor ?? "");
   const [rotulo, setRotulo] = useState(contato?.rotulo ?? "");
+  const [responsavel, setResponsavel] = useState(contato?.responsavel ?? "");
   const [salvando, setSalvando] = useState(false);
 
   async function salvar() {
@@ -274,7 +284,12 @@ function Editor({
       {
         method: contato ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tipo, valor: limpo, rotulo: rotulo.trim() || null }),
+        body: JSON.stringify({
+          tipo,
+          valor: limpo,
+          rotulo: rotulo.trim() || null,
+          responsavel: responsavel.trim() || null,
+        }),
       },
     );
 
@@ -355,6 +370,17 @@ function Editor({
           if (e.key === "Escape") onFechar();
         }}
         placeholder="Setor (opcional)"
+        style={{ ...inputStyle, flex: 1 }}
+      />
+
+      <input
+        value={responsavel}
+        onChange={(e) => setResponsavel(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") void salvar();
+          if (e.key === "Escape") onFechar();
+        }}
+        placeholder="Responsável (opcional)"
         style={{ ...inputStyle, flex: 1 }}
       />
 

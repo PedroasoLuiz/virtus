@@ -144,7 +144,7 @@ export async function contatosDaPessoa(clienteId: number): Promise<ContatoDaPess
 
   const { data, error } = await supabase
     .from("clientescontatos")
-    .select("id, tipo, valor, rotulo")
+    .select("id, tipo, valor, rotulo, responsavel")
     .eq("fkCliente", clienteId)
     .eq("ativo", true)
     .order("tipo")
@@ -157,13 +157,19 @@ export async function contatosDaPessoa(clienteId: number): Promise<ContatoDaPess
     tipo: l.tipo as ContatoDaPessoa["tipo"],
     valor: l.valor as string,
     rotulo: (l.rotulo as string | null) || null,
+    responsavel: (l.responsavel as string | null) || null,
   }));
 }
 
 export async function criarContato(
   clienteId: number,
   usuarioId: string,
-  entrada: { tipo: "telefone" | "email"; valor: string; rotulo: string | null },
+  entrada: {
+    tipo: "telefone" | "email";
+    valor: string;
+    rotulo: string | null;
+    responsavel: string | null;
+  },
 ): Promise<ContatoDaPessoa> {
   const supabase = await serverClient();
 
@@ -175,9 +181,10 @@ export async function criarContato(
       tipo: entrada.tipo,
       valor: entrada.valor,
       rotulo: entrada.rotulo,
+      responsavel: entrada.responsavel,
       ativo: true,
     })
-    .select("id, tipo, valor, rotulo")
+    .select("id, tipo, valor, rotulo, responsavel")
     .single();
 
   if (error) throw error;
@@ -187,6 +194,7 @@ export async function criarContato(
     tipo: data.tipo as ContatoDaPessoa["tipo"],
     valor: data.valor as string,
     rotulo: (data.rotulo as string | null) || null,
+    responsavel: (data.responsavel as string | null) || null,
   };
 }
 
@@ -200,16 +208,20 @@ export async function criarContato(
 export async function atualizarContato(
   clienteId: number,
   contatoId: number,
-  entrada: { valor: string; rotulo: string | null },
+  entrada: { valor: string; rotulo: string | null; responsavel: string | null },
 ): Promise<ContatoDaPessoa> {
   const supabase = await serverClient();
 
   const { data, error } = await supabase
     .from("clientescontatos")
-    .update({ valor: entrada.valor, rotulo: entrada.rotulo })
+    .update({
+      valor: entrada.valor,
+      rotulo: entrada.rotulo,
+      responsavel: entrada.responsavel,
+    })
     .eq("fkCliente", clienteId)
     .eq("id", contatoId)
-    .select("id, tipo, valor, rotulo")
+    .select("id, tipo, valor, rotulo, responsavel")
     .single();
 
   if (error) throw error;
@@ -219,7 +231,44 @@ export async function atualizarContato(
     tipo: data.tipo as ContatoDaPessoa["tipo"],
     valor: data.valor as string,
     rotulo: (data.rotulo as string | null) || null,
+    responsavel: (data.responsavel as string | null) || null,
   };
+}
+
+/**
+ * Copia para `clientes.responsavel` o responsavel do contato PRINCIPAL.
+ *
+ * ⚠️ E a mesma denormalizacao que `contato` e `email` ja usam, e existe pela
+ * listagem: ela ordena e busca por responsavel, e ler isso de uma tabela filha a
+ * cada linha custaria uma consulta por pessoa da pagina.
+ *
+ * ⚠️ O telefone principal ganha do e-mail quando os dois tem responsavel. E uma
+ * escolha, e nao uma verdade: alguem precisa aparecer na coluna, e o telefone e
+ * por onde a cobranca fala primeiro.
+ */
+export async function sincronizarResponsavelPrincipal(clienteId: number): Promise<void> {
+  const supabase = await serverClient();
+
+  const { data: pessoa, error: erroPessoa } = await supabase
+    .from("clientes")
+    .select("contato, email")
+    .eq("id", clienteId)
+    .maybeSingle();
+
+  if (erroPessoa) throw erroPessoa;
+  if (!pessoa) return;
+
+  const contatos = await contatosDaPessoa(clienteId);
+
+  const doTelefone = contatos.find((c) => c.tipo === "telefone" && c.valor === pessoa.contato);
+  const doEmail = contatos.find((c) => c.tipo === "email" && c.valor === pessoa.email);
+
+  const { error } = await supabase
+    .from("clientes")
+    .update({ responsavel: doTelefone?.responsavel ?? doEmail?.responsavel ?? null })
+    .eq("id", clienteId);
+
+  if (error) throw error;
 }
 
 /**

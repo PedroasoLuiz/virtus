@@ -93,6 +93,18 @@ export type ContatoDaPessoa = {
   valor: string;
   /** "Financeiro", "Comercial"… O que este contato e dentro da empresa. */
   rotulo: string | null;
+  /**
+   * Quem atende neste contato.
+   *
+   * ⚠️ E do CONTATO, e nao do cadastro. O telefone do financeiro e o e-mail do
+   * comercial tem gente diferente do outro lado, e um responsavel unico na ficha
+   * mandava todo mundo falar com a mesma pessoa.
+   *
+   * `clientes.responsavel` continua existindo e passa a significar o responsavel
+   * do contato PRINCIPAL — e a mesma denormalizacao de `contato` e `email`, e e
+   * o que a listagem mostra e ordena.
+   */
+  responsavel: string | null;
 };
 
 /** Um endereco da pessoa. */

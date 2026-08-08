@@ -68,6 +68,7 @@ export async function criarContato({
     tipo: body.tipo,
     valor: body.valor,
     rotulo: body.rotulo?.trim() || null,
+    responsavel: body.responsavel?.trim() || null,
   });
 
   return created(contatoSchema.parse(contato));
@@ -83,6 +84,7 @@ export async function atualizarContato({
   const contato = await service.atualizarContato(empresaId, params.id, params.contatoId, {
     valor: body.valor,
     rotulo: body.rotulo?.trim() || null,
+    responsavel: body.responsavel?.trim() || null,
   });
 
   return ok(contatoSchema.parse(contato));

@@ -76,7 +76,6 @@ type Form = {
   dataNascimento: string;
   email: string;
   contato: string;
-  responsavel: string;
   inscricaoMunicipal: string;
   inscricaoEstadual: string;
   regimeTributario: string;
@@ -93,7 +92,6 @@ function inicial(cliente: Cliente | null): Form {
     dataNascimento: cliente?.dataNascimento ?? "",
     email: cliente?.email ?? "",
     contato: cliente?.contato ?? "",
-    responsavel: cliente?.responsavel ?? "",
     inscricaoMunicipal: cliente?.inscricaoMunicipal ?? "",
     inscricaoEstadual: cliente?.inscricaoEstadual ?? "",
     regimeTributario: cliente?.regimeTributario ?? "",
@@ -251,7 +249,12 @@ export function PessoaDrawer({
         dataNascimento: form.dataNascimento || null,
         // Campo opcional vazio vai como null: string vazia falharia na
         // validacao de tamanho e no formato de e-mail.
-        responsavel: form.responsavel.trim() || null,
+        /*
+         * ⚠️ `responsavel` NAO sai daqui. Ele mora no contato agora, e a coluna
+         * de `clientes` e copia do responsavel do principal: mandando o campo do
+         * formulario, todo salvar da ficha desfaria o que a aba de contatos
+         * acabou de gravar.
+         */
         inscricaoMunicipal: form.inscricaoMunicipal.trim() || null,
         inscricaoEstadual: form.inscricaoEstadual.trim() || null,
         regimeTributario: form.regimeTributario || null,
@@ -464,19 +467,13 @@ export function PessoaDrawer({
               legenda="Nada aqui trava o cadastro. São dados que só aparecem na hora de emitir nota ou de falar com quem responde pela pessoa, e ficam guardados para quando essa hora chegar."
             >
               {/*
-                Temporário: o responsável vai virar coluna do CONTATO, porque
-                cada telefone e cada e-mail tem o seu. Enquanto isso ele fica
-                aqui, para não sumir do cadastro no meio do caminho.
+                ⚠️ Não há campo de RESPONSÁVEL aqui. Ele é do contato: quem
+                atende o telefone do financeiro não é quem lê o e-mail do
+                comercial, e um nome só na ficha mandava todo mundo falar com a
+                mesma pessoa. `clientes.responsavel` continua guardado, agora
+                como cópia do responsável do contato principal, que é o que a
+                listagem mostra e ordena.
               */}
-              <Field label="Responsável">
-                <input
-                  style={inputStyle}
-                  value={form.responsavel}
-                  onChange={(e) => set("responsavel", e.target.value)}
-                  placeholder="Quem responde por este cadastro"
-                />
-              </Field>
-
               {juridica && (
                 <>
                   <Field label="Inscrição municipal">

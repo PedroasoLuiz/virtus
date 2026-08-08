@@ -753,6 +753,8 @@ export type ClienteContatoRow = {
   valor: string;
   /** De quem e este contato dentro da empresa: financeiro, comercial, a pessoa. */
   rotulo: string | null;
+  /** Quem atende NESTE contato: o financeiro e o comercial sao gente diferente. */
+  responsavel: string | null;
   ativo: boolean;
 };
 
