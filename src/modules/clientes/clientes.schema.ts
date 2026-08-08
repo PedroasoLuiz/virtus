@@ -125,10 +125,6 @@ export const usuarioComAcessoSchema = z.object({
  * operacoes incrementais deixariam a pessoa num estado que nenhuma das duas
  * pediu. Mandando o conjunto, a ultima a salvar ganha e ela SABE o que mandou.
  */
-export const definirCentrosBodySchema = z.object({
-  centros: z.array(idSchema).max(60),
-});
-
 export const definirUsuariosBodySchema = z.object({
   usuarios: z.array(z.uuid()).max(60),
 });
@@ -183,7 +179,6 @@ export type ContatoIdParam = z.infer<typeof contatoIdParamSchema>;
 export type FilhoIdParam = z.infer<typeof filhoIdParamSchema>;
 export type CriarEnderecoBody = z.infer<typeof criarEnderecoBodySchema>;
 export type CriarBancarioBody = z.infer<typeof criarBancarioBodySchema>;
-export type DefinirCentrosBody = z.infer<typeof definirCentrosBodySchema>;
 export type DefinirUsuariosBody = z.infer<typeof definirUsuariosBodySchema>;
 export type CriarContatoBody = z.infer<typeof criarContatoBodySchema>;
 export type CriarClienteBody = z.infer<typeof criarClienteBodySchema>;

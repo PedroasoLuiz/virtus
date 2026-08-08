@@ -399,61 +399,6 @@ export async function desativarBancario(clienteId: number, bancarioId: number): 
   if (error) throw error;
 }
 
-// ── Centros de custo ────────────────────────────────────────────
-
-export async function centrosDaPessoa(clienteId: number): Promise<number[]> {
-  const supabase = await serverClient();
-
-  const { data, error } = await supabase
-    .from("clientesxcentrocusto")
-    .select("fkCentroCusto")
-    .eq("fkCliente", clienteId);
-
-  if (error) throw error;
-  return (data ?? []).map((l) => l.fkCentroCusto as number);
-}
-
-/**
- * Troca o conjunto de centros pelo que veio.
- *
- * ⚠️ Apaga o que SAIU e insere o que entrou, em vez de limpar tudo e regravar.
- * Limpando, dois usuarios salvando ao mesmo tempo deixariam a pessoa sem centro
- * nenhum no intervalo entre o delete e o insert.
- */
-export async function definirCentrosDaPessoa(
-  clienteId: number,
-  usuarioId: string,
-  centros: number[],
-): Promise<void> {
-  const supabase = await serverClient();
-
-  const tinha = await centrosDaPessoa(clienteId);
-  const sair = tinha.filter((id) => !centros.includes(id));
-  const entrar = centros.filter((id) => !tinha.includes(id));
-
-  if (sair.length > 0) {
-    const { error } = await supabase
-      .from("clientesxcentrocusto")
-      .delete()
-      .eq("fkCliente", clienteId)
-      .in("fkCentroCusto", sair);
-
-    if (error) throw error;
-  }
-
-  if (entrar.length > 0) {
-    const { error } = await supabase.from("clientesxcentrocusto").insert(
-      entrar.map((id) => ({
-        fkCliente: clienteId,
-        fkCentroCusto: id,
-        fkUserCriacao: usuarioId,
-      })),
-    );
-
-    if (error) throw error;
-  }
-}
-
 // ── Usuarios com acesso ─────────────────────────────────────────
 
 /**

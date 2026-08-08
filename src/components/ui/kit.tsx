@@ -62,6 +62,13 @@ export function Panel({ children }: { children: React.ReactNode }) {
  *
  * Unico elemento branco da tela junto dos cards do kanban. Sem borda: o
  * contraste com o cinza ja o recorta, e uma linha por cima disso so pesaria.
+ *
+ * ⚠️ O RECUO LATERAL da tabela mora aqui, e nao na tabela.
+ *
+ * Ele existe porque ha um cartao em volta: sem os 16, a primeira coluna encosta
+ * na quina arredondada. Dentro de um drawer nao ha cartao nenhum, e a mesma
+ * tabela ali aparecia afastada da borda sem nada que justificasse o vao. Quem
+ * poe o cartao poe o recuo.
  */
 export function TableFrame({ children }: { children: React.ReactNode }) {
   return (
@@ -72,6 +79,7 @@ export function TableFrame({ children }: { children: React.ReactNode }) {
         flexDirection: "column",
         minHeight: 0,
         margin: "0 16px 16px",
+        padding: "0 16px",
         backgroundColor: "var(--surface)",
         borderRadius: "var(--radius-lg)",
         overflow: "hidden",
@@ -228,22 +236,21 @@ export function TableArea({
 }) {
   return (
     /*
-     * O respiro do cartao mora AQUI, na area rolavel, e nao nas celulas.
+     * ⚠️ Sem recuo lateral: ele e do cartao, e vive no `TableFrame`.
      *
-     * ⚠️ Nas celulas ele recuava so o TEXTO: a divisoria de cada linha continuava
-     * indo de quina a quina, porque ela e do `<tr>` e nao da celula. Com o vao no
-     * container, a tabela inteira encolhe — conteudo e traco juntos —, e as
-     * linhas param onde o cartao pede.
+     * Aqui, ele viajava junto com a tabela para dentro de drawers e paineis, que
+     * nao tem cartao — e ali o vao afastava a tabela da borda sem nada em volta
+     * que pedisse isso.
      *
      * ⚠️ Em cima o vao e ZERO, e nao pode voltar. O cabecalho e `sticky` e gruda
      * no topo DESTA area: qualquer respiro acima dele vira uma fresta por onde as
      * linhas aparecem enquanto rolam. Quem fecha a quina de cima e o fundo branco
      * do proprio cabecalho.
      *
-     * Embaixo ficam 8: a ultima linha colada no rodape esbarra na curva do
-     * cartao, e ali nao ha nada grudado para tapar.
+     * Embaixo ficam 8: a ultima linha colada no fim esbarra no que vier depois,
+     * e ali nao ha nada grudado para tapar.
      */
-    <div style={{ flex: 1, overflow: "auto", minHeight: 0, padding: "0 16px 8px" }}>
+    <div style={{ flex: 1, overflow: "auto", minHeight: 0, paddingBottom: 8 }}>
       <table style={{ width: "100%", borderCollapse: "collapse", minWidth }}>{children}</table>
     </div>
   );
@@ -679,14 +686,14 @@ export function Pagination({
         alignItems: "center",
         justifyContent: "space-between",
         /*
-         * O mesmo recuo da tabela, para os dois alinharem dentro do cartao.
+         * Sem recuo proprio: ela nasce colada na tabela, e o afastamento da
+         * borda vem de quem as envolve — o cartao na tela, o drawer no drawer.
          *
-         * ⚠️ Aqui havia 76 a direita, folga para o botao flutuante do WhatsApp
+         * ⚠️ Aqui houve 76 a direita, folga para o botao flutuante do WhatsApp
          * nao cobrir o "proxima pagina". Ele saiu do canto da tela e foi para a
          * barra lateral, entao a folga virou um vao de sessenta pixels defendendo
          * a tela de um botao que nao existe mais ali.
          */
-        padding: "0 16px",
         /*
          * Sem fundo e sem borda de topo: a paginacao vira rodape da tabela, e
          * uma barra cinza embaixo de uma tabela que ja nao tem moldura
@@ -1740,26 +1747,41 @@ export function GrupoDeCampos({
   titulo,
   legenda,
   primeiro,
+  onIncluir,
+  rotuloIncluir = "Adicionar",
   children,
 }: {
   titulo: string;
   legenda: string;
   /** Primeiro do formulario: sem o respiro que separa um grupo do anterior. */
   primeiro?: boolean;
+  /**
+   * O mais, colado no titulo.
+   *
+   * ⚠️ Colado, e nao um botao no fim da lista. Ele e a acao DO GRUPO, e no rodape
+   * de uma tabela que rola ele descia junto com a ultima linha: quem tinha oito
+   * telefones precisava rolar ate o fim para achar como cadastrar o nono.
+   */
+  onIncluir?: () => void;
+  rotuloIncluir?: string;
   children: React.ReactNode;
 }) {
   return (
     <section>
       <div style={{ marginBottom: "var(--form-gap-titulo)", marginTop: primeiro ? 0 : 4 }}>
-        <div
-          style={{
-            fontSize: "calc(var(--text-lg) + 2px)",
-            fontWeight: "var(--fw-semi)",
-            color: "var(--text-primary)",
-            letterSpacing: "var(--tracking-snug)",
-          }}
-        >
-          {titulo}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span
+            style={{
+              fontSize: "calc(var(--text-lg) + 2px)",
+              fontWeight: "var(--fw-semi)",
+              color: "var(--text-primary)",
+              letterSpacing: "var(--tracking-snug)",
+            }}
+          >
+            {titulo}
+          </span>
+
+          {onIncluir && <BotaoMais rotulo={rotuloIncluir} onClick={onIncluir} />}
         </div>
         <p
           style={{

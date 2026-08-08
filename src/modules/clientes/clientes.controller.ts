@@ -17,7 +17,6 @@ import {
   type CriarBancarioBody,
   type CriarContatoBody,
   type CriarEnderecoBody,
-  type DefinirCentrosBody,
   type DefinirUsuariosBody,
   type FilhoIdParam,
   type IdParam,
@@ -172,27 +171,6 @@ export async function excluirBancario({
   await service.excluirBancario(empresaId, params.id, params.filhoId);
 
   return ok({ id: params.filhoId });
-}
-
-export async function listarCentrosDaPessoa({
-  params,
-  ctx,
-}: Entrada<undefined, undefined, IdParam>) {
-  const empresaId = empresaObrigatoria(ctx);
-  const centros = await service.centrosDaPessoa(empresaId, params.id);
-
-  return ok({ centros });
-}
-
-export async function definirCentrosDaPessoa({
-  body,
-  params,
-  ctx,
-}: Entrada<DefinirCentrosBody, undefined, IdParam>) {
-  const empresaId = empresaObrigatoria(ctx);
-  await service.definirCentrosDaPessoa(empresaId, ctx.usuarioId, params.id, body.centros);
-
-  return ok({ centros: body.centros });
 }
 
 export async function listarAcesso({ params, ctx }: Entrada<undefined, undefined, IdParam>) {

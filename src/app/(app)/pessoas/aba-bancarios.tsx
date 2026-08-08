@@ -70,6 +70,8 @@ export function AbaDeBancarios({
         primeiro
         titulo="Dados bancários"
         legenda="Para onde o pagamento sai, ou de onde a devolução vem. São dados de terceiro: não entram no fluxo de caixa nem na conciliação, servem para preencher o pagamento na hora certa."
+        onIncluir={novo ? undefined : () => setNovo(true)}
+        rotuloIncluir="Nova conta"
       >
         <TableArea minWidth={0}>
           <TableHead>
@@ -92,14 +94,6 @@ export function AbaDeBancarios({
             )}
           </tbody>
         </TableArea>
-
-        {!novo && (
-          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
-            <Button size="sm" variant="secondary" onClick={() => setNovo(true)}>
-              Nova conta
-            </Button>
-          </div>
-        )}
       </GrupoDeCampos>
 
       {novo && (

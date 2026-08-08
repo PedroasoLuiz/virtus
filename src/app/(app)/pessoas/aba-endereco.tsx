@@ -71,6 +71,8 @@ export function AbaDeEndereco({
         primeiro
         titulo="Endereços"
         legenda="O principal é o que sai na nota fiscal. Os demais servem para entrega, obra ou filial — o primeiro cadastrado já nasce principal."
+        onIncluir={novo ? undefined : () => setNovo(true)}
+        rotuloIncluir="Novo endereço"
       >
         <TableArea minWidth={0}>
           <TableHead>
@@ -92,14 +94,6 @@ export function AbaDeEndereco({
             )}
           </tbody>
         </TableArea>
-
-        {!novo && (
-          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
-            <Button size="sm" variant="secondary" onClick={() => setNovo(true)}>
-              Novo endereço
-            </Button>
-          </div>
-        )}
       </GrupoDeCampos>
 
       {novo && (

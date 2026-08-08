@@ -17,7 +17,6 @@ import { AbaDeContatos } from "./aba-contatos";
 import { AbaDeEndereco } from "./aba-endereco";
 import { AbaDeBancarios } from "./aba-bancarios";
 import { AbaDeAcesso } from "./aba-acesso";
-import { AbaDeCentros } from "./aba-centros";
 import { useCacheDoDrawer } from "./cache-do-drawer";
 
 /**
@@ -30,8 +29,13 @@ import { useCacheDoDrawer } from "./cache-do-drawer";
  *
  * ⚠️ Em ABAS, e não numa pilha. Contato, endereço e acesso são assuntos que se
  * consultam separados: quem abre para conferir um telefone não quer rolar por
- * centro de custo no caminho. E cada aba tem seu próprio ritmo de mudança — o
+ * dado bancário no caminho. E cada aba tem seu próprio ritmo de mudança — o
  * nome quase nunca muda, o telefone muda toda hora.
+ *
+ * ⚠️ Não há aba de CENTRO DE CUSTO. O que existia amarrava a pessoa aos centros
+ * da EMPRESA, e centro da empresa é a nossa contabilidade: dizer que um cliente
+ * "usa" o nosso centro de receita mistura duas contabilidades diferentes. O
+ * cliente terá os próprios centros, em tabela própria, quando isso for feito.
  */
 
 const PAPEIS: { valor: PapelPessoa; rotulo: string; explica: string }[] = [
@@ -45,7 +49,6 @@ const ABA_PAPEIS = "Papéis";
 const ABA_CONTATOS = "Contatos";
 const ABA_ENDERECO = "Endereço";
 const ABA_BANCARIO = "Bancário";
-const ABA_CENTROS = "Centro de custo";
 const ABA_ACESSO = "Acesso";
 
 /*
@@ -56,15 +59,7 @@ const ABA_ACESSO = "Acesso";
  * que quase ninguem toca. Ordenado por frequencia, a aba certa e quase sempre a
  * primeira.
  */
-const ABAS = [
-  ABA_INFO,
-  ABA_PAPEIS,
-  ABA_CONTATOS,
-  ABA_ENDERECO,
-  ABA_BANCARIO,
-  ABA_CENTROS,
-  ABA_ACESSO,
-];
+const ABAS = [ABA_INFO, ABA_PAPEIS, ABA_CONTATOS, ABA_ENDERECO, ABA_BANCARIO, ABA_ACESSO];
 
 type Form = {
   razao: string;
@@ -74,7 +69,6 @@ type Form = {
   contato: string;
   responsavel: string;
   papeis: PapelPessoa[];
-  centroCustoId: string;
   ativo: boolean;
 };
 
@@ -87,23 +81,17 @@ function inicial(cliente: Cliente | null): Form {
     contato: cliente?.contato ?? "",
     responsavel: cliente?.responsavel ?? "",
     papeis: cliente?.papeis ?? ["cliente"],
-    // Vazio num cadastro novo: quem escolhe o padrao e o banco, e o "Geral"
-    // vale mesmo quando a pessoa nasce fora desta tela.
-    centroCustoId: cliente?.centroCustoId ? String(cliente.centroCustoId) : "",
     ativo: cliente?.ativo ?? true,
   };
 }
 
 export function PessoaDrawer({
   cliente,
-  centros,
   aberto,
   onClose,
 }: {
   /** null = novo cadastro. */
   cliente: Cliente | null;
-  /** Centros de RECEITA da empresa — pessoa e origem de entrada. */
-  centros: { id: number; descricao: string }[];
   aberto: boolean;
   onClose: () => void;
 }) {
@@ -216,7 +204,11 @@ export function PessoaDrawer({
         cnpj: digitos || null,
         responsavel: form.responsavel.trim() || null,
         papeis: form.papeis,
-        centroCustoId: form.centroCustoId ? Number(form.centroCustoId) : null,
+        /*
+         * ⚠️ `centroCustoId` NAO sai daqui. O salvar e um PATCH: fora do corpo,
+         * a coluna fica com o que o gatilho do banco pos. Mandando null, todo
+         * salvar de nome ou telefone apagaria o centro que a pessoa ja tinha.
+         */
         ...(editando ? { ativo: form.ativo } : {}),
       })}
     >
@@ -272,20 +264,6 @@ export function PessoaDrawer({
           <AbaDeEndereco clienteId={cliente.id} cache={cache} />
         ) : editando && aba === ABA_BANCARIO ? (
           <AbaDeBancarios clienteId={cliente.id} cache={cache} />
-        ) : editando && aba === ABA_CENTROS ? (
-          <AbaDeCentros
-            clienteId={cliente.id}
-            centros={centros}
-            cache={cache}
-            padrao={form.centroCustoId ? Number(form.centroCustoId) : null}
-            /*
-             * ⚠️ O padrão continua no FORMULÁRIO, e sai no salvar — diferente do
-             * principal dos contatos, que grava sozinho. Ele é um campo de
-             * `clientes` como o nome e o documento, e gravar em separado faria
-             * metade do cadastro salvar no clique e metade no botão.
-             */
-            onPadrao={(id) => set("centroCustoId", id ? String(id) : "")}
-          />
         ) : editando && aba === ABA_ACESSO ? (
           <AbaDeAcesso
             clienteId={cliente.id}

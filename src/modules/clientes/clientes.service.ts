@@ -136,21 +136,6 @@ export async function excluirBancario(
   await repo.desativarBancario(clienteId, bancarioId);
 }
 
-export async function centrosDaPessoa(empresaId: number, clienteId: number): Promise<number[]> {
-  await obterCliente(empresaId, clienteId);
-  return repo.centrosDaPessoa(clienteId);
-}
-
-export async function definirCentrosDaPessoa(
-  empresaId: number,
-  usuarioId: string,
-  clienteId: number,
-  centros: number[],
-): Promise<void> {
-  await obterCliente(empresaId, clienteId);
-  await repo.definirCentrosDaPessoa(clienteId, usuarioId, centros);
-}
-
 export async function acessoDaPessoa(
   empresaId: number,
   clienteId: number,

@@ -93,19 +93,15 @@ const VAZIO: Contagem = { total: 0, cliente: 0, fornecedor: 0, colaborador: 0 };
 type Campo = "id" | "razao" | "cnpj" | "contato" | "email" | "responsavel";
 type Dir = "asc" | "desc";
 
-export function PessoasTela({
-  centros,
-}: {
-  /*
-   * ⚠️ O tipo continua `Cliente`, e a tabela `clientes`.
-   *
-   * O que mudou foi o NOME da tela: ali dentro há cliente, fornecedor e
-   * colaborador, e chamar tudo de cliente escondia dois terços do cadastro.
-   * Renomear a tabela e a API junto seria uma migração de banco e de rota para
-   * consertar uma palavra na tela.
-   */
-  centros: { id: number; descricao: string }[];
-}) {
+/*
+ * ⚠️ O tipo continua `Cliente`, e a tabela `clientes`.
+ *
+ * O que mudou foi o NOME da tela: ali dentro há cliente, fornecedor e
+ * colaborador, e chamar tudo de cliente escondia dois terços do cadastro.
+ * Renomear a tabela e a API junto seria uma migração de banco e de rota para
+ * consertar uma palavra na tela.
+ */
+export function PessoasTela() {
   const [pessoas, setPessoas] = useState<Cliente[] | null>(null);
   const [total, setTotal] = useState(0);
   const [contagem, setContagem] = useState<Contagem>(VAZIO);
@@ -507,7 +503,6 @@ export function PessoasTela({
           // inicial já vem da certa sem precisar de efeito para sincronizar.
           key={edicao.pessoa?.id ?? "novo"}
           cliente={edicao.pessoa}
-          centros={centros}
           aberto
           onClose={() => {
             setEdicao(null);

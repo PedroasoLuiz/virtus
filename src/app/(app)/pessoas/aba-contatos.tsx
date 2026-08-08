@@ -52,6 +52,7 @@ export function AbaDeContatos({
   onPrincipal: (tipo: "telefone" | "email", valor: string) => void;
 }) {
   const [sub, setSub] = useState<string>(TELEFONES);
+  const [novo, setNovo] = useState(false);
 
   const tipo: "telefone" | "email" = sub === TELEFONES ? "telefone" : "email";
   const daVez = (contatos ?? []).filter((c) => c.tipo === tipo);
@@ -63,6 +64,8 @@ export function AbaDeContatos({
         primeiro
         titulo="Contatos"
         legenda="Todos os telefones e e-mails desta pessoa. O marcado como principal é o que a cobrança usa e o que casa esta pessoa com a conversa no WhatsApp; os demais ficam aqui para quem precisar falar com outro setor."
+        onIncluir={novo ? undefined : () => setNovo(true)}
+        rotuloIncluir={tipo === "telefone" ? "Novo telefone" : "Novo e-mail"}
       >
         {/*
           ⚠️ As subguias usam a MESMA anatomia das abas de cima, e não pastilhas.
@@ -70,7 +73,16 @@ export function AbaDeContatos({
           duas telas irmãs — e dois desenhos diferentes para o mesmo gesto fazem
           a pessoa aprender duas vezes.
         */}
-        <PanelTabs tabs={[TELEFONES, EMAILS]} active={sub} onChange={setSub} />
+        <PanelTabs
+          tabs={[TELEFONES, EMAILS]}
+          active={sub}
+          onChange={(t) => {
+            setSub(t);
+            // O formulario aberto era do OUTRO tipo: seguir aberto faria o campo
+            // de telefone pedir um e-mail sem nada dizer que mudou de assunto.
+            setNovo(false);
+          }}
+        />
 
         <Lista
           key={tipo}
@@ -78,6 +90,8 @@ export function AbaDeContatos({
           tipo={tipo}
           itens={contatos == null ? null : daVez}
           principal={principal}
+          novo={novo}
+          onFechar={() => setNovo(false)}
           onMudou={onMudou}
           onPrincipal={(valor) => onPrincipal(tipo, valor)}
         />
@@ -91,6 +105,8 @@ function Lista({
   tipo,
   itens,
   principal,
+  novo,
+  onFechar,
   onMudou,
   onPrincipal,
 }: {
@@ -98,6 +114,9 @@ function Lista({
   tipo: "telefone" | "email";
   itens: ContatoDaPessoa[] | null;
   principal: string;
+  /** O formulario so existe depois do mais: fora disso a aba e leitura. */
+  novo: boolean;
+  onFechar: () => void;
   onMudou: () => void;
   onPrincipal: (valor: string) => void;
 }) {
@@ -144,6 +163,7 @@ function Lista({
 
     setValor("");
     setRotulo("");
+    onFechar();
     onMudou();
   }
 
@@ -225,43 +245,57 @@ function Lista({
       </TableArea>
 
       {/*
-        ⚠️ O rótulo fica ao lado, e não é obrigatório.
+        ⚠️ Os campos só existem DEPOIS do mais.
 
-        "Financeiro", "Comercial", "Portaria" é o que faz três telefones da mesma
-        empresa deixarem de ser três números iguais. Obrigatório, viraria uma
-        caixa preenchida com qualquer coisa só para o botão liberar.
+        Abertos o tempo todo, eles pareciam parte da lista: uma linha de tabela em
+        branco esperando ser preenchida, embaixo das que já existem. A aba é para
+        consultar quem já está cadastrado; cadastrar é o gesto de vez em quando.
+
+        ⚠️ O setor não é obrigatório. "Financeiro", "Comercial", "Portaria" é o que
+        faz três telefones da mesma empresa deixarem de ser três números iguais.
+        Obrigatório, viraria uma caixa preenchida com qualquer coisa só para o
+        botão liberar.
       */}
-      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <input
-          value={valor}
-          onChange={(e) => setValor(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") void adicionar();
-          }}
-          placeholder={tipo === "telefone" ? "(00) 00000-0000" : "financeiro@empresa.com.br"}
-          type={tipo === "email" ? "email" : "text"}
-          style={{ ...inputStyle, flex: 2 }}
-        />
+      {novo && (
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <input
+            autoFocus
+            value={valor}
+            onChange={(e) => setValor(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void adicionar();
+              if (e.key === "Escape") onFechar();
+            }}
+            placeholder={tipo === "telefone" ? "(00) 00000-0000" : "financeiro@empresa.com.br"}
+            type={tipo === "email" ? "email" : "text"}
+            style={{ ...inputStyle, flex: 2 }}
+          />
 
-        <input
-          value={rotulo}
-          onChange={(e) => setRotulo(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") void adicionar();
-          }}
-          placeholder="Setor (opcional)"
-          style={{ ...inputStyle, flex: 1 }}
-        />
+          <input
+            value={rotulo}
+            onChange={(e) => setRotulo(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void adicionar();
+              if (e.key === "Escape") onFechar();
+            }}
+            placeholder="Setor (opcional)"
+            style={{ ...inputStyle, flex: 1 }}
+          />
 
-        <Button
-          size="sm"
-          variant="secondary"
-          disabled={!valor.trim() || salvando}
-          onClick={() => void adicionar()}
-        >
-          Adicionar
-        </Button>
-      </div>
+          <Button size="sm" variant="ghost" onClick={onFechar}>
+            Cancelar
+          </Button>
+
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={!valor.trim() || salvando}
+            onClick={() => void adicionar()}
+          >
+            Adicionar
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
