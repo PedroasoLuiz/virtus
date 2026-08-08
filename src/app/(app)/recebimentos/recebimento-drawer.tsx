@@ -2,7 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { BotaoDeCabecalho, Drawer } from "@/components/ui/drawer";
-import { CampoBloqueado, Field } from "@/components/ui/kit";
+import {
+  CampoBloqueado,
+  EmptyRow,
+  Field,
+  Formulario,
+  GrupoDeCampos,
+  TableArea,
+  TableHead,
+  Td,
+  Th,
+  Tr,
+} from "@/components/ui/kit";
 import { useAvisos } from "@/components/ui/avisos";
 import { formatarSemSimbolo, type Centavos } from "@/shared/utils/money";
 import { paraFormatoBR, type DataISO } from "@/shared/utils/datas";
@@ -88,7 +99,15 @@ function Conteudo({
     <Drawer
       open
       onClose={onClose}
-      title={recebimento ? `Recebimento ${recebimento.id}` : "Recebimento"}
+      /*
+        ⚠️ Sem o numero no titulo: ele agora e o campo Codigo, logo abaixo.
+
+        Escrito nos dois lugares, a mesma informacao aparece duas vezes na
+        primeira dobra da tela, e a do titulo e a pior das duas — nao se copia e
+        some ao rolar. Mesma decisao da conta a receber, que se chama so "Conta a
+        receber".
+      */
+      title="Recebimento"
       headerExtra={
         recebimento ? (
           /*
@@ -123,28 +142,6 @@ function Conteudo({
           </BotaoDeCabecalho>
         ) : null
       }
-      footer={
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {recebimento && (
-            <div>
-              <div className="rotulo" style={{ fontSize: "var(--text-xs)" }}>
-                Entrou no banco
-              </div>
-              <div
-                style={{
-                  fontSize: "var(--text-md)",
-                  fontWeight: "var(--fw-semi)",
-                  fontVariantNumeric: "tabular-nums",
-                  color: "var(--credito)",
-                }}
-              >
-                {formatarSemSimbolo(recebimento.valor)}
-              </div>
-            </div>
-          )}
-          <span style={{ flex: 1 }} />
-        </div>
-      }
     >
       {erro && (
         <div
@@ -163,8 +160,32 @@ function Conteudo({
       )}
 
       {recebimento && (
-        <>
-          <div style={{ display: "flex", flexDirection: "column", gap: 3, marginBottom: 18 }}>
+        /*
+          ⚠️ A anatomia e a do resto do sistema: `Formulario` e `GrupoDeCampos`,
+          com o vao entre campos vindo do token. Havia aqui um `div` com `gap: 3`
+          e uma margem de 18 escritos a mao, que acertavam o ritmo dos campos por
+          coincidencia e erravam o de um bloco para o outro.
+        */
+        <Formulario>
+          <GrupoDeCampos
+            primeiro
+            titulo="Como o dinheiro entrou"
+            legenda="O lançamento como ele foi gravado. Recebimento não se edita: corrigir é estornar e lançar de novo, porque mexer num valor já conciliado desfaz uma conferência que alguém assinou."
+          >
+            {/*
+              ⚠️ O codigo vem PRIMEIRO, e e campo com cadeado como os outros.
+
+              E o que se dita ao telefone e o que se procura no extrato. Escrito
+              so no titulo do drawer, ele some assim que a pessoa rola ate a
+              tabela, e nao da para copiar. Mesma decisao da conta a receber.
+            */}
+            <Field label="Código">
+              <CampoBloqueado
+                valor={String(recebimento.id)}
+                titulo="O número é dado pelo sistema quando o recebimento nasce."
+              />
+            </Field>
+
             {/* Antes do cliente: baixa é ato de alguém, e a primeira pergunta de
                 quem confere um lançamento estranho é quem lançou. */}
             <Field label="Baixado por">
@@ -192,6 +213,21 @@ function Conteudo({
             <Field label="Conta">
               <CampoBloqueado valor={recebimento.contaNome ?? "—"} />
             </Field>
+
+            {/*
+              ⚠️ O valor virou CAMPO, e saiu do rodape.
+
+              No rodape ele era um numero solto com rotulo miudo, verde, do lado
+              de fora do bloco onde mora todo o resto do lancamento: o unico dado
+              da tela que nao se copiava, justamente o que se confere contra o
+              extrato. Como campo, ele tem o rotulo a esquerda como os outros e
+              vem logo depois da conta em que caiu, que e a pergunta anterior.
+              Mesma decisao dos tres valores da conta a receber.
+            */}
+            <Field label="Entrou no banco">
+              <CampoBloqueado valor={formatarSemSimbolo(recebimento.valor)} />
+            </Field>
+
             <Field label="Conciliado">
               <CampoBloqueado
                 valor={recebimento.conciliado ? "Sim" : "Ainda não"}
@@ -203,87 +239,69 @@ function Conteudo({
                 <CampoBloqueado valor={recebimento.observacoes} multilinha />
               </Field>
             )}
-          </div>
+          </GrupoDeCampos>
 
-          {/* Mesmo tratamento do rótulo dos campos acima, e não o `.rotulo` em
-              caixa alta: é a mesma hierarquia, e dois estilos de título dentro
-              do mesmo drawer fazem parecer que um vale mais que o outro. */}
-          <div style={ROTULO_DE_SECAO}>Parcelas quitadas</div>
+          <GrupoDeCampos
+            titulo="Parcelas quitadas"
+            legenda="Para onde cada parte deste dinheiro foi. Juros e multa entram por cima do que abateu a dívida, e é por isso que somar as três colunas passa do valor da parcela."
+          >
+            {/*
+              ⚠️ A tabela e a do KIT, e nao uma escrita neste arquivo.
 
-          <Tabela
-            cabecalho={["Conta", "Parcela", "Vencimento", "Abatido", "Juros", "Multa"]}
-            linhas={recebimento.destinos.map((d) => [
-              String(d.faturaNumero),
-              String(d.numero),
-              d.vencimento ? paraFormatoBR(d.vencimento as DataISO) : "—",
-              formatarSemSimbolo(d.valor as Centavos),
-              // Zero, e não travessão: a coluna é de dinheiro, e "0,00" diz que
-              // não houve juros. O travessão diz "não se aplica", que é outra
-              // coisa, e aqui sempre se aplica.
-              formatarSemSimbolo(d.juros as Centavos),
-              formatarSemSimbolo(d.multa as Centavos),
-            ])}
-          />
-        </>
+              A que existia aqui repetia moldura, cabecalho cinza e altura de
+              linha por conta propria, e ja discordava do resto do sistema em
+              detalhe que ninguem notaria uma tela por vez: o dia em que a altura
+              da linha muda no kit, esta continuaria com a antiga.
+
+              ⚠️ Tudo a ESQUERDA, inclusive numero. E a regra da conta a receber,
+              e ela existe para o olho nao refazer o percurso a cada tela.
+            */}
+            <TableArea minWidth={0}>
+              <TableHead>
+                <Th minWidth={80}>Conta</Th>
+                <Th minWidth={70}>Parcela</Th>
+                <Th minWidth={110}>Vencimento</Th>
+                <Th minWidth={100}>Abatido</Th>
+                <Th minWidth={90}>Juros</Th>
+                <Th minWidth={90}>Multa</Th>
+              </TableHead>
+
+              <tbody>
+                {recebimento.destinos.length === 0 && (
+                  <EmptyRow colSpan={6} message="Nenhuma parcela neste recebimento." />
+                )}
+
+                {recebimento.destinos.map((d) => (
+                  <Tr key={`${d.faturaNumero}-${d.numero}`}>
+                    <Td style={NUM}>{d.faturaNumero}</Td>
+                    <Td style={NUM}>{d.numero}</Td>
+                    <Td>{d.vencimento ? paraFormatoBR(d.vencimento as DataISO) : "—"}</Td>
+                    <Td style={NUM}>{formatarSemSimbolo(d.valor as Centavos)}</Td>
+                    {/* Zero, e não travessão: a coluna é de dinheiro, e "0,00"
+                        diz que não houve juros. O travessão diz "não se aplica",
+                        que é outra coisa, e aqui sempre se aplica. */}
+                    <Td style={NUM}>{formatarSemSimbolo(d.juros as Centavos)}</Td>
+                    <Td style={NUM}>{formatarSemSimbolo(d.multa as Centavos)}</Td>
+                  </Tr>
+                ))}
+              </tbody>
+            </TableArea>
+          </GrupoDeCampos>
+        </Formulario>
       )}
     </Drawer>
   );
 }
 
-/** O mesmo tratamento do rotulo de um campo, para titular uma secao. */
-const ROTULO_DE_SECAO: React.CSSProperties = {
-  marginBottom: 8,
-  fontSize: "var(--text-sm)",
-  fontWeight: "var(--fw-medium)",
-  color: "var(--text-tertiary)",
-};
-
 /**
- * Tabela do drawer. Tudo alinhado a ESQUERDA, inclusive numero — a mesma regra
- * da conta a receber, para que o olho nao refaca o percurso a cada tela.
+ * Numero na tabela: tabular e sem quebra, mas a ESQUERDA.
+ *
+ * ⚠️ Nao e o `tdNum` do kit. Aquele alinha a direita, e aqui a regra e a da
+ * conta a receber: tudo a esquerda, inclusive dinheiro. O que se ganha e o
+ * digito alinhado com o digito de cima, que e o que faz uma coluna de valores
+ * ser conferivel de relance.
  */
-function Tabela({ cabecalho, linhas }: { cabecalho: string[]; linhas: string[][] }) {
-  return (
-    <div style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-lg)" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "var(--text-sm)" }}>
-        <thead>
-          <tr style={{ background: "var(--surface-2)" }}>
-            {cabecalho.map((c, ci) => (
-              <th
-                key={c}
-                className="rotulo"
-                style={{
-                  height: 32,
-                  padding: "0 12px",
-                  // `th` centraliza por padrao no navegador e `td` nao: sem esta
-                  // linha o cabecalho fica deslocado da coluna que ele nomeia.
-                  textAlign: "left",
-                  borderBottom: "1px solid var(--border)",
-                  whiteSpace: "nowrap",
-                  borderTopLeftRadius: ci === 0 ? "var(--radius-lg)" : undefined,
-                  borderTopRightRadius: ci === cabecalho.length - 1 ? "var(--radius-lg)" : undefined,
-                }}
-              >
-                {c}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {linhas.map((celulas, li) => (
-            <tr key={li} style={{ borderTop: li === 0 ? undefined : "1px solid var(--border)" }}>
-              {celulas.map((c, ci) => (
-                <td
-                  key={ci}
-                  style={{ height: 34, padding: "0 12px", fontVariantNumeric: "tabular-nums" }}
-                >
-                  {c}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
+const NUM: React.CSSProperties = {
+  fontVariantNumeric: "tabular-nums",
+  whiteSpace: "nowrap",
+};
