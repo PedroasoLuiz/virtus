@@ -79,7 +79,10 @@ export function RecebimentosTabela({
   return (
     <PageLayout>
       <Panel>
-        <PageHeader title="Recebimentos">
+        <PageHeader
+          title="Baixas"
+          description="Cada dinheiro que entrou e as parcelas que ele quitou. Um PIX que fecha três contas é uma baixa só: é assim que o extrato do banco vê."
+        >
           <FilterButton
             activeCount={(de ? 1 : 0) + (ate ? 1 : 0)}
             onClear={() => {

@@ -57,7 +57,12 @@ export const GRUPOS_POR_MODULO: Partial<Record<Modulo, Grupo[]>> = {
           label: "Contas a receber",
           items: [
             { label: "Títulos", href: "/faturas" },
-            { label: "Recebimentos", href: "/recebimentos" },
+            /*
+             * "Baixas" e nao "Recebimentos": e o nome que o financeiro usa para o
+             * gesto de dar por recebido. "Recebimento" descreve o dinheiro; a tela
+             * e sobre a acao de baixar o titulo.
+             */
+            { label: "Baixas", href: "/recebimentos" },
           ],
         },
         { label: "Contas a pagar", href: "/contas-pagar" },

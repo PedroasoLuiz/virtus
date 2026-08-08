@@ -167,15 +167,24 @@ export async function extrato(
     supabase.rpc("saldo_da_conta_antes", { p_conta: contaId, p_data: de }),
     supabase
       .from("pagamentos")
-      .select("id, data, nome, descricao, valor, natureza, tipo, origem, conciliado")
+      /*
+       * ⚠️ O extrato pergunta por `data_caixa`, e nao por `data`.
+       *
+       * `data` e quando o cliente pagou; `data_caixa` e quando o dinheiro se
+       * moveu NA CONTA. Uma venda no cartao no dia 20 de agosto nao aparece no
+       * extrato de agosto: ela cai em setembro, e o extrato do banco vai
+       * mostra-la la. Perguntando pela data do pagamento, a conciliacao acusava
+       * diferenca todo mes.
+       */
+      .select("id, data_caixa, nome, descricao, valor, natureza, tipo, origem, conciliado")
       .eq("fkEmpresa", empresaId)
       .eq("fkContaBancaria", contaId)
-      .gte("data", de)
-      .lte("data", ate)
+      .gte("data_caixa", de)
+      .lte("data_caixa", ate)
       // Data primeiro, id depois: o id desempata dois lancamentos do mesmo dia e
       // congela a ordem, senao o saldo acumulado mudaria de uma consulta para a
       // outra sem nada ter mudado no banco.
-      .order("data", { ascending: true })
+      .order("data_caixa", { ascending: true })
       .order("id", { ascending: true }),
   ]);
 
@@ -202,7 +211,8 @@ export async function extrato(
 
       return {
         id: m.id,
-        data: m.data ? ((m.data.slice(0, 10)) as DataISO) : null,
+        // A data do EXTRATO e a do caixa: e o dia em que o banco viu o dinheiro.
+        data: m.data_caixa ? ((m.data_caixa.slice(0, 10)) as DataISO) : null,
         nome: m.nome,
         tipo: entrada ? ("ENTRADA" as const) : ("SAIDA" as const),
         valor,

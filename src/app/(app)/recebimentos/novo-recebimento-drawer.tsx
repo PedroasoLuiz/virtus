@@ -2,7 +2,15 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Drawer } from "@/components/ui/drawer";
-import { Button, CampoNumerico, Field, inputStyle, selectStyle } from "@/components/ui/kit";
+import {
+  Button,
+  CampoNumerico,
+  Field,
+  Formulario,
+  GrupoDeCampos,
+  inputStyle,
+  selectStyle,
+} from "@/components/ui/kit";
 import { useAvisos } from "@/components/ui/avisos";
 import { filaDeRecebimento } from "@/shared/domain/parcelas";
 import {
@@ -283,7 +291,7 @@ export function NovoRecebimentoDrawer({
     <Drawer
       open
       onClose={onClose}
-      title="Registrar recebimento"
+      title="Baixa"
       footer={
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <Totais abatido={abatido} acrescimo={acrescimo} total={total} />
@@ -306,11 +314,21 @@ export function NovoRecebimentoDrawer({
           }
           onClick={registrar}
         >
-          {salvando ? "Registrando…" : "Registrar recebimento"}
+          {salvando ? "Registrando…" : "Registrar"}
         </Button>
       }
     >
-      <div style={{ display: "flex", flexDirection: "column", gap: 3, marginBottom: 16 }}>
+      {/*
+        ⚠️ O ritmo e a anatomia sao os do resto do sistema: `Formulario` e
+        `GrupoDeCampos`, com o vao entre campos vindo do token. Havia um `gap: 3`
+        escrito aqui, que acertava o vao dos campos por acaso e errava o resto.
+      */}
+      <Formulario>
+        <GrupoDeCampos
+          primeiro
+          titulo="O dinheiro que entrou"
+          legenda="Um pagamento é de um pagador só, e pode quitar parcelas de contas diferentes. É assim que o extrato do banco vê: uma linha só."
+        >
         <Field label="Cliente" required hint="De quem veio o dinheiro. Um pagamento é de um pagador só.">
           {/* Trocar de cliente zera a distribuicao: as parcelas sao outras, e um
               valor digitado para a parcela de outro cliente nao significa nada
@@ -446,7 +464,8 @@ export function NovoRecebimentoDrawer({
             style={{ ...inputStyle, height: "auto", padding: 8, resize: "vertical" }}
           />
         </Field>
-      </div>
+        </GrupoDeCampos>
+      </Formulario>
 
       {!clienteId ? (
         <Aviso>Escolha o cliente para ver o que ele tem em aberto.</Aviso>
@@ -456,16 +475,15 @@ export function NovoRecebimentoDrawer({
         <Aviso>Este cliente não tem parcela em aberto.</Aviso>
       ) : (
         <>
-          <div style={{ marginBottom: 10 }}>
-            <div className="rotulo" style={{ fontSize: "var(--text-xs)" }}>
-              Para onde foi o dinheiro
-            </div>
-            <div style={{ fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>
-              Dentro de cada conta a ordem é a do vencimento: a parcela seguinte abre quando a
-              anterior fecha.
-            </div>
-          </div>
-
+          {/*
+            O mesmo cabecalho de grupo do resto do sistema, no lugar de um rotulo
+            e um paragrafo escritos a mao: o vao acima dele vinha de uma margem
+            propria e nao batia com o dos outros blocos da tela.
+          */}
+          <GrupoDeCampos
+            titulo="Para onde foi"
+            legenda="Dentro de cada conta a ordem é a do vencimento: a parcela seguinte abre quando a anterior fecha."
+          >
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             {contasDaLista.map((faturaId) => (
               <div key={faturaId}>
@@ -523,6 +541,7 @@ export function NovoRecebimentoDrawer({
               </div>
             ))}
           </div>
+          </GrupoDeCampos>
         </>
       )}
     </Drawer>

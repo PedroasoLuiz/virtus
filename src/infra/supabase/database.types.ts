@@ -356,6 +356,14 @@ export type PagamentoRow = {
   data_credito: string | null;
   /** O que a adquirente reteve. Vira lancamento de despesa proprio. */
   taxa: number | null;
+  /**
+   * Quando o dinheiro se move NA CONTA: coluna GERADA pelo banco.
+   *
+   * ⚠️ Nao se escreve nela — o Postgres recusa. E `data_credito` quando ha, e
+   * `data` quando nao, e e por ela que o extrato, o saldo e a conciliacao
+   * perguntam.
+   */
+  data_caixa: string | null;
   tipo: string | null;
   natureza: string | null;
   descricao: string | null;
