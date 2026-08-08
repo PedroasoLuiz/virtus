@@ -65,6 +65,21 @@ export const criarFaturaBodySchema = z
     path: ["apuracaoFim"],
   });
 
+/**
+ * A parcela nova sai de uma que ja existe: quem cadastra diz QUANTO tirar dela e
+ * para QUANDO.
+ *
+ * ⚠️ O corpo e OPCIONAL. Sem ele, vale a operacao antiga — partir a ultima ao
+ * meio —, e o que ja chamava este endpoint sem corpo continua funcionando.
+ */
+export const dividirParcelaBodySchema = z
+  .object({
+    origemId: idSchema,
+    valor: centavosPositivoSchema,
+    vencimento: dataISOSchema,
+  })
+  .optional();
+
 export const idParamSchema = z.object({ id: idSchema });
 
 export const ticketParamSchema = z.object({ id: idSchema, ticketId: idSchema });
@@ -191,6 +206,7 @@ export type ListarQuery = z.infer<typeof listarQuerySchema>;
 export type CriarFaturaBody = z.infer<typeof criarFaturaBodySchema>;
 export type AlterarStatusBody = z.infer<typeof alterarStatusBodySchema>;
 export type IdParam = z.infer<typeof idParamSchema>;
+export type DividirParcelaBody = z.infer<typeof dividirParcelaBodySchema>;
 export type ParcelaParam = z.infer<typeof parcelaParamSchema>;
 
 export type TipoDocumentoQuery = z.infer<typeof tipoDocumentoQuerySchema>;

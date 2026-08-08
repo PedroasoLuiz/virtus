@@ -4,6 +4,7 @@ import { AppError } from "@/shared/errors/app-error";
 import { empresaObrigatoria } from "@/shared/auth/contexto";
 import { metaDePaginacao } from "@/shared/utils/paginacao";
 import { centavos } from "@/shared/utils/money";
+import type { DataISO } from "@/shared/utils/datas";
 import * as service from "@/modules/faturas/faturas.service";
 import {
   faturaResumoSchema,
@@ -13,6 +14,7 @@ import {
   type AlterarVencimentoBody,
   type EnviarParcelaBody,
   type EnviarParcelaWhatsappBody,
+  type DividirParcelaBody,
   type IdParam,
   type ListarQuery,
   type ParcelaParam,
@@ -63,9 +65,20 @@ export async function alterarStatus({
   return ok({ id: params.id, status: body.status });
 }
 
-export async function adicionarParcela({ params, ctx }: Entrada<undefined, undefined, IdParam>) {
+export async function adicionarParcela({
+  body,
+  params,
+  ctx,
+}: Entrada<DividirParcelaBody, undefined, IdParam>) {
   const empresaId = empresaObrigatoria(ctx);
-  await service.adicionarParcelaNaFatura(empresaId, ctx.usuarioId, params.id);
+  await service.adicionarParcelaNaFatura(
+    empresaId,
+    ctx.usuarioId,
+    params.id,
+    // O schema garante inteiro positivo; a marca de `Centavos` e do dominio, e
+    // a borda e o lugar de coloca-la.
+    body && { ...body, valor: centavos(body.valor), vencimento: body.vencimento as DataISO },
+  );
   const fatura = await service.obterFatura(empresaId, params.id);
   return ok(faturaSchema.parse(fatura));
 }

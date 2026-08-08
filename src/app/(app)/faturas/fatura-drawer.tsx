@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { BotaoDeCabecalho, BotaoHistorico, Drawer } from "@/components/ui/drawer";
+import { FormDrawer } from "@/components/ui/form-drawer";
 import { useAvisos } from "@/components/ui/avisos";
 import { NovoRecebimentoDrawer } from "../recebimentos/novo-recebimento-drawer";
 import { Icon } from "@/components/layout/icones";
@@ -9,11 +10,13 @@ import {
   AcoesDaLinha,
   Button,
   CampoBloqueado,
+  CampoNumerico,
   EmptyRow,
   Field,
   GrupoDeCampos,
   inputStyle,
   PanelTabs,
+  selectStyle,
   TableArea,
   TableHead,
   Td,
@@ -22,7 +25,12 @@ import {
   Tr,
 } from "@/components/ui/kit";
 import { TicketDrawer } from "../tickets/ticket-drawer";
-import { proximaAReceber, saldoAReceber, totalRecebido } from "@/shared/domain/parcelas";
+import {
+  oQuePodeNaConta,
+  proximaAReceber,
+  saldoAReceber,
+  totalRecebido,
+} from "@/shared/domain/parcelas";
 import { ehPessoaFisica } from "@/shared/domain/cadastro-pessoa";
 import { formatarDocumento } from "@/shared/domain/documento";
 import { formatarSemSimbolo, type Centavos } from "@/shared/utils/money";
@@ -88,6 +96,7 @@ function Conteudo({
    * ele.
    */
   const [prorrogando, setProrrogando] = useState<Fatura["parcelas"][number] | null>(null);
+  const [dividindo, setDividindo] = useState(false);
   const { avisar, confirmar } = useAvisos();
 
   async function cancelarConta() {
@@ -217,6 +226,29 @@ function Conteudo({
    * desconto recebeu 1.000 e esta quitada, e a subtracao a mostrava com 500 em
    * aberto para sempre. A parcela e quem carrega a verdade sobre o pagamento.
    */
+  /*
+   * ⚠️ O que da para fazer nesta conta sai da MESMA regra que o servidor aplica.
+   *
+   * A tela apaga o que nao pode; o servico recusa de novo. Escrita duas vezes,
+   * ela divergiria no primeiro ajuste e a tela passaria a oferecer o que o
+   * servidor vai negar.
+   */
+  const pode = fatura
+    ? oQuePodeNaConta({
+        cancelada: fatura.cancelada,
+        parcelas: fatura.parcelas.map((p) => ({
+          id: p.id,
+          numero: p.numero,
+          // Parcela antiga pode nao ter vencimento; a regra so precisa ordenar,
+          // e a string vazia manda para o comeco sem quebrar a comparacao.
+          vencimento: (p.vencimento ?? "") as DataISO,
+          valor: p.total as Centavos,
+          pago: p.pago,
+          temDocumento: Boolean(p.boleto || p.nfs),
+        })),
+      })
+    : null;
+
   const pago = fatura ? totalRecebido(fatura.parcelas) : 0;
   const emAberto = fatura ? saldoAReceber(fatura.parcelas) : 0;
   const descontado = fatura ? fatura.parcelas.reduce((s, p) => s + p.desconto, 0) : 0;
@@ -473,8 +505,8 @@ function Conteudo({
             */
             <GrupoDeCampos
               primeiro
-              titulo="De onde vem o valor"
-              legenda="O total desta conta é a soma do que foi tirado de cada ticket. O detalhe do serviço mora dentro dele: o menu da linha abre."
+              titulo="Serviços prestados"
+              legenda="Cada ticket entra com o valor que foi tirado dele, e a soma é o total desta conta. O detalhe do serviço mora dentro do ticket: o menu da linha abre."
             >
               <TableArea minWidth={0}>
               <TableHead>
@@ -570,8 +602,8 @@ function Conteudo({
             */
             <GrupoDeCampos
               primeiro
-              titulo="O que foi entregue junto"
-              legenda="Peça, material ou licença cobrados ao lado do serviço. Ainda não entram na conta: eles mexem no total, e o total hoje é exatamente o que veio dos tickets."
+              titulo="Itens vendidos"
+              legenda="Peça, material ou licença. Uma conta pode ser só de produto, sem serviço nenhum. Ainda não entram: eles mexem no total, e o total hoje é exatamente o que veio dos tickets."
             >
               <TableArea minWidth={0}>
               <TableHead>
@@ -592,17 +624,20 @@ function Conteudo({
           ) : (
             <GrupoDeCampos
               primeiro
-              titulo="Quando o dinheiro entra"
+              titulo="Pagamento"
               legenda="Cada parcela vence e é recebida por conta própria. A vencida aparece em vermelho, e o menu da linha é onde se dá baixa, prorroga o vencimento ou se emite o recibo."
+              /*
+                ⚠️ O mais só existe quando a REGRA deixa, e a regra é a mesma que o
+                servidor aplica. Aparecendo sempre, ele convidava a um clique que
+                voltava com recusa; sumindo, quem passa o mouse no título nem
+                descobre que existia.
+              */
+              onIncluir={pode?.parcelas.pode ? () => setDividindo(true) : undefined}
+              rotuloIncluir="Nova parcela"
             >
               <TableArea minWidth={0}>
               <TableHead>
                 <Th minWidth={54}>#</Th>
-                <Th minWidth={110}>Vencimento</Th>
-                <Th align="right" minWidth={120}>
-                  Valor
-                </Th>
-                <Th minWidth={90}>Documentos</Th>
                 {/*
                   ⚠️ Conciliado é sobre o EXTRATO, não sobre a baixa.
 
@@ -610,10 +645,19 @@ function Conteudo({
                   dinheiro apareceu na conta. Sem esta coluna, as duas viravam a
                   mesma coisa na leitura, e quem fecha o mês não tinha como ver o
                   que ainda falta bater.
+
+                  ⚠️ Fica ANTES do vencimento, junto do número: as duas primeiras
+                  colunas respondem "em que pé está esta parcela", e o resto é o
+                  conteúdo dela.
                 */}
                 <Th align="center" minWidth={90}>
                   Conciliado
                 </Th>
+                <Th minWidth={110}>Vencimento</Th>
+                <Th align="right" minWidth={120}>
+                  Valor
+                </Th>
+                <Th minWidth={90}>Documentos</Th>
                 <Th> </Th>
               </TableHead>
 
@@ -641,6 +685,10 @@ function Conteudo({
                         <Bolinha parcela={p} />
                         {p.numero}
                       </span>
+                    </Td>
+
+                    <Td style={{ textAlign: "center" }}>
+                      <MarcaDeConciliado parcela={p} />
                     </Td>
 
                     <Td>
@@ -680,10 +728,6 @@ function Conteudo({
                         bloqueado={p.pagamentoId != null || fatura.situacao === "CANCELADA"}
                         aoMudar={recarregar}
                       />
-                    </Td>
-
-                    <Td style={{ textAlign: "center" }}>
-                      <MarcaDeConciliado parcela={p} />
                     </Td>
 
                     <Td>
@@ -736,6 +780,18 @@ function Conteudo({
           onClose={() => setBaixando(null)}
           aoCriar={() => {
             setBaixando(null);
+            recarregar();
+          }}
+        />
+      )}
+
+      {dividindo && fatura && (
+        <NovaParcela
+          faturaId={fatura.id}
+          parcelas={fatura.parcelas.filter((p) => pode?.porParcela[p.id]?.pode)}
+          onClose={() => setDividindo(false)}
+          aoSalvar={() => {
+            setDividindo(false);
             recarregar();
           }}
         />
@@ -834,6 +890,106 @@ function NovoVencimento({
 // ── Peças ───────────────────────────────────────────────────────────────────
 
 /**
+ * Cria uma parcela tirando valor de outra.
+ *
+ * ⚠️ A parcela nova nao adiciona dinheiro: ela DIVIDE o que ja existe. O total da
+ * conta e o que foi combinado com o cliente, e um botao que aumentasse a conta
+ * sem passar por ticket faria a soma das parcelas deixar de bater com ela.
+ *
+ * ⚠️ Drawer proprio, e nao edicao na linha. A mudanca sai na hora para o banco e
+ * mexe numa cobranca que pode ja estar com o cliente; um campo que salva ao
+ * perder o foco tornaria isso um acidente de clique.
+ */
+function NovaParcela({
+  faturaId,
+  parcelas,
+  onClose,
+  aoSalvar,
+}: {
+  faturaId: number;
+  /** So as que a regra deixa mexer: paga e com documento ficam de fora. */
+  parcelas: Parcela[];
+  onClose: () => void;
+  aoSalvar: () => void;
+}) {
+  const [origemId, setOrigemId] = useState(parcelas.at(-1)?.id ?? 0);
+  const [valor, setValor] = useState(0);
+  const [vencimento, setVencimento] = useState("");
+
+  const origem = parcelas.find((p) => p.id === origemId) ?? null;
+
+  /*
+   * ⚠️ As mesmas bordas que o dominio confere, ditas antes do clique.
+   *
+   * O valor tem de caber na parcela de origem — igual a deixaria zerada, maior a
+   * deixaria negativa — e o vencimento novo tem de ser depois do dela, senao a
+   * ordem de recebimento passa a discordar da numeracao.
+   */
+  const erro =
+    !origem || valor <= 0
+      ? null
+      : valor >= origem.total
+        ? `O valor tem de ser menor que ${formatarSemSimbolo(origem.total as Centavos)}: é o que sai desta parcela que vira a nova.`
+        : vencimento && origem.vencimento && vencimento <= origem.vencimento
+          ? "O vencimento tem de ser depois do da parcela de origem."
+          : null;
+
+  return (
+    <FormDrawer
+      aberto
+      nivel={2}
+      titulo="Nova parcela"
+      subtitulo="O valor sai de uma parcela que já existe. O total da conta não muda."
+      onClose={onClose}
+      aoSalvar={aoSalvar}
+      url={`/api/v1/faturas/${faturaId}/parcelas`}
+      metodo="POST"
+      podeSalvar={Boolean(origem) && valor > 0 && Boolean(vencimento) && !erro}
+      valores={() => ({ origemId, valor, vencimento })}
+    >
+      <Field label="Tirar de">
+        <select
+          style={selectStyle}
+          value={origemId}
+          onChange={(e) => setOrigemId(Number(e.target.value))}
+        >
+          {parcelas.map((p) => (
+            <option key={p.id} value={p.id}>
+              Parcela {p.numero}
+              {p.vencimento ? ` · vence ${curto(p.vencimento)}` : ""} ·{" "}
+              {formatarSemSimbolo(p.total as Centavos)}
+            </option>
+          ))}
+        </select>
+      </Field>
+
+      <Field
+        label="Valor da parcela nova"
+        error={erro ?? undefined}
+        hint={
+          origem
+            ? `A parcela ${origem.numero} fica com ${formatarSemSimbolo(Math.max(0, origem.total - valor) as Centavos)}`
+            : undefined
+        }
+        required
+      >
+        <CampoNumerico valor={valor} aoMudar={setValor} escala={100} alinhar="right" />
+      </Field>
+
+      <Field label="Vence em" required>
+        <input
+          type="date"
+          style={inputStyle}
+          value={vencimento}
+          min={origem?.vencimento?.slice(0, 10)}
+          onChange={(e) => setVencimento(e.target.value)}
+        />
+      </Field>
+    </FormDrawer>
+  );
+}
+
+/**
  * A marca de conciliado de uma parcela.
  *
  * ⚠️ Três estados, e não dois. "Ainda não recebida" não é o mesmo que "recebida e
@@ -864,18 +1020,23 @@ function MarcaDeConciliado({ parcela }: { parcela: Parcela }) {
       }}
     >
       {ok ? (
-        <svg
-          width="15"
-          height="15"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.6"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden
-        >
-          <path d="M4 12.5l5.5 5.5L20 6.5" />
+        /*
+          ⚠️ Círculo PREENCHIDO com o check dentro, e não o check solto.
+
+          É a mesma marca do principal na ficha de pessoa: cheia quer dizer
+          "fechado, não há o que fazer aqui". O check solto lia como um item de
+          lista de tarefas, que é justamente o oposto.
+        */
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+          <circle cx="12" cy="12" r="9" />
+          <path
+            d="M8 12.4l2.6 2.6L16 9.6"
+            fill="none"
+            stroke="var(--surface)"
+            strokeWidth="2.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
         </svg>
       ) : (
         <svg

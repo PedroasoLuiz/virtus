@@ -12,6 +12,9 @@ import {
 import type { Paginacao, Pagina } from "@/shared/utils/paginacao";
 import {
   adicionarParcela,
+  dividirParcela,
+  oQuePodeNaConta,
+  type ParcelaEditavel,
   conferirTotal,
   excluirParcela,
   gerarParcelas,
@@ -257,22 +260,52 @@ export async function cancelarFatura(
 
 // ── Parcelas ────────────────────────────────────────────────────────────────
 
+/**
+ * Cria uma parcela tirando valor de outra. O total da conta nao muda.
+ *
+ * ⚠️ Com `divisao`, quem cadastra diz de qual parcela sai, quanto sai e para
+ * quando; sem ela, parte a ultima ao meio. Partir ao meio nunca era o numero
+ * combinado — "tira mil dessa e joga para o mes que vem" e o que o cliente pede.
+ */
 export async function adicionarParcelaNaFatura(
   empresaId: number,
   usuarioId: string,
   faturaId: number,
+  divisao?: { origemId: number; valor: Centavos; vencimento: DataISO },
 ): Promise<void> {
   const fatura = await obterFatura(empresaId, faturaId);
-  garantirEditavel(fatura);
+  garantirPodeMexerNasParcelas(fatura);
 
-  const plano = adicionarParcela(paraParcelasExistentes(fatura));
+  const existentes = paraParcelasEditaveis(fatura);
 
-  const novasParcelas = paraParcelasExistentes(fatura)
+  const plano = divisao
+    ? dividirParcela(existentes, divisao.origemId, {
+        valor: divisao.valor,
+        vencimento: divisao.vencimento,
+      })
+    : (() => {
+        const simples = adicionarParcela(existentes);
+        return {
+          atualizar: [
+            {
+              id: simples.atualizar.id,
+              numero: existentes.find((p) => p.id === simples.atualizar.id)!.numero,
+              valor: simples.atualizar.valor,
+            },
+          ],
+          criar: simples.criar,
+        };
+      })();
+
+  const porId = new Map(existentes.map((p) => [p.id, p]));
+  const mudadas = new Map(plano.atualizar.map((p) => [p.id, p]));
+
+  const novasParcelas = existentes
     .filter((p) => !p.pago)
     .map((p) => ({
-      numero: p.numero,
-      vencimento: p.vencimento,
-      valor: p.id === plano.atualizar.id ? plano.atualizar.valor : p.valor,
+      numero: mudadas.get(p.id)?.numero ?? p.numero,
+      vencimento: porId.get(p.id)!.vencimento,
+      valor: mudadas.get(p.id)?.valor ?? p.valor,
     }))
     .concat(plano.criar);
 
@@ -287,9 +320,9 @@ export async function excluirParcelaDaFatura(
   parcelaId: number,
 ): Promise<void> {
   const fatura = await obterFatura(empresaId, faturaId);
-  garantirEditavel(fatura);
+  garantirPodeMexerNasParcelas(fatura);
 
-  const plano = excluirParcela(paraParcelasExistentes(fatura), parcelaId);
+  const plano = excluirParcela(paraParcelasEditaveis(fatura), parcelaId);
 
   const porId = new Map(paraParcelasExistentes(fatura).map((p) => [p.id, p]));
   const novasParcelas = plano.atualizar
@@ -322,11 +355,17 @@ export async function alterarVencimentoDaParcela(
   vencimento: DataISO,
 ): Promise<void> {
   const fatura = await obterFatura(empresaId, faturaId);
-  garantirEditavel(fatura);
+  garantirPodeMexerNasParcelas(fatura);
 
   const parcela = fatura.parcelas.find((p) => p.id === parcelaId);
 
   if (!parcela) throw new NotFoundError("Parcela nao encontrada nesta conta");
+
+  if (parcela.boleto || parcela.nfs) {
+    throw new BusinessRuleError(
+      "Ja saiu boleto ou nota desta parcela; mudar o vencimento deixaria o documento dizendo outra coisa",
+    );
+  }
 
   if (parcela.pagamentoId) {
     throw new BusinessRuleError(
@@ -348,13 +387,36 @@ export async function alterarVencimentoDaParcela(
   });
 }
 
-function garantirEditavel(fatura: Fatura): void {
-  if (fatura.cancelada) {
-    throw new BusinessRuleError("Fatura cancelada nao pode ter as parcelas alteradas");
+/**
+ * ⚠️ A guarda e a MESMA regra que a tela le, e nao uma copia dela.
+ *
+ * A tela apaga o que nao pode e diz por que; aqui a operacao e recusada de novo.
+ * Escritas em dois lugares, elas divergiriam no primeiro ajuste e a tela passaria
+ * a oferecer o que o servidor recusa.
+ */
+function garantirPodeMexerNasParcelas(fatura: Fatura): void {
+  const pode = oQuePodeNaConta({
+    cancelada: fatura.cancelada,
+    parcelas: paraParcelasEditaveis(fatura),
+  });
+
+  if (!pode.parcelas.pode) {
+    throw new BusinessRuleError(pode.parcelas.motivo ?? "Esta conta nao aceita alterar parcelas");
   }
-  if (fatura.status === "PAGA") {
-    throw new BusinessRuleError("Fatura paga nao pode ter as parcelas alteradas");
-  }
+}
+
+/**
+ * As parcelas do jeito que a regra le, com a marca de documento emitido.
+ *
+ * ⚠️ Boleto e nota contam como documento; comprovante NAO. Comprovante e prova de
+ * que o dinheiro entrou; os outros dois sao promessas que sairam com um valor
+ * escrito, e mexer na parcela depois deixa o documento mentindo.
+ */
+function paraParcelasEditaveis(fatura: Fatura): ParcelaEditavel[] {
+  return paraParcelasExistentes(fatura).map((p) => {
+    const original = fatura.parcelas.find((x) => x.id === p.id)!;
+    return { ...p, temDocumento: Boolean(original.boleto || original.nfs) };
+  });
 }
 
 /**
