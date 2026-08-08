@@ -1429,6 +1429,28 @@ export const inputStyle: React.CSSProperties = {
 };
 
 /**
+ * Campo editavel DENTRO de uma celula de tabela.
+ *
+ * ⚠️ Sem moldura, sem canto arredondado e sem respiro lateral.
+ *
+ * A celula ja e a moldura: um campo com borda propria dentro dela desenha duas
+ * caixas, uma dentro da outra, e o recuo interno empurra o numero para longe da
+ * coluna que ele deveria alinhar — valor deixa de ficar embaixo de valor, que e a
+ * unica coisa que uma tabela de dinheiro precisa fazer bem.
+ *
+ * O foco continua visivel pelo cursor e pelo realce do navegador; a borda entra
+ * so quando o campo esta acusando erro, e ai ela e informacao.
+ */
+export const inputDeCelula: React.CSSProperties = {
+  ...inputStyle,
+  height: 26,
+  padding: 0,
+  border: "none",
+  borderRadius: 0,
+  backgroundColor: "transparent",
+};
+
+/**
  * Seta desenhada por nos, no lugar da nativa.
  *
  * A do sistema vem grande, preta e colada na borda direita — e nao aceita

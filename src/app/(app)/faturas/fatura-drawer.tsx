@@ -17,6 +17,7 @@ import {
   Formulario,
   GrupoDeCampos,
   inputStyle,
+  inputDeCelula,
   PanelTabs,
   TableArea,
   TableHead,
@@ -1002,8 +1003,33 @@ function Parcelamento({
       })}
     >
       <Formulario>
+        {/*
+          ⚠️ De QUEM e QUAL conta, antes da tabela.
+
+          O drawer abre por cima de outro e mexe em dinheiro: quem comeca a
+          lancar, atende o telefone e volta cinco minutos depois nao tem como
+          saber em que conta esta digitando. O título do drawer diz "Parcelamento",
+          que serve para qualquer uma.
+        */}
         <GrupoDeCampos
           primeiro
+          titulo="Conta a receber"
+          legenda="É este acordo que está sendo redividido. O total não muda: o que muda é em quantas vezes e quando."
+        >
+          <Field label="Código">
+            <CampoBloqueado valor={String(fatura.numero)} />
+          </Field>
+
+          <Field label="Cliente">
+            <CampoBloqueado valor={fatura.clienteNome ?? "—"} />
+          </Field>
+
+          <Field label="Total">
+            <CampoBloqueado valor={formatarSemSimbolo(fatura.total as Centavos)} />
+          </Field>
+        </GrupoDeCampos>
+
+        <GrupoDeCampos
           titulo="Como o pagamento se divide"
           legenda="Digite o valor ou a porcentagem de cada parcela; um preenche o outro. A soma tem de fechar com o total da conta para salvar."
           onIncluir={acrescentar}
@@ -1053,7 +1079,7 @@ function Parcelamento({
                       disabled={l.travada}
                       value={l.vencimento.slice(0, 10)}
                       onChange={(e) => mudar(i, { vencimento: e.target.value })}
-                      style={{ ...inputStyle, height: 28, padding: "0 6px" }}
+                      style={inputDeCelula}
                     />
                   </Td>
 
@@ -1065,7 +1091,7 @@ function Parcelamento({
                         valor={l.valor}
                         aoMudar={(v) => mudar(i, { valor: v })}
                         escala={100}
-                        style={{ height: 28 }}
+                        style={inputDeCelula}
                       />
                     )}
                   </Td>
@@ -1087,7 +1113,7 @@ function Parcelamento({
                         }
                         escala={100}
                         sufixo="%"
-                        style={{ height: 28 }}
+                        style={inputDeCelula}
                       />
                     )}
                   </Td>
@@ -1104,49 +1130,56 @@ function Parcelamento({
                 </Tr>
               ))}
             </tbody>
+
+            {/*
+              ⚠️ O fechamento e RODAPE DA TABELA, e nao uma faixa embaixo dela.
+
+              A soma tem de cair na mesma coluna dos valores que ela soma: fora da
+              tabela, ela era um numero solto atravessado na linha, e conferir
+              exigia o olho ir e voltar. Aqui e a conta de somar que a pessoa faria
+              de qualquer jeito, escrita onde ela olharia.
+            */}
+            <tfoot>
+              <tr style={{ borderTop: "1px solid var(--border-strong)" }}>
+                <td colSpan={2} style={{ height: 34, padding: "0 4px", color: "var(--text-tertiary)" }}>
+                  Soma das parcelas
+                </td>
+                <td
+                  style={{
+                    padding: "0 4px",
+                    fontWeight: "var(--fw-semi)",
+                    fontVariantNumeric: "tabular-nums",
+                  }}
+                >
+                  {formatarSemSimbolo((somaPagas + somaAbertas) as Centavos)}
+                </td>
+                <td style={{ padding: "0 4px", color: "var(--text-tertiary)" }}>
+                  {porcentagem(somaPagas + somaAbertas, fatura.total)}
+                </td>
+                <td />
+              </tr>
+
+              {/* A diferenca so existe enquanto ha diferenca. Uma linha "faltam
+                  0,00" seria ruido permanente pedindo para ser ignorada. */}
+              {diferenca !== 0 && (
+                <tr style={{ color: "var(--danger-text)" }}>
+                  <td colSpan={2} style={{ height: 30, padding: "0 4px" }}>
+                    {diferenca > 0 ? "Falta distribuir" : "Passou do total em"}
+                  </td>
+                  <td
+                    style={{
+                      padding: "0 4px",
+                      fontWeight: "var(--fw-semi)",
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                  >
+                    {formatarSemSimbolo(Math.abs(diferenca) as Centavos)}
+                  </td>
+                  <td colSpan={2} />
+                </tr>
+              )}
+            </tfoot>
           </TableArea>
-
-          {/*
-            ⚠️ O fechamento fica embaixo da tabela, e nao numa mensagem de erro.
-
-            É a conferencia que a pessoa faz de qualquer jeito, somando com o
-            olho. Dizendo o quanto falta, ela sabe o que digitar; dizendo so "nao
-            confere", ela teria de refazer a soma para descobrir.
-          */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "baseline",
-              justifyContent: "space-between",
-              gap: 12,
-              marginTop: 12,
-              paddingTop: 10,
-              borderTop: "1px solid var(--border)",
-              fontSize: "var(--text-sm)",
-            }}
-          >
-            <span style={{ color: "var(--text-tertiary)" }}>
-              Soma das parcelas{" "}
-              <strong style={{ color: "var(--text-primary)", fontVariantNumeric: "tabular-nums" }}>
-                {formatarSemSimbolo((somaPagas + somaAbertas) as Centavos)}
-              </strong>{" "}
-              de {formatarSemSimbolo(fatura.total as Centavos)}
-            </span>
-
-            <span
-              style={{
-                fontWeight: "var(--fw-semi)",
-                fontVariantNumeric: "tabular-nums",
-                color: diferenca === 0 ? "var(--credito)" : "var(--danger-text)",
-              }}
-            >
-              {diferenca === 0
-                ? "fecha"
-                : diferenca > 0
-                  ? `faltam ${formatarSemSimbolo(diferenca as Centavos)}`
-                  : `sobram ${formatarSemSimbolo(-diferenca as Centavos)}`}
-            </span>
-          </div>
         </GrupoDeCampos>
       </Formulario>
     </FormDrawer>
