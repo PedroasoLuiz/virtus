@@ -27,7 +27,7 @@ import { ehPessoaFisica } from "@/shared/domain/cadastro-pessoa";
 import { formatarDocumento } from "@/shared/domain/documento";
 import { formatarSemSimbolo, type Centavos } from "@/shared/utils/money";
 import { paraFormatoBR, type DataISO } from "@/shared/utils/datas";
-import type { Fatura } from "./fatura-tipos";
+import type { Fatura, Parcela } from "./fatura-tipos";
 import { curto, periodo, vencida } from "./fatura-datas";
 import { AnexarDocumento, Documentos } from "./fatura-documentos";
 import { ItemDoMenu, MenuDeLinha } from "./fatura-menu";
@@ -464,15 +464,21 @@ function Conteudo({
           />
 
           {aba === "tickets" ? (
+            /*
+              ⚠️ O título não repete o nome da aba.
+
+              A aba já se chama Tickets; um título "Tickets" em cima de uma coluna
+              "Ticket" é a mesma palavra três vezes na mesma tela, e nenhuma delas
+              informa. O título diz o que aquela lista É para esta conta.
+            */
             <GrupoDeCampos
               primeiro
-              titulo="Tickets"
-              legenda="O que está sendo cobrado nesta conta. O total é a soma do que foi tirado de cada ticket, e o detalhe do serviço mora dentro dele."
+              titulo="De onde vem o valor"
+              legenda="O total desta conta é a soma do que foi tirado de cada ticket. O detalhe do serviço mora dentro dele: o menu da linha abre."
             >
               <TableArea minWidth={0}>
               <TableHead>
-                <Th minWidth={70}>Ticket</Th>
-                <Th>Serviço</Th>
+                <Th minWidth={70}>Código</Th>
                 <Th minWidth={110}>Encerrado</Th>
                 <Th align="right" minWidth={110}>
                   Valor
@@ -482,30 +488,12 @@ function Conteudo({
 
               <tbody>
                 {fatura.tickets.length === 0 && (
-                  <EmptyRow colSpan={5} message="Nenhum ticket vinculado a esta conta." />
+                  <EmptyRow colSpan={4} message="Nenhum ticket vinculado a esta conta." />
                 )}
 
                 {fatura.tickets.map((t) => (
                   <Tr key={t.ticketId}>
                     <Td style={{ fontVariantNumeric: "tabular-nums" }}>{t.numero}</Td>
-
-                    {/*
-                      O título do ticket entra aqui: era o que faltava para saber
-                      o que se está cobrando sem abrir cada um.
-                    */}
-                    <Td style={{ maxWidth: 200 }}>
-                      <span
-                        title={t.titulo}
-                        style={{
-                          display: "block",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {t.titulo}
-                      </span>
-                    </Td>
 
                     <Td>
                       {t.encerradoEm ? (
@@ -582,12 +570,12 @@ function Conteudo({
             */
             <GrupoDeCampos
               primeiro
-              titulo="Produtos"
-              legenda="Peça, material ou licença cobrados junto do serviço. Ainda não entram na conta: eles mexem no total, e o total hoje é exatamente o que veio dos tickets."
+              titulo="O que foi entregue junto"
+              legenda="Peça, material ou licença cobrados ao lado do serviço. Ainda não entram na conta: eles mexem no total, e o total hoje é exatamente o que veio dos tickets."
             >
               <TableArea minWidth={0}>
               <TableHead>
-                <Th>Produto</Th>
+                <Th>Descrição</Th>
                 <Th align="right" minWidth={90}>
                   Quantidade
                 </Th>
@@ -604,7 +592,7 @@ function Conteudo({
           ) : (
             <GrupoDeCampos
               primeiro
-              titulo="Parcelas"
+              titulo="Quando o dinheiro entra"
               legenda="Cada parcela vence e é recebida por conta própria. A vencida aparece em vermelho, e o menu da linha é onde se dá baixa, prorroga o vencimento ou se emite o recibo."
             >
               <TableArea minWidth={0}>
@@ -615,12 +603,23 @@ function Conteudo({
                   Valor
                 </Th>
                 <Th minWidth={90}>Documentos</Th>
+                {/*
+                  ⚠️ Conciliado é sobre o EXTRATO, não sobre a baixa.
+
+                  Dar baixa é dizer "recebi"; conciliar é ter conferido que o
+                  dinheiro apareceu na conta. Sem esta coluna, as duas viravam a
+                  mesma coisa na leitura, e quem fecha o mês não tinha como ver o
+                  que ainda falta bater.
+                */}
+                <Th align="center" minWidth={90}>
+                  Conciliado
+                </Th>
                 <Th> </Th>
               </TableHead>
 
               <tbody>
                 {fatura.parcelas.length === 0 && (
-                  <EmptyRow colSpan={5} message="Nenhuma parcela gerada." />
+                  <EmptyRow colSpan={6} message="Nenhuma parcela gerada." />
                 )}
 
                 {fatura.parcelas.map((p) => (
@@ -681,6 +680,10 @@ function Conteudo({
                         bloqueado={p.pagamentoId != null || fatura.situacao === "CANCELADA"}
                         aoMudar={recarregar}
                       />
+                    </Td>
+
+                    <Td style={{ textAlign: "center" }}>
+                      <MarcaDeConciliado parcela={p} />
                     </Td>
 
                     <Td>
@@ -829,6 +832,69 @@ function NovoVencimento({
 }
 
 // ── Peças ───────────────────────────────────────────────────────────────────
+
+/**
+ * A marca de conciliado de uma parcela.
+ *
+ * ⚠️ Três estados, e não dois. "Ainda não recebida" não é o mesmo que "recebida e
+ * não conferida": a primeira não tem o que conciliar, e um X vermelho nela
+ * acusaria uma pendência que não existe. Sem baixa, a célula fica vazia.
+ *
+ * ⚠️ Verde para conferido, âmbar para "recebi mas não bateu". O âmbar é o único
+ * estado que pede ação de alguém, e é o que quem fecha o mês vai procurar.
+ */
+function MarcaDeConciliado({ parcela }: { parcela: Parcela }) {
+  if (!parcela.pago) {
+    return <span style={{ color: "var(--text-disabled)" }}>—</span>;
+  }
+
+  const ok = parcela.conciliado;
+
+  return (
+    <span
+      title={
+        ok
+          ? "A baixa desta parcela já bateu com o extrato da conta."
+          : "Recebida, mas ainda não conferida no extrato."
+      }
+      style={{
+        display: "inline-grid",
+        placeItems: "center",
+        color: ok ? "var(--credito)" : "var(--warning-text)",
+      }}
+    >
+      {ok ? (
+        <svg
+          width="15"
+          height="15"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden
+        >
+          <path d="M4 12.5l5.5 5.5L20 6.5" />
+        </svg>
+      ) : (
+        <svg
+          width="15"
+          height="15"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.1"
+          strokeLinecap="round"
+          aria-hidden
+        >
+          <circle cx="12" cy="12" r="8.5" />
+          <path d="M12 7.6v5M12 15.9v.2" />
+        </svg>
+      )}
+    </span>
+  );
+}
 
 /**
  * O corpo do drawer enquanto a conta não chegou.

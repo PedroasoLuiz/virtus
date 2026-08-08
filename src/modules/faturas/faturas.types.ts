@@ -62,6 +62,8 @@ export type ParcelaFatura = {
   pagamentoId: number | null;
   /** Data da baixa. E o fato que o recibo comprova — nao confundir com o vencimento. */
   pagoEm: DataISO | null;
+  /** A baixa desta parcela ja bateu com o extrato da conta. */
+  conciliado: boolean;
   /** Quanto ja entrou nesta parcela, somado dos vinculos. */
   recebido: Centavos;
   nfs: string | null;

@@ -19,6 +19,8 @@ export type Parcela = {
   pagamentoId: number | null;
   /** Data da baixa. E o fato que o recibo comprova — nao e o vencimento. */
   pagoEm: string | null;
+  /** A baixa ja bateu com o extrato. Vem do pagamento, nao da parcela. */
+  conciliado: boolean;
   /** Quanto ja entrou nesta parcela, de um pagamento ou de varios. */
   recebido: number;
   nfs: string | null;

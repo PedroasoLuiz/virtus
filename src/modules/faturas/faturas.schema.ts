@@ -138,6 +138,7 @@ export const faturaSchema = faturaResumoSchema.extend({
       pago: z.boolean(),
       pagamentoId: z.number().nullable(),
       pagoEm: z.string().nullable(),
+      conciliado: z.boolean(),
       recebido: z.number(),
       nfs: z.string().nullable(),
       boleto: z.string().nullable(),

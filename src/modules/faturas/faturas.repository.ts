@@ -412,7 +412,7 @@ export async function listarParcelas(faturaId: number): Promise<ParcelaFatura[]>
     .select(
       // `pagamentos(data)` e a data REAL da baixa. O recibo comprova um fato, e
       // sem ela sobraria o vencimento no lugar — que e outra coisa.
-      "id, numeroparcela, vencimento, valor, acrescimo, desconto, total, pago, fkPagamento, nfs, boleto, comprovante, pagamentos(data), pagamentosxparcelas(valor)",
+      "id, numeroparcela, vencimento, valor, acrescimo, desconto, total, pago, fkPagamento, nfs, boleto, comprovante, pagamentos(data, conciliado), pagamentosxparcelas(valor)",
     )
     .eq("fkFatura", faturaId)
     .order("numeroparcela", { ascending: true });
@@ -439,6 +439,15 @@ export async function listarParcelas(faturaId: number): Promise<ParcelaFatura[]>
       ),
     ),
     pagoEm: (l.pagamentos as unknown as { data: string | null } | null)?.data ?? null,
+    /*
+     * ⚠️ Conciliado e do PAGAMENTO, e nao da parcela.
+     *
+     * Quem confere o extrato marca o lancamento, e uma baixa pode quitar tres
+     * parcelas de uma vez: a conferencia e sobre o dinheiro que entrou, nao sobre
+     * cada titulo que ele fechou.
+     */
+    conciliado:
+      (l.pagamentos as unknown as { conciliado: boolean | null } | null)?.conciliado ?? false,
     nfs: l.nfs,
     boleto: l.boleto,
   }));
