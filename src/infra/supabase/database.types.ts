@@ -714,6 +714,34 @@ export type MenuFavoritoRow = {
 };
 
 /**
+ * Uma linha do extrato do banco, como o arquivo do banco a trouxe.
+ *
+ * ⚠️ Nao e `pagamentos`. Esta tabela e o que o BANCO diz que aconteceu;
+ * `pagamentos` e o que a empresa registrou. Conciliar e afirmar que uma linha de
+ * cada lado sao o mesmo dinheiro, e e `fkPagamento` que guarda essa afirmacao.
+ */
+export type ExtratoBancarioRow = {
+  id: number;
+  created_at: string;
+  fkEmpresa: number | null;
+  fkContaBancaria: number | null;
+  data: string | null;
+  /** O `TRNTYPE` do OFX: "DEBIT", "CREDIT". */
+  descricao: string | null;
+  valor: number | null;
+  tipo: string | null;
+  /** O `MEMO` do OFX: o historico que o banco escreveu. */
+  nome: string | null;
+  /**
+   * Chave de deduplicacao. Ver `chaveDaLinha` em `shared/domain/conciliacao`:
+   * o formato espelha o das linhas ja gravadas, e mudar duplica o extrato.
+   */
+  hash: string | null;
+  conciliado: boolean | null;
+  fkPagamento: number | null;
+};
+
+/**
  * Preferencias de interface, uma linha por usuario.
  *
  * Tabela propria e nao coluna em `usuarios`: aquela so tem policy de leitura, e
@@ -887,6 +915,7 @@ export type Database = {
       ordensservicoxservicosdespesas: { Row: TicketServicoDespesaRow; Insert: Partial<TicketServicoDespesaRow>; Update: Partial<TicketServicoDespesaRow>; Relationships: [] };
       ordensservicostatus: { Row: TicketStatusRow; Insert: Partial<TicketStatusRow>; Update: Partial<TicketStatusRow>; Relationships: [] };
       menufavoritos: { Row: MenuFavoritoRow; Insert: Partial<MenuFavoritoRow>; Update: Partial<MenuFavoritoRow>; Relationships: [] };
+      extratobancario: { Row: ExtratoBancarioRow; Insert: Partial<ExtratoBancarioRow>; Update: Partial<ExtratoBancarioRow>; Relationships: [] };
       idempotencia: { Row: IdempotenciaRow; Insert: Partial<IdempotenciaRow>; Update: Partial<IdempotenciaRow>; Relationships: [] };
       usuariopreferencias: { Row: UsuarioPreferenciasRow; Insert: Partial<UsuarioPreferenciasRow>; Update: Partial<UsuarioPreferenciasRow>; Relationships: [] };
       assinaturas: { Row: AssinaturaRow; Insert: Partial<AssinaturaRow>; Update: Partial<AssinaturaRow>; Relationships: [] };
