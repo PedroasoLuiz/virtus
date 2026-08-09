@@ -2251,7 +2251,6 @@ function Info({ texto }: { texto: string }) {
         fontSize: 9,
         fontWeight: "var(--fw-semi)",
         lineHeight: 1,
-        fontStyle: "italic",
         cursor: "help",
       }}
     >
@@ -2925,6 +2924,7 @@ export function SeletorBuscavel({
   placeholder = "Digite para buscar…",
   autoFocus,
   desabilitado,
+  sublinhado,
 }: {
   /** `null` quando nada foi escolhido ainda. */
   valor: number | null;
@@ -2935,6 +2935,14 @@ export function SeletorBuscavel({
   placeholder?: string;
   autoFocus?: boolean;
   desabilitado?: boolean;
+  /**
+   * O fio de baixo, sem caixa. Mesma razao da variante do `SearchInput`.
+   *
+   * ⚠️ Existe para o seletor que mora DENTRO de uma lista, e nao num formulario.
+   * Ali ele nao e um campo a preencher: e a continuacao da linha de cima, e a
+   * moldura o transformava num segundo registro empilhado sob o primeiro.
+   */
+  sublinhado?: boolean;
 }) {
   const [termo, setTermo] = useState("");
   const [opcoes, setOpcoes] = useState<{ id: number; nome: string }[]>([]);
@@ -3022,7 +3030,19 @@ export function SeletorBuscavel({
           setTermo(e.target.value);
           setAberto(true);
         }}
-        style={inputStyle}
+        style={
+          sublinhado
+            ? {
+                ...inputStyle,
+                padding: 0,
+                borderRadius: 0,
+                border: "none",
+                borderBottom: "1px solid var(--border)",
+                backgroundColor: "transparent",
+                fontSize: "var(--text-sm)",
+              }
+            : inputStyle
+        }
       />
 
       {aberto && (

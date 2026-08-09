@@ -700,3 +700,15 @@ table td input[type="date"]::-webkit-calendar-picker-indicator {
 :root[data-theme="dark"] table td input[type="date"]::-webkit-calendar-picker-indicator {
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2300bb47' stroke-width='2' stroke-linecap='round'><rect x='3.5' y='5' width='17' height='16' rx='2'/><path d='M8 3v4M16 3v4M3.5 10h17'/></svg>");
 }
+
+/*
+ * Barra de progresso indeterminada.
+ *
+ * Vai e volta em vez de correr sempre para a direita: o retorno deixa claro que
+ * ela nao mede fracao nenhuma, e sim que algo esta em curso. Barra que so avanca
+ * faz esperar o fim que ela nunca promete.
+ */
+@keyframes barra-indeterminada {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(250%); }
+}
