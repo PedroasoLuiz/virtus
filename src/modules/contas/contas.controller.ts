@@ -87,5 +87,18 @@ function paraDominio(body: ContaBody) {
     ativo: body.ativo,
     limite: centavos(body.limite),
     saldoInicial: centavos(body.saldoInicial),
+    aceitaCartao: body.aceitaCartao,
+    /*
+     * ⚠️ Taxa so vale onde ha cartao.
+     *
+     * Desmarcar "aceita cartao" e deixar 3,5% gravado deixaria a conta com um
+     * numero que nada le, esperando alguem religar a caixa e descobrir uma taxa
+     * que nunca foi revista.
+     */
+    taxaDebito: body.aceitaCartao ? (body.taxaDebito ?? null) : null,
+    taxaCredito: body.aceitaCartao ? (body.taxaCredito ?? null) : null,
+    taxaParcelado: body.aceitaCartao ? (body.taxaParcelado ?? null) : null,
+    prazoCreditoDias: body.aceitaCartao ? (body.prazoCreditoDias ?? null) : null,
+    tarifaBoleto: body.tarifaBoleto == null ? null : centavos(body.tarifaBoleto),
   };
 }

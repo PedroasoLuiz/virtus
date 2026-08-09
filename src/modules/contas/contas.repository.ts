@@ -18,7 +18,7 @@ import type {
  */
 
 const COLUNAS =
-  "id, apelido, banco, agencia, conta, tipo, ativo, limite, saldoinicial";
+  "id, apelido, banco, agencia, conta, tipo, ativo, limite, saldoinicial, aceita_cartao, taxa_debito, taxa_credito, taxa_parcelado, prazo_credito_dias, tarifa_boleto";
 
 export async function listar(empresaId: number): Promise<ContaBancaria[]> {
   const supabase = await serverClient();
@@ -32,10 +32,24 @@ export async function listar(empresaId: number): Promise<ContaBancaria[]> {
 
   if (error) throw error;
 
-  const linhas = data ?? [];
-  const saldos = await saldosPorConta(linhas.map((l) => l.id));
-
-  return linhas.map((l) => paraDominio(l, saldos.get(l.id) ?? ZERO));
+  /*
+   * ⚠️ A LISTAGEM NAO CALCULA SALDO, e e de proposito.
+   *
+   * `vwsaldo` agrega sobre `pagamentos` inteiro. Pedir o saldo de N contas custa
+   * o mesmo que pedir o de uma: ela varre a tabela toda e so depois agrupa. Numa
+   * empresa com vinte contas e vinte pessoas com a tela aberta, isso e uma
+   * varredura completa de `pagamentos` por abertura, vezes vinte.
+   *
+   * ⚠️ E indice NAO resolve este caso. Ele ajuda quando se pede POUCAS contas —
+   * a leitura por id, no drawer e no extrato, ficou em index scan. Mas a
+   * listagem pede TODAS as contas da empresa, e ai nao ha o que filtrar: somar
+   * todas exige tocar todo lancamento de qualquer jeito. O corte tem de ser nao
+   * perguntar.
+   *
+   * Quem precisa do numero pede por id, uma conta de cada vez, no momento em que
+   * o numero e olhado.
+   */
+  return (data ?? []).map((l) => paraDominio(l, null));
 }
 
 export async function buscarPorId(
@@ -54,6 +68,7 @@ export async function buscarPorId(
   if (error) throw error;
   if (!data) return null;
 
+  // Aqui o saldo vem: e uma conta so, pedida porque alguem foi olhar para ela.
   const saldos = await saldosPorConta([data.id]);
   return paraDominio(data, saldos.get(data.id) ?? ZERO);
 }
@@ -231,6 +246,8 @@ export async function extrato(
     ate,
     saldoInicial,
     saldoFinal: corrente,
+    // `buscarPorId` la em cima ja calculou: e a mesma leitura, aproveitada.
+    saldoAtual: conta.saldo ?? ZERO,
     entradas,
     saidas,
     movimentos,
@@ -291,8 +308,14 @@ function paraDominio(
     ativo: boolean | null;
     limite: number | null;
     saldoinicial: number | null;
+    aceita_cartao: boolean | null;
+    taxa_debito: number | null;
+    taxa_credito: number | null;
+    taxa_parcelado: number | null;
+    prazo_credito_dias: number | null;
+    tarifa_boleto: number | null;
   },
-  saldo: Centavos,
+  saldo: Centavos | null,
 ): ContaBancaria {
   return {
     id: linha.id,
@@ -305,6 +328,14 @@ function paraDominio(
     limite: doBanco(linha.limite),
     saldoInicial: doBanco(linha.saldoinicial),
     saldo,
+    aceitaCartao: linha.aceita_cartao ?? false,
+    taxaDebito: linha.taxa_debito,
+    taxaCredito: linha.taxa_credito,
+    taxaParcelado: linha.taxa_parcelado,
+    prazoCreditoDias: linha.prazo_credito_dias,
+    // Nulo e "nao cobra"; zero e "cobra zero". Sao respostas diferentes, e um
+    // `?? 0` aqui apagaria a primeira.
+    tarifaBoleto: linha.tarifa_boleto == null ? null : doBanco(linha.tarifa_boleto),
     nome: nomeDaConta(linha),
   };
 }
@@ -319,5 +350,11 @@ function paraBancoDeDados(entrada: ContaNova) {
     ativo: entrada.ativo,
     limite: paraBanco(entrada.limite),
     saldoinicial: paraBanco(entrada.saldoInicial),
+    aceita_cartao: entrada.aceitaCartao,
+    taxa_debito: entrada.taxaDebito,
+    taxa_credito: entrada.taxaCredito,
+    taxa_parcelado: entrada.taxaParcelado,
+    prazo_credito_dias: entrada.prazoCreditoDias,
+    tarifa_boleto: entrada.tarifaBoleto == null ? null : paraBanco(entrada.tarifaBoleto),
   };
 }

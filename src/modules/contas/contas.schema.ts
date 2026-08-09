@@ -7,6 +7,9 @@ import { centavosSchema, dataISOSchema, idSchema } from "@/shared/validators/com
 
 const texto = z.string().trim().max(120).nullish();
 
+/** Taxa em porcentagem, com duas casas. Ver `contaBodySchema`. */
+const percentual = z.number().min(0).max(100).nullish();
+
 export const idParamSchema = z.object({ id: idSchema });
 
 export const contaBodySchema = z.object({
@@ -23,6 +26,21 @@ export const contaBodySchema = z.object({
    * tudo que passou — por isso e campo de cadastro, e nao um lancamento.
    */
   saldoInicial: centavosSchema.default(0),
+
+  /**
+   * O contrato de recebimento desta conta.
+   *
+   * ⚠️ Percentual com teto de 100: taxa de adquirente vive entre 0,5% e 6%, e um
+   * digito a mais — 35 no lugar de 3,5 — passaria e viraria despesa de um terco
+   * da venda em todo lancamento seguinte.
+   */
+  aceitaCartao: z.boolean().default(false),
+  taxaDebito: percentual,
+  taxaCredito: percentual,
+  taxaParcelado: percentual,
+  /** Ate um ano: prazo maior que isso e erro de digitacao, nao contrato. */
+  prazoCreditoDias: z.number().int().min(0).max(365).nullish(),
+  tarifaBoleto: centavosSchema.nullish(),
 });
 
 export const extratoQuerySchema = z.object({
@@ -55,6 +73,7 @@ export const extratoSchema = z.object({
   saldoFinal: z.number(),
   entradas: z.number(),
   saidas: z.number(),
+  saldoAtual: z.number(),
   movimentos: z.array(
     z.object({
       id: z.number(),
