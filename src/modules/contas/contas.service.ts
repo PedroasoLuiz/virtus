@@ -90,7 +90,9 @@ export async function extratoDaConta(
 
   const dias = (Date.parse(ate) - Date.parse(de)) / (24 * 60 * 60 * 1000);
   if (dias > MAXIMO_DE_DIAS) {
-    throw new BusinessRuleError("O extrato vai até seis meses por consulta. Reduza o período.");
+    throw new BusinessRuleError(
+      "O extrato vai até seis meses por consulta. Escolha um intervalo menor.",
+    );
   }
 
   const extrato = await repo.extrato(empresaId, contaId, de, ate);

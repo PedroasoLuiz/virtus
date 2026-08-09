@@ -7,6 +7,7 @@ import { useAvisos } from "@/components/ui/avisos";
 import { NovoRecebimentoDrawer } from "../recebimentos/novo-recebimento-drawer";
 import { Icon } from "@/components/layout/icones";
 import {
+  Alert,
   AcoesDaLinha,
   BotaoDeAcao,
   CampoBloqueado,
@@ -342,19 +343,14 @@ function Conteudo({
       }
     >
       {erro && (
-        <div
-          role="alert"
-          style={{
-            padding: "10px 12px",
-            borderRadius: "var(--radius-md)",
-            background: "var(--danger-bg)",
-            border: "1px solid var(--danger-border)",
-            color: "var(--danger-text)",
-            fontSize: "var(--text-base)",
-          }}
-        >
-          {erro}
-        </div>
+        /*
+          O `Alert` do kit, e nao uma caixa escrita aqui. A que existia
+          pintava o TEXTO de `--danger-text` sobre `--danger-bg`, e o
+          proprio kit avisa que essa combinacao tem menos contraste que o
+          preto do resto da pagina. La quem carrega a gravidade e o icone
+          e o cartao.
+        */
+        <Alert variant="danger" title={erro} />
       )}
 
       {!fatura && !erro && <Esqueleto />}

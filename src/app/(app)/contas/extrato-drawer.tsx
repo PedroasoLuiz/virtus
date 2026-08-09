@@ -5,6 +5,7 @@ import { BotaoDeCabecalho, Drawer } from "@/components/ui/drawer";
 import { ExtratoTabela } from "./extrato-tabela";
 import { ConciliacaoDrawer } from "./conciliacao-drawer";
 import {
+  Alert,
   CampoBloqueado,
   Field,
   Formulario,
@@ -324,18 +325,23 @@ export function ExtratoDrawer({
       </Formulario>
 
       {erro && (
-        <div
-          role="alert"
-          style={{
-            padding: "10px 12px",
-            borderRadius: "var(--radius-md)",
-            background: "var(--danger-bg)",
-            border: "1px solid var(--danger-border)",
-            color: "var(--danger-text)",
-            fontSize: "var(--text-base)",
-          }}
-        >
-          {erro}
+        /*
+          ⚠️ O `Alert` do kit, e nao uma caixa escrita aqui.
+
+          A que existia pintava o TEXTO de `--danger-text` sobre `--danger-bg` —
+          e o proprio comentario do kit avisa que essa combinacao tem menos
+          contraste que o preto do resto da pagina. No kit, quem carrega a
+          gravidade e o icone e o cartao; o texto fica legivel.
+
+          ⚠️ E o tom e `warning`, e nao `danger` como nos drawers que salvam.
+
+          Aqui a falha quase sempre e o limite de seis meses da consulta: nao ha
+          estrago, ha uma regra, e os campos de data que resolvem estao logo
+          acima. Vermelho anunciaria prejuizo onde so falta ajustar um intervalo.
+          Onde o erro e de gravacao, o vermelho fica.
+        */
+        <div style={{ marginTop: "var(--form-gap-grupo)" }}>
+          <Alert variant="warning" title={erro} />
         </div>
       )}
 

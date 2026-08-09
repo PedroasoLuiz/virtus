@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { BotaoDeCabecalho, Drawer } from "@/components/ui/drawer";
 import {
+  Alert,
   Badge,
   Button,
   CampoBloqueado,
@@ -511,19 +512,15 @@ function Conteudo({
       }
     >
       {erro && (
-        <div
-          role="alert"
-          style={{
-            padding: "10px 12px",
-            marginBottom: 12,
-            borderRadius: "var(--radius-md)",
-            background: "var(--danger-bg)",
-            border: "1px solid var(--danger-border)",
-            color: "var(--danger-text)",
-            fontSize: "var(--text-base)",
-          }}
-        >
-          {erro}
+        /*
+          O `Alert` do kit, e nao uma caixa escrita aqui. A que existia
+          pintava o TEXTO de `--danger-text` sobre `--danger-bg`, e o
+          proprio kit avisa que essa combinacao tem menos contraste que o
+          preto do resto da pagina. La quem carrega a gravidade e o icone
+          e o cartao.
+        */
+        <div style={{ marginBottom: 12 }}>
+          <Alert variant="danger" title={erro} />
         </div>
       )}
 
