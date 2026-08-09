@@ -27,7 +27,8 @@ import {
 } from "@/components/ui/kit";
 import { Quadro } from "@/components/ui/quadro";
 import { useAvisos } from "@/components/ui/avisos";
-import { cookieDaVisao } from "@/components/layout/cookies";
+import { salvarVisao } from "@/modules/preferencias/preferencias.actions";
+import type { Visao } from "@/modules/preferencias/preferencias.types";
 import { ProjetoDrawer, type OpcaoCliente } from "./projeto-drawer";
 import { formatarSemSimbolo } from "@/shared/utils/money";
 import { periodoEmMeses } from "@/shared/utils/datas";
@@ -66,9 +67,21 @@ export function ProjetosTela({
   const [criando, setCriando] = useState(false);
   const [movidos, setMovidos] = useState<Record<number, SituacaoProjeto>>({});
 
+  /**
+   * A escolha entre tabela e kanban vira PREFERENCIA DO USUARIO.
+   *
+   * ⚠️ Uma escolha so, para todas as telas com quadro, e nao mais um cookie por
+   * tela. Quem trabalha olhando quadro quer quadro em tudo; escolher de novo em
+   * cada tela era o trabalho que a preferencia existe para poupar.
+   *
+   * ⚠️ A tela troca NA HORA e a gravacao vai atras, sem esperar. Um quadro que
+   * so aparece depois da ida ao servidor faz o clique parecer perdido. Se a
+   * gravacao falhar, o pior caso e a proxima carga abrir na visao antiga — e
+   * nao um dado errado.
+   */
   function escolherModo(novo: string) {
     setModo(novo);
-    document.cookie = `${cookieDaVisao("projetos")}=${novo};path=/;max-age=31536000;samesite=lax`;
+    void salvarVisao(novo as Visao);
   }
 
   const posicionados = useMemo(

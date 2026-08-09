@@ -29,7 +29,8 @@ import {
 } from "@/components/ui/kit";
 import { TicketDrawer, type OpcaoCliente, type OpcaoServico } from "./ticket-drawer";
 import { useAvisos } from "@/components/ui/avisos";
-import { cookieDaVisao } from "@/components/layout/cookies";
+import { salvarVisao } from "@/modules/preferencias/preferencias.actions";
+import type { Visao } from "@/modules/preferencias/preferencias.types";
 import { IconeFatura, IconeServico } from "./icones";
 import { formatarSemSimbolo } from "@/shared/utils/money";
 import { paraFormatoBR, periodoEmMeses } from "@/shared/utils/datas";
@@ -128,14 +129,20 @@ export function TicketsTabela({
   const filtrosAtivos = [statusId, origem].filter(Boolean).length + (verCancelados ? 1 : 0);
 
   /**
-   * A escolha entre tabela e kanban vira cookie.
+   * A escolha entre tabela e kanban vira PREFERENCIA DO USUARIO.
    *
-   * Sem isso, quem trabalha no quadro reabria a tela em tabela a cada
-   * navegacao. Um ano de validade porque e preferencia, nao sessao.
+   * ⚠️ Uma escolha so, para todas as telas com quadro, e nao mais um cookie por
+   * tela. Quem trabalha olhando quadro quer quadro em tudo; escolher de novo em
+   * cada tela era o trabalho que a preferencia existe para poupar.
+   *
+   * ⚠️ A tela troca NA HORA e a gravacao vai atras, sem esperar. Um quadro que
+   * so aparece depois da ida ao servidor faz o clique parecer perdido. Se a
+   * gravacao falhar, o pior caso e a proxima carga abrir na visao antiga — e
+   * nao um dado errado.
    */
   function escolherModo(novo: string) {
     setModo(novo);
-    document.cookie = `${cookieDaVisao("tickets")}=${novo};path=/;max-age=31536000;samesite=lax`;
+    void salvarVisao(novo as Visao);
   }
 
   async function mover(ticketId: number, destinoId: number) {

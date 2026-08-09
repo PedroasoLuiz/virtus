@@ -4,6 +4,8 @@ import { entitlementsDaEmpresa } from "@/modules/plataforma/plataforma.service";
 import { empresasDisponiveis, usuarioLogado } from "@/modules/sessao/sessao.service";
 import type { Entitlements } from "@/modules/plataforma/plataforma.types";
 import { CONTEXTO_DEMO } from "@/shared/demo/dados-demo";
+import { visaoDoUsuario } from "@/modules/preferencias/preferencias.repository";
+import { VISAO_PADRAO, type Visao } from "@/modules/preferencias/preferencias.types";
 
 /**
  * Sessao para as telas (Server Components).
@@ -26,6 +28,17 @@ export type SessaoUI = {
    * saber quem e externo, ja que a RLS responde por cliente sozinha.
    */
   externo: boolean;
+  /**
+   * Como as telas com quadro devem abrir.
+   *
+   * ⚠️ Lida no SERVIDOR e entregue junto da sessao, e nao buscada pela tela. A
+   * pagina precisa nascer no modo certo: pedindo depois, ela abriria em tabela e
+   * saltaria para kanban quando o JavaScript subisse, em toda navegacao.
+   *
+   * ⚠️ Vem de graca no `Promise.all` que a sessao ja fazia — e uma consulta a
+   * mais em paralelo, e nao um tempo a mais na tela.
+   */
+  visao: Visao;
   demo: boolean;
 };
 
@@ -45,15 +58,17 @@ export async function sessaoUI(): Promise<SessaoUI> {
       usuarioNome: "Demonstração",
       podeTrocarEmpresa: false,
       externo: false,
+      visao: VISAO_PADRAO,
       demo: true,
     };
   }
 
 
   const ctx = await contextoAtual({ exigirSessao: true });
-  const [usuario, empresas] = await Promise.all([
+  const [usuario, empresas, visao] = await Promise.all([
     usuarioLogado(),
     empresasDisponiveis(ctx.usuarioId),
+    visaoDoUsuario(),
   ]);
 
   const entitlements = ctx.empresaId ? await entitlementsDaEmpresa(ctx.empresaId) : SEM_PLANO;
@@ -66,6 +81,7 @@ export async function sessaoUI(): Promise<SessaoUI> {
     usuarioNome: usuario?.nome ?? null,
     podeTrocarEmpresa: empresas.length > 1,
     externo: usuario?.externo ?? false,
+    visao,
     demo: false,
   };
 }

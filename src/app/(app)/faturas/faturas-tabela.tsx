@@ -31,6 +31,8 @@ import { formatarSemSimbolo, type Centavos } from "@/shared/utils/money";
 import { Quadro } from "@/components/ui/quadro";
 import { Icon } from "@/components/layout/icones";
 import { useAvisos } from "@/components/ui/avisos";
+import { salvarVisao } from "@/modules/preferencias/preferencias.actions";
+import type { Visao } from "@/modules/preferencias/preferencias.types";
 import { useRouter } from "next/navigation";
 import { hoje, paraFormatoBR, type DataISO } from "@/shared/utils/datas";
 import {
@@ -56,11 +58,14 @@ export function FaturasTabela({
   faturas,
   clientes,
   emitidoPor,
+  visaoInicial,
 }: {
   faturas: FaturaResumo[];
   clientes: { id: number; nome: string }[];
   /** Quem assina o rodape dos documentos. */
   emitidoPor: string;
+  /** Preferencia do usuario, lida no servidor para a tela ja nascer certa. */
+  visaoInicial: Visao;
 }) {
   const router = useRouter();
   const { avisar } = useAvisos();
@@ -92,7 +97,24 @@ export function FaturasTabela({
 
   const [busca, setBusca] = useState("");
   const [status, setStatus] = useState("");
-  const [modo, setModo] = useState("tabela");
+  const [modo, setModo] = useState<string>(visaoInicial);
+
+  /**
+   * A escolha entre tabela e kanban vira PREFERENCIA DO USUARIO.
+   *
+   * ⚠️ Contas a receber era a unica das tres telas com quadro que NAO guardava a
+   * escolha: o modo nascia "tabela" cravado, e quem trabalha no quadro reabria
+   * em tabela a cada navegacao e a cada F5.
+   *
+   * ⚠️ A tela troca NA HORA e a gravacao vai atras, sem esperar. Um quadro que
+   * so aparece depois da ida ao servidor faz o clique parecer perdido. Se a
+   * gravacao falhar, o pior caso e a proxima carga abrir na visao antiga — e
+   * nao um dado errado.
+   */
+  function escolherModo(novo: string) {
+    setModo(novo);
+    void salvarVisao(novo as Visao);
+  }
   const [pagina, setPagina] = useState(1);
   const [detalhe, setDetalhe] = useState<number | null>(null);
 
@@ -117,7 +139,7 @@ export function FaturasTabela({
         <PageHeader title="Contas a receber">
           <ViewButton
             view={modo}
-            setView={setModo}
+            setView={escolherModo}
             opcoes={[
               { valor: "tabela", rotulo: "Tabela", icone: <IconeTabela /> },
               { valor: "kanban", rotulo: "Kanban", icone: <IconeKanban /> },

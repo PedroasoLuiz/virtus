@@ -8,16 +8,17 @@
  */
 export const COOKIE_SIDEBAR = "vpay_sidebar";
 
-/**
- * Modo de exibicao por tela: `tabela` ou `kanban`.
+/*
+ * ⚠️ `cookieDaVisao` SAIU daqui, e nao deve voltar.
  *
- * Cookie e nao `localStorage` porque a preferencia precisa ser lida NO
- * SERVIDOR: a pagina ja renderiza no modo certo, sem o piscar de abrir em
- * tabela e trocar para kanban depois que o JavaScript sobe.
+ * Ela dava um cookie por tela, sob a ideia de que o kanban de tickets e o de
+ * faturas eram escolhas diferentes. Na pratica nao sao: quem trabalha olhando
+ * quadro quer quadro em tudo, e escolher de novo em cada tela era o trabalho
+ * que a preferencia existia para poupar.
  *
- * Um cookie por tela — o kanban de tickets e o de outra tela nao sao a mesma
- * escolha.
+ * Virou UMA preferencia, no perfil do usuario, em `modules/preferencias`. O
+ * motivo de ser lida no servidor continua valendo e vale mais ainda: a sessao ja
+ * a entrega junto do resto, e a pagina nasce no modo certo sem o piscar de abrir
+ * em tabela e saltar para kanban quando o JavaScript sobe. A diferenca e que
+ * agora ela acompanha a pessoa entre navegadores, e nao so o dispositivo.
  */
-export function cookieDaVisao(tela: string): string {
-  return `vpay_visao_${tela}`;
-}
