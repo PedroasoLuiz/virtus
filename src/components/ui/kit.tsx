@@ -2488,6 +2488,64 @@ export function CampoDeTexto({
   );
 }
 
+/**
+ * Taxa em porcentagem, com duas casas.
+ *
+ * ⚠️ VAZIO e `null`, e nao zero. "Nao cobra" e "cobra zero por cento" sao
+ * respostas diferentes: a primeira e uma pergunta sem resposta, e a segunda e um
+ * acordo fechado. Zerar o vazio faria toda conta recem-cadastrada parecer ter
+ * taxa negociada em zero.
+ *
+ * ⚠️ Teto de 100 no proprio campo. Taxa de adquirente vive entre 0,5% e 6%, e um
+ * digito a mais — 35 no lugar de 3,5 — viraria despesa de um terco da venda em
+ * todo lancamento seguinte, sem nada acusar.
+ */
+export function CampoPercentual({
+  valor,
+  aoMudar,
+}: {
+  valor: number | null;
+  aoMudar: (v: number | null) => void;
+}) {
+  return (
+    <div style={{ position: "relative" }}>
+      <input
+        type="number"
+        inputMode="decimal"
+        step="0.01"
+        min={0}
+        max={100}
+        value={valor ?? ""}
+        placeholder="0,00"
+        onChange={(e) => {
+          const bruto = e.target.value;
+          if (bruto === "") return aoMudar(null);
+
+          const n = Number(bruto);
+          if (!Number.isFinite(n)) return;
+          aoMudar(Math.min(100, Math.max(0, n)));
+        }}
+        style={{ ...inputStyle, paddingRight: 30, fontVariantNumeric: "tabular-nums" }}
+      />
+      {/* A unidade fica NO campo, e nao so no rotulo: quem digita 3,5 precisa ver
+          que aquilo e por cento, e nao reais. */}
+      <span
+        style={{
+          position: "absolute",
+          right: 10,
+          top: "50%",
+          transform: "translateY(-50%)",
+          pointerEvents: "none",
+          fontSize: "var(--text-sm)",
+          color: "var(--text-tertiary)",
+        }}
+      >
+        %
+      </span>
+    </div>
+  );
+}
+
 /** Abas de conteudo dentro de um drawer. Mesmo padrao do SIC. */
 export function PanelTabs({
   tabs,

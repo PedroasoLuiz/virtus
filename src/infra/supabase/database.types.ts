@@ -393,6 +393,22 @@ export type ContaBancariaRow = {
   limite: number | null;
   /** Saldo de partida. O saldo de hoje e ele mais tudo que passou. */
   saldoinicial: number | null;
+  /**
+   * O contrato de recebimento da conta.
+   *
+   * ⚠️ A taxa e do CONTRATO e nao do lancamento: muda uma vez por ano e vale
+   * para todas as vendas daquela maquininha. Perguntada a cada baixa, ela era
+   * refeita de cabeca e cada pessoa chegava a um numero.
+   */
+  aceita_cartao: boolean | null;
+  /** Percentuais. Nulo e "nao cobra"; zero e "cobra zero". */
+  taxa_debito: number | null;
+  taxa_credito: number | null;
+  taxa_parcelado: number | null;
+  /** Dias ate o credito cair. Nulo usa o padrao da forma de recebimento. */
+  prazo_credito_dias: number | null;
+  /** ⚠️ VALOR fixo, e nao percentual: o banco cobra por boleto emitido. */
+  tarifa_boleto: number | null;
 };
 
 /** Saldo calculado por conta. View: saldo inicial + entradas - saidas. */
@@ -698,6 +714,19 @@ export type MenuFavoritoRow = {
 };
 
 /**
+ * Preferencias de interface, uma linha por usuario.
+ *
+ * Tabela propria e nao coluna em `usuarios`: aquela so tem policy de leitura, e
+ * carrega `externo` e `ativo`. RLS filtra linha e nao coluna, entao abrir UPDATE
+ * la deixaria o usuario virar as proprias flags de acesso.
+ */
+export type UsuarioPreferenciasRow = {
+  fkUser: string;
+  visao: string;
+  updated_at: string;
+};
+
+/**
  * Chave de idempotencia de escrita financeira.
  *
  * `http` nulo significa "ainda correndo": a linha e reservada antes de a rota
@@ -859,6 +888,7 @@ export type Database = {
       ordensservicostatus: { Row: TicketStatusRow; Insert: Partial<TicketStatusRow>; Update: Partial<TicketStatusRow>; Relationships: [] };
       menufavoritos: { Row: MenuFavoritoRow; Insert: Partial<MenuFavoritoRow>; Update: Partial<MenuFavoritoRow>; Relationships: [] };
       idempotencia: { Row: IdempotenciaRow; Insert: Partial<IdempotenciaRow>; Update: Partial<IdempotenciaRow>; Relationships: [] };
+      usuariopreferencias: { Row: UsuarioPreferenciasRow; Insert: Partial<UsuarioPreferenciasRow>; Update: Partial<UsuarioPreferenciasRow>; Relationships: [] };
       assinaturas: { Row: AssinaturaRow; Insert: Partial<AssinaturaRow>; Update: Partial<AssinaturaRow>; Relationships: [] };
       whatsappconversas: { Row: WhatsappConversaRow; Insert: Partial<WhatsappConversaRow>; Update: Partial<WhatsappConversaRow>; Relationships: [] };
       whatsappmensagens: { Row: WhatsappMensagemRow; Insert: Partial<WhatsappMensagemRow>; Update: Partial<WhatsappMensagemRow>; Relationships: [] };
