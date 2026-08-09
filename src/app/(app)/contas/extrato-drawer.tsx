@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { BotaoDeCabecalho, Drawer } from "@/components/ui/drawer";
 import { ExtratoTabela } from "./extrato-tabela";
+import { ConciliacaoDrawer } from "./conciliacao-drawer";
 import {
   CampoBloqueado,
   Field,
@@ -114,19 +115,37 @@ export function ExtratoDrawer({
   const [ate, setAte] = useState(hoje());
   const [extrato, setExtrato] = useState<Extrato | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const [conciliando, setConciliando] = useState(false);
+
+  /**
+   * Busca o extrato do periodo.
+   *
+   * ⚠️ Em `useCallback` e nao solta dentro do efeito: a conciliacao precisa
+   * chamar a MESMA busca ao fechar, para as marcas de conferido aparecerem sem
+   * a pessoa ter de fechar e abrir o extrato de novo. Duplicada, as duas versoes
+   * divergiriam no primeiro parametro novo.
+   */
+  const buscar = useCallback(
+    async (signal?: AbortSignal): Promise<Extrato | null> => {
+      // Campo de data pela metade nao vira consulta: enquanto a pessoa digita
+      // "2026-0", o valor ja chega aqui e voltaria 422 a cada tecla.
+      if (!ehDataISO(de) || !ehDataISO(ate)) return null;
+
+      const r = await fetch(`/api/v1/contas/${conta.id}/extrato?de=${de}&ate=${ate}`, { signal });
+      const corpo = await r.json();
+      if (!r.ok) throw new Error(corpo?.error?.message ?? "Falha ao carregar o extrato");
+
+      return corpo.data as Extrato;
+    },
+    [conta.id, de, ate],
+  );
 
   useEffect(() => {
-    // Campo de data pela metade nao vira consulta: enquanto a pessoa digita
-    // "2026-0", o valor ja chega aqui e voltaria 422 a cada tecla.
-    if (!ehDataISO(de) || !ehDataISO(ate)) return;
-
     const controle = new AbortController();
 
-    fetch(`/api/v1/contas/${conta.id}/extrato?de=${de}&ate=${ate}`, { signal: controle.signal })
-      .then(async (r) => {
-        const corpo = await r.json();
-        if (!r.ok) throw new Error(corpo?.error?.message ?? "Falha ao carregar o extrato");
-        setExtrato(corpo.data);
+    buscar(controle.signal)
+      .then((dados) => {
+        if (dados) setExtrato(dados);
         setErro(null);
       })
       .catch((e: unknown) => {
@@ -137,7 +156,7 @@ export function ExtratoDrawer({
       });
 
     return () => controle.abort();
-  }, [conta.id, de, ate]);
+  }, [buscar]);
 
   /**
    * Emite o extrato em PDF.
@@ -171,6 +190,28 @@ export function ExtratoDrawer({
         ferramenta da janela, que e o que ele e.
       */
       headerExtra={
+        <>
+        {/*
+          ⚠️ Conciliar vem ANTES de imprimir, indo da esquerda para a direita.
+
+          A ordem e a do trabalho: primeiro se confere contra o banco, depois se
+          imprime o que ficou conferido. Invertida, o botao de papel apareceria
+          primeiro numa tela cuja razao de existir e a conferencia.
+        */}
+        <BotaoDeCabecalho
+          rotulo={
+            extrato
+              ? "Conciliar este extrato com o arquivo do banco"
+              : "Escolha um período para poder conciliar"
+          }
+          desabilitado={!extrato}
+          onClick={() => setConciliando(true)}
+        >
+          {/* Duas setas que se encontram: as duas listas virando uma. */}
+          <path d="M4 8h13l-3-3" />
+          <path d="M20 16H7l3 3" />
+        </BotaoDeCabecalho>
+
         <BotaoDeCabecalho
           rotulo={
             extrato
@@ -186,6 +227,7 @@ export function ExtratoDrawer({
           <path d="M6 18H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-1" />
           <path d="M7 14h10v6H7z" />
         </BotaoDeCabecalho>
+        </>
       }
     >
       {/*
@@ -322,8 +364,26 @@ export function ExtratoDrawer({
             )}
           </div>
 
-          <ExtratoTabela dias={dias} saldoAnterior={extrato.saldoInicial} />
+          <ExtratoTabela dias={dias} saldoAnterior={extrato.saldoInicial} de={extrato.de} />
         </>
+      )}
+      {/*
+        A conciliacao abre em cima, no nivel 2, e devolve se mexeu em alguma
+        coisa: mexendo, o extrato atras recarrega para as marcas de conferido
+        aparecerem sem a pessoa precisar fechar e abrir de novo.
+      */}
+      {conciliando && (
+        <ConciliacaoDrawer
+          conta={conta}
+          de={de}
+          ate={ate}
+          aoFechar={(mudou) => {
+            setConciliando(false);
+            // Mexeu na conciliacao: o extrato atras recarrega para as marcas de
+            // conferido aparecerem sem a pessoa fechar e abrir de novo.
+            if (mudou) buscar().then((d) => d && setExtrato(d)).catch(() => {});
+          }}
+        />
       )}
     </Drawer>
   );

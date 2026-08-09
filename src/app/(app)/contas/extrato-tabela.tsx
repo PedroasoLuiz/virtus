@@ -32,10 +32,13 @@ import type { MovimentoDoExtrato } from "@/modules/contas/contas.types";
 export function ExtratoTabela({
   dias,
   saldoAnterior,
+  de,
 }: {
   dias: { data: string; movimentos: MovimentoDoExtrato[]; saldoDoDia: Centavos }[];
   /** O que havia na conta antes do primeiro dia do periodo. */
   saldoAnterior: Centavos;
+  /** O primeiro dia consultado. E ele que da nome a linha de abertura. */
+  de: DataISO;
 }) {
   return (
     <TableArea minWidth={0}>
@@ -65,8 +68,13 @@ export function ExtratoTabela({
           linha da tabela que nao tem lancamento nenhum.
         */}
         <tr style={{ height: 30, background: "var(--surface-2)" }}>
+          {/*
+            ⚠️ A data ENTRA no rotulo. "Saldo anterior" sozinho deixa a pergunta
+            no ar — anterior a que dia? —, e quem confere contra o banco precisa
+            justamente desse dia para achar a linha correspondente no papel.
+          */}
           <Td colSpan={2} style={{ textAlign: "right", color: "var(--text-secondary)" }}>
-            Saldo anterior
+            {`Saldo antes de ${paraFormatoBR(de)}`}
           </Td>
           <Td style={{ ...NUM, textAlign: "right", fontWeight: "var(--fw-semi)" }}>
             {formatarSemSimbolo(saldoAnterior)}
