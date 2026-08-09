@@ -3,6 +3,7 @@ import { doBanco, paraBanco, type Centavos } from "@/shared/utils/money";
 import { hoje, type DataISO } from "@/shared/utils/datas";
 import { primeiroPreenchido } from "@/shared/utils/texto";
 import { intervalo, type Paginacao, type Pagina } from "@/shared/utils/paginacao";
+import { dadosDaEmpresa } from "@/modules/empresa/empresa.repository";
 import {
   repartirRecebimento,
   type ChaveStatus,
@@ -182,28 +183,6 @@ export async function buscarPorId(empresaId: number, id: number): Promise<Ticket
     faturas,
   };
 }
-
-/** Emitente do documento — cabecalho do PDF. */
-async function dadosDaEmpresa(empresaId: number) {
-  const supabase = await serverClient();
-  const { data } = await supabase
-    .from("empresas")
-    .select("razaosocial, fantasia, nome, cnpj, logo, logradouro, bairro, cidade, cep")
-    .eq("id", empresaId)
-    .maybeSingle();
-
-  const e = data as Record<string, string | null> | null;
-
-  return {
-    razaoSocial: primeiroPreenchido(e?.razaosocial, e?.fantasia, e?.nome),
-    endereco: primeiroPreenchido(
-      [e?.logradouro, e?.bairro, e?.cidade, e?.cep].filter(Boolean).join(" · "),
-    ),
-    cnpj: primeiroPreenchido(e?.cnpj),
-    logo: primeiroPreenchido(e?.logo),
-  };
-}
-
 /**
  * Nome do usuario a partir do uuid.
  *

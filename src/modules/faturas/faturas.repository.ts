@@ -19,6 +19,7 @@ import {
 } from "@/modules/faturas/faturas.types";
 import { saldoAReceber, totalRecebido, type Parcela } from "@/shared/domain/parcelas";
 import { nomeDaConta } from "@/shared/domain/conta-bancaria";
+import { dadosDaEmpresa } from "@/modules/empresa/empresa.repository";
 
 /**
  * Unica porta de acesso aos dados de faturas.
@@ -157,28 +158,6 @@ export async function apagarAnexo(anexoId: number): Promise<AnexoDaFatura | null
 
   return { id: data.id, nome: data.nome, caminho: data.caminho, criadoEm: data.created_at };
 }
-
-/** Emitente do documento — cabecalho do recibo. */
-async function dadosDaEmpresa(empresaId: number) {
-  const supabase = await serverClient();
-  const { data } = await supabase
-    .from("empresas")
-    .select("razaosocial, fantasia, nome, cnpj, logo, logradouro, bairro, cidade, cep")
-    .eq("id", empresaId)
-    .maybeSingle();
-
-  const e = data as Record<string, string | null> | null;
-
-  return {
-    razaoSocial: primeiroPreenchido(e?.razaosocial, e?.fantasia, e?.nome),
-    endereco: primeiroPreenchido(
-      [e?.logradouro, e?.bairro, e?.cidade, e?.cep].filter(Boolean).join(" · "),
-    ),
-    cnpj: primeiroPreenchido(e?.cnpj),
-    logo: primeiroPreenchido(e?.logo),
-  };
-}
-
 /**
  * Quanto cada conta recebeu, e quanto ainda espera.
  *
