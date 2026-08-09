@@ -2,7 +2,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { formatarSemSimbolo, type Centavos } from "@/shared/utils/money";
 import { paraFormatoBR, periodoEmMeses, type DataISO } from "@/shared/utils/datas";
-import { carregarLogo, type TicketParaPDF } from "./pdf";
+import { carregarLogo, type TicketParaPDF } from "./pdf-base";
 
 /**
  * Segundo layout do documento — registro de serviço, no registro de invoice.

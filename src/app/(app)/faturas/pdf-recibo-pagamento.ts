@@ -2,7 +2,7 @@ import jsPDF from "jspdf";
 import { formatarSemSimbolo, type Centavos } from "@/shared/utils/money";
 import { paraFormatoBR, type DataISO } from "@/shared/utils/datas";
 import { valorPorExtenso } from "@/shared/utils/extenso";
-import { carregarLogo } from "../tickets/pdf";
+import { carregarLogo } from "../tickets/pdf-base";
 
 /**
  * Recibo de pagamento de uma parcela.
