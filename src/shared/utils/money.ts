@@ -19,10 +19,21 @@ export function centavos(valor: number): Centavos {
 
 export const ZERO = centavos(0);
 
-/** Reais -> centavos. Arredonda no meio para cima, como o usuario espera. */
+/**
+ * Reais -> centavos. Arredonda no meio para cima, como o usuario espera.
+ *
+ * ⚠️ O `+ 0` no fim existe para matar o ZERO NEGATIVO, e nao e enfeite.
+ *
+ * As colunas de dinheiro do banco herdado sao `double precision`, e somar
+ * doubles deixa residuo: a `vwsaldo` da conta 1 devolve 8,0035e-11 no lugar de
+ * zero. Quando o residuo e negativo, `Math.round(-1e-11 * 100)` da `-0` — que e
+ * um numero valido em JavaScript, passa por `Number.isInteger`, e o
+ * `Intl.NumberFormat` imprime como "-0,00". Era esse o saldo negativo de zero
+ * que aparecia na tela. `-0 + 0` e `0`.
+ */
 export function deReais(reais: number): Centavos {
   if (!Number.isFinite(reais)) throw new Error(`Valor monetario invalido: ${reais}`);
-  return centavos(Math.round(reais * 100));
+  return centavos(Math.round(reais * 100) + 0);
 }
 
 export function paraReais(v: Centavos): number {
