@@ -12,19 +12,25 @@ import {
   Field,
   Formulario,
   GrupoDeCampos,
+  inputDeCelula,
   inputStyle,
   MarcaDeUso,
   SeletorBuscavel,
   TableArea,
   TableHead,
   Td,
-  tdNum,
   Th,
   Tr,
 } from "@/components/ui/kit";
 import { useAvisos } from "@/components/ui/avisos";
 import { formatarSemSimbolo, type Centavos } from "@/shared/utils/money";
 import { hoje, paraFormatoBR, periodoEmMeses, type DataISO } from "@/shared/utils/datas";
+
+/** Numero em coluna: tabular e sem quebra, para o digito alinhar com o de cima. */
+const NUM: React.CSSProperties = {
+  whiteSpace: "nowrap",
+  fontVariantNumeric: "tabular-nums",
+};
 
 /**
  * Nova conta a receber, a partir dos tickets em aberto.
@@ -261,12 +267,23 @@ export function NovaFaturaDrawer({ onClose }: { onClose: () => void }) {
                 <Th minWidth={54}>Cobrar</Th>
                 <Th minWidth={70}>Ticket</Th>
                 <Th>Período</Th>
-                <Th align="right" minWidth={96}>
-                  Em aberto
-                </Th>
-                <Th align="right" minWidth={120}>
-                  Valor
-                </Th>
+                {/*
+                  ⚠️ UMA coluna de dinheiro, e nao duas.
+
+                  "Em aberto" e "Valor" mostravam o mesmo numero na maioria das
+                  linhas: marcar um ticket ja traz o saldo inteiro, e cobrar menos
+                  e a excecao. Duas colunas iguais lado a lado fazem procurar a
+                  diferenca que quase nunca existe.
+
+                  Aqui a coluna e a DIVIDA do ticket: sem marcar, ela diz quanto
+                  ha em aberto; marcada, ela vira o campo do quanto disso entra
+                  nesta conta. E a mesma anatomia da coluna "Em aberto" da baixa.
+
+                  ⚠️ E alinhada a ESQUERDA, como tudo no sistema — inclusive
+                  dinheiro. Puxada para a direita, a leitura salta o vao vazio do
+                  meio e volta.
+                */}
+                <Th minWidth={130}>Em aberto</Th>
               </TableHead>
 
               <tbody>
@@ -297,7 +314,7 @@ export function NovaFaturaDrawer({ onClose }: { onClose: () => void }) {
                         />
                       </Td>
 
-                      <Td style={tdNum}>{t.numero}</Td>
+                      <Td style={NUM}>{t.numero}</Td>
 
                       <Td>
                         {t.inicio || t.fim
@@ -305,23 +322,21 @@ export function NovaFaturaDrawer({ onClose }: { onClose: () => void }) {
                           : "—"}
                       </Td>
 
-                      <Td style={tdNum}>{formatarSemSimbolo(t.saldo as Centavos)}</Td>
-
                       <Td>
-                        {/* Editável: faturamento parcial é comum, e o que sobra
-                            continua no saldo do ticket para a próxima. */}
+                        {/* Editável quando marcado: faturamento parcial é comum,
+                            e o que sobra continua no saldo do ticket para a
+                            próxima. O teto é o próprio saldo. */}
                         {escolhido ? (
                           <CampoNumerico
                             valor={valores[t.id]}
                             escala={100}
+                            style={inputDeCelula}
                             aoMudar={(v) =>
                               setValores((atual) => ({ ...atual, [t.id]: Math.min(v, t.saldo) }))
                             }
                           />
                         ) : (
-                          <span style={{ ...tdNum, display: "block", color: "var(--text-disabled)" }}>
-                            —
-                          </span>
+                          <span style={NUM}>{formatarSemSimbolo(t.saldo as Centavos)}</span>
                         )}
                       </Td>
                     </Tr>
