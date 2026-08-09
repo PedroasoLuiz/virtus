@@ -15,6 +15,7 @@ import {
   inputDeCelula,
   inputStyle,
   MarcaDeUso,
+  Pagination,
   SeletorBuscavel,
   TableArea,
   TableHead,
@@ -25,6 +26,15 @@ import {
 import { useAvisos } from "@/components/ui/avisos";
 import { formatarSemSimbolo, type Centavos } from "@/shared/utils/money";
 import { hoje, paraFormatoBR, periodoEmMeses, type DataISO } from "@/shared/utils/datas";
+
+/**
+ * Quantos tickets cabem numa pagina.
+ *
+ * Dez, o mesmo da tabela de parcelas da baixa: a lista aqui e o meio e nao o
+ * fim, e uma tabela mais alta que a tela empurra o total e o parcelamento para
+ * fora justamente na hora de conferir.
+ */
+const POR_PAGINA = 10;
 
 /** Numero em coluna: tabular e sem quebra, para o digito alinhar com o de cima. */
 const NUM: React.CSSProperties = {
@@ -64,6 +74,7 @@ export function NovaFaturaDrawer({ onClose }: { onClose: () => void }) {
   /** Quanto tirar de cada ticket. Ausente = não entra nesta conta. */
   const [valores, setValores] = useState<Record<number, number>>({});
   const [salvando, setSalvando] = useState(false);
+  const [pagina, setPagina] = useState(1);
 
   const [parcelas, setParcelas] = useState(1);
   const [primeiroVencimento, setPrimeiroVencimento] = useState<string>(hoje());
@@ -120,6 +131,11 @@ export function NovaFaturaDrawer({ onClose }: { onClose: () => void }) {
 
     return () => controle.abort();
   }, [clienteId, avisar]);
+
+  const todos = tickets ?? [];
+  const totalPaginas = Math.max(1, Math.ceil(todos.length / POR_PAGINA));
+  const paginaAtual = Math.min(pagina, totalPaginas);
+  const visiveis = todos.slice((paginaAtual - 1) * POR_PAGINA, paginaAtual * POR_PAGINA);
 
   const escolhidos = useMemo(
     () => (tickets ?? []).filter((t) => (valores[t.id] ?? 0) > 0),
@@ -242,12 +258,20 @@ export function NovaFaturaDrawer({ onClose }: { onClose: () => void }) {
                 // cliente nao pode sobreviver ao outro.
                 setTickets(null);
                 setValores({});
+                setPagina(1);
               }}
             />
           </Field>
 
           {clienteId && (
             /*
+              ⚠️ O vao aqui e o de TITULO, e nao o de campo.
+
+              Os filhos do grupo se separam por `--form-gap-campo`, que sao 3px:
+              e o respiro de um campo para o seguinte numa pilha de campos
+              irmaos. O cliente e a tabela nao sao irmaos — um comanda a outra —,
+              e com 3px o campo encostava no cabecalho da tabela.
+
               ⚠️ SEM moldura em volta da tabela.
 
               Havia um `div` com borda envolvendo o `TableArea`, e o cartao do
@@ -255,6 +279,7 @@ export function NovaFaturaDrawer({ onClose }: { onClose: () => void }) {
               contorno. E o rotulo "Tickets em aberto" escrito a mao saiu — o
               titulo do grupo acima ja diz do que a lista trata.
             */
+            <div style={{ marginTop: "var(--form-gap-titulo)" }}>
             <TableArea minWidth={0}>
               <TableHead>
                 {/*
@@ -292,7 +317,7 @@ export function NovaFaturaDrawer({ onClose }: { onClose: () => void }) {
                   <EmptyRow colSpan={5} message="Nenhum ticket em aberto para este cliente." />
                 )}
 
-                {(tickets ?? []).map((t, n) => {
+                {visiveis.map((t, n) => {
                   const escolhido = (valores[t.id] ?? 0) > 0;
 
                   return (
@@ -344,6 +369,26 @@ export function NovaFaturaDrawer({ onClose }: { onClose: () => void }) {
                 })}
               </tbody>
             </TableArea>
+
+            {/*
+              ⚠️ Pagina, e o que foi marcado nas outras paginas CONTINUA valendo.
+
+              Um cliente com trinta tickets em aberto nao cabe na tela, e rolar
+              trinta linhas para achar o que se quer cobrar e pior que virar
+              pagina. O estado e da conta inteira e nao da pagina: o total la
+              embaixo soma tudo que foi marcado, em qualquer pagina. Mesma
+              decisao da tabela de parcelas da baixa.
+            */}
+            {(tickets ?? []).length > POR_PAGINA && (
+              <Pagination
+                page={paginaAtual}
+                totalPages={totalPaginas}
+                total={(tickets ?? []).length}
+                pageSize={POR_PAGINA}
+                onPage={setPagina}
+              />
+            )}
+            </div>
           )}
         </GrupoDeCampos>
 
