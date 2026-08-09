@@ -18,12 +18,11 @@ import {
   Td,
   Th,
   Tr,
-  tdNum,
 } from "@/components/ui/kit";
 import { useAvisos } from "@/components/ui/avisos";
 import { ContaDrawer } from "./conta-drawer";
 import { ExtratoDrawer } from "./extrato-drawer";
-import { formatarSemSimbolo } from "@/shared/utils/money";
+import type { EmpresaParaDocumento } from "@/modules/empresa/empresa.repository";
 import type { ContaBancaria } from "@/modules/contas/contas.types";
 
 /**
@@ -34,7 +33,16 @@ import type { ContaBancaria } from "@/modules/contas/contas.types";
  * Por isso "Extrato bancario" deixou de ser item de menu.
  */
 
-export function ContasTabela({ contas }: { contas: ContaBancaria[] }) {
+export function ContasTabela({
+  contas,
+  empresa,
+  emitidoPor,
+}: {
+  contas: ContaBancaria[];
+  /** Emitente do cabecalho do extrato em PDF. */
+  empresa: EmpresaParaDocumento;
+  emitidoPor: string;
+}) {
   const router = useRouter();
   const { avisar, confirmar } = useAvisos();
 
@@ -77,6 +85,18 @@ export function ContasTabela({ contas }: { contas: ContaBancaria[] }) {
 
         <TableFrame>
           <TableArea minWidth={860}>
+            {/*
+              ⚠️ SEM coluna de saldo, e nao por desenho: por custo.
+
+              `vwsaldo` varre `pagamentos` inteiro a cada chamada, e a listagem
+              pedia o saldo de todas as contas da empresa. Vinte contas e vinte
+              pessoas com a tela aberta viravam uma varredura completa por
+              abertura, vezes vinte — e indice nao corta isso, porque somar todas
+              as contas exige tocar todo lancamento de qualquer jeito.
+
+              O saldo continua a um clique: o extrato abre com abertura,
+              entradas, saidas e fecho do periodo, e ai a conta e de UMA conta so.
+            */}
             <TableHead>
               <Th>Conta</Th>
               <Th minWidth={130}>Banco</Th>
@@ -85,15 +105,12 @@ export function ContasTabela({ contas }: { contas: ContaBancaria[] }) {
               <Th align="center" minWidth={90}>
                 Situação
               </Th>
-              <Th align="right" minWidth={120}>
-                Saldo
-              </Th>
               <Th align="right" minWidth={110}>
                 Ações
               </Th>
             </TableHead>
             <tbody>
-              {filtradas.length === 0 && <EmptyRow colSpan={7} />}
+              {filtradas.length === 0 && <EmptyRow colSpan={6} />}
               {filtradas.map((c, i) => (
                 <Tr
                   key={c.id}
@@ -122,15 +139,6 @@ export function ContasTabela({ contas }: { contas: ContaBancaria[] }) {
                     <Badge tom={c.ativo ? "success" : "neutral"}>
                       {c.ativo ? "Ativa" : "Inativa"}
                     </Badge>
-                  </Td>
-                  <Td
-                    style={{
-                      ...tdNum,
-                      fontWeight: "var(--fw-medium)",
-                      color: c.saldo < 0 ? "var(--debito)" : "var(--text-primary)",
-                    }}
-                  >
-                    {formatarSemSimbolo(c.saldo)}
                   </Td>
                   <Td>
                     <AcoesDaLinha>
@@ -186,7 +194,14 @@ export function ContasTabela({ contas }: { contas: ContaBancaria[] }) {
         />
       )}
 
-      {extrato && <ExtratoDrawer conta={extrato} onClose={() => setExtrato(null)} />}
+      {extrato && (
+        <ExtratoDrawer
+          conta={extrato}
+          empresa={empresa}
+          emitidoPor={emitidoPor}
+          onClose={() => setExtrato(null)}
+        />
+      )}
     </PageLayout>
   );
 }

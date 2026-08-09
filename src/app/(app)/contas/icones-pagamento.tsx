@@ -7,10 +7,6 @@
  * inteira para dizer o que a forma do desenho diz de relance. O ícone também
  * agrupa visualmente: bate o olho e vê que o dia foi todo de boleto.
  *
- * Círculo com o verde tingido de fundo: é o mesmo tratamento dos badges de
- * status positivo (docs/07). Não é o verde preenchido, que fica reservado à
- * ação — aqui é rótulo, não botão.
- *
  * ⚠️ A forma vem de texto livre do legado, onde o mesmo PIX aparece com quatro
  * grafias. Por isso a decisão é por trecho contido, e não por igualdade.
  */
@@ -31,9 +27,16 @@ type Desenho = {
    * pesarem igual na tela.
    */
   traco?: number;
-  /** Marca preenchida em vez de traçada. Hoje só o Pix. */
+  /** Marca preenchida em vez de traçada. Ninguém usa hoje: ver o Pix. */
   preenchido?: boolean;
-  /** Tamanho em px. Marca cheia precisa de mais área que um traço. */
+  /**
+   * Tamanho em px, quando o padrão não serve.
+   *
+   * ⚠️ Serve para compensar GRADE, e não para dar destaque. O Pix é o único que
+   * declara: a folga que o `viewBox` dele tem para o traço não ser cortado faz o
+   * desenho ocupar menos da caixa que os outros, e sem o ajuste ele sairia maior
+   * que os vizinhos para parecer do mesmo tamanho.
+   */
   tamanho?: number;
   tracos: React.ReactNode;
 };
@@ -52,10 +55,22 @@ type Desenho = {
  * Marca cheia precisa de mais espaço que um desenho de linha para dizer a mesma
  * coisa, e forçar as duas ao mesmo tamanho era o erro.
  */
+/**
+ * A marca oficial do Pix, em 24.
+ *
+ * ⚠️ NAO simplificar. Cheguei a troca-la por um losango vazado "que le melhor
+ * em tamanho pequeno" — e nao era mais o Pix, era um losango. Marca de bandeira
+ * e reconhecimento e nao desenho: quem olha nao decodifica a forma, ele a
+ * lembra. Simplificada, ela deixa de ser lembrada.
+ *
+ * ⚠️ Vazada, e nao cheia. E o contorno da mesma marca, e nao outro desenho: ela
+ * fica ao lado de um texto miudo, e a versao preenchida virava uma mancha escura
+ * mais pesada que a palavra que acompanha. Os outros icones da coluna tambem sao
+ * traco — cheia, so ela destoava.
+ */
 const PIX: React.ReactNode = (
   <path d="M5.283 18.36a3.505 3.505 0 0 0 2.493-1.032l3.6-3.6a.684.684 0 0 1 .946 0l3.613 3.613a3.505 3.505 0 0 0 2.493 1.032h.71l-4.56 4.56a3.647 3.647 0 0 1-5.157 0L4.85 18.36ZM18.428 5.627a3.505 3.505 0 0 0-2.493 1.032l-3.613 3.614a.67.67 0 0 1-.946 0l-3.6-3.6A3.505 3.505 0 0 0 5.283 5.64h-.434l4.573-4.572a3.647 3.647 0 0 1 5.156 0l4.559 4.559ZM4.85 6.51h.433a2.483 2.483 0 0 1 1.75.723l3.6 3.6a1.72 1.72 0 0 0 2.434 0l3.613-3.613a2.482 2.482 0 0 1 1.75-.723h.723l2.734 2.734a3.647 3.647 0 0 1 0 5.157l-2.734 2.734h-.723a2.483 2.483 0 0 1-1.75-.723l-3.613-3.613a1.76 1.76 0 0 0-2.434 0l-3.6 3.6a2.483 2.483 0 0 1-1.75.723H4.85l-2.734-2.735a3.647 3.647 0 0 1 0-5.156Z" />
 );
-
 /** Duas setas em sentidos opostos: dinheiro trocando de lugar. */
 const TRANSFERENCIA: React.ReactNode = (
   <>
@@ -76,7 +91,19 @@ const CARTAO: React.ReactNode = (
  * precisa ser testado antes.
  */
 const DESENHOS: Desenho[] = [
-  { chave: "pix", viewBox: "0 0 24 24", preenchido: true, tamanho: 19, tracos: PIX },
+  /*
+   * ⚠️ O `viewBox` do Pix e MAIOR que a grade do desenho, de proposito.
+   *
+   * A marca oficial encosta nas quatro bordas do quadrado de 24. Cheia isso nao
+   * incomodava, porque forma preenchida termina exatamente na borda; vazada, o
+   * traco de 1,6 se distribui para os dois lados da linha e 0,8 dele cai FORA da
+   * caixa — e o SVG corta o que sai. O resultado eram as quatro pontas comidas,
+   * com a marca parecendo espremida dentro de um quadrado.
+   *
+   * Uma unidade e meia de folga em volta cabe o traco inteiro. O desenho nao
+   * mudou: o que mudou foi a moldura parar de corta-lo.
+   */
+  { chave: "pix", viewBox: "-1.5 -1.5 27 27", traco: 1.6, tamanho: 13, tracos: PIX },
   {
     chave: "boleto",
     viewBox: "0 0 16 16",
@@ -138,6 +165,15 @@ function desenhoDe(forma: string | null, origem: string | null): Desenho {
   return DESENHOS.find((d) => texto.includes(d.chave)) ?? GENERICO;
 }
 
+/**
+ * A forma do pagamento, em icone, ao lado do texto que a nomeia.
+ *
+ * ⚠️ SO o traco, sem bolha em volta. Houve uma versao com o icone dentro de um
+ * circulo de 30px tingido, do tempo em que ele aparecia sozinho numa coluna e
+ * precisava de area para ser lido. Hoje ele acompanha a palavra: a bolha pesava
+ * o mesmo que o nome do lancamento e disputava a leitura com ele, e sumiu junto
+ * com o trilho de cartoes que a usava.
+ */
 export function IconeDoPagamento({
   forma,
   origem,
@@ -150,23 +186,17 @@ export function IconeDoPagamento({
   return (
     <span
       title={forma?.trim() || "Forma não informada"}
-      // `.redondo` e não raio grande: squircle aplicado a raio circular achata
-      // as laterais (docs/09).
-      className="redondo"
       style={{
         display: "inline-grid",
         placeItems: "center",
-        width: 30,
-        height: 30,
         flexShrink: 0,
-        borderRadius: "50%",
-        background: "var(--accent-subtle)",
-        color: "var(--accent-text)",
+        color: "var(--text-tertiary)",
       }}
     >
       <svg
-        width={desenho.tamanho ?? 15}
-        height={desenho.tamanho ?? 15}
+        /* O tamanho da propria marca quando ela declara um: ver o Pix. */
+        width={desenho.tamanho ?? 13}
+        height={desenho.tamanho ?? 13}
         viewBox={desenho.viewBox}
         fill={desenho.preenchido ? "currentColor" : "none"}
         stroke={desenho.preenchido ? "none" : "currentColor"}

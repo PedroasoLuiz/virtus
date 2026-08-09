@@ -1,16 +1,30 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Drawer } from "@/components/ui/drawer";
-import { CampoBloqueado, Field, inputStyle } from "@/components/ui/kit";
-import { useAvisos } from "@/components/ui/avisos";
+import { BotaoDeCabecalho, Drawer } from "@/components/ui/drawer";
+import { ExtratoTabela } from "./extrato-tabela";
+import {
+  CampoBloqueado,
+  Field,
+  Formulario,
+  GrupoDeCampos,
+  inputStyle,
+} from "@/components/ui/kit";
 import { formatarSemSimbolo, type Centavos } from "@/shared/utils/money";
-import { ehDataISO, hoje, paraFormatoBR, somarDias, type DataISO } from "@/shared/utils/datas";
-import { IconeDoPagamento } from "./icones-pagamento";
+import { ehDataISO, hoje, somarDias } from "@/shared/utils/datas";
 import type { ContaBancaria, Extrato, MovimentoDoExtrato } from "@/modules/contas/contas.types";
+import type { EmpresaParaDocumento } from "@/modules/empresa/empresa.repository";
 
 /**
  * O extrato de uma conta.
+ *
+ * ⚠️ Marcar como conferido saiu daqui, e volta com gesto proprio.
+ *
+ * O trilho de cartoes tinha um visto clicavel que aparecia no hover; ele foi
+ * embora junto com o trilho. A tabela mostra o estado e nao o edita: conciliar
+ * em lote e trabalho de uma tela que sabe casar linha do sistema com linha do
+ * banco, e nao de um clique solto no meio da leitura. O `PUT` da rota
+ * `/extrato/:pagamentoId` continua no ar esperando por ela.
  *
  * Aberto a partir da conta, e nao de um item de menu: extrato sem conta
  * escolhida e uma pergunta pela metade, e o saldo de abertura so existe em
@@ -84,8 +98,17 @@ function porDia(movimentos: MovimentoDoExtrato[]): Dia[] {
   return [...dias.values()];
 }
 
-export function ExtratoDrawer({ conta, onClose }: { conta: ContaBancaria; onClose: () => void }) {
-  const { avisar } = useAvisos();
+export function ExtratoDrawer({
+  conta,
+  empresa,
+  emitidoPor,
+  onClose,
+}: {
+  conta: ContaBancaria;
+  empresa: EmpresaParaDocumento;
+  emitidoPor: string;
+  onClose: () => void;
+}) {
 
   const [de, setDe] = useState(inicioDoMes());
   const [ate, setAte] = useState(hoje());
@@ -117,39 +140,18 @@ export function ExtratoDrawer({ conta, onClose }: { conta: ContaBancaria; onClos
   }, [conta.id, de, ate]);
 
   /**
-   * Marcar como conferido.
+   * Emite o extrato em PDF.
    *
-   * O estado da tela muda ANTES da resposta: conciliar e conferencia em lote, e
-   * esperar meio segundo por linha faria a pessoa perder o lugar na lista. Se a
-   * gravacao falhar, o visto volta atras — mentir sobre o que foi salvo seria
-   * pior que a espera.
+   * ⚠️ O gerador entra por `import()` e nao no topo do arquivo. O jsPDF e o
+   * autotable pesam algumas centenas de kB, e carrega-los junto com a tela faria
+   * quem so quer CONFERIR o extrato pagar o custo de imprimir. E o mesmo caminho
+   * que o ticket e o recibo ja usam.
    */
-  async function conciliar(movimento: MovimentoDoExtrato) {
-    const novo = !movimento.conciliado;
-    aplicar(movimento.id, novo);
+  async function imprimir() {
+    if (!extrato) return;
 
-    const r = await fetch(`/api/v1/contas/${conta.id}/extrato/${movimento.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ conciliado: novo }),
-    });
-
-    if (!r.ok) {
-      aplicar(movimento.id, movimento.conciliado);
-      const dados = await r.json().catch(() => null);
-      avisar("atencao", dados?.error?.message ?? "Não foi possível marcar a conferência");
-    }
-  }
-
-  function aplicar(id: number, conciliado: boolean) {
-    setExtrato((atual) =>
-      atual
-        ? {
-            ...atual,
-            movimentos: atual.movimentos.map((m) => (m.id === id ? { ...m, conciliado } : m)),
-          }
-        : atual,
-    );
+    const { imprimirExtrato } = await import("./pdf-extrato");
+    await imprimirExtrato(conta, extrato, empresa, emitidoPor);
   }
 
   const dias = extrato ? porDia(extrato.movimentos) : [];
@@ -160,66 +162,124 @@ export function ExtratoDrawer({ conta, onClose }: { conta: ContaBancaria; onClos
       open
       onClose={onClose}
       title="Extrato bancário"
-      footer={
-        <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-          {/* Os totais fecham à direita, no mesmo eixo da coluna de saldo. */}
-          <span style={{ flex: 1 }} />
-          {extrato && (
-            <>
-              <Totalizador rotulo="Entradas" valor={extrato.entradas} cor="var(--credito)" />
-              <Totalizador rotulo="Saídas" valor={extrato.saidas} cor="var(--debito)" />
-            </>
-          )}
-          <Totalizador
-            rotulo="Saldo do período"
-            valor={extrato?.saldoFinal ?? conta.saldo}
-            destaque
-          />
-        </div>
+      /*
+        ⚠️ `headerExtra` poe o botao a ESQUERDA do X, e nao em `acoes`.
+
+        Imprimir nao e a acao principal desta tela — a principal e conferir linha
+        a linha —, e em `acoes` ele ganharia o peso do botao primario que os
+        outros drawers usam para salvar. Ao lado do fechar, ele le como uma
+        ferramenta da janela, que e o que ele e.
+      */
+      headerExtra={
+        <BotaoDeCabecalho
+          rotulo={
+            extrato
+              ? "Imprimir este extrato em PDF"
+              : "Escolha um período para poder imprimir"
+          }
+          desabilitado={!extrato}
+          onClick={() => void imprimir()}
+        >
+          {/* Impressora: papel saindo por cima, corpo no meio, bandeja embaixo.
+              Desenhada na grade de 24, que é o `viewBox` do botão de cabeçalho. */}
+          <path d="M7 8V4h10v4" />
+          <path d="M6 18H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-1" />
+          <path d="M7 14h10v6H7z" />
+        </BotaoDeCabecalho>
       }
     >
-      {/* Os dados da conta no padrão dos campos das outras telas: cadastro se lê
-          igual em todo lugar do sistema. */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 3, marginBottom: 18 }}>
-        <Field label="Conta">
-          <CampoBloqueado valor={conta.apelido?.trim() || conta.nome} />
-        </Field>
-        <Field label="Banco">
-          <CampoBloqueado valor={conta.banco?.trim() || "—"} />
-        </Field>
-        <Field label="Agência / conta">
-          <CampoBloqueado valor={[conta.agencia, conta.conta].filter(Boolean).join(" / ") || "—"} />
-        </Field>
-        <Field label="Saldo atual">
-          <CampoBloqueado
-            valor={formatarSemSimbolo(conta.saldo)}
-            titulo="Saldo de hoje, somando todo o histórico. Não depende do período consultado abaixo."
-          />
-        </Field>
+      {/*
+        ⚠️ A anatomia e a do resto do sistema: `Formulario` e `GrupoDeCampos`,
+        com o vao vindo do token. Havia um `div` com `gap: 3` e margem de 18
+        escritos a mao, que acertavam o ritmo dos campos por coincidencia.
+      */}
+      <Formulario>
+        <GrupoDeCampos
+          primeiro
+          titulo="A conta"
+          legenda="De onde este extrato sai, quanto há na conta hoje, e o recorte que os lançamentos abaixo respeitam."
+        >
+          {/*
+            ⚠️ Banco e agencia entraram na DICA, e nao em campos proprios.
 
-        <Field label="Período" hint="Até seis meses por consulta.">
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {/* O próprio seletor já não oferece período maior que o teto. */}
-            <input
-              type="date"
-              value={de}
-              min={limite(ate, -MAXIMO_DE_DIAS)}
-              max={ate || undefined}
-              onChange={(e) => setDe(e.target.value)}
-              style={{ ...inputStyle, width: 150 }}
+            Eles nao se consultam: quem abre o extrato ja sabe de que conta ele
+            e — escolheu a linha para chegar aqui. Sao dado de conferencia, e so
+            valem no momento em que alguem compara com o papel do banco. Como
+            campo, ocupavam duas linhas no topo de toda abertura para responder
+            uma pergunta que quase nunca se faz.
+
+            ⚠️ E "Saldo atual" saiu de vez. Ele obrigava a listagem a calcular o
+            saldo de todas as contas para a tela abrir, e este drawer ja mostra
+            abertura, entradas, saidas e fecho do periodo logo abaixo — que sao
+            os numeros que se confere aqui.
+          */}
+          <Field
+            label="Conta"
+            hint={[
+              conta.banco?.trim() ? `Banco ${conta.banco.trim()}` : null,
+              conta.agencia?.trim() ? `agência ${conta.agencia.trim()}` : null,
+              conta.conta?.trim() ? `conta ${conta.conta.trim()}` : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          >
+            <CampoBloqueado valor={conta.apelido?.trim() || conta.nome} />
+          </Field>
+
+          {/*
+            ⚠️ O saldo vem do EXTRATO, e nao da conta que a listagem entregou.
+
+            A listagem parou de calcular saldo — `vwsaldo` varre `pagamentos`
+            inteiro a cada chamada —, entao `conta.saldo` chega nulo aqui. O
+            extrato traz o numero de graca: para responder, ele ja busca a conta
+            por id, e essa leitura ja calcula o saldo de UMA conta so.
+
+            ⚠️ E o saldo de HOJE, nao o do periodo. Por isso ele fica no bloco da
+            conta e nao no do periodo: trocar as datas ali embaixo nao o move.
+          */}
+          <Field
+            label="Saldo atual"
+            hint="Saldo de hoje, somando todo o histórico. Não depende do período consultado abaixo."
+          >
+            <CampoBloqueado
+              valor={extrato ? formatarSemSimbolo(extrato.saldoAtual) : "—"}
             />
-            <span style={{ fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>até</span>
-            <input
-              type="date"
-              value={ate}
-              min={de || undefined}
-              max={limite(de, MAXIMO_DE_DIAS)}
-              onChange={(e) => setAte(e.target.value)}
-              style={{ ...inputStyle, width: 150 }}
-            />
-          </div>
-        </Field>
-      </div>
+          </Field>
+
+          {/*
+            ⚠️ O periodo fica no MESMO grupo, logo abaixo do saldo.
+
+            Ele teve titulo e legenda proprios enquanto somava entradas, saidas e
+            fecho — havia um bloco para introduzir. Sem os tres, sobrou um
+            cabecalho de secao para um campo de data: dois niveis de titulo para
+            uma pergunta. O grupo aqui em cima ja diz de que trata a tela.
+          */}
+          <Field label="Período" hint="Até seis meses por consulta.">
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {/* O próprio seletor já não oferece período maior que o teto. */}
+              <input
+                type="date"
+                value={de}
+                min={limite(ate, -MAXIMO_DE_DIAS)}
+                max={ate || undefined}
+                onChange={(e) => setDe(e.target.value)}
+                style={{ ...inputStyle, width: 150 }}
+              />
+              <span style={{ fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>
+                até
+              </span>
+              <input
+                type="date"
+                value={ate}
+                min={de || undefined}
+                max={limite(de, MAXIMO_DE_DIAS)}
+                onChange={(e) => setAte(e.target.value)}
+                style={{ ...inputStyle, width: 150 }}
+              />
+            </div>
+          </Field>
+        </GrupoDeCampos>
+      </Formulario>
 
       {erro && (
         <div
@@ -244,6 +304,9 @@ export function ExtratoDrawer({ conta, onClose }: { conta: ContaBancaria; onClos
               display: "flex",
               alignItems: "baseline",
               gap: 8,
+              // O vao de GRUPO, e nao o de campo: os lancamentos sao outro
+              // assunto, e nao a continuacao do periodo consultado acima.
+              marginTop: "var(--form-gap-grupo)",
               marginBottom: 8,
               fontSize: "var(--text-sm)",
               fontWeight: "var(--fw-medium)",
@@ -259,56 +322,7 @@ export function ExtratoDrawer({ conta, onClose }: { conta: ContaBancaria; onClos
             )}
           </div>
 
-          {/*
-           * O trilho: fundo verde acinzentado, 4px de respiro, sem borda.
-           *
-           * A borda saiu porque o próprio fundo já delimita o bloco, e as duas
-           * coisas juntas davam contorno dentro de contorno.
-           */}
-          <div
-            style={{
-              background: "var(--kanban-coluna-bg)",
-              borderRadius: "var(--radius-lg)",
-              padding: 4,
-              display: "flex",
-              flexDirection: "column",
-              gap: 4,
-              fontVariantNumeric: "tabular-nums",
-            }}
-          >
-            <Abertura data={extrato.de} valor={extrato.saldoInicial} />
-
-            {dias.length === 0 && (
-              <div
-                style={{
-                  padding: "28px 16px",
-                  textAlign: "center",
-                  borderRadius: "var(--radius-md)",
-                  background: "var(--surface)",
-                  color: "var(--text-tertiary)",
-                  fontSize: "var(--text-base)",
-                }}
-              >
-                Nenhum movimento neste período.
-              </div>
-            )}
-
-            {/* Data em cima, lançamentos no meio, saldo embaixo — a ordem do
-                extrato de banco. O saldo fecha o dia: ele é o resultado do que
-                passou acima, e no topo ele apareceria antes das linhas que o
-                explicam. */}
-            {dias.map((dia) => (
-              <div key={dia.data} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                <DataDoDia data={dia.data} />
-
-                {dia.movimentos.map((m) => (
-                  <Linha key={m.id} movimento={m} aoConciliar={() => conciliar(m)} />
-                ))}
-
-                <FechoDoDia saldo={dia.saldoDoDia} />
-              </div>
-            ))}
-          </div>
+          <ExtratoTabela dias={dias} saldoAnterior={extrato.saldoInicial} />
         </>
       )}
     </Drawer>
@@ -316,187 +330,6 @@ export function ExtratoDrawer({ conta, onClose }: { conta: ContaBancaria; onClos
 }
 
 // ── Peças ───────────────────────────────────────────────────────────────────
-
-/**
- * O ponto de partida, abrindo a lista.
- *
- * Fica no trilho e não num cartão branco: não é um lançamento, é a régua de onde
- * o primeiro saldo do período sai.
- */
-function Abertura({ data, valor }: { data: string; valor: Centavos }) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        padding: "5px 10px",
-        fontSize: "var(--text-xs)",
-        color: "var(--text-tertiary)",
-      }}
-    >
-      <span>Saldo anterior a {paraFormatoBR(data as DataISO)}</span>
-      <span style={{ flex: 1 }} />
-      <span style={{ color: valor < 0 ? "var(--debito)" : "var(--text-secondary)" }}>
-        {formatarSemSimbolo(valor)}
-      </span>
-    </div>
-  );
-}
-
-/** Abre o dia. Só a data: o que aconteceu vem nas linhas logo abaixo. */
-function DataDoDia({ data }: { data: string }) {
-  return (
-    <div
-      style={{
-        // Respiro igual em cima e embaixo, para a faixa não colar no primeiro
-        // cartão do dia e parecer pertencer a ele.
-        padding: "6px 10px",
-        fontSize: "var(--text-xs)",
-        fontWeight: "var(--fw-semi)",
-        letterSpacing: "var(--tracking-wide)",
-        color: "var(--text-secondary)",
-      }}
-    >
-      {data ? paraFormatoBR(data as DataISO) : "—"}
-    </div>
-  );
-}
-
-/**
- * Fecha o dia com o saldo dele.
- *
- * Só o saldo: entradas e saídas do dia saíram porque a pergunta desta linha é
- * "quanto tinha na conta no fim deste dia", e três números competindo faziam
- * procurar qual era o certo. A soma do período continua no rodapé.
- */
-function FechoDoDia({ saldo }: { saldo: Centavos }) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "baseline",
-        justifyContent: "flex-end",
-        gap: 8,
-        padding: "6px 10px",
-      }}
-    >
-      <span style={{ fontSize: "var(--text-xs)", color: "var(--text-tertiary)" }}>
-        saldo do dia
-      </span>
-      <span
-        style={{
-          fontSize: "var(--text-sm)",
-          fontWeight: "var(--fw-semi)",
-          color: saldo < 0 ? "var(--debito)" : "var(--text-primary)",
-        }}
-      >
-        {formatarSemSimbolo(saldo)}
-      </span>
-    </div>
-  );
-}
-
-/**
- * Um lançamento: cartão branco correndo por cima do trilho.
- *
- * Sem saldo acumulado na linha. O saldo é pergunta do DIA, e repetido em toda
- * linha ele virava uma coluna de números parecidos que ninguém lê — e ainda
- * disputava atenção com o valor, que é o que a linha tem de dizer.
- */
-function Linha({
-  movimento,
-  aoConciliar,
-}: {
-  movimento: MovimentoDoExtrato;
-  aoConciliar: () => void;
-}) {
-  const [hover, setHover] = useState(false);
-  const entrada = movimento.tipo === "ENTRADA";
-  const historico = movimento.nome?.trim() || movimento.descricao?.trim() || "—";
-
-  /*
-   * A segunda linha é a FORMA, e não a descrição.
-   *
-   * A descrição do legado é "Baixa referente a parcela 2": ela repete o que a
-   * própria tela já é, e some com o espaço que a forma precisa. Num extrato, o
-   * que se procura ao lado do nome é como o dinheiro veio — e é isso que casa
-   * com a linha do banco.
-   */
-  const forma = movimento.formaPagamento?.trim() || null;
-
-  return (
-    <div
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        minHeight: 42,
-        padding: "6px 10px",
-        borderRadius: "var(--radius-md)",
-        background: "var(--surface)",
-      }}
-    >
-      <IconeDoPagamento forma={movimento.formaPagamento} origem={movimento.origem} />
-
-      <span style={{ flex: 1, minWidth: 0 }}>
-        <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span
-            style={{
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-              fontSize: "var(--text-sm)",
-              fontWeight: "var(--fw-medium)",
-            }}
-            title={historico}
-          >
-            {historico}
-          </span>
-
-          <VistoDeConferencia
-            conciliado={movimento.conciliado}
-            visivel={movimento.conciliado || hover}
-            onClick={aoConciliar}
-          />
-        </span>
-
-        {forma && (
-          <span
-            style={{
-              display: "block",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-              fontSize: "var(--text-xs)",
-              color: "var(--text-tertiary)",
-            }}
-          >
-            {forma}
-          </span>
-        )}
-      </span>
-
-      {/* Entrada em verde, saída em vermelho, e nunca o contrário.
-          No mesmo corpo do nome: a cor e a posição já dão o destaque, e maior
-          que o nome o valor virava o assunto da linha em vez do lançamento. */}
-      <span
-        style={{
-          textAlign: "right",
-          whiteSpace: "nowrap",
-          fontSize: "var(--text-sm)",
-          fontWeight: "var(--fw-semi)",
-          color: entrada ? "var(--credito)" : "var(--debito)",
-        }}
-      >
-        {entrada ? "+" : "-"}
-        {formatarSemSimbolo(movimento.valor)}
-      </span>
-    </div>
-  );
-}
 
 /**
  * O visto de conferido, à direita do nome.
@@ -509,77 +342,3 @@ function Linha({
  * descobre — inclusive o de desmarcar, porque conciliar é afirmar "eu vi isso na
  * conta", e ver errado acontece.
  */
-function VistoDeConferencia({
-  conciliado,
-  visivel,
-  onClick,
-}: {
-  conciliado: boolean;
-  visivel: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={conciliado ? "Conferido no extrato do banco" : "Marcar como conferido"}
-      aria-label={conciliado ? "Conferido" : "Marcar como conferido"}
-      aria-pressed={conciliado}
-      style={{
-        display: "inline-grid",
-        placeItems: "center",
-        width: 14,
-        height: 14,
-        flexShrink: 0,
-        padding: 0,
-        border: "none",
-        background: "none",
-        color: conciliado ? "var(--success)" : "var(--text-disabled)",
-        opacity: visivel ? 1 : 0,
-        cursor: "pointer",
-        transition: "opacity var(--dur) var(--ease)",
-      }}
-    >
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-        <circle cx="8" cy="8" r="6.4" fill={conciliado ? "currentColor" : "none"} />
-        <path
-          d="M5.2 8.2l1.9 1.9 3.7-3.9"
-          stroke={conciliado ? "var(--surface)" : "currentColor"}
-          strokeWidth="1.7"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    </button>
-  );
-}
-
-function Totalizador({
-  rotulo,
-  valor,
-  cor,
-  destaque,
-}: {
-  rotulo: string;
-  valor: Centavos;
-  cor?: string;
-  destaque?: boolean;
-}) {
-  return (
-    <div style={{ textAlign: "right" }}>
-      <div className="rotulo" style={{ fontSize: "var(--text-xs)" }}>
-        {rotulo}
-      </div>
-      <div
-        style={{
-          fontSize: destaque ? "var(--text-md)" : "var(--text-sm)",
-          fontWeight: "var(--fw-semi)",
-          fontVariantNumeric: "tabular-nums",
-          color: cor ?? (valor < 0 ? "var(--debito)" : "var(--text-primary)"),
-        }}
-      >
-        {formatarSemSimbolo(valor)}
-      </div>
-    </div>
-  );
-}
