@@ -7,15 +7,14 @@ import {
   ActiveToggle,
   Button,
   CampoBloqueado,
-  CampoNumerico,
   EmptyRow,
   Field,
   Formulario,
   GrupoDeCampos,
-  inputDeCelula,
   inputStyle,
   MarcaDeUso,
   Pagination,
+  PanelTabs,
   SeletorBuscavel,
   TableArea,
   TableHead,
@@ -36,6 +35,16 @@ import { hoje, paraFormatoBR, periodoEmMeses, type DataISO } from "@/shared/util
  */
 const POR_PAGINA = 10;
 
+/**
+ * De onde o dinheiro da conta pode vir.
+ *
+ * ⚠️ Produto ainda nao existe, e a aba fica assim mesmo. Escondida, a pessoa
+ * procura onde nao ha; declarada e vazia, ela responde a duvida antes de a busca
+ * comecar.
+ */
+const ABA_TICKETS = "Tickets";
+const ABA_PRODUTOS = "Produtos";
+
 /** Numero em coluna: tabular e sem quebra, para o digito alinhar com o de cima. */
 const NUM: React.CSSProperties = {
   whiteSpace: "nowrap",
@@ -48,9 +57,9 @@ const NUM: React.CSSProperties = {
  * O caminho do dinheiro no VPay e ticket -> conta a receber -> baixa. Esta tela
  * e o meio: escolhe o cliente, mostra o que ele tem em aberto, e vira cobranca.
  *
- * O valor de cada ticket e EDITAVEL: faturamento parcial e comum — entrega-se
- * metade do escopo e cobra-se metade. O que sobra continua no saldo do ticket,
- * disponivel para a proxima.
+ * ⚠️ O valor de cada ticket NAO se edita aqui: entra o saldo inteiro. Quem
+ * entrega meio escopo emite meio ticket, e nao um ticket inteiro cobrado pela
+ * metade — a conta e o ticket precisam concordar sobre o mesmo servico.
  */
 
 type TicketFaturavel = {
@@ -75,6 +84,7 @@ export function NovaFaturaDrawer({ onClose }: { onClose: () => void }) {
   const [valores, setValores] = useState<Record<number, number>>({});
   const [salvando, setSalvando] = useState(false);
   const [pagina, setPagina] = useState(1);
+  const [aba, setAba] = useState(ABA_TICKETS);
 
   const [parcelas, setParcelas] = useState(1);
   const [primeiroVencimento, setPrimeiroVencimento] = useState<string>(hoje());
@@ -155,11 +165,18 @@ export function NovaFaturaDrawer({ onClose }: { onClose: () => void }) {
   const apuracaoInicio = datas.length ? datas.reduce((a, b) => (a < b ? a : b)) : hoje();
   const apuracaoFim = datas.length ? datas.reduce((a, b) => (a > b ? a : b)) : hoje();
 
+  /**
+   * Marca ou desmarca um ticket.
+   *
+   * ⚠️ Entra pelo SALDO INTEIRO, e nao ha meio-termo. O valor cobrado e o do
+   * ticket: quem entrega meio escopo emite meio ticket, e nao um ticket inteiro
+   * cobrado pela metade. Com o numero editavel aqui, a conta e o ticket passavam
+   * a discordar sobre o mesmo servico, e o saldo que sobrava no ticket nao tinha
+   * documento que o explicasse.
+   */
   function alternar(t: TicketFaturavel) {
     setValores((v) => {
       const copia = { ...v };
-      // Marcar traz o saldo inteiro: é o caso comum. Quem cobra parcial ajusta
-      // o número ao lado.
       if (copia[t.id]) delete copia[t.id];
       else copia[t.id] = t.saldo;
       return copia;
@@ -243,10 +260,10 @@ export function NovaFaturaDrawer({ onClose }: { onClose: () => void }) {
       <Formulario>
         <GrupoDeCampos
           primeiro
-          titulo="O que vai ser cobrado"
-          legenda="A conta nasce dos tickets em aberto do cliente. Cobrar menos que o saldo é faturamento parcial: o que sobra continua no ticket, disponível para a próxima."
+          titulo="De quem é a cobrança"
+          legenda="A conta nasce do que o cliente tem em aberto: os tickets entregues e ainda não faturados."
         >
-          <Field label="Cliente" required hint="De quem é a cobrança.">
+          <Field label="Cliente" required>
             <SeletorBuscavel
               valor={clienteId ? Number(clienteId) : null}
               rotulo={nomeDoCliente}
@@ -262,222 +279,239 @@ export function NovaFaturaDrawer({ onClose }: { onClose: () => void }) {
               }}
             />
           </Field>
-
-          {clienteId && (
-            /*
-              ⚠️ O vao aqui e o de TITULO, e nao o de campo.
-
-              Os filhos do grupo se separam por `--form-gap-campo`, que sao 3px:
-              e o respiro de um campo para o seguinte numa pilha de campos
-              irmaos. O cliente e a tabela nao sao irmaos — um comanda a outra —,
-              e com 3px o campo encostava no cabecalho da tabela.
-
-              ⚠️ SEM moldura em volta da tabela.
-
-              Havia um `div` com borda envolvendo o `TableArea`, e o cartao do
-              drawer ja e a moldura: as duas juntas davam contorno dentro de
-              contorno. E o rotulo "Tickets em aberto" escrito a mao saiu — o
-              titulo do grupo acima ja diz do que a lista trata.
-            */
-            <div style={{ marginTop: "var(--form-gap-titulo)" }}>
-            <TableArea minWidth={0}>
-              <TableHead>
-                {/*
-                  ⚠️ A marca de COBRAR abre a linha.
-
-                  Sem ela, com o valor saindo do saldo, todo ticket em aberto
-                  entraria na conta sozinho: abrir a tela de um cliente com seis
-                  tickets significaria faturar os seis.
-                */}
-                <Th minWidth={54}>Cobrar</Th>
-                <Th minWidth={70}>Ticket</Th>
-                <Th>Período</Th>
-                {/*
-                  ⚠️ UMA coluna de dinheiro, e nao duas.
-
-                  "Em aberto" e "Valor" mostravam o mesmo numero na maioria das
-                  linhas: marcar um ticket ja traz o saldo inteiro, e cobrar menos
-                  e a excecao. Duas colunas iguais lado a lado fazem procurar a
-                  diferenca que quase nunca existe.
-
-                  Aqui a coluna e a DIVIDA do ticket: sem marcar, ela diz quanto
-                  ha em aberto; marcada, ela vira o campo do quanto disso entra
-                  nesta conta. E a mesma anatomia da coluna "Em aberto" da baixa.
-
-                  ⚠️ E alinhada a ESQUERDA, como tudo no sistema — inclusive
-                  dinheiro. Puxada para a direita, a leitura salta o vao vazio do
-                  meio e volta.
-                */}
-                <Th minWidth={130}>Em aberto</Th>
-              </TableHead>
-
-              <tbody>
-                {tickets == null && <EmptyRow colSpan={5} message="Carregando…" />}
-                {tickets != null && tickets.length === 0 && (
-                  <EmptyRow colSpan={5} message="Nenhum ticket em aberto para este cliente." />
-                )}
-
-                {visiveis.map((t, n) => {
-                  const escolhido = (valores[t.id] ?? 0) > 0;
-
-                  return (
-                    <Tr key={t.id} delay={n * 12}>
-                      <Td>
-                        {/*
-                          ⚠️ A marca do KIT, e nao uma caixa desenhada aqui.
-
-                          Havia um `Caixa` local repetindo o mesmo circulo com
-                          visto, no verde generico e com meio pixel de borda
-                          proprio. O gesto de incluir uma linha ja tem desenho no
-                          sistema, e dois desenhos para ele fazem aprender duas
-                          vezes.
-                        */}
-                        <MarcaDeUso
-                          marcado={escolhido}
-                          rotulo={escolhido ? "Tirar este ticket da conta" : "Cobrar este ticket"}
-                          onClick={() => alternar(t)}
-                        />
-                      </Td>
-
-                      <Td style={NUM}>{t.numero}</Td>
-
-                      <Td>
-                        {t.inicio || t.fim
-                          ? periodoEmMeses(t.inicio as DataISO, t.fim as DataISO)
-                          : "—"}
-                      </Td>
-
-                      <Td>
-                        {/* Editável quando marcado: faturamento parcial é comum,
-                            e o que sobra continua no saldo do ticket para a
-                            próxima. O teto é o próprio saldo. */}
-                        {escolhido ? (
-                          <CampoNumerico
-                            valor={valores[t.id]}
-                            escala={100}
-                            style={inputDeCelula}
-                            aoMudar={(v) =>
-                              setValores((atual) => ({ ...atual, [t.id]: Math.min(v, t.saldo) }))
-                            }
-                          />
-                        ) : (
-                          <span style={NUM}>{formatarSemSimbolo(t.saldo as Centavos)}</span>
-                        )}
-                      </Td>
-                    </Tr>
-                  );
-                })}
-              </tbody>
-            </TableArea>
-
-            {/*
-              ⚠️ Pagina, e o que foi marcado nas outras paginas CONTINUA valendo.
-
-              Um cliente com trinta tickets em aberto nao cabe na tela, e rolar
-              trinta linhas para achar o que se quer cobrar e pior que virar
-              pagina. O estado e da conta inteira e nao da pagina: o total la
-              embaixo soma tudo que foi marcado, em qualquer pagina. Mesma
-              decisao da tabela de parcelas da baixa.
-            */}
-            {(tickets ?? []).length > POR_PAGINA && (
-              <Pagination
-                page={paginaAtual}
-                totalPages={totalPaginas}
-                total={(tickets ?? []).length}
-                pageSize={POR_PAGINA}
-                onPage={setPagina}
-              />
-            )}
-            </div>
-          )}
         </GrupoDeCampos>
 
-        {escolhidos.length > 0 && (
-          <GrupoDeCampos
-            titulo="Como vai ser cobrada"
-            legenda="O parcelamento e a competência da conta. A competência sai dos tickets escolhidos e não se digita."
-          >
+        {clienteId && (
+          <>
             {/*
-              ⚠️ O TOTAL saiu do rodape e virou campo.
+              ⚠️ O parcelamento vem ANTES da lista, e nao depois.
 
-              La ele era um numero solto com rotulo miudo, do lado de fora do
-              bloco em que se escolhe o que cobrar — e e ele que decide se a conta
-              esta certa. Como campo, tem o rotulo a esquerda como todo dado da
-              tela e da para copiar. Mesma decisao da baixa e do recebimento.
+              Ele e a decisao da conta — em quantas vezes, a partir de quando —, e
+              a lista abaixo e o detalhamento dela. Embaixo, quem escolhia dez
+              tickets rolava a lista inteira de volta para achar onde se define o
+              vencimento, e o total ficava fora da vista justamente enquanto se
+              montava a conta.
+
+              ⚠️ Aparece com o CLIENTE escolhido, e nao com o primeiro ticket
+              marcado. Preso a marcacao, o bloco nascia no meio da tela e
+              empurrava a lista para baixo no instante do clique — e a linha que a
+              pessoa acabou de marcar saia de debaixo do cursor.
             */}
-            <Field
-              label="Total da conta"
-              hint="A soma do que foi marcado. É este valor que será parcelado abaixo."
+            <GrupoDeCampos
+              titulo="Como vai ser cobrada"
+              legenda="O parcelamento e a competência da conta. A competência sai dos tickets escolhidos e não se digita."
             >
-              <CampoBloqueado valor={formatarSemSimbolo(total)} />
-            </Field>
+              {/*
+                ⚠️ O TOTAL saiu do rodape e virou campo.
 
-            <Field
-              label="Competência"
-              hint="Sai do período dos tickets escolhidos — não se digita para não divergir do que está sendo cobrado."
-            >
-              <CampoBloqueado
-                valor={`${paraFormatoBR(apuracaoInicio as DataISO)} a ${paraFormatoBR(
-                  apuracaoFim as DataISO,
-                )}`}
-              />
-            </Field>
+                La era um numero solto com rotulo miudo, do lado de fora do bloco
+                em que se monta a conta — e e ele que decide se ela esta certa.
+                Mesma decisao da baixa e do recebimento.
+              */}
+              <Field
+                label="Total da conta"
+                hint="A soma do que foi marcado na lista abaixo. É este valor que será parcelado."
+              >
+                <CampoBloqueado valor={formatarSemSimbolo(total)} />
+              </Field>
 
-            <Field label="Parcelas">
-              <input
-                type="number"
-                min={1}
-                max={360}
-                value={parcelas}
-                onChange={(e) => setParcelas(Math.max(1, Number(e.target.value) || 1))}
-                style={inputStyle}
-              />
-            </Field>
+              <Field
+                label="Competência"
+                hint="Sai do período dos tickets escolhidos — não se digita para não divergir do que está sendo cobrado."
+              >
+                <CampoBloqueado
+                  valor={
+                    escolhidos.length === 0
+                      ? "—"
+                      : `${paraFormatoBR(apuracaoInicio as DataISO)} a ${paraFormatoBR(
+                          apuracaoFim as DataISO,
+                        )}`
+                  }
+                />
+              </Field>
 
-            <Field label="1º vencimento">
-              <input
-                type="date"
-                value={primeiroVencimento}
-                onChange={(e) => setPrimeiroVencimento(e.target.value)}
-                style={inputStyle}
-              />
-            </Field>
-
-            {parcelas > 1 && (
-              <Field label="Intervalo" hint="Dias entre uma parcela e a seguinte.">
+              <Field label="Parcelas">
                 <input
                   type="number"
                   min={1}
-                  max={365}
-                  value={intervalo}
-                  onChange={(e) => setIntervalo(Math.max(1, Number(e.target.value) || 30))}
+                  max={360}
+                  value={parcelas}
+                  onChange={(e) => setParcelas(Math.max(1, Number(e.target.value) || 1))}
                   style={inputStyle}
                 />
               </Field>
-            )}
 
-            <Field label="Observações">
-              <textarea
-                value={observacoes}
-                onChange={(e) => setObservacoes(e.target.value)}
-                rows={2}
-                placeholder="Sai no documento enviado ao cliente"
-                maxLength={400}
-                style={{ ...inputStyle, height: "auto", padding: 8, resize: "vertical" }}
-              />
-            </Field>
+              <Field label="1º vencimento">
+                <input
+                  type="date"
+                  value={primeiroVencimento}
+                  onChange={(e) => setPrimeiroVencimento(e.target.value)}
+                  style={inputStyle}
+                />
+              </Field>
 
-            <Field
-              label="Emitir"
-              hint="Rascunho não cobra e não baixa o ticket — serve para conferir antes."
-            >
-              {/*
-                ⚠️ O interruptor do kit, no lugar de uma caixa de marcar nativa
-                com rotulo proprio alinhado a mao pela altura do campo.
-              */}
-              <ActiveToggle active={emitir} onChange={() => setEmitir((e) => !e)} />
-            </Field>
-          </GrupoDeCampos>
+              {parcelas > 1 && (
+                <Field label="Intervalo" hint="Dias entre uma parcela e a seguinte.">
+                  <input
+                    type="number"
+                    min={1}
+                    max={365}
+                    value={intervalo}
+                    onChange={(e) => setIntervalo(Math.max(1, Number(e.target.value) || 30))}
+                    style={inputStyle}
+                  />
+                </Field>
+              )}
+
+              <Field label="Observações">
+                <textarea
+                  value={observacoes}
+                  onChange={(e) => setObservacoes(e.target.value)}
+                  rows={2}
+                  placeholder="Sai no documento enviado ao cliente"
+                  maxLength={400}
+                  style={{ ...inputStyle, height: "auto", padding: 8, resize: "vertical" }}
+                />
+              </Field>
+
+              <Field
+                label="Emitir"
+                hint="Rascunho não cobra e não baixa o ticket — serve para conferir antes."
+              >
+                {/*
+                  ⚠️ O interruptor do kit, no lugar de uma caixa de marcar nativa
+                  com rotulo proprio alinhado a mao pela altura do campo.
+                */}
+                <ActiveToggle active={emitir} onChange={() => setEmitir((e) => !e)} />
+              </Field>
+            </GrupoDeCampos>
+
+            {/*
+              ⚠️ SEM titulo de grupo aqui: a aba ja se chama Tickets, e um titulo
+              logo acima seria o mesmo assunto dito duas vezes em dois tamanhos de
+              letra. E a mesma decisao da aba de pagamentos da baixa.
+            */}
+            <div>
+              <PanelTabs tabs={[ABA_TICKETS, ABA_PRODUTOS]} active={aba} onChange={setAba} />
+
+              {aba === ABA_PRODUTOS ? (
+                /*
+                  ⚠️ A aba existe VAZIA de proposito, e diz o que falta.
+
+                  Produto ainda nao entra numa conta a receber, e esconder a aba
+                  faria a pessoa procurar onde nao ha. Dizendo, ela sabe que o
+                  caminho e o ticket enquanto isto nao existir — e nao fica
+                  tentando faturar produto por outro lugar.
+                */
+                <p
+                  style={{
+                    padding: "28px 16px",
+                    textAlign: "center",
+                    border: "1px dashed var(--border-strong)",
+                    borderRadius: "var(--radius-lg)",
+                    color: "var(--text-tertiary)",
+                    fontSize: "var(--text-sm)",
+                    lineHeight: 1.6,
+                  }}
+                >
+                  Cobrar produto direto na conta ainda não existe. Por enquanto o
+                  produto entra pelo ticket, e o ticket entra aqui.
+                </p>
+              ) : (
+                <>
+                  {/*
+                    ⚠️ SEM moldura em volta da tabela: o cartao do drawer ja e a
+                    moldura, e as duas juntas dao contorno dentro de contorno.
+                  */}
+                  <TableArea minWidth={0}>
+                    <TableHead>
+                      {/*
+                        ⚠️ A marca de COBRAR abre a linha.
+
+                        Sem ela, com o valor saindo do saldo, todo ticket em
+                        aberto entraria na conta sozinho: abrir a tela de um
+                        cliente com seis tickets significaria faturar os seis.
+                      */}
+                      <Th minWidth={54}>Cobrar</Th>
+                      <Th minWidth={70}>Ticket</Th>
+                      <Th>Período</Th>
+                      {/*
+                        ⚠️ Uma coluna de dinheiro, e ela NAO se edita.
+
+                        Ja foram duas — "em aberto" e "valor" — mostrando o mesmo
+                        numero na maioria das linhas, e depois uma so que virava
+                        campo ao marcar. O valor cobrado e o do ticket: quem
+                        entrega meio escopo emite meio ticket, e nao um ticket
+                        inteiro cobrado pela metade. Editavel aqui, a conta e o
+                        ticket passavam a discordar sobre o mesmo servico.
+                      */}
+                      <Th minWidth={110}>Em aberto</Th>
+                    </TableHead>
+
+                    <tbody>
+                      {tickets == null && <EmptyRow colSpan={4} message="Carregando…" />}
+                      {tickets != null && tickets.length === 0 && (
+                        <EmptyRow
+                          colSpan={4}
+                          message="Nenhum ticket em aberto para este cliente."
+                        />
+                      )}
+
+                      {visiveis.map((t, n) => (
+                        <Tr key={t.id} delay={n * 12}>
+                          <Td>
+                            {/*
+                              ⚠️ A marca do KIT, e nao uma caixa desenhada aqui.
+
+                              Havia um `Caixa` local repetindo o mesmo circulo com
+                              visto, no verde generico e com meio pixel de borda
+                              proprio. O gesto de incluir uma linha ja tem desenho
+                              no sistema.
+                            */}
+                            <MarcaDeUso
+                              marcado={(valores[t.id] ?? 0) > 0}
+                              rotulo={
+                                (valores[t.id] ?? 0) > 0
+                                  ? "Tirar este ticket da conta"
+                                  : "Cobrar este ticket"
+                              }
+                              onClick={() => alternar(t)}
+                            />
+                          </Td>
+
+                          <Td style={NUM}>{t.numero}</Td>
+
+                          <Td>
+                            {t.inicio || t.fim
+                              ? periodoEmMeses(t.inicio as DataISO, t.fim as DataISO)
+                              : "—"}
+                          </Td>
+
+                          <Td style={NUM}>{formatarSemSimbolo(t.saldo as Centavos)}</Td>
+                        </Tr>
+                      ))}
+                    </tbody>
+                  </TableArea>
+
+                  {/*
+                    ⚠️ Pagina, e o que foi marcado nas outras paginas CONTINUA
+                    valendo. O estado e da conta inteira e nao da pagina: o total
+                    la em cima soma tudo que foi marcado, em qualquer uma. Mesma
+                    decisao da tabela de parcelas da baixa.
+                  */}
+                  {todos.length > POR_PAGINA && (
+                    <Pagination
+                      page={paginaAtual}
+                      totalPages={totalPaginas}
+                      total={todos.length}
+                      pageSize={POR_PAGINA}
+                      onPage={setPagina}
+                    />
+                  )}
+                </>
+              )}
+            </div>
+          </>
         )}
       </Formulario>
     </Drawer>
