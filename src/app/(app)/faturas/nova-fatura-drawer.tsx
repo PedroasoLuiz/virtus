@@ -1,20 +1,26 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Drawer } from "@/components/ui/drawer";
 import {
+  ActiveToggle,
   Button,
+  CampoBloqueado,
   CampoNumerico,
   EmptyRow,
   Field,
+  Formulario,
+  GrupoDeCampos,
+  inputStyle,
+  MarcaDeUso,
+  SeletorBuscavel,
   TableArea,
   TableHead,
   Td,
+  tdNum,
   Th,
   Tr,
-  inputStyle,
-  selectStyle,
 } from "@/components/ui/kit";
 import { useAvisos } from "@/components/ui/avisos";
 import { formatarSemSimbolo, type Centavos } from "@/shared/utils/money";
@@ -42,19 +48,12 @@ type TicketFaturavel = {
   total: number;
 };
 
-type OpcaoCliente = { id: number; nome: string };
-
-export function NovaFaturaDrawer({
-  clientes,
-  onClose,
-}: {
-  clientes: OpcaoCliente[];
-  onClose: () => void;
-}) {
+export function NovaFaturaDrawer({ onClose }: { onClose: () => void }) {
   const router = useRouter();
   const { avisar } = useAvisos();
 
   const [clienteId, setClienteId] = useState("");
+  const [nomeDoCliente, setNomeDoCliente] = useState<string | null>(null);
   const [tickets, setTickets] = useState<TicketFaturavel[] | null>(null);
   /** Quanto tirar de cada ticket. Ausente = não entra nesta conta. */
   const [valores, setValores] = useState<Record<number, number>>({});
@@ -66,8 +65,30 @@ export function NovaFaturaDrawer({
   const [observacoes, setObservacoes] = useState("");
   const [emitir, setEmitir] = useState(true);
 
+  /**
+   * Os clientes que casam com o que foi digitado.
+   *
+   * ⚠️ BUSCA, e nao a arvore inteira. A pagina carregava todos os clientes so
+   * para encher um `<select>`: numa base com vinte mil ativos, sao vinte mil
+   * linhas no HTML da pagina para escolher uma, e a tela trava antes de
+   * aparecer. Mesmo caminho que o drawer da baixa ja seguia.
+   */
+  const buscarClientes = useCallback(async (termo: string) => {
+    const p = new URLSearchParams({ perPage: "15", papel: "cliente", ativo: "true" });
+    if (termo.trim()) p.set("busca", termo.trim());
+
+    const r = await fetch(`/api/v1/clientes?${p.toString()}`);
+    if (!r.ok) return [];
+
+    const corpo = await r.json();
+
+    return ((corpo.data ?? []) as { id: number; razao: string; nomeFantasia: string | null }[]).map(
+      (c) => ({ id: c.id, nome: c.nomeFantasia?.trim() || c.razao }),
+    );
+  }, []);
+
   /*
-   * O efeito so BUSCA; quem limpa a lista e o proprio `onChange` do cliente.
+   * O efeito so BUSCA; quem limpa a lista e o proprio `aoEscolher` do cliente.
    *
    * Limpar aqui seria escrever estado no meio do render — o React reclama com
    * razao: o efeito rodaria, marcaria a tela como suja e pediria outro render
@@ -179,90 +200,79 @@ export function NovaFaturaDrawer({
       open
       onClose={onClose}
       title="Nova conta a receber"
-      footer={
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{ minWidth: 0 }}>
-            <div className="rotulo" style={{ fontSize: "var(--text-xs)" }}>
-              {escolhidos.length} ticket{escolhidos.length === 1 ? "" : "s"}
-            </div>
-            <div
-              style={{
-                fontSize: "var(--text-md)",
-                fontWeight: "var(--fw-semi)",
-                fontVariantNumeric: "tabular-nums",
-              }}
-            >
-              {formatarSemSimbolo(total)}
-            </div>
-          </div>
-
-        </div>
-      }
       acoes={
         <Button
           size="xs"
           variant="primary"
           disabled={salvando || escolhidos.length === 0}
+          title={escolhidos.length === 0 ? "Escolha ao menos um ticket para cobrar" : undefined}
           onClick={criar}
         >
           {salvando ? "Criando…" : emitir ? "Criar e emitir" : "Criar rascunho"}
         </Button>
       }
     >
-      <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-        <Field label="Cliente" required>
-          <select
-            value={clienteId}
-            onChange={(e) => {
-              setClienteId(e.target.value);
-              // Nada marcado ao trocar de cliente: valor escolhido para um
-              // cliente nao pode sobreviver ao outro.
-              setTickets(null);
-              setValores({});
-            }}
-            style={selectStyle}
-          >
-            <option value="">Escolher…</option>
-            {clientes.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.nome}
-              </option>
-            ))}
-          </select>
-        </Field>
-      </div>
+      {/*
+        ⚠️ A anatomia e a do resto do sistema: `Formulario` e `GrupoDeCampos`,
+        com o vao entre campos vindo do token. Havia um `div` com `gap: 3` e
+        rotulos de secao escritos a mao, que acertavam o ritmo por coincidencia e
+        erravam o de um bloco para o outro.
+      */}
+      <Formulario>
+        <GrupoDeCampos
+          primeiro
+          titulo="O que vai ser cobrado"
+          legenda="A conta nasce dos tickets em aberto do cliente. Cobrar menos que o saldo é faturamento parcial: o que sobra continua no ticket, disponível para a próxima."
+        >
+          <Field label="Cliente" required hint="De quem é a cobrança.">
+            <SeletorBuscavel
+              valor={clienteId ? Number(clienteId) : null}
+              rotulo={nomeDoCliente}
+              buscar={buscarClientes}
+              aoEscolher={(c) => {
+                setClienteId(c ? String(c.id) : "");
+                setNomeDoCliente(c?.nome ?? null);
+                // Nada marcado ao trocar de cliente: valor escolhido para um
+                // cliente nao pode sobreviver ao outro.
+                setTickets(null);
+                setValores({});
+              }}
+            />
+          </Field>
 
-      {clienteId && (
-        <div style={{ marginTop: 16 }}>
-          <div className="rotulo" style={{ fontSize: "var(--text-xs)", marginBottom: 8 }}>
-            Tickets em aberto
-          </div>
+          {clienteId && (
+            /*
+              ⚠️ SEM moldura em volta da tabela.
 
-          <div
-            style={{
-              borderRadius: "var(--radius-lg)",
-              border: "1px solid var(--border)",
-              overflow: "hidden",
-            }}
-          >
+              Havia um `div` com borda envolvendo o `TableArea`, e o cartao do
+              drawer ja e a moldura: as duas juntas davam contorno dentro de
+              contorno. E o rotulo "Tickets em aberto" escrito a mao saiu — o
+              titulo do grupo acima ja diz do que a lista trata.
+            */
             <TableArea minWidth={0}>
               <TableHead>
+                {/*
+                  ⚠️ A marca de COBRAR abre a linha.
+
+                  Sem ela, com o valor saindo do saldo, todo ticket em aberto
+                  entraria na conta sozinho: abrir a tela de um cliente com seis
+                  tickets significaria faturar os seis.
+                */}
+                <Th minWidth={54}>Cobrar</Th>
                 <Th minWidth={70}>Ticket</Th>
                 <Th>Período</Th>
-                <Th align="right" minWidth={90}>
+                <Th align="right" minWidth={96}>
                   Em aberto
                 </Th>
                 <Th align="right" minWidth={120}>
-                  Cobrar
+                  Valor
                 </Th>
               </TableHead>
+
               <tbody>
-                {tickets == null && <EmptyRow colSpan={4} message="Carregando…" />}
+                {tickets == null && <EmptyRow colSpan={5} message="Carregando…" />}
                 {tickets != null && tickets.length === 0 && (
-                  <EmptyRow
-                    colSpan={4}
-                    message="Nenhum ticket em aberto para este cliente."
-                  />
+                  <EmptyRow colSpan={5} message="Nenhum ticket em aberto para este cliente." />
                 )}
 
                 {(tickets ?? []).map((t, n) => {
@@ -271,28 +281,33 @@ export function NovaFaturaDrawer({
                   return (
                     <Tr key={t.id} delay={n * 12}>
                       <Td>
-                        <span
+                        {/*
+                          ⚠️ A marca do KIT, e nao uma caixa desenhada aqui.
+
+                          Havia um `Caixa` local repetindo o mesmo circulo com
+                          visto, no verde generico e com meio pixel de borda
+                          proprio. O gesto de incluir uma linha ja tem desenho no
+                          sistema, e dois desenhos para ele fazem aprender duas
+                          vezes.
+                        */}
+                        <MarcaDeUso
+                          marcado={escolhido}
+                          rotulo={escolhido ? "Tirar este ticket da conta" : "Cobrar este ticket"}
                           onClick={() => alternar(t)}
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: 8,
-                            cursor: "pointer",
-                          }}
-                        >
-                          <Caixa marcada={escolhido} />
-                          <span style={{ fontVariantNumeric: "tabular-nums" }}>{t.numero}</span>
-                        </span>
+                        />
                       </Td>
-                      <Td style={{ color: "var(--text-tertiary)" }}>
+
+                      <Td style={tdNum}>{t.numero}</Td>
+
+                      <Td>
                         {t.inicio || t.fim
                           ? periodoEmMeses(t.inicio as DataISO, t.fim as DataISO)
                           : "—"}
                       </Td>
-                      <Td style={{ textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-                        {formatarSemSimbolo(t.saldo as Centavos)}
-                      </Td>
-                      <Td style={{ padding: "0 8px 0 16px" }}>
+
+                      <Td style={tdNum}>{formatarSemSimbolo(t.saldo as Centavos)}</Td>
+
+                      <Td>
                         {/* Editável: faturamento parcial é comum, e o que sobra
                             continua no saldo do ticket para a próxima. */}
                         {escolhido ? (
@@ -300,14 +315,11 @@ export function NovaFaturaDrawer({
                             valor={valores[t.id]}
                             escala={100}
                             aoMudar={(v) =>
-                              setValores((atual) => ({
-                                ...atual,
-                                [t.id]: Math.min(v, t.saldo),
-                              }))
+                              setValores((atual) => ({ ...atual, [t.id]: Math.min(v, t.saldo) }))
                             }
                           />
                         ) : (
-                          <span style={{ color: "var(--text-tertiary)", textAlign: "right", display: "block" }}>
+                          <span style={{ ...tdNum, display: "block", color: "var(--text-disabled)" }}>
                             —
                           </span>
                         )}
@@ -317,141 +329,97 @@ export function NovaFaturaDrawer({
                 })}
               </tbody>
             </TableArea>
-          </div>
+          )}
+        </GrupoDeCampos>
 
-          {escolhidos.length > 0 && (
-            <div
-              style={{
-                marginTop: 16,
-                display: "flex",
-                flexDirection: "column",
-                gap: 3,
-              }}
+        {escolhidos.length > 0 && (
+          <GrupoDeCampos
+            titulo="Como vai ser cobrada"
+            legenda="O parcelamento e a competência da conta. A competência sai dos tickets escolhidos e não se digita."
+          >
+            {/*
+              ⚠️ O TOTAL saiu do rodape e virou campo.
+
+              La ele era um numero solto com rotulo miudo, do lado de fora do
+              bloco em que se escolhe o que cobrar — e e ele que decide se a conta
+              esta certa. Como campo, tem o rotulo a esquerda como todo dado da
+              tela e da para copiar. Mesma decisao da baixa e do recebimento.
+            */}
+            <Field
+              label="Total da conta"
+              hint="A soma do que foi marcado. É este valor que será parcelado abaixo."
             >
-              <Field
-                label="Competência"
-                hint="Sai do período dos tickets escolhidos — não se digita para não divergir do que está sendo cobrado."
-              >
-                <div
-                  style={{
-                    height: "var(--h-input)",
-                    display: "flex",
-                    alignItems: "center",
-                    fontSize: "var(--text-sm)",
-                    color: "var(--text-secondary)",
-                  }}
-                >
-                  {paraFormatoBR(apuracaoInicio as DataISO)} a{" "}
-                  {paraFormatoBR(apuracaoFim as DataISO)}
-                </div>
-              </Field>
+              <CampoBloqueado valor={formatarSemSimbolo(total)} />
+            </Field>
 
-              <Field label="Parcelas">
+            <Field
+              label="Competência"
+              hint="Sai do período dos tickets escolhidos — não se digita para não divergir do que está sendo cobrado."
+            >
+              <CampoBloqueado
+                valor={`${paraFormatoBR(apuracaoInicio as DataISO)} a ${paraFormatoBR(
+                  apuracaoFim as DataISO,
+                )}`}
+              />
+            </Field>
+
+            <Field label="Parcelas">
+              <input
+                type="number"
+                min={1}
+                max={360}
+                value={parcelas}
+                onChange={(e) => setParcelas(Math.max(1, Number(e.target.value) || 1))}
+                style={inputStyle}
+              />
+            </Field>
+
+            <Field label="1º vencimento">
+              <input
+                type="date"
+                value={primeiroVencimento}
+                onChange={(e) => setPrimeiroVencimento(e.target.value)}
+                style={inputStyle}
+              />
+            </Field>
+
+            {parcelas > 1 && (
+              <Field label="Intervalo" hint="Dias entre uma parcela e a seguinte.">
                 <input
                   type="number"
                   min={1}
-                  max={360}
-                  value={parcelas}
-                  onChange={(e) => setParcelas(Math.max(1, Number(e.target.value) || 1))}
+                  max={365}
+                  value={intervalo}
+                  onChange={(e) => setIntervalo(Math.max(1, Number(e.target.value) || 30))}
                   style={inputStyle}
                 />
               </Field>
+            )}
 
-              <Field label="1º vencimento">
-                <input
-                  type="date"
-                  value={primeiroVencimento}
-                  onChange={(e) => setPrimeiroVencimento(e.target.value)}
-                  style={inputStyle}
-                />
-              </Field>
+            <Field label="Observações">
+              <textarea
+                value={observacoes}
+                onChange={(e) => setObservacoes(e.target.value)}
+                rows={2}
+                placeholder="Sai no documento enviado ao cliente"
+                maxLength={400}
+                style={{ ...inputStyle, height: "auto", padding: 8, resize: "vertical" }}
+              />
+            </Field>
 
-              {parcelas > 1 && (
-                <Field label="Intervalo" hint="Dias entre uma parcela e a seguinte.">
-                  <input
-                    type="number"
-                    min={1}
-                    max={365}
-                    value={intervalo}
-                    onChange={(e) => setIntervalo(Math.max(1, Number(e.target.value) || 30))}
-                    style={inputStyle}
-                  />
-                </Field>
-              )}
-
-              <Field label="Observações">
-                <textarea
-                  value={observacoes}
-                  onChange={(e) => setObservacoes(e.target.value)}
-                  rows={2}
-                  placeholder="Sai no documento enviado ao cliente"
-                  style={{ ...inputStyle, height: "auto", padding: 8, resize: "vertical" }}
-                />
-              </Field>
-
-              <Field
-                label="Emitir"
-                hint="Rascunho não cobra e não baixa o ticket — serve para conferir antes."
-              >
-                <label
-                  style={{
-                    height: "var(--h-input)",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 8,
-                    fontSize: "var(--text-sm)",
-                    cursor: "pointer",
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={emitir}
-                    onChange={(e) => setEmitir(e.target.checked)}
-                    style={{ accentColor: "var(--primary)", cursor: "pointer" }}
-                  />
-                  Já emitir a conta
-                </label>
-              </Field>
-            </div>
-          )}
-        </div>
-      )}
+            <Field
+              label="Emitir"
+              hint="Rascunho não cobra e não baixa o ticket — serve para conferir antes."
+            >
+              {/*
+                ⚠️ O interruptor do kit, no lugar de uma caixa de marcar nativa
+                com rotulo proprio alinhado a mao pela altura do campo.
+              */}
+              <ActiveToggle active={emitir} onChange={() => setEmitir((e) => !e)} />
+            </Field>
+          </GrupoDeCampos>
+        )}
+      </Formulario>
     </Drawer>
-  );
-}
-
-/** Mesma caixa desenhada do resto do app — a nativa varia por navegador. */
-function Caixa({ marcada }: { marcada: boolean }) {
-  return (
-    <span
-      role="checkbox"
-      aria-checked={marcada}
-      style={{
-        flexShrink: 0,
-        width: 15,
-        height: 15,
-        display: "grid",
-        placeItems: "center",
-        borderRadius: "var(--radius-full)",
-        border: marcada ? "none" : "1.5px solid var(--border-strong)",
-        background: marcada ? "var(--success)" : "transparent",
-        color: "#fff",
-      }}
-    >
-      {marcada && (
-        <svg
-          width="9"
-          height="9"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="3.6"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M20 6L9 17l-5-5" />
-        </svg>
-      )}
-    </span>
   );
 }

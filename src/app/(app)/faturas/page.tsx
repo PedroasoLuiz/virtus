@@ -1,6 +1,5 @@
 import { sessaoUI } from "@/shared/auth/sessao-ui";
 import { listarFaturas } from "@/modules/faturas/faturas.service";
-import { arvoreDeClientes } from "@/modules/clientes/clientes.repository";
 import { SemEmpresa } from "../sem-empresa";
 import { FaturasTabela } from "./faturas-tabela";
 
@@ -12,15 +11,19 @@ export default async function FaturasPage() {
   const { ctx, usuarioNome, visao } = await sessaoUI();
   if (ctx.empresaId == null) return <SemEmpresa />;
 
-  const [{ itens }, clientes] = await Promise.all([
-    listarFaturas(ctx.empresaId, {}, { page: 1, perPage: 100 }),
-    arvoreDeClientes(ctx.empresaId),
-  ]);
+  /*
+   * ⚠️ A pagina NAO carrega mais os clientes.
+   *
+   * Ela trazia a arvore inteira para preencher um `<select>` no drawer de nova
+   * conta: numa base com vinte mil clientes ativos, sao vinte mil linhas no HTML
+   * para escolher uma. O drawer passou a perguntar ao servidor conforme se
+   * digita, como o da baixa ja fazia.
+   */
+  const { itens } = await listarFaturas(ctx.empresaId, {}, { page: 1, perPage: 100 });
 
   return (
     <FaturasTabela
       faturas={itens}
-      clientes={clientes.map((c) => ({ id: c.id, nome: c.nome }))}
       emitidoPor={usuarioNome ?? ""}
       visaoInicial={visao}
     />

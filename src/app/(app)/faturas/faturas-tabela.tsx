@@ -56,12 +56,10 @@ const PAGE_SIZE = 25;
 
 export function FaturasTabela({
   faturas,
-  clientes,
   emitidoPor,
   visaoInicial,
 }: {
   faturas: FaturaResumo[];
-  clientes: { id: number; nome: string }[];
   /** Quem assina o rodape dos documentos. */
   emitidoPor: string;
   /** Preferencia do usuario, lida no servidor para a tela ja nascer certa. */
@@ -264,7 +262,7 @@ export function FaturasTabela({
 
       <FaturaDrawer emitidoPor={emitidoPor} faturaId={detalhe} onClose={() => setDetalhe(null)} />
       {criando && (
-        <NovaFaturaDrawer clientes={clientes} onClose={() => setCriando(false)} />
+        <NovaFaturaDrawer onClose={() => setCriando(false)} />
       )}
     </PageLayout>
   );
