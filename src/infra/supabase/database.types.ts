@@ -843,6 +843,7 @@ export type PlanoRow = {
   modulo_crm: boolean | null;
   modulo_contratos: boolean | null;
   modulo_chat: boolean | null;
+  modulo_social: boolean | null;
   destaque: boolean | null;
   ordem: number | null;
 };

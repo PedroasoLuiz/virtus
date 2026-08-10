@@ -11,6 +11,6 @@ import { idParamSchema, renovarAcessoBodySchema } from "@/modules/insights/insig
  * repetir o gesto conta a conta.
  */
 export const PATCH = handler(
-  { body: renovarAcessoBodySchema, params: idParamSchema, requerModulo: "financeiro" },
+  { body: renovarAcessoBodySchema, params: idParamSchema, requerModulo: "social" },
   controller.renovarAcesso,
 );

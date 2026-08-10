@@ -7,7 +7,7 @@ import type {
   PaginaDisponivel,
   Periodo,
   PontoDaSerie,
-  Publicacao,
+  ResumoDePublicacoes,
 } from "@/modules/insights/insights.types";
 
 /**
@@ -39,10 +39,22 @@ import type {
 const VERSAO = "v26.0";
 const BASE = `https://graph.facebook.com/${VERSAO}`;
 
+/**
+ * ⚠️ Toda chamada tem TIMEOUT, e isto e requisito de servidor, nao capricho.
+ *
+ * Sem prazo, uma requisicao pendurada na Meta segura a funcao ate o limite da
+ * plataforma. Num painel que faz vinte chamadas, uma so travada consome a
+ * execucao inteira, e o usuario recebe o timeout da Vercel — que nao explica
+ * nada — em vez do aviso de que uma origem falhou. Com prazo, a origem lenta
+ * cai sozinha e o resto do painel responde.
+ */
+const PRAZO_MS = 12_000;
+
 async function pedir<T>(caminho: string, token: string): Promise<T> {
   const resposta = await fetch(`${BASE}${caminho}`, {
     headers: { Authorization: `Bearer ${token}` },
     cache: "no-store",
+    signal: AbortSignal.timeout(PRAZO_MS),
   });
 
   const corpo = await resposta.json().catch(() => null);
@@ -313,11 +325,11 @@ async function metricasDoPerfil(
   ]);
 
   return {
-    publicacoesDoPeriodo: await publicacoes,
+    publicacoes: await publicacoes,
     alcancePorDia,
     igUsername,
     seguidores: Math.round(perfil.followers_count ?? 0),
-    publicacoes: Math.round(perfil.media_count ?? 0),
+    publicacoesNoPerfil: Math.round(perfil.media_count ?? 0),
     ganhoNoPeriodo: ganhoPorDia.reduce((s, p) => s + p.valor, 0),
     alcanceNoPeriodo: alcancePorDia.reduce((s, p) => s + p.valor, 0),
     ganhoPorDia,
@@ -385,7 +397,7 @@ async function publicacoesDoPerfil(
   igUserId: string,
   token: string,
   periodo: Periodo,
-): Promise<Publicacao[]> {
+): Promise<ResumoDePublicacoes> {
   const corpo = await pedir<{ data?: LinhaDeMidia[] }>(
     `/${igUserId}/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink,` +
       `timestamp,like_count,comments_count` +
@@ -393,7 +405,7 @@ async function publicacoesDoPerfil(
     token,
   ).catch(() => ({ data: [] as LinhaDeMidia[] }));
 
-  return (corpo.data ?? [])
+  const todas = (corpo.data ?? [])
     .filter((m) => m.id && m.permalink)
     .map((m) => {
       const curtidas = Math.round(m.like_count ?? 0);
@@ -418,8 +430,23 @@ async function publicacoesDoPerfil(
         compartilhamentos: null,
       };
     })
-    .sort((a, b) => b.curtidas + b.comentarios - (a.curtidas + a.comentarios))
-    .slice(0, PUBLICACOES_NO_PAINEL);
+    .sort((a, b) => b.curtidas + b.comentarios - (a.curtidas + a.comentarios));
+
+  /*
+   * ⚠️ Os TOTAIS saem da lista inteira, e a grade recebe as seis primeiras.
+   *
+   * Antes so as seis voltavam, e a tela contava em cima delas: um perfil com
+   * quarenta publicacoes no mes anunciava "6 publicacoes no periodo", e as
+   * reacoes eram a soma das seis mais reagidas — sempre o teto, nunca o total.
+   * Os dois numeros iam para a reuniao errados, e nada na tela dizia que eram
+   * um recorte.
+   */
+  return {
+    quantidade: todas.length,
+    curtidas: todas.reduce((s, p) => s + p.curtidas, 0),
+    comentarios: todas.reduce((s, p) => s + p.comentarios, 0),
+    melhores: todas.slice(0, PUBLICACOES_NO_PAINEL),
+  };
 }
 
 type LinhaDePost = {
@@ -451,7 +478,7 @@ async function publicacoesDaPagina(
   pageId: string,
   token: string,
   periodo: Periodo,
-): Promise<Publicacao[]> {
+): Promise<ResumoDePublicacoes> {
   const corpo = await pedir<{ data?: LinhaDePost[] }>(
     `/${pageId}/posts?fields=id,message,created_time,permalink_url,full_picture,shares,` +
       `attachments{media_type},reactions.summary(total_count).limit(0),` +
@@ -460,7 +487,7 @@ async function publicacoesDaPagina(
     token,
   ).catch(() => ({ data: [] as LinhaDePost[] }));
 
-  return (corpo.data ?? [])
+  const todas = (corpo.data ?? [])
     .filter((p) => p.id && p.permalink_url)
     .map((p) => {
       const midia = p.attachments?.data?.[0]?.media_type;
@@ -490,8 +517,15 @@ async function publicacoesDaPagina(
         b.comentarios +
         (b.compartilhamentos ?? 0) -
         (a.curtidas + a.comentarios + (a.compartilhamentos ?? 0)),
-    )
-    .slice(0, PUBLICACOES_NO_PAINEL);
+    );
+
+  // ⚠️ Totais sobre a lista inteira, grade com as seis. Ver o lado do perfil.
+  return {
+    quantidade: todas.length,
+    curtidas: todas.reduce((s, p) => s + p.curtidas, 0),
+    comentarios: todas.reduce((s, p) => s + p.comentarios, 0),
+    melhores: todas.slice(0, PUBLICACOES_NO_PAINEL),
+  };
 }
 
 /**

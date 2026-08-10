@@ -9,6 +9,6 @@ import { paginasDisponiveisBodySchema } from "@/modules/insights/insights.schema
  * token pode vir no corpo, e credencial nao viaja em URL.
  */
 export const POST = handler(
-  { body: paginasDisponiveisBodySchema, requerModulo: "financeiro" },
+  { body: paginasDisponiveisBodySchema, requerModulo: "social" },
   controller.paginasDisponiveis,
 );

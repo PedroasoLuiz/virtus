@@ -134,12 +134,20 @@ function somarFamilias(
  * função de requisição para atender esse formato duplicaria o tratamento de erro
  * — que é onde mora a regra de nunca vazar o token.
  */
+/**
+ * ⚠️ Toda chamada tem TIMEOUT. Sem prazo, uma requisicao pendurada na Meta
+ * segura a funcao ate o limite da plataforma, e num painel que faz vinte
+ * chamadas uma so travada consome a execucao inteira.
+ */
+const PRAZO_MS = 12_000;
+
 async function pedirBruto<T>(caminho: string, token: string): Promise<T> {
   const resposta = await fetch(`${BASE}${caminho}`, {
     headers: { Authorization: `Bearer ${token}` },
     // ⚠️ Sem cache do Next: a resposta depende do token, e um cache
     // compartilhado serviria dado de uma conta para outra.
     cache: "no-store",
+    signal: AbortSignal.timeout(PRAZO_MS),
   });
 
   const corpo = await resposta.json().catch(() => null);
@@ -179,7 +187,11 @@ function janela(periodo: Periodo): string {
 export async function contasDoToken(token: string): Promise<ContaDisponivel[]> {
   const resposta = await fetch(
     `${BASE}/me/adaccounts?fields=id,name,account_status,currency&limit=200`,
-    { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" },
+    {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+      signal: AbortSignal.timeout(PRAZO_MS),
+    },
   );
 
   const corpo = await resposta.json().catch(() => null);
@@ -473,11 +485,13 @@ export async function anunciosDaConta(
   const melhores = (corpo.data ?? [])
     .filter((l) => l.ad_id)
     .map((l) => {
+      const porFamilia = contarPorFamilia(l.actions);
+
       const fechado = fecharResumo(
         paraCentavos(l.spend),
         paraInteiro(l.impressions),
         paraInteiro(l.clicks),
-        contarPorFamilia(l.actions),
+        porFamilia,
       );
 
       return {
@@ -491,6 +505,7 @@ export async function anunciosDaConta(
         cliques: fechado.cliques,
         resultados: fechado.resultados,
         ctr: fechado.ctr,
+        porFamilia,
       };
     })
     .sort((a, b) => b.investido - a.investido)

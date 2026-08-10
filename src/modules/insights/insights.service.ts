@@ -18,6 +18,7 @@ import {
   type ChaveDeCliente,
   type FamiliaDeResultado,
 } from "@/shared/domain/insights";
+import { diffEmDias } from "@/shared/utils/datas";
 import type { Centavos } from "@/shared/utils/money";
 import type {
   Acesso,
@@ -33,6 +34,9 @@ import type {
 } from "@/modules/insights/insights.types";
 
 /** Regra de negocio do painel de anuncios. */
+
+/** Ate onde a Meta guarda insight de Pagina. Ver `painelDoCliente`. */
+const DIAS_NO_MAXIMO = 730;
 
 export async function listarConexoes(empresaId: number): Promise<Conexao[]> {
   return repo.listar(empresaId);
@@ -287,6 +291,26 @@ export async function painelDoCliente(
     throw new BusinessRuleError("O fim do período não pode ser antes do início");
   }
 
+  /*
+   * ⚠️ TETO no tamanho do periodo, e o motivo nao e a tela: e custo e disponi-
+   * bilidade.
+   *
+   * O periodo vem da URL e nada o limitava. Os insights de Pagina sao fatiados
+   * em janelas de 90 dias, entao pedir dez anos vira mais de quarenta janelas
+   * vezes tres metricas, mais as chamadas de anuncio, tudo numa requisicao. Um
+   * unico usuario com a URL na mao — ou um laco distraido — multiplicava por
+   * cem as chamadas a uma API de terceiro que tem cota, e derrubava o painel de
+   * TODAS as empresas quando a cota estourasse.
+   *
+   * Dois anos e o limite util de verdade: e ate onde a Meta guarda insight de
+   * Pagina.
+   */
+  if (diffEmDias(periodo.de, periodo.ate) > DIAS_NO_MAXIMO) {
+    throw new BusinessRuleError(
+      "O período não pode passar de 2 anos, que é o limite do que a Meta guarda",
+    );
+  }
+
   return painelComCache(empresaId, chaveEmTexto(chave), periodo.de, periodo.ate, () =>
     montarPainelDoCliente(empresaId, chave, periodo),
   );
@@ -339,7 +363,15 @@ async function montarPainelDoCliente(
     return conexao.nome ?? conexao.adAccountId;
   }
 
-  const anuncios = await Promise.all(
+  /*
+   * ⚠️ Os anuncios e a Pagina saem JUNTOS, e nao um depois do outro.
+   *
+   * A Pagina esperava a rodada inteira de anuncios terminar para so entao
+   * comecar a dela: com uma conta de anuncio, isso somava a latencia das duas
+   * origens em vez de pagar a maior das duas. Sao APIs diferentes, com tokens
+   * diferentes, e nenhuma depende do resultado da outra.
+   */
+  const buscaDosAnuncios = Promise.all(
     minhasContas.map(async (conexao) => {
       const token = await tokenDoAcesso(conexao.acessoId);
       if (!token) {
@@ -364,6 +396,47 @@ async function montarPainelDoCliente(
       }
     }),
   );
+
+  /*
+   * ⚠️ A PRIMEIRA Pagina ativa do cliente, e as demais entram em `falhas`.
+   * Somar duas Paginas daria um numero de fas sem dono, e escolher em silencio
+   * esconderia que existe outra. Ninguem tem duas hoje; quando tiver, a tela
+   * avisa em vez de mentir.
+   */
+  const pagina = minhasPaginas[0] ?? null;
+
+  const buscaDaPagina = (async () => {
+    if (!pagina) return null;
+
+    const token = await tokenDoAcesso(pagina.acessoId);
+    if (!token) {
+      falhas.push("Não foi possível ler o token da Página. Renove o acesso.");
+      return null;
+    }
+
+    try {
+      return await painelDaPagina(
+        pagina.pageId,
+        pagina.igUserId,
+        pagina.igUsername,
+        token,
+        periodo,
+      );
+    } catch (e) {
+      const detalhe = e instanceof Error ? e.message : "erro desconhecido";
+      falhas.push(`${pagina.nome ?? pagina.pageId}: ${detalhe}`);
+      return null;
+    }
+  })();
+
+  const [anuncios, dadosDaPagina] = await Promise.all([buscaDosAnuncios, buscaDaPagina]);
+
+  for (const extra of minhasPaginas.slice(1)) {
+    falhas.push(`A Página ${extra.nome ?? extra.pageId} não está no painel: o cliente tem mais de uma.`);
+  }
+
+  const metricasPagina = dadosDaPagina?.pagina ?? null;
+  const metricasPerfil = dadosDaPagina?.perfil ?? null;
 
   const vivos = anuncios.filter((a) => a != null);
 
@@ -397,8 +470,24 @@ async function montarPainelDoCliente(
           }, {}),
         );
 
+  const familiaDoCliente = resumo?.familiaDeResultado ?? null;
+
+  /*
+   * ⚠️ A coluna "Resultados" da tabela conta a MESMA familia em todas as linhas.
+   *
+   * Cada campanha vinha com a familia dominante DELA: numa conta com campanha de
+   * venda e campanha de engajamento, a coluna tinha compras numa linha e
+   * engajamentos na outra, com o mesmo cabecalho e sem nada avisando. Somar
+   * aquela coluna dava um numero de unidade nenhuma, e comparar duas linhas
+   * comparava coisas diferentes. Agora todas contam o que o cartao do topo
+   * conta, e zero na linha quer dizer "esta campanha nao entregou disso".
+   */
   const campanhas: CampanhaDoPeriodo[] = vivos
     .flatMap((a) => a.campanhas)
+    .map((c) => ({
+      ...c,
+      resultados: familiaDoCliente == null ? 0 : (c.porFamilia[familiaDoCliente] ?? 0),
+    }))
     .sort((a, b) => b.investido - a.investido);
 
   /*
@@ -412,13 +501,11 @@ async function montarPainelDoCliente(
    * nenhuma. Recortando pelas campanhas que produziram a familia, o custo passa
    * a descrever o que aconteceu de fato.
    */
-  const familia = resumo?.familiaDeResultado ?? null;
-
   const investidoDoResultado = (
-    familia == null
+    familiaDoCliente == null
       ? (resumo?.investido ?? 0)
       : campanhas
-          .filter((c) => (c.porFamilia[familia] ?? 0) > 0)
+          .filter((c) => (c.porFamilia[familiaDoCliente] ?? 0) > 0)
           .reduce((s, c) => s + c.investido, 0)
   ) as Centavos;
 
@@ -446,43 +533,6 @@ async function montarPainelDoCliente(
     .flatMap((a) => a.anuncios)
     .sort((a, b) => b.investido - a.investido)
     .slice(0, 6);
-
-  /*
-   * ⚠️ A PRIMEIRA Pagina ativa do cliente, e as demais entram em `falhas`.
-   * Somar duas Paginas daria um numero de fas sem dono, e escolher em silencio
-   * esconderia que existe outra. Ninguem tem duas hoje; quando tiver, a tela
-   * avisa em vez de mentir.
-   */
-  const pagina = minhasPaginas[0] ?? null;
-  for (const extra of minhasPaginas.slice(1)) {
-    falhas.push(`A Página ${extra.nome ?? extra.pageId} não está no painel: o cliente tem mais de uma.`);
-  }
-
-  let metricasPagina = null;
-  let metricasPerfil = null;
-
-  if (pagina) {
-    const token = await tokenDoAcesso(pagina.acessoId);
-
-    if (!token) {
-      falhas.push("Não foi possível ler o token da Página. Renove o acesso.");
-    } else {
-      try {
-        const dados = await painelDaPagina(
-          pagina.pageId,
-          pagina.igUserId,
-          pagina.igUsername,
-          token,
-          periodo,
-        );
-        metricasPagina = dados.pagina;
-        metricasPerfil = dados.perfil;
-      } catch (e) {
-        const detalhe = e instanceof Error ? e.message : "erro desconhecido";
-        falhas.push(`${pagina.nome ?? pagina.pageId}: ${detalhe}`);
-      }
-    }
-  }
 
   return {
     cliente: { chave: chaveEmTexto(alvo.chave), nome: alvo.nome },

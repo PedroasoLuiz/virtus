@@ -18,7 +18,7 @@ export const PATCH = handler(
   {
     body: atualizarConexaoBodySchema,
     params: idParamSchema,
-    requerModulo: "financeiro",
+    requerModulo: "social",
   },
   controller.atualizar,
 );

@@ -13,6 +13,6 @@ import { painelQuerySchema } from "@/modules/insights/insights.schema";
  * do token, e um cache compartilhado serviria dado de um cliente para outro.
  */
 export const GET = handler(
-  { query: painelQuerySchema, requerModulo: "financeiro" },
+  { query: painelQuerySchema, requerModulo: "social" },
   controller.painel,
 );

@@ -10,6 +10,6 @@ import { contasDisponiveisBodySchema } from "@/modules/insights/insights.schema"
  * Credencial nao viaja em URL, mesmo em consulta.
  */
 export const POST = handler(
-  { body: contasDisponiveisBodySchema, requerModulo: "financeiro" },
+  { body: contasDisponiveisBodySchema, requerModulo: "social" },
   controller.contasDisponiveis,
 );

@@ -182,7 +182,7 @@ export type MetricasDaPagina = {
    * publicacao, e nao espelho: reaproveitar a outra lista apresentaria como
    * publicacao do Facebook coisas que talvez nunca tenham saido la.
    */
-  publicacoes: Publicacao[];
+  publicacoes: ResumoDePublicacoes;
 };
 
 /**
@@ -227,6 +227,23 @@ export type AnuncioDoPeriodo = {
   cliques: number;
   resultados: number;
   ctr: number;
+  /** Mesma razao da campanha: a grade conta a familia do CLIENTE, nao a do anuncio. */
+  porFamilia: Partial<Record<FamiliaDeResultado, number>>;
+};
+
+/**
+ * As publicacoes de um periodo: os totais de TODAS, e as seis da grade.
+ *
+ * ⚠️ Os dois vem juntos de proposito. A grade mostra seis; a contagem e as
+ * reacoes falam do periodo inteiro. Devolvendo so as seis, a tela contava em
+ * cima delas e anunciava "6 publicacoes" num mes com quarenta.
+ */
+export type ResumoDePublicacoes = {
+  quantidade: number;
+  curtidas: number;
+  comentarios: number;
+  /** As mais reagidas, para a grade. */
+  melhores: Publicacao[];
 };
 
 /** As metricas do perfil do Instagram daquela Pagina. */
@@ -234,7 +251,14 @@ export type MetricasDoPerfil = {
   igUsername: string | null;
   /** O total AGORA. E um retrato: a Meta nao guarda o total de dias passados. */
   seguidores: number;
-  publicacoes: number;
+  /**
+   * Quantas publicacoes o perfil tem AO TODO, e nao no periodo.
+   *
+   * ⚠️ Nome diferente do `publicacoes` logo abaixo de proposito: aquele e o
+   * recorte do periodo. Com o mesmo nome, os dois numeros se confundiam na tela
+   * e ninguem sabia qual estava lendo.
+   */
+  publicacoesNoPerfil: number;
   ganhoNoPeriodo: number;
   alcanceNoPeriodo: number;
   ganhoPorDia: PontoDaSerie[];
@@ -242,8 +266,8 @@ export type MetricasDoPerfil = {
   alcancePorDia: PontoDaSerie[];
   /** Se a Meta devolveu menos dias que o pedido, por causa da janela curta. */
   serieCortada: boolean;
-  /** As mais reagidas do periodo, e nao as mais recentes. */
-  publicacoesDoPeriodo: Publicacao[];
+  /** Os totais do periodo e as mais reagidas para a grade. */
+  publicacoes: ResumoDePublicacoes;
 };
 
 /**

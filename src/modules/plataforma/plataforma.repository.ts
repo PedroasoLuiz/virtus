@@ -18,7 +18,7 @@ import {
 // String literal unica de proposito: o supabase-js infere o tipo do resultado a
 // partir do texto do select, e concatenar com `+` derruba essa inferencia.
 const COLUNAS_PLANO =
-  "id, nome, descricao, ativo, preco_mensal, preco_anual, destaque, ordem, max_usuarios, max_empresas, max_clientes, max_faturas_mes, max_os_mes, max_storage_mb, modulo_financeiro, modulo_os, modulo_manutencao, modulo_estoque, modulo_crm, modulo_contratos, modulo_chat";
+  "id, nome, descricao, ativo, preco_mensal, preco_anual, destaque, ordem, max_usuarios, max_empresas, max_clientes, max_faturas_mes, max_os_mes, max_storage_mb, modulo_financeiro, modulo_os, modulo_manutencao, modulo_estoque, modulo_crm, modulo_contratos, modulo_chat, modulo_social";
 
 const COLUNAS_ASSINATURA =
   "id, fkEmpresa, fkPlano, status, periodicidade, inicio, fim, trial_fim, cancelada_em";

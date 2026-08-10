@@ -12,9 +12,9 @@ import { conectarContasBodySchema } from "@/modules/insights/insights.schema";
  * gravaria o segredo N vezes, que era o modelo antigo e fazia a renovacao
  * alcancar so uma delas.
  */
-export const GET = handler({ requerModulo: "financeiro" }, controller.listar);
+export const GET = handler({ requerModulo: "social" }, controller.listar);
 
 export const POST = handler(
-  { body: conectarContasBodySchema, requerModulo: "financeiro" },
+  { body: conectarContasBodySchema, requerModulo: "social" },
   controller.conectarContas,
 );

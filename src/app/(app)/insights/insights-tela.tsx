@@ -1110,14 +1110,6 @@ function BlocoDeInstagram({ painel }: { painel: PainelDoCliente }) {
     return base > 0 ? (perfil.ganhoNoPeriodo / base) * 100 : null;
   }, [perfil]);
 
-  const reacoes = useMemo(() => {
-    const posts = perfil?.publicacoesDoPeriodo ?? [];
-    return {
-      curtidas: posts.reduce((s, p) => s + p.curtidas, 0),
-      comentarios: posts.reduce((s, p) => s + p.comentarios, 0),
-    };
-  }, [perfil]);
-
   return (
     <Bloco>
       {perfil == null ? (
@@ -1146,33 +1138,47 @@ function BlocoDeInstagram({ painel }: { painel: PainelDoCliente }) {
                 },
                 {
                   rotulo: "Publicações no perfil",
-                  valor: inteiro(perfil.publicacoes),
+                  valor: inteiro(perfil.publicacoesNoPerfil),
                   ajuda: GLOSSARIO.publicacoes,
                 },
               ]}
             />
 
             <CartaoDeIndicador
-              label="Alcance no período"
+              /*
+               * ⚠️ "por dia", igual ao lado do Facebook, e não "no período".
+               *
+               * É a SOMA do alcance de cada dia, e não pessoas distintas: quem
+               * viu na segunda e na terça conta duas vezes. O Facebook já dizia
+               * isso e o Instagram não, com o mesmo tipo de número: dois rótulos
+               * diferentes para a mesma conta faziam parecer que um deles era
+               * único e o outro não.
+               */
+              label="Alcance por dia"
               valor={inteiro(perfil.alcanceNoPeriodo)}
               icone={<IconeOnda />}
               ajuda={GLOSSARIO.alcancePerfil}
               linhas={[
                 {
+                  /*
+                   * ⚠️ Vem do TOTAL do período, e não do tamanho da grade. A
+                   * grade mostra seis; contar em cima dela anunciava "6
+                   * publicações" num mês com quarenta.
+                   */
                   rotulo: "Publicações no período",
-                  valor: inteiro(perfil.publicacoesDoPeriodo.length),
+                  valor: inteiro(perfil.publicacoes.quantidade),
                 },
               ]}
             />
 
             <CartaoDeIndicador
               label="Reações no período"
-              valor={inteiro(reacoes.curtidas + reacoes.comentarios)}
+              valor={inteiro(perfil.publicacoes.curtidas + perfil.publicacoes.comentarios)}
               icone={<IconeCoracao />}
               ajuda={GLOSSARIO.reacoes}
               linhas={[
-                { rotulo: "Curtidas", valor: inteiro(reacoes.curtidas) },
-                { rotulo: "Comentários", valor: inteiro(reacoes.comentarios) },
+                { rotulo: "Curtidas", valor: inteiro(perfil.publicacoes.curtidas) },
+                { rotulo: "Comentários", valor: inteiro(perfil.publicacoes.comentarios) },
               ]}
             />
           </FaixaDeCartoes>
@@ -1216,7 +1222,7 @@ function BlocoDeInstagram({ painel }: { painel: PainelDoCliente }) {
 
           <Rolavel>
             <Publicacoes
-              lista={perfil.publicacoesDoPeriodo}
+              lista={perfil.publicacoes.melhores}
               vazio="Nenhuma publicação no Instagram neste período"
             />
           </Rolavel>
@@ -1716,7 +1722,7 @@ function BlocoDaPagina({ painel }: { painel: PainelDoCliente }) {
       */}
       <Rolavel>
         <Publicacoes
-          lista={pagina.publicacoes}
+          lista={pagina.publicacoes.melhores}
           vazio="Nenhuma publicação na Página neste período"
         />
       </Rolavel>

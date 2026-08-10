@@ -23,6 +23,7 @@ export const MODULOS = [
   "crm",
   "contratos",
   "chat",
+  "social",
 ] as const;
 
 export type Modulo = (typeof MODULOS)[number];
@@ -36,9 +37,11 @@ export const COLUNA_DO_MODULO: Record<Modulo, string> = {
   crm: "modulo_crm",
   contratos: "modulo_contratos",
   chat: "modulo_chat",
+  social: "modulo_social",
 };
 
 export const ROTULO_DO_MODULO: Record<Modulo, string> = {
+  social: "Social",
   financeiro: "Financeiro",
   os: "Ordens de serviço",
   manutencao: "Manutenção",

@@ -115,6 +115,13 @@ const publicacaoSchema = z.object({
   compartilhamentos: z.number().nullable(),
 });
 
+const resumoDePublicacoesSchema = z.object({
+  quantidade: z.number(),
+  curtidas: z.number(),
+  comentarios: z.number(),
+  melhores: z.array(publicacaoSchema),
+});
+
 export const painelDoClienteSchema = z.object({
   cliente: z.object({ chave: z.string(), nome: z.string() }),
   periodo: z.object({ de: z.string(), ate: z.string() }),
@@ -171,6 +178,7 @@ export const painelDoClienteSchema = z.object({
       cliques: z.number(),
       resultados: z.number(),
       ctr: z.number(),
+      porFamilia: z.record(z.string(), z.number()),
     }),
   ),
   paginaNome: z.string().nullable(),
@@ -183,20 +191,20 @@ export const painelDoClienteSchema = z.object({
       alcancePorDia: serieSchema,
       visualizacoesPorDia: serieSchema,
       engajamentoPorDia: serieSchema,
-      publicacoes: z.array(publicacaoSchema),
+      publicacoes: resumoDePublicacoesSchema,
     })
     .nullable(),
   perfil: z
     .object({
       igUsername: z.string().nullable(),
       seguidores: z.number(),
-      publicacoes: z.number(),
+      publicacoesNoPerfil: z.number(),
+      publicacoes: resumoDePublicacoesSchema,
       ganhoNoPeriodo: z.number(),
       alcanceNoPeriodo: z.number(),
       ganhoPorDia: serieSchema,
       alcancePorDia: serieSchema,
       serieCortada: z.boolean(),
-      publicacoesDoPeriodo: z.array(publicacaoSchema),
     })
     .nullable(),
   falhas: z.array(z.string()),

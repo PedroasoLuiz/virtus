@@ -28,6 +28,48 @@ export function ehSubgrupo(filho: Filho): filho is Subgrupo {
  * cada modulo traz seus grupos.
  */
 export const GRUPOS_POR_MODULO: Partial<Record<Modulo, Grupo[]>> = {
+  /*
+   * ⚠️ Social e MODULO PROPRIO, e nao um grupo dentro do financeiro.
+   *
+   * Morando no financeiro, ele era vendido junto: quem nao tinha financeiro
+   * ficava sem Social, e quem tinha ganhava Social de graca. Num SaaS isso nao e
+   * detalhe de organizacao, e sim o que a empresa consegue ou nao cobrar — e o
+   * Insights consome API de terceiro, entao ele tem custo por uso.
+   */
+  social: [
+    {
+      /*
+       * Social fica no fim: nao participa do fluxo do dinheiro, e sim mostra o
+       * resultado da midia que o cliente paga. E consulta, e nao operacao.
+       *
+       * ⚠️ A rede e o NIVEL DO MEIO, e o assunto vem embaixo dela. Meta,
+       * TikTok e Google nao compartilham metrica, permissao nem token: cada uma
+       * e um bloco fechado. Agrupando por assunto ("Insights" no topo, com as
+       * redes dentro), a proxima rede teria de se espalhar por varios itens em
+       * vez de nascer como um so.
+       */
+      key: "social",
+      label: "Social",
+      icon: "social",
+      items: [
+        {
+          key: "social-meta",
+          label: "Meta",
+          /*
+           * ⚠️ Uma entrada so, e o painel dentro dela e por CLIENTE.
+           *
+           * Antes eram "Anuncios" e "Perfis", separados porque sao APIs,
+           * permissoes e tokens diferentes. Isso e verdade para quem escreve o
+           * codigo e falso para quem apresenta o resultado: falar de um cliente
+           * exigia abrir as duas telas e somar de cabeca. A falha de uma origem
+           * nao contamina a outra porque o painel diz o que faltou, em vez de
+           * uma tarja de erro cobrindo tudo.
+           */
+          items: [{ label: "Painel", href: "/insights" }],
+        },
+      ],
+    }
+  ],
   financeiro: [
     {
       // Ticket e a origem do fluxo: orcamento nasce nele e vira conta a
@@ -131,38 +173,6 @@ export const GRUPOS_POR_MODULO: Partial<Record<Modulo, Grupo[]>> = {
             { label: "Fluxo de caixa", href: "/fluxo-caixa" },
             { label: "Relatórios", href: "/relatorios" },
           ],
-        },
-      ],
-    },
-    {
-      /*
-       * Social fica no fim: nao participa do fluxo do dinheiro, e sim mostra o
-       * resultado da midia que o cliente paga. E consulta, e nao operacao.
-       *
-       * ⚠️ A rede e o NIVEL DO MEIO, e o assunto vem embaixo dela. Meta,
-       * TikTok e Google nao compartilham metrica, permissao nem token: cada uma
-       * e um bloco fechado. Agrupando por assunto ("Insights" no topo, com as
-       * redes dentro), a proxima rede teria de se espalhar por varios itens em
-       * vez de nascer como um so.
-       */
-      key: "social",
-      label: "Social",
-      icon: "social",
-      items: [
-        {
-          key: "social-meta",
-          label: "Meta",
-          /*
-           * ⚠️ Uma entrada so, e o painel dentro dela e por CLIENTE.
-           *
-           * Antes eram "Anuncios" e "Perfis", separados porque sao APIs,
-           * permissoes e tokens diferentes. Isso e verdade para quem escreve o
-           * codigo e falso para quem apresenta o resultado: falar de um cliente
-           * exigia abrir as duas telas e somar de cabeca. A falha de uma origem
-           * nao contamina a outra porque o painel diz o que faltou, em vez de
-           * uma tarja de erro cobrindo tudo.
-           */
-          items: [{ label: "Painel", href: "/insights" }],
         },
       ],
     },
