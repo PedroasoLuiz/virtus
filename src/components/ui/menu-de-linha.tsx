@@ -25,6 +25,10 @@ const MOLDURA_DE_ACAO: React.CSSProperties = {
 /**
  * O menu de acoes de uma linha da tabela do drawer.
  *
+ * Mora no kit porque os dois lados do caixa usam: a parcela a receber e a
+ * parcela a pagar fazem o mesmo gesto na mesma moldura. Escrito duas vezes, o
+ * portal e a medida do cartao ja teriam divergido.
+ *
  * ⚠️ Menu, e nao botoes soltos como na listagem de pessoas. Ali cada linha tem
  * uma acao; aqui a parcela tem cinco — baixar, prorrogar, recibo, anexar, tirar
  * a baixa —, e cinco icones por linha viram uma barra de ferramentas em cada

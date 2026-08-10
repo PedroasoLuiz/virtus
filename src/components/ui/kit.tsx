@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 /**
  * Kit de composicao de pagina.
@@ -70,7 +71,21 @@ export function Panel({ children }: { children: React.ReactNode }) {
  * tabela ali aparecia afastada da borda sem nada que justificasse o vao. Quem
  * poe o cartao poe o recuo.
  */
-export function TableFrame({ children }: { children: React.ReactNode }) {
+export function TableFrame({
+  children,
+  solto = false,
+}: {
+  children: React.ReactNode;
+  /**
+   * Sem a margem lateral, para quem ja esta dentro de uma coluna recuada.
+   *
+   * ⚠️ Existe por causa da tela que ROLA como documento (Insights), onde a
+   * tabela e uma peca no meio de cartoes e graficos. La o recuo ja vem da
+   * coluna, e a margem daqui empurraria so a tabela mais 16 para dentro,
+   * desalinhando-a de tudo que esta acima dela.
+   */
+  solto?: boolean;
+}) {
   return (
     <div
       style={{
@@ -78,7 +93,7 @@ export function TableFrame({ children }: { children: React.ReactNode }) {
         display: "flex",
         flexDirection: "column",
         minHeight: 0,
-        margin: "0 16px 16px",
+        margin: solto ? 0 : "0 16px 16px",
         padding: "0 16px",
         backgroundColor: "var(--surface)",
         borderRadius: "var(--radius-lg)",
@@ -498,6 +513,7 @@ export function BotaoDeAcao({
   desabilitado,
   perigo,
   destaque,
+  confirmar,
   children,
 }: {
   /** Vai no `title` e no `aria-label`: icone sozinho nao se le. */
@@ -513,6 +529,24 @@ export function BotaoDeAcao({
    * ele passaria a chamar mais atencao que a propria linha da tabela.
    */
   destaque?: boolean;
+  /**
+   * Preenchido no verde da MARCA: o botao que CONFIRMA uma edicao.
+   *
+   * ⚠️ `--primary`, e nao `--success`. Aquele e o verde de ESTADO — o das
+   * pastilhas e dos alertas, que diz "deu certo" sobre algo que ja aconteceu.
+   * Aqui o verde e o da acao, a mesma cor do botao primario do sistema. Usar o
+   * de estado faria o botao anunciar um sucesso antes de o clique existir.
+   *
+   * O texto sai em `--primary-fg`, que tem token proprio justamente porque no
+   * tema escuro ele nao e branco.
+   *
+   * ⚠️ Isto nao contradiz o aviso do `destaque` acima. Aquele fala de acao de
+   * APOIO, que nao deve competir com a linha; confirmar uma edicao aberta e o
+   * oposto — e a acao principal daquele momento, e a unica que encerra o estado
+   * em que a tabela esta. Vazado, ele fica igual ao cancelar ao lado, e o gesto
+   * que grava passa a ter o mesmo peso do que descarta.
+   */
+  confirmar?: boolean;
   /** Os tracos do icone, na grade de 16. */
   children: React.ReactNode;
 }) {
@@ -537,17 +571,29 @@ export function BotaoDeAcao({
         width: 26,
         height: 26,
         flexShrink: 0,
-        border: "1px solid var(--border)",
+        border:
+          confirmar && !desabilitado
+            ? "1px solid var(--primary)"
+            : "1px solid var(--border)",
         borderRadius: "var(--radius-sm)",
-        background: hover && !desabilitado ? "var(--surface-2)" : "var(--surface)",
+        background:
+          confirmar && !desabilitado
+            ? hover
+              ? "var(--primary-hover)"
+              : "var(--primary)"
+            : hover && !desabilitado
+              ? "var(--surface-2)"
+              : "var(--surface)",
         padding: 0,
         color: desabilitado
           ? "var(--text-disabled)"
-          : perigo
-            ? "var(--danger)"
-            : destaque
-              ? "var(--primary)"
-              : "var(--text-secondary)",
+          : confirmar
+            ? "var(--primary-fg)"
+            : perigo
+              ? "var(--danger)"
+              : destaque
+                ? "var(--primary)"
+                : "var(--text-secondary)",
         cursor: desabilitado ? "not-allowed" : "pointer",
         transition: "background var(--dur) var(--ease)",
       }}
@@ -1265,10 +1311,35 @@ export function FilterButton({
   children,
   activeCount = 0,
   onClear,
+  rotulo,
+  onAplicar,
+  rotuloAplicar = "Filtrar",
 }: {
   children: React.ReactNode;
   activeCount?: number;
   onClear: () => void;
+  /**
+   * O recorte atual, escrito no proprio botao.
+   *
+   * ⚠️ Existe para o filtro cujo valor precisa ficar A VISTA. Num painel que se
+   * apresenta ao cliente, todo numero da tela so significa alguma coisa junto do
+   * periodo: escondido atras do icone, "investido 4.000" nao diz de quando. E o
+   * lugar certo de mostra-lo e o controle que o muda, nao uma legenda solta em
+   * outro canto que ninguem liga ao filtro.
+   */
+  rotulo?: string;
+  /**
+   * Aplicar por BOTAO, em vez de a cada tecla.
+   *
+   * ⚠️ Existe para o filtro cuja consulta e cara. Campo de data dispara `change`
+   * a cada digito, e num painel que consulta uma API de fora isso e uma rodada
+   * inteira por digito. Com o botao, quem preenche decide quando vale.
+   *
+   * ⚠️ So aparece quando e passado. Nas listagens que filtram na hora, um botao
+   * de aplicar seria um passo a mais para o que ja respondia sozinho.
+   */
+  onAplicar?: () => void;
+  rotuloAplicar?: string;
 }) {
   const [aberto, setAberto] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -1306,6 +1377,11 @@ export function FilterButton({
         <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
           <path d="M1.5 1.5A.5.5 0 0 1 2 1h12a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.128.334L10 8.692V13.5a.5.5 0 0 1-.342.474l-3 1A.5.5 0 0 1 6 14.5V8.692L1.628 3.834A.5.5 0 0 1 1.5 3.5v-2zm1 .5v1.308l4.372 4.858A.5.5 0 0 1 7 8.5v5.306l2-.666V8.5a.5.5 0 0 1 .128-.334L13.5 3.308V2h-11z" />
         </svg>
+        {rotulo && (
+          <span style={{ whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
+            {rotulo}
+          </span>
+        )}
         {ativo && (
           <span
             style={{
@@ -1335,48 +1411,99 @@ export function FilterButton({
             top: "calc(100% + 6px)",
             right: 0,
             zIndex: 300,
-            minWidth: 230,
+            minWidth: 264,
             backgroundColor: "var(--surface)",
-            border: "1px solid var(--border-strong)",
+            // Borda fina, e o relevo vem da sombra. `--border-strong` desenhava
+            // um contorno que competia com a propria caixa flutuando.
+            border: "1px solid var(--border)",
             borderRadius: "var(--radius-lg)",
             boxShadow: "var(--shadow-lg)",
             overflow: "hidden",
           }}
         >
-          <div style={{ padding: "8px 12px 6px", borderBottom: "1px solid var(--border)" }}>
-            <span
-              style={{
-                fontSize: 10,
-                fontWeight: 700,
-                color: "var(--text-tertiary)",
-                textTransform: "uppercase",
-                letterSpacing: "0.07em",
-              }}
-            >
-              Filtros
-            </span>
+          {/*
+            ⚠️ O titulo do painel some quando ha botao de aplicar.
+
+            "FILTROS" em caixa alta repetia o nome do botao que acabou de ser
+            clicado, e comia uma faixa inteira da caixa. Com o rodape de acoes, o
+            painel ja se explica pelo que faz.
+          */}
+          {!onAplicar && (
+            <div style={{ padding: "8px 12px 6px", borderBottom: "1px solid var(--border)" }}>
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  color: "var(--text-tertiary)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.07em",
+                }}
+              >
+                Filtros
+              </span>
+            </div>
+          )}
+
+          <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 14 }}>
+            {children}
           </div>
-          <div style={{ padding: "12px", display: "flex", flexDirection: "column", gap: 12 }}>{children}</div>
-          <div style={{ borderTop: "1px solid var(--border)", padding: "8px 12px" }}>
+
+          {/*
+            ⚠️ Duas acoes na MESMA linha, e a de aplicar a direita. Empilhadas em
+            largura cheia, "limpar" ficava do tamanho de uma acao principal, e a
+            mais destrutiva das duas era a unica visivel.
+          */}
+          <div
+            style={{
+              borderTop: "1px solid var(--border)",
+              padding: "10px 14px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 10,
+              background: "var(--surface-2)",
+            }}
+          >
             <button
               onClick={() => {
                 onClear();
-                setAberto(false);
+                if (!onAplicar) setAberto(false);
               }}
               style={{
-                width: "100%",
                 padding: "5px 0",
                 background: "none",
                 border: "none",
-                cursor: ativo ? "pointer" : "default",
+                cursor: "pointer",
                 fontSize: "var(--text-sm)",
-                color: ativo ? "var(--danger-text)" : "var(--text-disabled)",
+                color: "var(--text-secondary)",
                 fontFamily: "var(--font)",
                 fontWeight: 500,
               }}
             >
-              Limpar filtros
+              Limpar
             </button>
+
+            {onAplicar ? (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => {
+                  onAplicar();
+                  setAberto(false);
+                }}
+              >
+                {rotuloAplicar}
+              </Button>
+            ) : (
+              <span
+                style={{
+                  fontSize: "var(--text-sm)",
+                  color: ativo ? "var(--text-tertiary)" : "var(--text-disabled)",
+                }}
+              >
+                {ativo ? `${activeCount} ativo${activeCount > 1 ? "s" : ""}` : "Nenhum ativo"}
+              </span>
+            )}
           </div>
         </div>
       )}
@@ -1587,8 +1714,13 @@ export const inputStyle: React.CSSProperties = {
  * coluna que ele deveria alinhar — valor deixa de ficar embaixo de valor, que e a
  * unica coisa que uma tabela de dinheiro precisa fazer bem.
  *
- * O foco continua visivel pelo cursor e pelo realce do navegador; a borda entra
- * so quando o campo esta acusando erro, e ai ela e informacao.
+ * ⚠️ SO a linha de baixo, e PONTILHADA. Ela e o unico sinal de que ali se
+ * digita: sem nada, a celula editavel e a de leitura ficam identicas e a pessoa
+ * nao sabe onde clicar; com borda inteira, volta a caixa dentro da caixa. O
+ * pontilhado diz "campo" sem competir com as divisorias da tabela, que sao
+ * continuas.
+ *
+ * Vale para TODO campo editavel em tabela do sistema, e nao so para um.
  */
 export const inputDeCelula: React.CSSProperties = {
   ...inputStyle,
@@ -1596,6 +1728,7 @@ export const inputDeCelula: React.CSSProperties = {
   padding: 0,
   border: "none",
   borderRadius: 0,
+  borderBottom: "1px dashed var(--border-strong)",
   backgroundColor: "transparent",
 };
 
@@ -2354,11 +2487,21 @@ export function CampoBloqueado({
   valor,
   multilinha = false,
   titulo,
+  depois,
 }: {
   valor: string;
   multilinha?: boolean;
   /** Explicacao no hover. Para campo derivado, evita gastar uma linha de dica. */
   titulo?: string;
+  /**
+   * Um pedaco a mais DENTRO da mesma caixa, logo apos o valor.
+   *
+   * ⚠️ Serve para o campo que mostra "de quanto para quanto" sem virar outro
+   * componente: a caixa continua a mesma, do mesmo tamanho e com o mesmo cadeado,
+   * e so ganha um trecho ao lado. Trocando o campo por um `span` solto, ele
+   * perdia a moldura e o bloco inteiro pulava de altura ao entrar em edicao.
+   */
+  depois?: React.ReactNode;
 }) {
   // Altura e corpo de texto vem do `inputStyle`: ler e editar tem de ter o
   // mesmo tamanho, senao a linha salta ao entrar em edicao.
@@ -2385,6 +2528,44 @@ export function CampoBloqueado({
           style={{ ...base, height: "auto", minHeight: 60, padding: "6px 28px 6px 8px", resize: "none" }}
         />
         <span style={{ position: "absolute", right: 8, top: 8, display: "flex" }}>
+          <LockIcon />
+        </span>
+      </div>
+    );
+  }
+
+  /*
+   * Com `depois`, a caixa vira `div` em vez de `input`: um `input` nao tem
+   * filhos, e a alternativa seria dois campos lado a lado — que e exatamente a
+   * quebra de tamanho que este parametro existe para evitar. O estilo e o mesmo,
+   * entao o que se ve nao muda.
+   */
+  if (depois) {
+    return (
+      <div style={{ position: "relative" }}>
+        <div
+          title={titulo}
+          style={{
+            ...base,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+          }}
+        >
+          <span>{valor}</span>
+          {depois}
+        </div>
+        <span
+          style={{
+            position: "absolute",
+            right: 8,
+            top: "50%",
+            transform: "translateY(-50%)",
+            display: "flex",
+          }}
+        >
           <LockIcon />
         </span>
       </div>
@@ -2925,6 +3106,7 @@ export function SeletorBuscavel({
   autoFocus,
   desabilitado,
   sublinhado,
+  celula,
 }: {
   /** `null` quando nada foi escolhido ainda. */
   valor: number | null;
@@ -2943,6 +3125,14 @@ export function SeletorBuscavel({
    * moldura o transformava num segundo registro empilhado sob o primeiro.
    */
   sublinhado?: boolean;
+  /**
+   * Sem moldura nenhuma: nem borda, nem raio, nem recuo.
+   *
+   * ⚠️ Existe para o seletor que mora DENTRO de uma celula de tabela. Ali a
+   * moldura do campo briga com as divisorias da linha, e o resultado e uma grade
+   * dentro de outra. Mesma razao do `inputDeCelula`, e por isso reusa ele.
+   */
+  celula?: boolean;
 }) {
   const [termo, setTermo] = useState("");
   const [opcoes, setOpcoes] = useState<{ id: number; nome: string }[]>([]);
@@ -3031,17 +3221,19 @@ export function SeletorBuscavel({
           setAberto(true);
         }}
         style={
-          sublinhado
-            ? {
-                ...inputStyle,
-                padding: 0,
-                borderRadius: 0,
-                border: "none",
-                borderBottom: "1px solid var(--border)",
-                backgroundColor: "transparent",
-                fontSize: "var(--text-sm)",
-              }
-            : inputStyle
+          celula
+            ? inputDeCelula
+            : sublinhado
+              ? {
+                  ...inputStyle,
+                  padding: 0,
+                  borderRadius: 0,
+                  border: "none",
+                  borderBottom: "1px solid var(--border)",
+                  backgroundColor: "transparent",
+                  fontSize: "var(--text-sm)",
+                }
+              : inputStyle
         }
       />
 
@@ -3121,3 +3313,154 @@ function ItemDaBusca({ nome, onClick }: { nome: string; onClick: () => void }) {
   );
 }
 
+
+/**
+ * Conferido no extrato, ou ainda esperando.
+ *
+ * ⚠️ Icone, e nao a pastilha com "Sim" e "Pendente". A coluna e binaria e se le
+ * de relance varrendo a lista de cima a baixo; pastilha carrega uma palavra que
+ * muda de largura de linha para linha, e o olho passa a ler texto onde bastava
+ * distinguir duas formas. O relogio diz o que a pastilha "Pendente" dizia:
+ * ninguem conferiu ainda.
+ *
+ * Mora no kit porque as duas listagens de baixa — a que recebe e a que paga —
+ * fazem a mesma pergunta sobre o mesmo campo. Escrita duas vezes, ela ja teria
+ * dois amarelos.
+ */
+export function MarcaDeConciliacao({ conciliado }: { conciliado: boolean }) {
+  const rotulo = conciliado
+    ? "Conferido no extrato do banco"
+    : "Ainda não conferido no extrato. Conciliar é gesto humano: nada no sistema marca sozinho.";
+
+  return (
+    <span
+      title={rotulo}
+      aria-label={rotulo}
+      style={{
+        display: "inline-flex",
+        // O amarelo solido, e nao o `--warning`: aquele e ambar escuro,
+        // calibrado para ler como TEXTO, e some quando vira um traco de 15px.
+        color: conciliado ? "var(--success)" : "var(--warning-solido)",
+      }}
+    >
+      {conciliado ? (
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
+          {/* Preenchido, e nao contornado: cheio, o certo fecha a pergunta. */}
+          <circle cx="8" cy="8" r="7" />
+          <path
+            d="M4.8 8.2l2.1 2.1 4.2-4.2"
+            fill="none"
+            stroke="var(--surface)"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      ) : (
+        <svg
+          width="15"
+          height="15"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          {/* Vazado de proposito: o que falta nao pode ter o mesmo peso do que
+              ja foi resolvido, senao as duas marcas competem na mesma coluna. */}
+          <circle cx="8" cy="8" r="6.4" />
+          <path d="M8 4.6V8l2.2 1.6" />
+        </svg>
+      )}
+    </span>
+  );
+}
+
+/**
+ * Um cartao que aparece ao passar o mouse, com o texto que nao coube.
+ *
+ * ⚠️ Existe porque `title` nativo nao serve aqui: ele demora quase um segundo,
+ * some sozinho, nao aceita quebra de linha e nao pode ser estilizado. Para um
+ * texto que a coluna cortou, o que se quer e ler agora e inteiro.
+ *
+ * ⚠️ O cartao sai do fluxo por PORTAL, preso na tela e nao na celula. A tabela
+ * do sistema rola dentro de si (`overflow: auto`) e recorta tudo que e
+ * posicionado dentro dela: na ultima linha o cartao simplesmente sumia. Mesma
+ * razao do `MenuDeLinha`.
+ */
+export function DicaFlutuante({
+  texto,
+  children,
+}: {
+  texto: string | null;
+  children: React.ReactNode;
+}) {
+  const [onde, setOnde] = useState<{ top: number; left: number } | null>(null);
+  const alvo = useRef<HTMLSpanElement>(null);
+
+  if (!texto) return <>{children}</>;
+
+  function abrir() {
+    if (!alvo.current) return;
+    const r = alvo.current.getBoundingClientRect();
+    setOnde({ top: r.bottom + 6, left: r.left });
+  }
+
+  return (
+    <span
+      ref={alvo}
+      onMouseEnter={abrir}
+      onMouseLeave={() => setOnde(null)}
+      style={{ display: "inline-flex" }}
+    >
+      {children}
+
+      {onde &&
+        createPortal(
+          <div
+            style={{
+              position: "fixed",
+              top: onde.top,
+              left: onde.left,
+              zIndex: 441,
+              maxWidth: 280,
+              padding: "8px 10px",
+              borderRadius: "var(--radius-md)",
+              border: "1px solid var(--border)",
+              background: "var(--surface)",
+              boxShadow: "var(--shadow-md)",
+              fontSize: "var(--text-sm)",
+              color: "var(--text-primary)",
+              lineHeight: 1.4,
+              // O cartao nao recebe mouse: entrando nele, o `mouseleave` do alvo
+              // dispararia e ele piscaria sem parar.
+              pointerEvents: "none",
+            }}
+          >
+            {texto}
+          </div>,
+          document.body,
+        )}
+    </span>
+  );
+}
+
+/** O "i" que abre a dica. Contornado: ele acompanha o dado, nao o substitui. */
+export function IconeInfo() {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      style={{ color: "var(--text-tertiary)", flexShrink: 0, cursor: "help" }}
+    >
+      <circle cx="8" cy="8" r="6.2" />
+      <path d="M8 7.2v3.6M8 5.2v.5" />
+    </svg>
+  );
+}

@@ -8,6 +8,7 @@ import {
   FilterButton,
   FilterItem,
   IncluirButton,
+  MarcaDeConciliacao,
   PageHeader,
   PageLayout,
   Pagination,
@@ -24,7 +25,7 @@ import {
 import { useAvisos } from "@/components/ui/avisos";
 import { NovoRecebimentoDrawer } from "./novo-recebimento-drawer";
 import { RecebimentoDrawer } from "./recebimento-drawer";
-import { IndicadoresDeBaixa } from "./indicadores-de-baixa";
+import { IndicadoresDeBaixa } from "@/components/financeiro/indicadores-de-baixa";
 import { formatarSemSimbolo } from "@/shared/utils/money";
 import { paraFormatoBR, type DataISO } from "@/shared/utils/datas";
 import type {
@@ -312,61 +313,3 @@ function destino(r: RecebimentoResumo): string {
   return r.qtdContas > 1 ? `${parcelas} · ${r.qtdContas} contas` : parcelas;
 }
 
-/**
- * Conferido no extrato, ou ainda esperando.
- *
- * ⚠️ Icone, e nao a pastilha com "Sim" e "Pendente". A coluna e binaria e se le
- * de relance varrendo a lista de cima a baixo; pastilha carrega uma palavra que
- * muda de largura de linha para linha, e o olho passa a ler texto onde bastava
- * distinguir duas formas. O relogio diz o que a pastilha "Pendente" dizia:
- * ninguem conferiu ainda.
- */
-function MarcaDeConciliacao({ conciliado }: { conciliado: boolean }) {
-  const rotulo = conciliado
-    ? "Conferido no extrato do banco"
-    : "Ainda não conferido no extrato. Conciliar é gesto humano: nada no sistema marca sozinho.";
-
-  return (
-    <span
-      title={rotulo}
-      aria-label={rotulo}
-      style={{
-        display: "inline-flex",
-        // O amarelo solido, e nao o `--warning`: aquele e ambar escuro,
-        // calibrado para ler como TEXTO, e some quando vira um traco de 15px.
-        color: conciliado ? "var(--success)" : "var(--warning-solido)",
-      }}
-    >
-      {conciliado ? (
-        <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
-          {/* Preenchido, e nao contornado: cheio, o certo fecha a pergunta. */}
-          <circle cx="8" cy="8" r="7" />
-          <path
-            d="M4.8 8.2l2.1 2.1 4.2-4.2"
-            fill="none"
-            stroke="var(--surface)"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      ) : (
-        <svg
-          width="15"
-          height="15"
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          {/* Vazado de proposito: o que falta nao pode ter o mesmo peso do que
-              ja foi resolvido, senao as duas marcas competem na mesma coluna. */}
-          <circle cx="8" cy="8" r="6.4" />
-          <path d="M8 4.6V8l2.2 1.6" />
-        </svg>
-      )}
-    </span>
-  );
-}
