@@ -204,6 +204,14 @@ export type Publicacao = {
   comentarios: number;
   /** So a Pagina do Facebook tem. O Instagram nao expoe compartilhamento. */
   compartilhamentos: number | null;
+  /**
+   * Quantas vezes a publicacao foi vista.
+   *
+   * ⚠️ Nulo quando a Meta nao devolve, e nao zero. Ela exige uma consulta POR
+   * publicacao para isto, com nomes de metrica que mudam de versao para versao;
+   * um zero ali diria "ninguem viu" onde a verdade e "nao consegui perguntar".
+   */
+  visualizacoes: number | null;
 };
 
 /**

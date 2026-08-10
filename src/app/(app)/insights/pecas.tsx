@@ -67,6 +67,29 @@ export function curtoEmReais(centavos: number): string {
 }
 
 
+/**
+ * "51k" no lugar de "50.732".
+ *
+ * ⚠️ Existe para o rodape da PUBLICACAO, onde tres ou quatro contadores dividem
+ * a largura de um cartao de 180 pixels. Escrito por extenso, um numero de cinco
+ * digitos empurra os outros para fora, e a grade deixa de se ler de relance —
+ * que e a unica coisa que ela precisa fazer.
+ *
+ * ⚠️ Uma casa decimal so ate dez mil. Acima disso a casa nao acrescenta nada
+ * ("50,7k" e "51k" dizem o mesmo) e ainda gasta dois caracteres.
+ *
+ * ⚠️ O numero exato continua acessivel: quem precisa dele passa o mouse. Isto
+ * nao pode ser usado onde o valor PRECISA ser exato, como dinheiro.
+ */
+export function compacto(n: number): string {
+  const abs = Math.abs(n);
+
+  if (abs < 1_000) return String(Math.round(n));
+  if (abs < 10_000) return `${(n / 1_000).toFixed(1).replace(".", ",")}k`;
+  if (abs < 1_000_000) return `${Math.round(n / 1_000)}k`;
+  return `${(n / 1_000_000).toFixed(1).replace(".", ",")}M`;
+}
+
 export function plural(n: number, um: string, varios: string): string {
   return `${inteiro(n)} ${n === 1 ? um : varios}`;
 }
@@ -368,9 +391,10 @@ export function IconeSeta() {
 
 
 /** Olho: quem abriu a Página. */
-export function IconeOlho() {
+export function IconeOlho({ pequeno = false }: { pequeno?: boolean }) {
+  const t = pequeno ? 13 : 18;
   return (
-    <svg width="18" height="18" viewBox="0 0 20 20" {...TRACO}>
+    <svg width={t} height={t} viewBox="0 0 20 20" {...TRACO}>
       <path d="M2.5 10S5.4 5.5 10 5.5 17.5 10 17.5 10 14.6 14.5 10 14.5 2.5 10 2.5 10z" />
       <circle cx="10" cy="10" r="2.1" />
     </svg>

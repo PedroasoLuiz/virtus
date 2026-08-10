@@ -8,9 +8,11 @@ import {
   Grade,
   IconeBalao,
   IconeCoracao,
+  IconeOlho,
   IconeSeta,
   Previa,
   Subtitulo,
+  compacto,
   dataBR,
   inteiro,
   plural,
@@ -125,13 +127,25 @@ function CartaoDePublicacao({ publicacao: p }: { publicacao: Publicacao }) {
             fontVariantNumeric: "tabular-nums",
           }}
         >
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+          {/*
+            ⚠️ Número curto, com o exato no `title`. Três ou quatro contadores
+            dividem a largura de um cartão de 180: "50.732" empurra os outros
+            para fora e a grade deixa de se ler de relance. Quem precisa do
+            número cheio passa o mouse.
+          */}
+          <span
+            style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
+            title={`${inteiro(p.curtidas)} curtidas`}
+          >
             <IconeCoracao pequeno />
-            {inteiro(p.curtidas)}
+            {compacto(p.curtidas)}
           </span>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+          <span
+            style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
+            title={`${inteiro(p.comentarios)} comentários`}
+          >
             <IconeBalao />
-            {inteiro(p.comentarios)}
+            {compacto(p.comentarios)}
           </span>
           {/*
             ⚠️ Compartilhamento só aparece quando EXISTE. O Instagram não expõe
@@ -139,12 +153,30 @@ function CartaoDePublicacao({ publicacao: p }: { publicacao: Publicacao }) {
             compartilhou" onde a verdade é "a API não conta".
           */}
           {p.compartilhamentos != null && (
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+            <span
+              style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
+              title={`${inteiro(p.compartilhamentos)} compartilhamentos`}
+            >
               <IconeSeta />
-              {inteiro(p.compartilhamentos)}
+              {compacto(p.compartilhamentos)}
             </span>
           )}
-          <span style={{ marginLeft: "auto" }}>{dataBR(p.data)}</span>
+          {/*
+            ⚠️ Visualizações só aparecem quando a Meta respondeu. Nulo é "não
+            consegui perguntar", e um zero ali diria "ninguém viu".
+          */}
+          {p.visualizacoes != null && (
+            <span
+              style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
+              title={`${inteiro(p.visualizacoes)} visualizações`}
+            >
+              <IconeOlho pequeno />
+              {compacto(p.visualizacoes)}
+            </span>
+          )}
+
+          {/* A data cede o lugar quando os contadores enchem a linha. */}
+          <span style={{ marginLeft: "auto", whiteSpace: "nowrap" }}>{dataBR(p.data)}</span>
         </div>
       </div>
     </a>

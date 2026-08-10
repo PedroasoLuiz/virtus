@@ -7,6 +7,7 @@ import type {
   PaginaDisponivel,
   Periodo,
   PontoDaSerie,
+  Publicacao,
   ResumoDePublicacoes,
 } from "@/modules/insights/insights.types";
 
@@ -378,6 +379,42 @@ function legendaCurta(bruta: string | undefined): string | null {
 }
 
 /**
+ * As visualizacoes de cada publicacao, buscadas UMA A UMA.
+ *
+ * ⚠️ So para as que APARECEM. A Meta nao devolve visualizacao na listagem: e uma
+ * consulta por publicacao. Buscando as cinquenta do periodo para mostrar seis,
+ * o painel pagaria cinquenta idas para jogar quarenta e quatro fora.
+ *
+ * ⚠️ LISTA de nomes, tentados em ordem, pelo mesmo motivo das metricas de
+ * Pagina: a Meta trocou `impressions` por `views` e continua trocando. Fixar um
+ * nome faz a coluna morrer na proxima renomeacao, e em silencio.
+ *
+ * ⚠️ Falha vira NULO, e nao zero. A tela simplesmente nao mostra a linha: um
+ * zero diria "ninguem viu" onde a verdade e "nao consegui perguntar".
+ */
+async function comVisualizacoes(
+  publicacoes: Publicacao[],
+  nomes: string[],
+  token: string,
+): Promise<Publicacao[]> {
+  return Promise.all(
+    publicacoes.map(async (p) => {
+      for (const nome of nomes) {
+        const corpo = await pedir<{ data?: LinhaDeMetrica[] }>(
+          `/${p.id}/insights?metric=${nome}`,
+          token,
+        ).catch(() => null);
+
+        const valor = corpo?.data?.find((l) => l.name === nome)?.values?.[0]?.value;
+        if (valor != null) return { ...p, visualizacoes: Math.round(valor) };
+      }
+
+      return p;
+    }),
+  );
+}
+
+/**
  * As publicacoes do perfil no periodo, das mais reagidas para as menos.
  *
  * ⚠️ A previa de VIDEO vem em `thumbnail_url`, e nao em `media_url`. Naquele vem
@@ -428,6 +465,8 @@ async function publicacoesDoPerfil(
         // ⚠️ O Instagram NAO expoe compartilhamento por publicacao. Nulo diz
         // "nao existe aqui"; zero diria "ninguem compartilhou", que e mentira.
         compartilhamentos: null,
+        // Preenchida depois, e so para as que aparecem. Ver `comVisualizacoes`.
+        visualizacoes: null,
       };
     })
     .sort((a, b) => b.curtidas + b.comentarios - (a.curtidas + a.comentarios));
@@ -445,7 +484,16 @@ async function publicacoesDoPerfil(
     quantidade: todas.length,
     curtidas: todas.reduce((s, p) => s + p.curtidas, 0),
     comentarios: todas.reduce((s, p) => s + p.comentarios, 0),
-    melhores: todas.slice(0, PUBLICACOES_NO_PAINEL),
+    /*
+     * ⚠️ `views` primeiro: a Meta aposentou `impressions` na virada de 2025 e a
+     * substituta e ela. `impressions` fica como reserva para conta que ainda
+     * responda pelo nome velho.
+     */
+    melhores: await comVisualizacoes(
+      todas.slice(0, PUBLICACOES_NO_PAINEL),
+      ["views", "impressions"],
+      token,
+    ),
   };
 }
 
@@ -509,6 +557,7 @@ async function publicacoesDaPagina(
         curtidas: Math.round(p.reactions?.summary?.total_count ?? 0),
         comentarios: Math.round(p.comments?.summary?.total_count ?? 0),
         compartilhamentos: Math.round(p.shares?.count ?? 0),
+        visualizacoes: null,
       };
     })
     .sort(
@@ -524,7 +573,11 @@ async function publicacoesDaPagina(
     quantidade: todas.length,
     curtidas: todas.reduce((s, p) => s + p.curtidas, 0),
     comentarios: todas.reduce((s, p) => s + p.comentarios, 0),
-    melhores: todas.slice(0, PUBLICACOES_NO_PAINEL),
+    melhores: await comVisualizacoes(
+      todas.slice(0, PUBLICACOES_NO_PAINEL),
+      ["post_impressions", "post_media_view", "post_impressions_unique"],
+      token,
+    ),
   };
 }
 

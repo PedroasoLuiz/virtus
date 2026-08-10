@@ -113,6 +113,7 @@ const publicacaoSchema = z.object({
   curtidas: z.number(),
   comentarios: z.number(),
   compartilhamentos: z.number().nullable(),
+  visualizacoes: z.number().nullable(),
 });
 
 const resumoDePublicacoesSchema = z.object({
