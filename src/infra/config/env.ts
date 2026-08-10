@@ -74,6 +74,20 @@ const serverSchema = z.object({
    * do anon key, que e publico e vai no bundle, chame as funcoes direto.
    */
   WHATSAPP_WEBHOOK_SEGREDO: opcional,
+  /**
+   * O app da Meta, que e da CASA e nao de um cliente.
+   *
+   * ⚠️ Por isso vive no ambiente, e nao no vault: ele nao varia por empresa. O
+   * que varia e o token de cada conta de anuncio, e esse continua cifrado no
+   * `supabase_vault`, um por conexao.
+   *
+   * ⚠️ `META_APP_ID` fica no schema de SERVIDOR mesmo sendo publico. Ele so e
+   * usado na troca de token, que acontece server-side; publica-lo no bundle
+   * antes de existir tela que precise dele seria expor sem necessidade. Quando o
+   * popup de OAuth entrar, ele passa para o `publicEnv`.
+   */
+  META_APP_ID: opcional,
+  META_APP_SECRET: opcional,
   EMAILJS_SERVICE_ID: opcional,
   EMAILJS_TEMPLATE_ID: opcional,
   EMAILJS_USER_ID: opcional,
