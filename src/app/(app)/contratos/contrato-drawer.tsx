@@ -64,12 +64,15 @@ export function ContratoDrawer({
   criando,
   clientes,
   clienteInicial,
+  natureza = "RECEITA",
   onClose,
   aoCriar,
 }: {
   contratoId: number | null;
   criando?: boolean;
   clientes: OpcaoCliente[];
+  /** De que lado o dinheiro corre. Viaja no POST; na edicao nao muda. */
+  natureza?: "RECEITA" | "DESPESA";
   /** Ja vem escolhido quando o contrato nasce de dentro de um projeto. */
   clienteInicial?: number | null;
   onClose: () => void;
@@ -83,6 +86,7 @@ export function ContratoDrawer({
       contratoId={criando ? null : contratoId}
       clientes={clientes}
       clienteInicial={clienteInicial}
+      natureza={natureza}
       onClose={onClose}
       aoCriar={aoCriar}
     />
@@ -93,12 +97,14 @@ function Conteudo({
   contratoId,
   clientes,
   clienteInicial,
+  natureza,
   onClose,
   aoCriar,
 }: {
   contratoId: number | null;
   clientes: OpcaoCliente[];
   clienteInicial?: number | null;
+  natureza: "RECEITA" | "DESPESA";
   onClose: () => void;
   aoCriar?: (id: number) => void;
 }) {
@@ -164,6 +170,7 @@ function Conteudo({
         diaVencimento: form.diaVencimento || null,
         inicio: form.inicio || null,
         fim: form.fim || null,
+        natureza,
       }),
     });
 

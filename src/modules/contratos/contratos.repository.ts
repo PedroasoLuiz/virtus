@@ -8,21 +8,34 @@ import type {
   Contrato,
   ContratoNovo,
   ContratoResumo,
+  NaturezaContrato,
   Periodicidade,
 } from "@/modules/contratos/contratos.types";
 
 /** Unica porta de acesso aos dados de contrato. */
 
 const COLUNAS =
-  'id, numero, descricao, valor, periodicidade, dia_vencimento, inicio, fim, proxima_competencia, ativo, "fkCliente"';
+  'id, numero, descricao, valor, periodicidade, dia_vencimento, inicio, fim, proxima_competencia, ativo, natureza, "fkCliente"';
 
-export async function listar(empresaId: number, incluirInativos: boolean): Promise<ContratoResumo[]> {
+export async function listar(
+  empresaId: number,
+  incluirInativos: boolean,
+  natureza: NaturezaContrato,
+): Promise<ContratoResumo[]> {
   const supabase = await serverClient();
 
+  /*
+   * ⚠️ `natureza` e OBRIGATORIA aqui, e nao um filtro opcional.
+   *
+   * Sem ela, a tela de contratos de cliente passaria a listar os contratos com
+   * fornecedor no dia em que o primeiro fosse cadastrado — e o total do rodape
+   * somaria receita com despesa. Quem chama tem que dizer de que lado quer.
+   */
   let query = supabase
     .from("contratos")
     .select(`${COLUNAS}, clientes(razao, nomefantasia)`)
     .eq("fkEmpresa", empresaId)
+    .eq("natureza", natureza)
     .eq("deletado", false);
 
   if (!incluirInativos) query = query.eq("ativo", true);
@@ -107,6 +120,7 @@ export async function criar(
       dia_vencimento: entrada.diaVencimento ?? null,
       inicio: entrada.inicio ?? null,
       fim: entrada.fim ?? null,
+      natureza: entrada.natureza ?? "RECEITA",
       // Nasce apontando para o próprio início: a primeira competência a gerar é
       // a do mês em que o contrato começou, não a do mês em que foi cadastrado.
       proxima_competencia: entrada.inicio ?? null,
@@ -187,6 +201,7 @@ type Linha = {
   fim: string | null;
   proxima_competencia: string | null;
   ativo: boolean | null;
+  natureza?: string | null;
   fkCliente: number | null;
   clientes?: unknown;
 };
@@ -208,6 +223,7 @@ function paraDominio(l: Linha, qtdCompetencias: number): ContratoResumo {
     fim: data(l.fim),
     proximaCompetencia: data(l.proxima_competencia),
     ativo: l.ativo ?? true,
+    natureza: (l.natureza ?? "RECEITA") as NaturezaContrato,
     qtdCompetencias,
   };
 }

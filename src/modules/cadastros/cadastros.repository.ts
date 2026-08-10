@@ -17,7 +17,7 @@ import {
  */
 
 const COLUNAS_SERVICO = "id, descricao, valor, cnae, fkCentroCusto, ativo, deletado";
-const COLUNAS_CENTRO = "id, descricao, tipo, ativo";
+const COLUNAS_CENTRO = "id, codigo, descricao, tipo, ativo";
 
 // ── Servicos ────────────────────────────────────────────────────────────────
 
@@ -209,6 +209,7 @@ function paraServico(l: Partial<ServicoRow> & { id: number }): Servico {
 function paraCentro(l: Partial<CentroCustoRow> & { id: number }): CentroCusto {
   return {
     id: l.id,
+    codigo: l.codigo ?? null,
     descricao: l.descricao ?? "",
     tipo: normalizarTipo(l.tipo ?? null),
     ativo: l.ativo ?? true,

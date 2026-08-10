@@ -4,9 +4,9 @@ import { SemEmpresa } from "../sem-empresa";
 import { ContasTabela } from "./contas-tabela";
 
 export default async function ContasPagarPage() {
-  const { ctx } = await sessaoUI();
+  const { ctx, visao } = await sessaoUI();
   if (ctx.empresaId == null) return <SemEmpresa />;
 
   const { itens } = await listarContas(ctx.empresaId, {}, { page: 1, perPage: 200 });
-  return <ContasTabela contas={itens} />;
+  return <ContasTabela contas={itens} visaoInicial={visao} />;
 }

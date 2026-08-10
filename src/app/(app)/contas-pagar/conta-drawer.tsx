@@ -1,19 +1,35 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Drawer } from "@/components/ui/drawer";
+import { useAvisos } from "@/components/ui/avisos";
+import { ItemDoMenu, MenuDeLinha } from "@/components/ui/menu-de-linha";
+import { NovaBaixaDrawer } from "./baixas/nova-baixa-drawer";
+import { EditorDeParcelamento } from "@/components/financeiro/editor-de-parcelamento";
+import { oQuePodeNaConta } from "@/shared/domain/parcelas";
+import { LancamentosDaConta, type LancamentoDaConta } from "./lancamentos-da-conta";
 import {
+  AcoesDaLinha,
   Alert,
-  Badge,
-  Button,
+  BotaoDeAcao,
   CampoBloqueado,
+  EmptyRow,
   Field,
-  ProgressoValor,
-  type Tom,
+  GrupoDeCampos,
+  MarcaDeConciliacao,
+  PanelTabs,
+  TableArea,
+  TableHead,
+  Td,
+  Th,
+  Tr,
 } from "@/components/ui/kit";
-import { formatar, formatarSemSimbolo, type Centavos } from "@/shared/utils/money";
+import { formatarSemSimbolo, type Centavos } from "@/shared/utils/money";
 import { hoje, paraFormatoBR, type DataISO } from "@/shared/utils/datas";
-import { situacaoDaConta, type SituacaoConta } from "@/modules/contas-pagar/contas-pagar.types";
+import { situacaoDaConta } from "@/modules/contas-pagar/contas-pagar.types";
+import { inputStyle } from "@/components/ui/kit";
+import { formatarDocumento } from "@/shared/domain/documento";
+import { ehPessoaFisica } from "@/shared/domain/cadastro-pessoa";
 
 /**
  * Detalhe da conta a pagar.
@@ -34,23 +50,45 @@ type Parcela = {
   desconto: number;
   total: number;
   pago: boolean;
+  /** O dinheiro desta parcela ja bateu no extrato. */
+  conciliado: boolean;
   nfs: string | null;
   boleto: string | null;
+  /** A prova de que o dinheiro saiu. */
+  comprovante: string | null;
 };
 
 type Conta = {
   id: number;
+  numero: number | null;
+  fornecedorId: number | null;
   descricao: string;
+  documento: string | null;
+  tipoDocumentoSigla: string | null;
   fornecedorNome: string | null;
   emissao: string | null;
   proximoVencimento: string | null;
   total: number;
   pago: boolean;
+  valorPago: number;
   cancelada: boolean;
+  suspensa: boolean;
+  conciliada: boolean;
   qtdParcelas: number;
   parcelasPagas: number;
   observacoes: string | null;
+  fornecedorDoc: string | null;
+  centroCustoNome: string | null;
   parcelas: Parcela[];
+  anexos: { id: number; nome: string; caminho: string; criadoEm: string | null }[];
+  rateio: { centroCustoId: number | null; centroCustoNome: string | null; valor: number }[];
+  lancamentos: LancamentoDaConta[];
+};
+
+/** Numero em coluna: tabular e sem quebra, para o digito alinhar com o de cima. */
+const NUM: React.CSSProperties = {
+  whiteSpace: "nowrap",
+  fontVariantNumeric: "tabular-nums",
 };
 
 export function ContaDrawer({ contaId, onClose }: { contaId: number | null; onClose: () => void }) {
@@ -64,6 +102,86 @@ export function ContaDrawer({ contaId, onClose }: { contaId: number | null; onCl
 function Conteudo({ contaId, onClose }: { contaId: number; onClose: () => void }) {
   const [conta, setConta] = useState<Conta | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const [aba, setAba] = useState<"lancamentos" | "parcelas" | "anexos">("lancamentos");
+  /** A parcela que o menu da linha mandou baixar. */
+  const [baixando, setBaixando] = useState<number | null>(null);
+  /** O total que a edicao de lancamentos ainda nao gravou. Nulo fora de edicao. */
+  const [totalPendente, setTotalPendente] = useState<number | null>(null);
+  const [parcelando, setParcelando] = useState(false);
+  const [observacoes, setObservacoes] = useState("");
+  const [salvandoObs, setSalvandoObs] = useState(false);
+
+  async function salvarObservacoes() {
+    // Sem ida ao servidor quando nada mudou: sair do campo sem digitar e o caso
+    // mais comum, e ele nao pode custar uma escrita.
+    if (!conta || observacoes === (conta.observacoes ?? "")) return;
+
+    setSalvandoObs(true);
+    const r = await fetch(`/api/v1/contas-pagar/${contaId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ observacoes: observacoes.trim() || null }),
+    });
+    const dados = await r.json().catch(() => null);
+    setSalvandoObs(false);
+
+    if (!r.ok) {
+      avisar("atencao", dados?.error?.message ?? "Não foi possível salvar a observação");
+      return;
+    }
+
+    setConta(dados.data as Conta);
+  }
+  const entrada = useRef<HTMLInputElement>(null);
+  const { avisar, confirmar } = useAvisos();
+
+  /*
+   * As duas escritas devolvem a CONTA inteira, e a tela adota a resposta.
+   *
+   * Recarregar por conta propria depois de gravar abriria uma janela em que a
+   * lista mostra o estado velho; e montar o novo estado na mao aqui seria uma
+   * segunda versao da verdade, que diverge do servidor no primeiro campo que
+   * alguem esquecer.
+   */
+  async function enviarAnexo(arquivo: File) {
+    const corpo = new FormData();
+    corpo.append("arquivo", arquivo);
+
+    const r = await fetch(`/api/v1/contas-pagar/${contaId}/anexos`, { method: "POST", body: corpo });
+    const dados = await r.json().catch(() => null);
+
+    if (!r.ok) {
+      avisar("atencao", dados?.error?.message ?? "Não foi possível enviar o arquivo");
+      return;
+    }
+
+    setConta(dados.data as Conta);
+    avisar("sucesso", "Arquivo anexado");
+  }
+
+  async function removerAnexo(anexoId: number) {
+    const r = await fetch(`/api/v1/contas-pagar/${contaId}/anexos/${anexoId}`, {
+      method: "DELETE",
+    });
+    const dados = await r.json().catch(() => null);
+
+    if (!r.ok) {
+      avisar("atencao", dados?.error?.message ?? "Não foi possível remover o arquivo");
+      return;
+    }
+
+    setConta(dados.data as Conta);
+    avisar("sucesso", "Arquivo removido");
+  }
+
+  /** Relê a conta do servidor. Usado depois de gravar por outro caminho. */
+  async function recarregar() {
+    const r = await fetch(`/api/v1/contas-pagar/${contaId}`);
+    if (!r.ok) return;
+    const corpo = await r.json();
+    setConta(corpo.data as Conta);
+    setObservacoes((corpo.data as Conta).observacoes ?? "");
+  }
 
   useEffect(() => {
     const controle = new AbortController();
@@ -73,6 +191,7 @@ function Conteudo({ contaId, onClose }: { contaId: number; onClose: () => void }
         const corpo = await r.json();
         if (!r.ok) throw new Error(corpo?.error?.message ?? "Falha ao carregar a conta");
         setConta(corpo.data);
+        setObservacoes((corpo.data as Conta).observacoes ?? "");
       })
       .catch((e: unknown) => {
         if (e instanceof Error && e.name !== "AbortError") setErro(e.message);
@@ -81,32 +200,62 @@ function Conteudo({ contaId, onClose }: { contaId: number; onClose: () => void }
     return () => controle.abort();
   }, [contaId]);
 
-  const situacao = conta
-    ? situacaoDaConta({
+  /*
+   * ⚠️ Pago sai das PARCELAS baixadas, e nao de um campo do cabecalho: e a
+   * parcela que carrega a verdade sobre o pagamento.
+   *
+   * ⚠️ E "em aberto" e o que as parcelas NAO PAGAS somam, e nao total menos
+   * pago. A subtracao ignora o desconto: uma conta de 1.500 baixada com 500 de
+   * desconto pagou 1.000 e esta quitada, e pela subtracao ela apareceria com 500
+   * em aberto para sempre. Parcela paga nao espera mais nada. Mesma regra do
+   * lado que recebe.
+   */
+  const pago = conta ? conta.parcelas.filter((p) => p.pago).reduce((s, p) => s + p.total, 0) : 0;
+  const emAberto = conta
+    ? conta.parcelas.filter((p) => !p.pago).reduce((s, p) => s + p.total, 0)
+    : 0;
+
+  /*
+   * O resumo e montado UMA vez e lido pelas duas regras.
+   *
+   * ⚠️ Montado duas vezes, ele ja tinha divergido: bastaria acrescentar um campo
+   * em `ContaPagarResumo` e lembrar de um dos dois para a situacao e o
+   * vencimento passarem a discordar sobre a mesma conta, na mesma tela.
+   */
+  const resumo = conta
+    ? {
         ...conta,
         fornecedorId: null,
         emissao: null,
+        valorPago: pago as Centavos,
         proximoVencimento: conta.proximoVencimento as DataISO | null,
         total: conta.total as Centavos,
-      })
+      }
     : null;
+
+  const situacao = resumo ? situacaoDaConta(resumo) : null;
 
   return (
     <Drawer
       open
       onClose={onClose}
-      title={conta ? `Conta ${conta.id}` : "Conta a pagar"}
-      headerExtra={situacao ? <Badge tom={TOM[situacao]}>{situacao}</Badge> : null}
-      footer={
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{ flex: 1, fontSize: "var(--text-md)", fontWeight: "var(--fw-semi)" }}>
-            Total: {conta ? formatar(conta.total as Centavos) : "—"}
-          </div>
-          <Button size="sm" disabled title="Ainda não implementado">
-            Baixar parcela
-          </Button>
-        </div>
-      }
+      /*
+        ⚠️ O titulo nao carrega mais o numero. Ele virou o campo "Código" no alto
+        da ficha, onde da para copiar; repetido no titulo, era o mesmo dado duas
+        vezes na mesma tela. Mesma decisao da conta a receber.
+      */
+      /*
+        ⚠️ SEM pastilha no cabecalho, e SEM rodape.
+
+        As pastilhas de situacao ao lado do fechar nao existem no kit: elas
+        foram desenhadas so aqui, e um enfeite que so uma tela tem vira dialeto.
+        A situacao ja e campo na ficha, onde da para ler e copiar.
+
+        O rodape tinha um "Baixar parcela" solto, e o Pedro perguntou o que ele
+        fazia ali — a pergunta certa. Baixar exige saber QUAL parcela, e no
+        rodape ele nao sabia nenhuma. O gesto mora no menu da linha, que sabe.
+      */
+      title="Conta a pagar"
     >
       {erro && (
         /*
@@ -138,144 +287,831 @@ function Conteudo({ contaId, onClose }: { contaId: number; onClose: () => void }
 
       {conta && (
         <>
-          {/* Pago vem das parcelas baixadas: e a parcela que carrega a verdade
-              sobre o pagamento, nao um campo do cabecalho. */}
-          <ProgressoValor
-            total={conta.total}
-            pago={conta.parcelas.filter((p) => p.pago).reduce((s, p) => s + p.total, 0)}
-          />
+          {/*
+            ⚠️ SEM barra de progresso aqui.
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
+            Ela dizia total e pago em desenho, e logo abaixo os mesmos dois
+            numeros aparecem como campo, junto com o em aberto. Era o mesmo dado
+            duas vezes, e a versao em barra e a que nao da para copiar nem ler
+            com precisao. Quem decide o que fazer com a conta le o "em aberto",
+            que a barra nao mostrava.
+          */}
+
+          {/*
+            ⚠️ O ritmo e o do FORMULARIO, o mesmo da conta a receber e da ficha
+            de pessoa: campos colados entre si, e o vao grande so entre um
+            assunto e outro. Havia um `gap: 8` escrito aqui, que acertava o vao
+            dos campos por acaso e errava o resto.
+
+            ⚠️ Sem titulo nem legenda: o que esta em cima da tabela e a
+            identificacao da conta, e ela nao precisa se apresentar. Cada aba tem
+            o proprio titulo, que e onde o assunto muda.
+          */}
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "var(--form-gap-campo)",
+            }}
+          >
+            {/*
+              ⚠️ O codigo vem PRIMEIRO e e campo com cadeado, como na conta a
+              receber. Escrito so no titulo do drawer, ele some quando a pessoa
+              rola a tabela, e nao da para copiar.
+            */}
+            <Field label="Código">
+              <CampoBloqueado
+                valor={String(conta.numero ?? conta.id)}
+                titulo="O número é dado pelo sistema quando a conta nasce, e conta por empresa."
+              />
+            </Field>
+
             <Field label="Fornecedor">
               <CampoBloqueado valor={conta.fornecedorNome ?? "—"} />
             </Field>
-            <Field label="Descrição">
-              <CampoBloqueado valor={conta.descricao || "—"} />
+
+            {/*
+              ⚠️ O documento aparece LOGO ABAIXO do nome, e nao noutra secao.
+              Dois fornecedores de nome parecido sao a hora exata em que alguem
+              confere o CNPJ, e e a mesma hora em que ele precisa ser copiado.
+              Mesma decisao da conta a receber.
+
+              ⚠️ E a DESCRICAO saiu daqui: ela e do LANCAMENTO, e mora na aba
+              dele. Repetida no cabecalho, ela dizia o nome de uma linha so
+              enquanto a conta pode ter varias.
+            */}
+            <Field label={ehPessoaFisica(conta.fornecedorDoc) ? "CPF" : "CNPJ"}>
+              <CampoBloqueado
+                valor={conta.fornecedorDoc ? formatarDocumento(conta.fornecedorDoc) : "—"}
+              />
             </Field>
+
+            {/*
+              ⚠️ "Documento" e o numero da NOTA, e nao o numero da conta. Ele fica
+              perto do fornecedor porque e ali que alguem confere se a nota que
+              chegou e mesmo a que esta sendo paga.
+            */}
+            {/*
+              ⚠️ Especie e numero num campo SO na leitura, e em dois na escrita.
+              Quem le quer "NFS-e 1234" de uma vez; quem digita precisa escolher
+              a especie de uma lista para o relatorio por especie fechar depois.
+            */}
+            <Field label="Documento">
+              <CampoBloqueado
+                valor={
+                  conta.documento
+                    ? [conta.tipoDocumentoSigla, conta.documento].filter(Boolean).join(" ")
+                    : "—"
+                }
+              />
+            </Field>
+
             <Field label="Emissão">
               <CampoBloqueado
                 valor={conta.emissao ? paraFormatoBR(conta.emissao as DataISO) : "—"}
               />
             </Field>
+
+            {/*
+              ⚠️ O resumo sai do RATEIO, e nao mais de `centroCustoNome`.
+
+              Aquele campo vem da coluna legada `fkCentroCusto`, que so guarda um
+              centro e nao e mais escrita: numa conta nova ele viria vazio, e a
+              ficha diria "sem centro" para uma conta repartida em dois. Com um
+              centro so, o texto e o mesmo de antes; com varios, ele conta quantos
+              e manda para a aba.
+            */}
+            <Field label="Centro de custo">
+              <CampoBloqueado
+                valor={
+                  conta.rateio.length === 0
+                    ? "—"
+                    : conta.rateio.length === 1
+                      ? (conta.rateio[0].centroCustoNome ?? "Sem centro")
+                      : `${conta.rateio.length} centros (ver Lançamentos)`
+                }
+              />
+            </Field>
+
             <Field label="Situação">
               <CampoBloqueado valor={situacao ?? "—"} />
             </Field>
-            {conta.observacoes && (
-              <Field label="Observações">
-                <CampoBloqueado valor={conta.observacoes} multilinha />
-              </Field>
-            )}
+
+            {/*
+              ⚠️ Os tres valores sao CAMPO, um por linha, como na conta a receber.
+              No rodape eram numeros soltos com rotulo miudo, e o "em aberto" — que
+              e o que decide se ainda ha o que pagar — tinha o mesmo peso do resto.
+            */}
+            <Field label="Total">
+              {/*
+                ⚠️ O campo continua o MESMO: mesma caixa, mesmo tamanho, mesmo
+                cadeado. O total novo entra DENTRO dele, depois do antigo, no
+                verde da marca. Trocado por outro componente, o bloco pulava de
+                altura ao entrar em edicao.
+              */}
+              <CampoBloqueado
+                valor={formatarSemSimbolo(conta.total as Centavos)}
+                depois={
+                  totalPendente != null && totalPendente !== conta.total ? (
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                        color: "var(--primary)",
+                        fontWeight: "var(--fw-semi)",
+                        fontVariantNumeric: "tabular-nums",
+                      }}
+                    >
+                      <span aria-hidden>&rsaquo;&rsaquo;</span>
+                      {formatarSemSimbolo(totalPendente as Centavos)}
+                    </span>
+                  ) : undefined
+                }
+              />
+            </Field>
+
+            <Field label="Pago">
+              <CampoBloqueado valor={formatarSemSimbolo(pago as Centavos)} />
+            </Field>
+
+            <Field label="Em aberto">
+              <CampoBloqueado valor={formatarSemSimbolo(emAberto as Centavos)} />
+            </Field>
+
+            {/*
+              ⚠️ Aparece SEMPRE, e nao so quando ha texto. Em observacao, o vazio
+              tambem e resposta: "ninguem anotou nada". Sumindo, a ficha muda de
+              tamanho de conta para conta e quem procura a anotacao nao sabe se
+              ela nao existe ou se o campo e que nao existe aqui.
+
+              ⚠️ E ela NAO e bloqueada. Observacao e o unico campo da ficha que
+              nao veio do documento: e a anotacao de quem trabalha na conta, e
+              ela nasce depois. Travada, obrigaria a abrir outra tela para
+              escrever "combinei prorrogar com o fornecedor".
+            */}
+            <Field label="Observações" hint={salvandoObs ? "Salvando…" : "Salva ao sair do campo."}>
+              <textarea
+                value={observacoes}
+                onChange={(e) => setObservacoes(e.target.value)}
+                /*
+                 * Grava ao SAIR do campo, e nao a cada tecla: uma requisicao por
+                 * letra faria dezenas de escritas para uma frase, e um `debounce`
+                 * ainda gravaria versoes intermediarias que ninguem quis.
+                 */
+                onBlur={() => void salvarObservacoes()}
+                rows={3}
+                maxLength={4000}
+                placeholder="Anotação de quem trabalha nesta conta"
+                style={{ ...inputStyle, height: "auto", padding: 8, resize: "vertical" }}
+              />
+            </Field>
           </div>
 
-          <div className="rotulo" style={{ marginBottom: 8 }}>
-            Parcelas ({conta.parcelas.length})
-          </div>
-          <div
-              style={{
-                border: "1px solid var(--border)",
-                borderRadius: "var(--radius-lg)",
-                overflow: "hidden",
-              }}
+          {/*
+            ⚠️ O vao antes das abas e o dos GRUPOS do formulario. Sem ele, as
+            abas encostam no ultimo campo e parecem pertencer a ele; elas comecam
+            outro assunto, e o respiro e o que diz isso.
+          */}
+          <div style={{ marginTop: "var(--form-gap-grupo)" }} />
+
+          <PanelTabs
+            /*
+              ⚠️ Lancamentos vem PRIMEIRO: e o que a conta e. Parcelas sao como
+              ela sera paga, e anexo e o papel dela. A ordem segue a pergunta que
+              se faz ao abrir: o que estou pagando, depois quando.
+            */
+            tabs={[
+              `Lançamentos (${conta.lancamentos.length})`,
+              `Parcelas (${conta.parcelas.length})`,
+              `Anexos (${conta.anexos.length})`,
+            ]}
+            active={
+              aba === "lancamentos"
+                ? `Lançamentos (${conta.lancamentos.length})`
+                : aba === "parcelas"
+                  ? `Parcelas (${conta.parcelas.length})`
+                  : `Anexos (${conta.anexos.length})`
+            }
+            onChange={(t) =>
+              setAba(
+                t.startsWith("Lançamentos")
+                  ? "lancamentos"
+                  : t.startsWith("Parcelas")
+                    ? "parcelas"
+                    : "anexos",
+              )
+            }
+          />
+
+          {aba === "parcelas" ? (
+            /*
+              ⚠️ O titulo NAO repete o nome da aba: ela ja se chama Parcelas. O
+              titulo diz o que aquela lista e para esta conta.
+            */
+            <GrupoDeCampos
+              primeiro
+              titulo="Pagamento"
+              legenda="Cada parcela vence e é paga por conta própria. A vencida aparece em vermelho, e o menu da linha é onde se dá baixa."
+              /*
+                ⚠️ Mexer no cronograma sai do `+` do TITULO, e nao do menu de
+                cada linha. E a mesma decisao da conta a receber: mudar
+                vencimento, dividir o saldo e acrescentar parcela sao o mesmo
+                gesto — abrir o cronograma inteiro —, e ele nao pertence a uma
+                parcela especifica.
+
+                Fica visivel e travado enquanto o editor nao existe: escondido,
+                ninguem descobriria que ele vai existir.
+              */
+              onIncluir={conta.cancelada ? undefined : () => setParcelando(true)}
+              rotuloIncluir="Mexer no parcelamento"
             >
-              <table
-                style={{ width: "100%", borderCollapse: "collapse", fontSize: "var(--text-sm)" }}
-              >
-                <thead>
-                  <tr style={{ background: "var(--surface-2)" }}>
-                    {["#", "Vencimento", "Valor", "Situação", "Anexos"].map((c, i) => (
-                      <th
-                        key={c}
-                        className="rotulo"
-                        style={{
-                          height: 32,
-                          padding: "0 12px",
-                          textAlign: i === 2 ? "right" : i === 1 ? "left" : "center",
-                          borderBottom: "1px solid var(--border)",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {c}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
+              {/*
+                ⚠️ Mesma anatomia da parcela da conta a RECEBER: bolinha de
+                estado colada no numero, conciliado logo depois, e o menu de
+                acoes fechando a linha. Sao o mesmo objeto visto dos dois lados
+                do caixa, e duas leituras diferentes obrigariam quem trabalha nas
+                duas telas a aprender duas vezes.
+              */}
+              <TableArea minWidth={0}>
+                <TableHead>
+                  <Th minWidth={54}>#</Th>
+                  {/*
+                    ⚠️ Conciliado e sobre o EXTRATO, nao sobre a baixa. Dar baixa
+                    e dizer "paguei"; conciliar e ter conferido que o dinheiro
+                    saiu da conta. Sem esta coluna as duas viram a mesma coisa na
+                    leitura, e quem fecha o mes nao ve o que falta bater.
+                  */}
+                  <Th minWidth={90}>Conciliado</Th>
+                  <Th minWidth={110}>Vencimento</Th>
+                  <Th minWidth={110}>Valor</Th>
+                  <Th minWidth={90}>Documentos</Th>
+                  <Th> </Th>
+                </TableHead>
+
                 <tbody>
                   {conta.parcelas.length === 0 && (
-                    <tr>
-                      <td
-                        colSpan={5}
-                        style={{
-                          padding: "20px 12px",
-                          textAlign: "center",
-                          color: "var(--text-tertiary)",
-                        }}
-                      >
-                        Nenhuma parcela gerada.
-                      </td>
-                    </tr>
+                    <EmptyRow colSpan={6} message="Nenhuma parcela gerada." />
                   )}
-                  {conta.parcelas.map((p, i) => (
-                    <tr
+
+                  {conta.parcelas.map((p) => (
+                    <Tr
                       key={p.id}
-                      style={{ borderTop: i === 0 ? undefined : "1px solid var(--border)" }}
+                      /*
+                        ⚠️ Vencida pinta a LINHA toda. A data sozinha em vermelho
+                        se perde no meio da tabela, e atraso e o unico estado aqui
+                        que pede acao hoje.
+                      */
+                      style={
+                        parcelaVencida(p)
+                          ? { background: "var(--danger-bg)", color: "var(--danger-text)" }
+                          : undefined
+                      }
                     >
-                      <td style={{ height: 34, padding: "0 12px", textAlign: "center" }}>
-                        {p.numero}
-                      </td>
-                      <td style={{ padding: "0 12px", fontVariantNumeric: "tabular-nums" }}>
-                        <Vencimento data={p.vencimento} pago={p.pago} />
-                      </td>
-                      <td
-                        style={{
-                          padding: "0 12px",
-                          textAlign: "right",
-                          fontVariantNumeric: "tabular-nums",
-                        }}
-                      >
+                      <Td>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
+                          <Bolinha parcela={p} />
+                          {p.numero}
+                        </span>
+                      </Td>
+
+                      <Td>
+                        <MarcaDeConciliacao conciliado={p.conciliado} />
+                      </Td>
+
+                      <Td style={NUM}>
+                        {p.vencimento ? (
+                          paraFormatoBR(p.vencimento as DataISO)
+                        ) : (
+                          <span style={{ color: "var(--text-disabled)" }}>—</span>
+                        )}
+                      </Td>
+
+                      <Td style={NUM}>
                         {formatarSemSimbolo(p.total as Centavos)}
-                      </td>
-                      <td style={{ padding: "0 12px", textAlign: "center" }}>
-                        <Badge tom={p.pago ? "success" : "info"}>
-                          {p.pago ? "PAGA" : "ABERTA"}
-                        </Badge>
-                      </td>
-                      <td style={{ padding: "0 12px", textAlign: "center" }}>
-                        <Anexos boleto={p.boleto} nfs={p.nfs} />
-                      </td>
-                    </tr>
+
+                        {/* Desconto dado na baixa: sem mostrar aqui, a soma das
+                            parcelas nao fecha com o total e parece erro de conta. */}
+                        {p.desconto > 0 && (
+                          <div
+                            title={`Desconto de ${formatarSemSimbolo(p.desconto as Centavos)}`}
+                            style={{
+                              marginTop: 1,
+                              fontSize: "var(--text-xs)",
+                              color: "var(--debito)",
+                            }}
+                          >
+                            −{formatarSemSimbolo(p.desconto as Centavos)}
+                          </div>
+                        )}
+                      </Td>
+
+                      <Td>
+                        <Anexos boleto={p.boleto} nfs={p.nfs} comprovante={p.comprovante} />
+                      </Td>
+
+                      <Td>
+                        <AcoesDaLinha>
+                          <MenuDeLinha>
+                            {(fechar) => (
+                              <AcoesDaParcela
+                                contaId={conta.id}
+                                parcela={p}
+                                cancelada={conta.cancelada}
+                                fechar={fechar}
+                                aoBaixar={() => setBaixando(p.id)}
+                                aoEditarParcelamento={() => setParcelando(true)}
+                                aoMudar={setConta}
+                              />
+                            )}
+                          </MenuDeLinha>
+                        </AcoesDaLinha>
+                      </Td>
+                    </Tr>
                   ))}
                 </tbody>
-              </table>
-          </div>
+              </TableArea>
+            </GrupoDeCampos>
+          ) : aba === "lancamentos" ? (
+            <LancamentosDaConta
+              contaId={conta.id}
+              lancamentos={conta.lancamentos}
+              total={conta.total}
+              /*
+                ⚠️ Editavel so enquanto NADA foi pago. Ao primeiro centavo a
+                conta vira documento: alguem pagou contra um valor, e mexer no
+                total depois faria o comprovante que existe apontar para uma
+                divida que mudou de tamanho. O servidor recusa de novo.
+              */
+              travado={conta.parcelasPagas > 0 || conta.cancelada}
+              motivoTravado={
+                conta.cancelada
+                  ? "Conta cancelada não se edita."
+                  : "Esta conta já tem parcela paga. O valor não muda depois do primeiro pagamento."
+              }
+              aoMudar={setConta}
+              aoMudarTotal={setTotalPendente}
+            />
+          ) : (
+            <GrupoDeCampos
+              primeiro
+              titulo="Arquivos da conta"
+              legenda="A nota, o contrato, o comprovante. O link vale por uma hora e é gerado na hora de abrir, e não fica valendo para sempre."
+              onIncluir={() => entrada.current?.click()}
+            >
+              {/*
+                ⚠️ O `input` de arquivo fica ESCONDIDO e o gesto sai do `+` do
+                titulo, que e onde o resto do sistema cadastra filho. No rodape
+                da lista ele desceria junto com o ultimo arquivo, e quem tem oito
+                anexos rolaria ate o fim para achar como enviar o nono.
+              */}
+              <input
+                ref={entrada}
+                type="file"
+                accept="application/pdf,image/png,image/jpeg,image/webp"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  const arquivo = e.target.files?.[0];
+                  // O valor e limpo para que enviar o MESMO arquivo de novo
+                  // volte a disparar o evento: sem isso, o segundo envio nao
+                  // acontece e a tela parece travada.
+                  e.target.value = "";
+                  if (arquivo) void enviarAnexo(arquivo);
+                }}
+              />
+
+              <TableArea minWidth={0}>
+                <TableHead>
+                  <Th>Arquivo</Th>
+                  <Th minWidth={104}>Enviado</Th>
+                  <Th minWidth={70}>Ações</Th>
+                </TableHead>
+
+                <tbody>
+                  {conta.anexos.length === 0 && (
+                    <EmptyRow colSpan={3} message="Nenhum arquivo anexado a esta conta." />
+                  )}
+
+                  {conta.anexos.map((a, i) => (
+                    <Tr key={a.id} delay={i * 12}>
+                      <Td>{a.nome}</Td>
+                      <Td style={NUM}>
+                        {a.criadoEm ? paraFormatoBR(a.criadoEm.slice(0, 10) as DataISO) : "—"}
+                      </Td>
+                      <Td>
+                        {/*
+                          ⚠️ Nao e o `AcoesDaLinha` do kit: ele empurra para a
+                          direita, e nesta tabela tudo alinha a esquerda.
+                        */}
+                        <span style={{ display: "inline-flex", gap: 4 }}>
+                          <BotaoDeAcao
+                            rotulo="Abrir o arquivo"
+                            onClick={() =>
+                              window.open(
+                                `/api/v1/contas-pagar/${conta.id}/anexos/${a.id}`,
+                                "_blank",
+                                "noopener",
+                              )
+                            }
+                          >
+                            <path d="M2 8s2.5-4.5 6-4.5S14 8 14 8s-2.5 4.5-6 4.5S2 8 2 8Z" />
+                            <circle cx="8" cy="8" r="1.9" />
+                          </BotaoDeAcao>
+                          <BotaoDeAcao
+                            rotulo="Remover o arquivo"
+                            onClick={() =>
+                              confirmar(
+                                `Remover ${a.nome} desta conta?`,
+                                "Remover",
+                                () => removerAnexo(a.id),
+                              )
+                            }
+                          >
+                            <path d="M3 4.5h10M6.5 4.5V3h3v1.5M5 4.5l.6 8h4.8l.6-8" />
+                          </BotaoDeAcao>
+                        </span>
+                      </Td>
+                    </Tr>
+                  ))}
+                </tbody>
+              </TableArea>
+            </GrupoDeCampos>
+          )}
         </>
+      )}
+      {/*
+       * ⚠️ Baixar abre o MESMO drawer da tela de baixas, so que ja com o
+       * fornecedor escolhido e esta parcela marcada.
+       *
+       * Uma tela de baixa propria aqui seriam dois lugares para o mesmo fato, e
+       * eles divergem: a de baixas ja sabe repartir um pagamento entre contas, e
+       * a daqui nunca saberia, porque so enxerga uma. Mesma decisao da conta a
+       * receber.
+       */}
+      {/*
+       * O MESMO editor da conta a receber. As regras de quem pode mexer vem de
+       * `oQuePodeNaConta`, que ja era compartilhada; o que muda entre os dois
+       * lados e texto e a URL do PUT.
+       */}
+      {parcelando && conta && (
+        <EditorDeParcelamento
+          url={`/api/v1/contas-pagar/${conta.id}/parcelas`}
+          numero={String(conta.numero ?? conta.id)}
+          contraparte={conta.fornecedorNome}
+          rotuloContraparte="Fornecedor"
+          tituloDaConta="Conta a pagar"
+          total={conta.total}
+          parcelas={conta.parcelas.map((p) => ({
+            id: p.id,
+            numero: p.numero,
+            vencimento: p.vencimento,
+            total: p.total,
+            pago: p.pago,
+          }))}
+          pode={oQuePodeNaConta({
+            cancelada: conta.cancelada,
+            parcelas: conta.parcelas.map((p) => ({
+              id: p.id,
+              numero: p.numero,
+              vencimento: (p.vencimento ?? hoje()) as DataISO,
+              valor: p.total as Centavos,
+              pago: p.pago,
+              // ⚠️ Comprovante conta como documento: mexer no vencimento de uma
+              // parcela cuja prova de pagamento ja foi emitida faria o papel
+              // apontar para uma data que nao existe mais.
+              temDocumento: p.nfs != null || p.boleto != null || p.comprovante != null,
+            })),
+          })}
+          onClose={() => setParcelando(false)}
+          aoSalvar={() => {
+            setParcelando(false);
+            recarregar();
+          }}
+        />
+      )}
+
+      {baixando != null && conta && (
+        <NovaBaixaDrawer
+          fornecedorInicial={{ id: conta.fornecedorId ?? 0, nome: conta.fornecedorNome }}
+          parcelaInicial={baixando}
+          onClose={() => setBaixando(null)}
+        />
       )}
     </Drawer>
   );
 }
 
-function Vencimento({ data, pago }: { data: string | null; pago: boolean }) {
-  if (!data) return <span style={{ color: "var(--text-tertiary)" }}>—</span>;
+/**
+ * Vencida: passou da data e ainda espera dinheiro.
+ *
+ * ⚠️ So parcela NAO paga vence. Numa paga a data e historia, e pintar a linha de
+ * vermelho encheria a tabela de atraso que ja foi resolvido.
+ */
+function parcelaVencida(p: { pago: boolean; vencimento: string | null }): boolean {
+  return !p.pago && p.vencimento != null && p.vencimento < hoje();
+}
 
-  const atrasado = !pago && data < hoje();
+/**
+ * O estado da parcela num ponto de cor, colado no numero.
+ *
+ * ⚠️ Conciliada e diferente de paga: paga e "saiu daqui", conciliada e "bateu
+ * com o extrato". Mesma leitura da parcela da conta a receber.
+ */
+function Bolinha({
+  parcela,
+}: {
+  parcela: { pago: boolean; conciliado: boolean; vencimento: string | null };
+}) {
+  const estado = parcela.conciliado
+    ? "Conciliada"
+    : parcela.pago
+      ? "Paga"
+      : parcelaVencida(parcela)
+        ? "Vencida"
+        : "Em aberto";
+
+  const cor =
+    estado === "Conciliada"
+      ? "var(--primary)"
+      : estado === "Paga"
+        ? "var(--success)"
+        : estado === "Vencida"
+          ? "var(--danger)"
+          : "var(--text-tertiary)";
+
   return (
     <span
+      aria-label={estado}
+      title={estado}
       style={{
-        color: atrasado ? "var(--danger-text)" : undefined,
-        fontWeight: atrasado ? "var(--fw-medium)" : undefined,
+        width: 8,
+        height: 8,
+        flexShrink: 0,
+        borderRadius: "var(--radius-full)",
+        background: cor,
       }}
-    >
-      {paraFormatoBR(data as DataISO)}
-    </span>
+      className="redondo"
+    />
   );
 }
 
-function Anexos({ boleto, nfs }: { boleto: string | null; nfs: string | null }) {
-  if (!boleto && !nfs) return <span style={{ color: "var(--text-disabled)" }}>—</span>;
+/**
+ * O menu de acoes de uma parcela a pagar.
+ *
+ * ⚠️ NAO tem "enviar por e-mail" nem "enviar por WhatsApp", que existem do lado
+ * que recebe. La o documento vai PARA o cliente, que precisa dele para pagar.
+ * Aqui quem paga e a propria empresa: nao ha a quem enviar, e a nota vem do
+ * fornecedor em vez de sair daqui.
+ */
+function AcoesDaParcela({
+  contaId,
+  parcela,
+  cancelada,
+  fechar,
+  aoBaixar,
+  aoEditarParcelamento,
+  aoMudar,
+}: {
+  contaId: number;
+  parcela: Parcela;
+  cancelada: boolean;
+  fechar: () => void;
+  aoBaixar: () => void;
+  aoEditarParcelamento: () => void;
+  aoMudar: (conta: Conta) => void;
+}) {
+  const entrada = useRef<HTMLInputElement>(null);
+  const [tipo, setTipo] = useState<"nfs" | "boleto" | "comprovante">("nfs");
+  const { avisar } = useAvisos();
+
+  async function enviar(arquivo: File) {
+    const corpo = new FormData();
+    corpo.append("arquivo", arquivo);
+
+    const r = await fetch(
+      `/api/v1/contas-pagar/${contaId}/parcelas/${parcela.id}/documento?tipo=${tipo}`,
+      { method: "POST", body: corpo },
+    );
+    const dados = await r.json().catch(() => null);
+
+    if (!r.ok) {
+      avisar("atencao", dados?.error?.message ?? "Não foi possível anexar");
+      return;
+    }
+
+    aoMudar(dados.data as Conta);
+    avisar("sucesso", "Documento anexado");
+  }
+
+  function pedirArquivo(qual: "nfs" | "boleto" | "comprovante") {
+    setTipo(qual);
+    fechar();
+    // O clique vai para o fim da fila para o `tipo` novo ja valer quando o
+    // arquivo voltar: `setTipo` so vale no proximo render.
+    setTimeout(() => entrada.current?.click(), 0);
+  }
+
+  return (
+    <>
+      <input
+        ref={entrada}
+        type="file"
+        accept="application/pdf,image/png,image/jpeg,image/webp"
+        style={{ display: "none" }}
+        onChange={(e) => {
+          const arquivo = e.target.files?.[0];
+          // Limpo para que enviar o MESMO arquivo de novo volte a disparar o
+          // evento: sem isso, o segundo envio nao acontece e a tela trava.
+          e.target.value = "";
+          if (arquivo) void enviar(arquivo);
+        }}
+      />
+
+      <ItemDoMenu
+        rotulo="Baixar parcela"
+        icone={<IconeSaida />}
+        /*
+          ⚠️ Baixar mora AQUI, e nao num botao de rodape. O gesto exige saber
+          QUAL parcela, e so a linha sabe. No rodape ele nao sabia nenhuma.
+        */
+        desabilitado={parcela.pago || cancelada}
+        motivo={
+          parcela.pago
+            ? "Esta parcela já está paga"
+            : cancelada
+              ? "Conta cancelada não recebe baixa"
+              : undefined
+        }
+        onClick={() => {
+          fechar();
+          aoBaixar();
+        }}
+      />
+
+      <ItemDoMenu
+        rotulo={parcela.nfs ? "Trocar a nota" : "Anexar nota"}
+        icone={<IconeNota />}
+        desabilitado={cancelada}
+        motivo={cancelada ? "Conta cancelada não recebe documento" : undefined}
+        onClick={() => pedirArquivo("nfs")}
+      />
+
+      <ItemDoMenu
+        rotulo={parcela.boleto ? "Trocar o boleto" : "Anexar boleto"}
+        icone={<IconeBoleto />}
+        desabilitado={cancelada}
+        motivo={cancelada ? "Conta cancelada não recebe documento" : undefined}
+        onClick={() => pedirArquivo("boleto")}
+      />
+
+      {/*
+        ⚠️ O comprovante e o documento mais importante deste lado: e a unica
+        prova de que o dinheiro saiu, e o que se procura quando o fornecedor
+        cobra de novo. Ele nem existia como coluna ate agora.
+      */}
+      <ItemDoMenu
+        rotulo={parcela.comprovante ? "Trocar o comprovante" : "Anexar comprovante"}
+        icone={<IconeComprovante />}
+        desabilitado={cancelada}
+        motivo={cancelada ? "Conta cancelada não recebe documento" : undefined}
+        onClick={() => pedirArquivo("comprovante")}
+      />
+
+      {/*
+        ⚠️ Imprimir o comprovante ainda nao existe, e aparece TRAVADO em vez de
+        ausente: some a opcao e a pessoa procura onde ela foi parar, sem
+        descobrir que o sistema ainda nao faz.
+      */}
+      {/*
+        ⚠️ Editar abre o CRONOGRAMA inteiro, e nao um formulario daquela parcela.
+        Mudar vencimento, dividir o saldo e acrescentar parcela sao o mesmo
+        gesto, e cada um deles mexe no valor das outras — o total esta fixo. Uma
+        tela por parcela nao teria como manter a soma fechando.
+      */}
+      <ItemDoMenu
+        rotulo="Editar parcelamento"
+        icone={<IconeCalendario />}
+        desabilitado={cancelada}
+        motivo={cancelada ? "Conta cancelada não se edita" : undefined}
+        onClick={() => {
+          fechar();
+          aoEditarParcelamento();
+        }}
+      />
+
+      <ItemDoMenu
+        rotulo="Imprimir comprovante"
+        icone={<IconeImpressora />}
+        desabilitado
+        motivo="O comprovante em PDF ainda não existe."
+        onClick={() => {}}
+      />
+    </>
+  );
+}
+
+/*
+ * Os icones do menu, na grade de 16 e com traco de 1.5.
+ *
+ * ⚠️ Todos CONTORNADOS, nenhum preenchido. Num menu, icone cheio pesa mais que o
+ * rotulo e o olho passa a ler o desenho antes da palavra — e a palavra e que diz
+ * o que vai acontecer. Preenchido fica reservado para marca de estado, onde o
+ * desenho E a informacao.
+ */
+const TRACO = {
+  width: 15,
+  height: 15,
+  viewBox: "0 0 16 16",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 1.5,
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+};
+
+/** Seta saindo para uma bandeja: o dinheiro deixando a conta. */
+function IconeSaida() {
+  return (
+    <svg {...TRACO}>
+      <path d="M8 9V2" />
+      <path d="M5.4 4.6L8 2l2.6 2.6" />
+      <path d="M2.8 10v2a1.4 1.4 0 001.4 1.4h7.6A1.4 1.4 0 0013.2 12v-2" />
+    </svg>
+  );
+}
+
+/** Folha com linhas: a nota do fornecedor. */
+function IconeNota() {
+  return (
+    <svg {...TRACO}>
+      <path d="M3.5 2.2h6l3 3v8.6h-9z" />
+      <path d="M9.5 2.2v3h3" />
+      <path d="M5.6 8.6h4.8M5.6 11h3.2" />
+    </svg>
+  );
+}
+
+/** Barras de larguras diferentes: o codigo de barras do boleto. */
+function IconeBoleto() {
+  return (
+    <svg {...TRACO}>
+      <path d="M2.6 3.4v9.2M5 3.4v9.2M7.2 3.4v9.2M9.8 3.4v9.2M13.4 3.4v9.2" />
+    </svg>
+  );
+}
+
+/** Folha com visto: a prova de que o dinheiro saiu. */
+function IconeComprovante() {
+  return (
+    <svg {...TRACO}>
+      <path d="M3.5 2.2h6l3 3v8.6h-9z" />
+      <path d="M9.5 2.2v3h3" />
+      <path d="M5.8 9.4l1.5 1.5 2.9-3" />
+    </svg>
+  );
+}
+
+/** Calendario: o cronograma inteiro, que e o que "Editar parcelamento" abre. */
+function IconeCalendario() {
+  return (
+    <svg {...TRACO}>
+      <rect x="2.4" y="3.4" width="11.2" height="10.2" rx="1.4" />
+      <path d="M2.4 6.4h11.2M5.4 2.2v2.4M10.6 2.2v2.4" />
+    </svg>
+  );
+}
+
+/** Impressora, na mesma grade dos outros. */
+function IconeImpressora() {
+  return (
+    <svg {...TRACO}>
+      <path d="M4.4 6V2.4h7.2V6" />
+      <path d="M4.4 12H3a.9.9 0 01-.9-.9V7.8A1.4 1.4 0 013.5 6.4h9A1.4 1.4 0 0113.9 7.8v3.3a.9.9 0 01-.9.9h-1.4" />
+      <rect x="4.4" y="9.6" width="7.2" height="4" rx="0.7" />
+    </svg>
+  );
+}
+
+function Anexos({
+  boleto,
+  nfs,
+  comprovante,
+}: {
+  boleto: string | null;
+  nfs: string | null;
+  comprovante: string | null;
+}) {
+  if (!boleto && !nfs && !comprovante) {
+    return <span style={{ color: "var(--text-disabled)" }}>—</span>;
+  }
 
   return (
     <span style={{ display: "inline-flex", gap: 4 }}>
-      {boleto && <Anexo href={boleto} rotulo="Boleto" />}
       {nfs && <Anexo href={nfs} rotulo="NF" />}
+      {boleto && <Anexo href={boleto} rotulo="Boleto" />}
+      {/* Por ultimo porque e o que aparece por ultimo na vida da parcela: a nota
+          chega, o boleto se paga, e o comprovante e a prova do que aconteceu. */}
+      {comprovante && <Anexo href={comprovante} rotulo="Comprovante" />}
     </span>
   );
 }
@@ -301,10 +1137,3 @@ function Anexo({ href, rotulo }: { href: string; rotulo: string }) {
   );
 }
 
-const TOM: Record<SituacaoConta, Tom> = {
-  ABERTA: "info",
-  PARCIAL: "warning",
-  VENCIDA: "danger",
-  PAGA: "success",
-  CANCELADA: "neutral",
-};

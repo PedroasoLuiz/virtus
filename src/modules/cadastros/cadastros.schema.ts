@@ -40,6 +40,7 @@ export const atualizarCentroBodySchema = criarCentroBodySchema.partial();
 
 export const centroSchema = z.object({
   id: z.number(),
+  codigo: z.string().nullable(),
   descricao: z.string(),
   tipo: z.enum(TIPOS_CENTRO_CUSTO),
   ativo: z.boolean(),

@@ -38,6 +38,19 @@ export function caminhoDoDocumento(
   faturaId: number,
   tipo: "nfs" | "boleto" | "comprovante" | "anexo",
   nomeOriginal: string,
+  /**
+   * A pasta do modulo dono do arquivo.
+   *
+   * ⚠️ O padrao continua sendo `faturas`, e isso NAO e preguica: o caminho ja
+   * gravado em `faturasanexos` e a unica forma de achar o arquivo no bucket.
+   * Mudar o formato para as faturas orfanaria todo anexo existente e quebraria
+   * todo link ja enviado a cliente.
+   *
+   * A policy do Storage confere apenas o PRIMEIRO segmento (`empresa/{id}`, via
+   * `empresa_do_caminho`), entao uma pasta nova aqui nao precisa de migration
+   * nenhuma e continua isolada por tenant.
+   */
+  modulo: "faturas" | "contas-pagar" = "faturas",
 ): string {
   const extensao = (nomeOriginal.split(".").pop() ?? "pdf").toLowerCase().slice(0, 5);
 
@@ -49,7 +62,7 @@ export function caminhoDoDocumento(
    * de milissegundos e barato. Com UUID o proprio CAMINHO vira segredo, e so
    * chega ao arquivo quem recebeu o link.
    */
-  return `empresa/${empresaId}/faturas/${faturaId}/${tipo}/${crypto.randomUUID()}.${extensao}`;
+  return `empresa/${empresaId}/${modulo}/${faturaId}/${tipo}/${crypto.randomUUID()}.${extensao}`;
 }
 
 export async function enviarDocumento(caminho: string, arquivo: File): Promise<void> {

@@ -6,12 +6,17 @@ import {
   type Contrato,
   type ContratoNovo,
   type ContratoResumo,
+  type NaturezaContrato,
 } from "@/modules/contratos/contratos.types";
 
 /** Regra de negocio de contratos. */
 
-export function listarContratos(empresaId: number, incluirInativos = false): Promise<ContratoResumo[]> {
-  return repo.listar(empresaId, incluirInativos);
+export function listarContratos(
+  empresaId: number,
+  incluirInativos = false,
+  natureza: NaturezaContrato = "RECEITA",
+): Promise<ContratoResumo[]> {
+  return repo.listar(empresaId, incluirInativos, natureza);
 }
 
 export async function obterContrato(empresaId: number, id: number): Promise<Contrato> {

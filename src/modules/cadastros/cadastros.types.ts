@@ -21,6 +21,8 @@ export type ServicoNovo = {
 
 export type CentroCusto = {
   id: number;
+  /** Codigo legivel, unico por empresa. Aceita hierarquia contabil: `3.1.02`. */
+  codigo: string | null;
   descricao: string;
   tipo: TipoCentroCusto;
   ativo: boolean;

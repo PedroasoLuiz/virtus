@@ -43,10 +43,22 @@ const ROTULO_PERIODO: Record<string, string> = {
 export function ContratosTela({
   contratos,
   clientes,
+  natureza = "RECEITA",
 }: {
   contratos: ContratoResumo[];
   clientes: OpcaoCliente[];
+  /**
+   * De que lado o dinheiro corre. Muda o titulo e a palavra da contraparte, e
+   * viaja no POST para o contrato nascer do lado certo.
+   *
+   * ⚠️ A tela e a MESMA nos dois casos de proposito: cadastrar um contrato de
+   * aluguel e cadastrar um contrato de mensalidade sao o mesmo gesto, com os
+   * mesmos campos e a mesma recorrencia. Duas telas iguais divergiriam no
+   * primeiro ajuste feito so numa delas.
+   */
+  natureza?: "RECEITA" | "DESPESA";
 }) {
+  const ehDespesa = natureza === "DESPESA";
   const router = useRouter();
   const { avisar } = useAvisos();
 
@@ -91,7 +103,9 @@ export function ContratosTela({
   return (
     <PageLayout>
       <Panel>
-        <PageHeader title="Contratos">
+        {/* O titulo nao repete o nome do grupo do menu: dentro de contas a
+            pagar, "Recorrentes" ja diz de que despesa se trata. */}
+        <PageHeader title={ehDespesa ? "Recorrentes" : "Contratos"}>
           <SearchInput value={busca} onSearch={setBusca} />
           <IncluirButton onClick={() => setCriando(true)} />
         </PageHeader>
@@ -111,7 +125,24 @@ export function ContratosTela({
             <tbody>
               {filtrados.length === 0 && <EmptyRow colSpan={6} />}
               {filtrados.map((c, i) => {
-                const { pode, motivo } = podeGerarCompetencia(c, hojeISO);
+                const regra = podeGerarCompetencia(c, hojeISO);
+
+                /*
+                 * ⚠️ Gerar competencia esta TRAVADO no lado da despesa.
+                 *
+                 * A geracao cria um TICKET, que e o caminho do lado que recebe:
+                 * ticket -> conta a receber -> baixa. Numa despesa isso
+                 * produziria um ticket de servico prestado para um fornecedor —
+                 * dado errado, e que ainda entraria no faturamento.
+                 *
+                 * O caminho certo e a competencia gerar uma CONTA A PAGAR, e ele
+                 * ainda nao existe. Travado com o motivo a vista, ninguem cria a
+                 * sujeira e todo mundo sabe o que falta.
+                 */
+                const pode = regra.pode && !ehDespesa;
+                const motivo = ehDespesa
+                  ? "Gerar conta a pagar a partir do contrato ainda não existe."
+                  : regra.motivo;
 
                 return (
                   <Tr key={c.id} delay={Math.min(i * 20, 150)} dimmed={!c.ativo}>
@@ -181,12 +212,18 @@ export function ContratosTela({
         </TableFrame>
       </Panel>
 
-      <ContratoDrawer contratoId={detalhe} clientes={clientes} onClose={() => setDetalhe(null)} />
+      <ContratoDrawer
+        contratoId={detalhe}
+        clientes={clientes}
+        natureza={natureza}
+        onClose={() => setDetalhe(null)}
+      />
       {criando && (
         <ContratoDrawer
           contratoId={null}
           criando
           clientes={clientes}
+          natureza={natureza}
           onClose={() => setCriando(false)}
         />
       )}

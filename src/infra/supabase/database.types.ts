@@ -206,6 +206,14 @@ export type ContratoRow = {
   periodicidade: string;
   dia_vencimento: number | null;
   proxima_competencia: string | null;
+  /**
+   * RECEITA gera conta a receber; DESPESA gera conta a pagar.
+   *
+   * ⚠️ O motor de recorrencia e UM SO para os dois lados. `fkCliente` continua
+   * com esse nome na despesa porque aponta para `clientes`, que e a tabela de
+   * pessoas: cliente e fornecedor sao papeis da mesma pessoa.
+   */
+  natureza: string;
   fkEmpresa: number | null;
   fkUserCriacao: string | null;
   fkUserModificacao: string | null;
@@ -460,6 +468,8 @@ export type FaturaParcelaRow = Timestamps & {
 
 export type ContaPagarRow = Timestamps & {
   id: number;
+  /** Contado por empresa, e nao o `id`, que e sequencia global. */
+  numero: number | null;
   fkEmpresa: number | null;
   fkFornecedor: number | null;
   descricao: string | null;
@@ -467,9 +477,267 @@ export type ContaPagarRow = Timestamps & {
   fkCentroCusto: number | null;
   pago: boolean | null;
   cancelada: boolean | null;
+  /** Divida real, pausada. Diferente de cancelada, que deixou de existir. */
+  suspensa: boolean | null;
   fkStatus: number | null;
   data: string | null;
+  /** O numero da nota. Nao confundir com `numero`, que e o da conta. */
+  documento: string | null;
+  /** A especie do documento: NFS-e, CT, DARF. */
+  fkTipoDocumento: number | null;
   observacoes: string | null;
+};
+
+/**
+ * ⚠️ Tabela PROPRIA de contas a pagar, e nao `faturasstatus`.
+ *
+ * Vocabulario proprio (ABERTA, PARC. PAGA, PAGA, CONGELADA) e com `fkEmpresa`:
+ * os ids nao sao globais, e um status so vale dentro da empresa dona dele.
+ */
+/**
+ * O rateio do lado que PAGA, espelho de `pagamentosxparcelas`.
+ *
+ * ⚠️ O ajuste mora aqui, e nao nas colunas `acrescimo`/`desconto` da parcela: o
+ * valor original da parcela fica intocado, e e isso que permite estornar exato.
+ * O legado sobrescrevia o total da parcela com o que foi pago, e depois disso
+ * nao havia como saber quanto ela valia.
+ */
+export type PagamentoParcelaPagarRow = {
+  id: number;
+  created_at: string;
+  fkPagamento: number;
+  fkParcela: number;
+  valor: number;
+  juros: number;
+  multa: number;
+  desconto: number;
+  fkUserCriacao: string | null;
+};
+
+/**
+ * A especie do documento que origina a conta.
+ *
+ * ⚠️ `fkEmpresa` nulo = do sistema, e vale para todas. A policy de leitura
+ * enxerga os dois; as de escrita exigem empresa, entao a lista do sistema e
+ * imutavel pelo app.
+ */
+/**
+ * Um LANCAMENTO da conta a pagar: o que esta sendo pago, quanto, e em que centro.
+ *
+ * ⚠️ O nome da tabela e historico. Ela nasceu como rateio de centro de custo e
+ * hoje guarda a linha inteira — descricao, tipo e valor. O rateio continua
+ * existindo, mas como AGRUPAMENTO destas linhas por centro, e nao como uma
+ * segunda lista que precisaria concordar com esta.
+ */
+export type ContaPagarCentroCustoRow = {
+  id: number;
+  created_at: string;
+  updated_at: string | null;
+  fkUserCriacao: string | null;
+  fkContaPagar: number | null;
+  fkCentroCusto: number | null;
+  valor: number | null;
+  descricao: string | null;
+  ordem: number | null;
+};
+
+/** De onde a conta veio. AVULSA e origem legitima, e nao ausencia de origem. */
+export type ContaPagarOrigemRow = {
+  id: number;
+  created_at: string;
+  fkUserCriacao: string | null;
+  fkContaPagar: number;
+  origem: string;
+  fkOrdem: number | null;
+  fkContrato: number | null;
+  valor: number | null;
+  observacoes: string | null;
+};
+
+/** O cartao de credito. `diaFechamento` e o que decide a competencia da compra. */
+export type CartaoRow = Timestamps & {
+  id: number;
+  fkEmpresa: number | null;
+  fkUserCriacao: string | null;
+  fkUserModificacao: string | null;
+  apelido: string | null;
+  bandeira: string | null;
+  limite: number | null;
+  diaFechamento: number | null;
+  diaVencimento: number | null;
+  ativo: boolean | null;
+  /** A conta de onde a fatura costuma ser paga. NAO e usada na baixa. */
+  fkContaBancaria: number | null;
+  /**
+   * O cadastro que RECEBE o pagamento da fatura.
+   *
+   * ⚠️ Fica no CARTAO, e nao no banco. Banco do sistema e compartilhado por
+   * todas as empresas, e um vinculo dali para `clientes` — que e sempre de uma
+   * empresa so — vazaria cadastro entre tenants.
+   */
+  fkFornecedor: number | null;
+  /** A instituicao emissora, escolhida da lista de bancos. */
+  fkBanco: number | null;
+  expiracao: string | null;
+  /**
+   * ⚠️ Somente os 4 ULTIMOS digitos.
+   *
+   * PAN completo nao se guarda aqui: exige cifragem e controle de acesso que
+   * este sistema nao tem. E `ccv` NAO existe — armazenar CVV e proibido pelo
+   * PCI-DSS sem excecao, nem cifrado.
+   */
+  numero: string | null;
+};
+
+/**
+ * A fatura de um ciclo.
+ *
+ * ⚠️ `competencia` e sempre o PRIMEIRO DIA DO MES: ela e o rotulo do ciclo, e
+ * nao uma data em que algo acontece. `fkContaPagar` so existe depois de fechada.
+ */
+export type CartaoFaturaRow = Timestamps & {
+  id: number;
+  fkEmpresa: number | null;
+  fkCartao: number | null;
+  fkUserCriacao: string | null;
+  fkUserModificacao: string | null;
+  competencia: string | null;
+  dataFechamento: string | null;
+  dataVencimento: string | null;
+  valor: number | null;
+  acrescimo: number | null;
+  desconto: number | null;
+  total: number | null;
+  status: string | null;
+  fkContaPagar: number | null;
+};
+
+/**
+ * Uma compra dentro da fatura.
+ *
+ * ⚠️ `fkCentroCusto` e preenchido, e nao zerado como o legado fazia. Zerado, a
+ * despesa some do relatorio por centro no mes em que foi feita.
+ */
+export type CartaoFaturaParcelaRow = {
+  id: number;
+  created_at: string | null;
+  updated_at: string | null;
+  fkUserModificacao: string | null;
+  fkCartaoFatura: number | null;
+  fkEmpresa: number | null;
+  fkCartao: number | null;
+  fkFornecedor: number | null;
+  descricao: string | null;
+  dataCompra: string | null;
+  competencia: string | null;
+  numeroparcela: number | null;
+  valor: number | null;
+  categoria: string | null;
+  fkCentroCusto: number | null;
+  status: string | null;
+};
+
+/**
+ * A lista de bancos.
+ *
+ * ⚠️ `fkEmpresa` nulo = do sistema, e vale para todas. Mesmo desenho de
+ * `documentostipos`: o VPay entrega a lista pronta e cada empresa acrescenta a
+ * sua instituicao, sem poder mexer na entregue.
+ */
+/**
+ * Conexao com uma conta de anuncio da Meta.
+ *
+ * ⚠️ NAO ha coluna de token. Ele vive cifrado no `supabase_vault`, e aqui fica
+ * so o `secretId` que aponta para ele. Token de anuncio em texto puro entrega a
+ * conta do cliente a quem conseguir ler a tabela ou um backup.
+ */
+export type MetaConexaoRow = {
+  id: number;
+  created_at: string;
+  updated_at: string | null;
+  fkUserCriacao: string | null;
+  fkEmpresa: number;
+  fkCliente: number | null;
+  adAccountId: string;
+  nome: string | null;
+  /** ⚠️ O segredo mora no ACESSO. Uma copia por conta fazia a renovacao alcancar so uma delas. */
+  fkAcesso: number;
+  ativo: boolean;
+};
+
+/**
+ * Uma Pagina do Facebook, e o perfil do Instagram vinculado.
+ *
+ * ⚠️ Sem `secretId`: o token de Pagina que a Graph API exige e derivado do token
+ * do acesso na hora da consulta. Guardar copia criaria mais um segredo a renovar.
+ */
+export type MetaPaginaRow = {
+  id: number;
+  created_at: string;
+  updated_at: string | null;
+  fkUserCriacao: string | null;
+  fkEmpresa: number;
+  fkAcesso: number;
+  fkCliente: number | null;
+  pageId: string;
+  nome: string | null;
+  igUserId: string | null;
+  igUsername: string | null;
+  ativo: boolean;
+};
+
+/** O acesso a Meta: um token, uma validade, N contas de anuncio penduradas. */
+export type MetaAcessoRow = {
+  id: number;
+  created_at: string;
+  updated_at: string | null;
+  fkUserCriacao: string | null;
+  fkEmpresa: number;
+  nome: string | null;
+  secretId: string;
+  expiraEm: string | null;
+  ativo: boolean;
+};
+
+export type BancoRow = {
+  id: number;
+  created_at: string;
+  fkUserCriacao: string | null;
+  fkEmpresa: number | null;
+  codigo: string;
+  nome: string;
+  ativo: boolean;
+};
+
+export type DocumentoTipoRow = {
+  id: number;
+  created_at: string;
+  fkUserCriacao: string | null;
+  fkEmpresa: number | null;
+  sigla: string;
+  nome: string;
+  ativo: boolean;
+};
+
+export type ContaPagarStatusRow = {
+  id: number;
+  created_at: string;
+  fkUserCriacao: string | null;
+  fkEmpresa: number | null;
+  descricao: string | null;
+  ativo: boolean | null;
+  nivel: number | null;
+  padrao: boolean | null;
+};
+
+export type ContaPagarAnexoRow = {
+  id: number;
+  created_at: string;
+  fkContaPagar: number;
+  fkUserCriacao: string | null;
+  nome: string;
+  caminho: string;
+  tipo: string | null;
 };
 
 export type ContaPagarParcelaRow = Timestamps & {
@@ -485,6 +753,8 @@ export type ContaPagarParcelaRow = Timestamps & {
   fkPagamento: number | null;
   nfs: string | null;
   boleto: string | null;
+  /** A prova de que o dinheiro saiu. Caminho no bucket privado. */
+  comprovante: string | null;
   /** Credencial do link publico da parcela. Nulo = nao compartilhada. */
   token: string | null;
   observacoes: string | null;
@@ -503,6 +773,13 @@ export type ServicoRow = Timestamps & {
 
 export type CentroCustoRow = Timestamps & {
   id: number;
+  /**
+   * Codigo legivel, unico por empresa.
+   *
+   * ⚠️ Texto, para aceitar hierarquia contabil (`3.1.02`). E ⚠️ nao e o `id`:
+   * aquele e sequencia global e vem intercalado entre empresas.
+   */
+  codigo: string | null;
   fkEmpresa: number | null;
   descricao: string;
   tipo: string;
@@ -895,6 +1172,7 @@ export type Database = {
       faturas: { Row: FaturaRow; Insert: Partial<FaturaRow>; Update: Partial<FaturaRow>; Relationships: [] };
       pagamentos: { Row: PagamentoRow; Insert: Partial<PagamentoRow>; Update: Partial<PagamentoRow>; Relationships: [] };
       pagamentosxparcelas: { Row: PagamentoParcelaRow; Insert: Partial<PagamentoParcelaRow>; Update: Partial<PagamentoParcelaRow>; Relationships: [] };
+      pagamentosxparcelaspagar: { Row: PagamentoParcelaPagarRow; Insert: Partial<PagamentoParcelaPagarRow>; Update: Partial<PagamentoParcelaPagarRow>; Relationships: [] };
       contasbancarias: { Row: ContaBancariaRow; Insert: Partial<ContaBancariaRow>; Update: Partial<ContaBancariaRow>; Relationships: [] };
       parametroscobranca: { Row: ParametroCobrancaRow; Insert: Partial<ParametroCobrancaRow>; Update: Partial<ParametroCobrancaRow>; Relationships: [] };
       vwsaldo: { Row: SaldoRow; Insert: never; Update: never; Relationships: [] };
@@ -902,6 +1180,18 @@ export type Database = {
       faturasparcelas: { Row: FaturaParcelaRow; Insert: Partial<FaturaParcelaRow>; Update: Partial<FaturaParcelaRow>; Relationships: [] };
       contaspagar: { Row: ContaPagarRow; Insert: Partial<ContaPagarRow>; Update: Partial<ContaPagarRow>; Relationships: [] };
       contaspagarparcelas: { Row: ContaPagarParcelaRow; Insert: Partial<ContaPagarParcelaRow>; Update: Partial<ContaPagarParcelaRow>; Relationships: [] };
+      contaspagaranexos: { Row: ContaPagarAnexoRow; Insert: Partial<ContaPagarAnexoRow>; Update: Partial<ContaPagarAnexoRow>; Relationships: [] };
+      contaspagarstatus: { Row: ContaPagarStatusRow; Insert: Partial<ContaPagarStatusRow>; Update: Partial<ContaPagarStatusRow>; Relationships: [] };
+      metapaginas: { Row: MetaPaginaRow; Insert: Partial<MetaPaginaRow>; Update: Partial<MetaPaginaRow>; Relationships: [] };
+      metaacessos: { Row: MetaAcessoRow; Insert: Partial<MetaAcessoRow>; Update: Partial<MetaAcessoRow>; Relationships: [] };
+      metaconexoes: { Row: MetaConexaoRow; Insert: Partial<MetaConexaoRow>; Update: Partial<MetaConexaoRow>; Relationships: [] };
+      bancos: { Row: BancoRow; Insert: Partial<BancoRow>; Update: Partial<BancoRow>; Relationships: [] };
+      cartao: { Row: CartaoRow; Insert: Partial<CartaoRow>; Update: Partial<CartaoRow>; Relationships: [] };
+      cartaofaturas: { Row: CartaoFaturaRow; Insert: Partial<CartaoFaturaRow>; Update: Partial<CartaoFaturaRow>; Relationships: [] };
+      cartaofaturasparcelas: { Row: CartaoFaturaParcelaRow; Insert: Partial<CartaoFaturaParcelaRow>; Update: Partial<CartaoFaturaParcelaRow>; Relationships: [] };
+      documentostipos: { Row: DocumentoTipoRow; Insert: Partial<DocumentoTipoRow>; Update: Partial<DocumentoTipoRow>; Relationships: [] };
+      contaspagarcentrocusto: { Row: ContaPagarCentroCustoRow; Insert: Partial<ContaPagarCentroCustoRow>; Update: Partial<ContaPagarCentroCustoRow>; Relationships: [] };
+      contaspagarorigens: { Row: ContaPagarOrigemRow; Insert: Partial<ContaPagarOrigemRow>; Update: Partial<ContaPagarOrigemRow>; Relationships: [] };
       servicos: { Row: ServicoRow; Insert: Partial<ServicoRow>; Update: Partial<ServicoRow>; Relationships: [] };
       centrodecusto: { Row: CentroCustoRow; Insert: Partial<CentroCustoRow>; Update: Partial<CentroCustoRow>; Relationships: [] };
       empresas: { Row: EmpresaRow; Insert: Partial<EmpresaRow>; Update: Partial<EmpresaRow>; Relationships: [] };
@@ -976,6 +1266,66 @@ export type Database = {
       vw_origens_faturamento: { Row: OrigemFaturamentoRow; Relationships: [] };
     };
     Functions: {
+      /** Le o token de uma conexao, conferindo o tenant antes de decifrar. */
+      meta_token_da_conexao: {
+        Args: { p_conexao: number };
+        Returns: string | null;
+      };
+      /** O token de um acesso, decifrado do vault sob checagem de tenant. */
+      meta_token_do_acesso: {
+        Args: { p_acesso: number };
+        Returns: string | null;
+      };
+      /**
+       * Cria ou renova um acesso, com o segredo no vault.
+       *
+       * ⚠️ `p_acesso` preenchido SUBSTITUI o segredo no lugar. E o que faz a
+       * renovacao valer para todas as contas daquele acesso de uma vez.
+       */
+      meta_guardar_acesso: {
+        Args: {
+          p_empresa: number;
+          p_acesso: number | null;
+          p_nome: string | null;
+          p_token: string;
+          p_expira: string | null;
+        };
+        Returns: number;
+      };
+      /** Liga uma Pagina do Facebook a um acesso, com o Instagram dela. */
+      meta_ligar_pagina: {
+        Args: {
+          p_empresa: number;
+          p_acesso: number;
+          p_page: string;
+          p_nome: string | null;
+          p_ig_user: string | null;
+          p_ig_user_name: string | null;
+          p_cliente: number | null;
+        };
+        Returns: number;
+      };
+      /** Liga uma conta de anuncio a um acesso. Sem segredo: ele mora no acesso. */
+      meta_ligar_conta: {
+        Args: {
+          p_empresa: number;
+          p_acesso: number;
+          p_conta: string;
+          p_nome: string | null;
+          p_cliente: number | null;
+        };
+        Returns: number;
+      };
+      /**
+       * O proximo numero de conta a pagar da empresa.
+       *
+       * Trava a linha de `zsequencias` com `for update`: ler a tabela e somar um
+       * daria o mesmo numero a duas pessoas cadastrando ao mesmo tempo.
+       */
+      get_next_seq_contaspagar: {
+        Args: { p_empresa: number };
+        Returns: number;
+      };
       /**
        * Grava os servicos do ticket numa transacao so — ver docs/10.
        *

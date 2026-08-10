@@ -6,6 +6,8 @@ import {
   EmptyRow,
   FilterButton,
   FilterItem,
+  IconeKanban,
+  IconeTabela,
   IncluirButton,
   PageHeader,
   PageLayout,
@@ -18,48 +20,109 @@ import {
   Td,
   Th,
   Tr,
+  ViewButton,
   selectStyle,
-  tdNum,
   type Tom,
 } from "@/components/ui/kit";
 import {
+  estaVencida,
   situacaoDaConta,
+  SITUACOES_CONTA,
   type ContaPagarResumo,
   type SituacaoConta,
 } from "@/modules/contas-pagar/contas-pagar.types";
-import { formatarSemSimbolo } from "@/shared/utils/money";
+import { formatarSemSimbolo, type Centavos } from "@/shared/utils/money";
 import { paraFormatoBR, type DataISO } from "@/shared/utils/datas";
 import { ContaDrawer } from "./conta-drawer";
+import { NovaContaDrawer } from "./nova-conta-drawer";
+import { Quadro } from "@/components/ui/quadro";
+import { salvarVisao } from "@/modules/preferencias/preferencias.actions";
+import type { Visao } from "@/modules/preferencias/preferencias.types";
 
 const PAGE_SIZE = 25;
-
-const SITUACOES: SituacaoConta[] = ["ABERTA", "PARCIAL", "VENCIDA", "PAGA", "CANCELADA"];
 
 const TOM: Record<SituacaoConta, Tom> = {
   ABERTA: "info",
   PARCIAL: "warning",
-  VENCIDA: "danger",
   PAGA: "success",
-  CANCELADA: "neutral",
+  BAIXADA: "success",
+  SUSPENSA: "neutral",
 };
 
-export function ContasTabela({ contas }: { contas: ContaPagarResumo[] }) {
+/*
+ * ⚠️ O filtro mistura SITUACAO com MARCA de proposito.
+ *
+ * Quem varre a lista pergunta "o que esta vencido?" e "o que foi cancelado?" com
+ * a mesma naturalidade com que pergunta "o que esta em aberto?" — mesmo que, no
+ * modelo, as duas primeiras cruzem com as outras em vez de excluir. Dois seletores
+ * separados seriam fieis ao modelo e piores de usar.
+ */
+const VENCIDAS = "VENCIDAS";
+const CANCELADAS = "CANCELADAS";
+
+const OPCOES_DE_FILTRO = [...SITUACOES_CONTA, VENCIDAS, CANCELADAS];
+
+export function ContasTabela({
+  contas,
+  visaoInicial,
+}: {
+  contas: ContaPagarResumo[];
+  visaoInicial: Visao;
+}) {
   const [busca, setBusca] = useState("");
   const [situacao, setSituacao] = useState("");
   const [pagina, setPagina] = useState(1);
   const [detalhe, setDetalhe] = useState<number | null>(null);
+  const [nova, setNova] = useState(false);
+  const [modo, setModo] = useState<string>(visaoInicial);
 
-  // A situacao e derivada, entao e calculada uma vez e reaproveitada no filtro
-  // e na coluna — recalcular por linha renderizada seria trabalho repetido.
+  /**
+   * A escolha entre tabela e quadro e PREFERENCIA DO USUARIO, e vale para todas
+   * as telas com quadro — nao e um estado desta tela.
+   *
+   * ⚠️ A tela troca NA HORA e a gravacao vai atras, sem esperar. Um quadro que
+   * so aparece depois da ida ao servidor faz o clique parecer perdido. Se a
+   * gravacao falhar, o pior caso e a proxima carga abrir na visao antiga — e nao
+   * um dado errado.
+   */
+  function escolherModo(novo: string) {
+    setModo(novo);
+    void salvarVisao(novo as Visao);
+  }
+
+  // Situacao e vencimento sao derivados, entao saem uma vez so e sao
+  // reaproveitados no filtro, na tabela e no quadro — recalcular por linha
+  // renderizada seria trabalho repetido.
   const comSituacao = useMemo(
-    () => contas.map((c) => ({ conta: c, situacao: situacaoDaConta(c) })),
+    () =>
+      contas.map((c) => ({
+        conta: c,
+        situacao: situacaoDaConta(c),
+        vencida: estaVencida(c),
+      })),
     [contas],
   );
 
   const filtradas = useMemo(() => {
     const termo = busca.trim().toLowerCase();
-    return comSituacao.filter(({ conta, situacao: s }) => {
-      if (situacao && s !== situacao) return false;
+
+    return comSituacao.filter(({ conta, situacao: s, vencida }) => {
+      if (situacao === VENCIDAS) {
+        if (!vencida) return false;
+      } else if (situacao === CANCELADAS) {
+        if (!conta.cancelada) return false;
+      } else if (situacao) {
+        if (s !== situacao) return false;
+        /*
+         * ⚠️ Cancelada some das situacoes, e so aparece no filtro dela.
+         *
+         * Ela continua tendo uma situacao por baixo — uma conta cancelada pela
+         * metade ainda e PARCIAL —, e sem este corte ela apareceria misturada
+         * com as vivas em toda coluna.
+         */
+        if (conta.cancelada) return false;
+      }
+
       if (!termo) return true;
       return (
         conta.descricao.toLowerCase().includes(termo) ||
@@ -76,6 +139,14 @@ export function ContasTabela({ contas }: { contas: ContaPagarResumo[] }) {
     <PageLayout>
       <Panel>
         <PageHeader title="Contas a pagar">
+          <ViewButton
+            view={modo}
+            setView={escolherModo}
+            opcoes={[
+              { valor: "tabela", rotulo: "Tabela", icone: <IconeTabela /> },
+              { valor: "kanban", rotulo: "Kanban", icone: <IconeKanban /> },
+            ]}
+          />
           <FilterButton
             activeCount={situacao ? 1 : 0}
             onClear={() => {
@@ -93,7 +164,7 @@ export function ContasTabela({ contas }: { contas: ContaPagarResumo[] }) {
                 style={selectStyle}
               >
                 <option value="">Todas</option>
-                {SITUACOES.map((s) => (
+                {OPCOES_DE_FILTRO.map((s) => (
                   <option key={s} value={s}>
                     {s}
                   </option>
@@ -108,9 +179,15 @@ export function ContasTabela({ contas }: { contas: ContaPagarResumo[] }) {
               setPagina(1);
             }}
           />
-          <IncluirButton />
+          <IncluirButton onClick={() => setNova(true)} />
         </PageHeader>
 
+        {modo === "kanban" ? (
+          <QuadroDeContas
+            itens={filtradas}
+            aoAbrir={setDetalhe}
+          />
+        ) : (
         <TableFrame>
           <TableArea minWidth={880}>
             <TableHead>
@@ -118,19 +195,19 @@ export function ContasTabela({ contas }: { contas: ContaPagarResumo[] }) {
               <Th>Descrição</Th>
               <Th minWidth={180}>Fornecedor</Th>
               <Th minWidth={100}>Vencimento</Th>
-              <Th align="center" minWidth={80}>
-                Parcelas
-              </Th>
-              <Th align="center" minWidth={100}>
-                Situação
-              </Th>
-              <Th align="right" minWidth={110}>
-                Valor
-              </Th>
+              {/*
+                ⚠️ Tudo a esquerda, inclusive numero e dinheiro. Havia
+                "Parcelas" e "Situacao" centralizadas e "Valor" a direita: tres
+                eixos diferentes na mesma tabela, e o olho refazia a mira em
+                cada coluna.
+              */}
+              <Th minWidth={80}>Parcelas</Th>
+              <Th minWidth={100}>Situação</Th>
+              <Th minWidth={110}>Valor</Th>
             </TableHead>
             <tbody>
               {visiveis.length === 0 && <EmptyRow colSpan={7} />}
-              {visiveis.map(({ conta, situacao: s }, i) => (
+              {visiveis.map(({ conta, situacao: s, vencida }, i) => (
                 <Tr
                   key={conta.id}
                   delay={Math.min(i * 20, 150)}
@@ -138,7 +215,7 @@ export function ContasTabela({ contas }: { contas: ContaPagarResumo[] }) {
                   onClick={() => setDetalhe(conta.id)}
                 >
                   <Td style={{ fontVariantNumeric: "tabular-nums", color: "var(--text-tertiary)" }}>
-                    {conta.id}
+                    {conta.numero ?? conta.id}
                   </Td>
                   <Td style={{ maxWidth: 280 }}>
                     <span
@@ -165,18 +242,43 @@ export function ContasTabela({ contas }: { contas: ContaPagarResumo[] }) {
                       {conta.fornecedorNome ?? "—"}
                     </span>
                   </Td>
-                  <Td style={{ whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
+                  {/*
+                    ⚠️ VENCIDA vive AQUI, na data, e nao na coluna de situacao.
+                    Ela e um fato sobre o calendario, e o lugar de um fato sobre
+                    o calendario e do lado da data que o produziu.
+                  */}
+                  <Td
+                    style={{
+                      whiteSpace: "nowrap",
+                      fontVariantNumeric: "tabular-nums",
+                      color: vencida ? "var(--danger-text)" : undefined,
+                      fontWeight: vencida ? "var(--fw-medium)" : undefined,
+                    }}
+                  >
                     {conta.proximoVencimento
                       ? paraFormatoBR(conta.proximoVencimento as DataISO)
                       : "—"}
                   </Td>
-                  <Td style={{ textAlign: "center", fontVariantNumeric: "tabular-nums" }}>
+                  <Td style={{ fontVariantNumeric: "tabular-nums" }}>
                     {conta.qtdParcelas > 0 ? `${conta.parcelasPagas}/${conta.qtdParcelas}` : "—"}
                   </Td>
-                  <Td style={{ textAlign: "center" }}>
-                    <Badge tom={TOM[s]}>{s}</Badge>
+                  <Td>
+                    {/* Cancelada ganha a propria pastilha: ela nao esta num
+                        ponto do caminho, saiu do caminho. */}
+                    {conta.cancelada ? (
+                      <Badge tom="danger">CANCELADA</Badge>
+                    ) : (
+                      <Badge tom={TOM[s]}>{s}</Badge>
+                    )}
                   </Td>
-                  <Td style={{ ...tdNum, fontWeight: "var(--fw-medium)", color: "var(--debito)" }}>
+                  <Td
+                    style={{
+                      whiteSpace: "nowrap",
+                      fontVariantNumeric: "tabular-nums",
+                      fontWeight: "var(--fw-medium)",
+                      color: "var(--debito)",
+                    }}
+                  >
                     {formatarSemSimbolo(conta.total)}
                   </Td>
                 </Tr>
@@ -191,9 +293,244 @@ export function ContasTabela({ contas }: { contas: ContaPagarResumo[] }) {
             onPage={setPagina}
           />
         </TableFrame>
+        )}
       </Panel>
 
       <ContaDrawer contaId={detalhe} onClose={() => setDetalhe(null)} />
+      {nova && <NovaContaDrawer onClose={() => setNova(false)} />}
     </PageLayout>
+  );
+}
+
+/** Cor do ponto no cabecalho de cada coluna do quadro. */
+const COR_COLUNA: Record<SituacaoConta, string> = {
+  ABERTA: "var(--info)",
+  PARCIAL: "var(--warning)",
+  PAGA: "var(--success)",
+  BAIXADA: "var(--primary)",
+  SUSPENSA: "var(--text-tertiary)",
+};
+
+/**
+ * Quadro de contas a pagar.
+ *
+ * Usa o `Quadro` compartilhado, o mesmo de contas a receber, tickets e projetos.
+ *
+ * ⚠️ NENHUM cartao arrasta, e isso nao e uma pendencia.
+ *
+ * Do lado que recebe, a fatura tem uma coluna `status` de verdade e mover o
+ * cartao e uma transicao real. Aqui a situacao e DERIVADA: `situacaoDaConta` a
+ * calcula de `pago`, `cancelada` e das parcelas. Nao ha o que gravar ao soltar o
+ * cartao noutra coluna — o que tira uma conta de ABERTA e uma BAIXA, com valor e
+ * data, e o que a leva a VENCIDA e o calendario. Deixar arrastar prometeria um
+ * gesto que o sistema nao tem como cumprir, e o cartao voltaria sozinho para o
+ * lugar sem explicar por que.
+ *
+ * ⚠️ CANCELADA nao e coluna: ela nao e etapa do caminho, e sim conta que saiu do
+ * caminho. Uma coluna morta no fim rouba largura das que importam, e o cartao
+ * cancelado nao tem para onde ir depois.
+ *
+ * ⚠️ VENCIDA tambem nao e coluna, e essa e a mudanca que fez o quadro parar de
+ * mentir. Ela e tempo, nao progresso: como coluna, engolia PARCIAL inteira — no
+ * dado real, as 9 contas parciais eram todas tambem vencidas, e a coluna PARCIAL
+ * ficava vazia. Agora vencida e a data em vermelho no cartao, e a conta aparece
+ * na coluna que diz quanto dela ja foi pago.
+ */
+function QuadroDeContas({
+  itens,
+  aoAbrir,
+}: {
+  itens: { conta: ContaPagarResumo; situacao: SituacaoConta; vencida: boolean }[];
+  aoAbrir: (id: number) => void;
+}) {
+  const colunas: SituacaoConta[] = ["ABERTA", "PARCIAL", "PAGA", "BAIXADA", "SUSPENSA"];
+
+  return (
+    <Quadro
+      colunas={colunas.map((c, i) => ({ id: i, descricao: c, cor: COR_COLUNA[c] }))}
+      cartoes={itens
+        .filter(({ conta }) => !conta.cancelada)
+        .map(({ conta, situacao, vencida }) => ({
+          ...conta,
+          colunaId: colunas.indexOf(situacao),
+          situacao,
+          vencida,
+          arrastavel: false,
+        }))}
+      // Nada arrasta, entao nada chega aqui. O `Quadro` exige a funcao.
+      aoMover={() => {}}
+      aoAbrir={(c) => aoAbrir(c.id)}
+      vazio="Nenhuma conta"
+      corpo={(c) => (
+        <>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 6,
+              fontSize: "var(--text-sm)",
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                height: 17,
+                padding: "0 6px",
+                borderRadius: "var(--radius-xs)",
+                background: "var(--primary-subtle)",
+                color: "var(--primary)",
+                fontSize: "var(--text-xs)",
+                fontWeight: "var(--fw-semi)",
+              }}
+            >
+              {c.numero ?? c.id}
+            </span>
+            <Vencimento data={c.proximoVencimento} vencida={c.vencida} />
+          </div>
+
+          {/*
+            O FORNECEDOR e a linha forte, e a descricao vem abaixo em tom menor.
+            Num quadro de despesa a primeira pergunta e "para quem", e a segunda
+            "do que se trata".
+          */}
+          <div
+            style={{
+              display: "-webkit-box",
+              WebkitBoxOrient: "vertical",
+              WebkitLineClamp: 2,
+              overflow: "hidden",
+              fontSize: "var(--text-sm)",
+              fontWeight: "var(--fw-medium)",
+              lineHeight: 1.32,
+              letterSpacing: "var(--tracking-normal)",
+              marginTop: 7,
+            }}
+          >
+            {c.fornecedorNome ?? "—"}
+          </div>
+
+          <div
+            style={{
+              display: "-webkit-box",
+              WebkitBoxOrient: "vertical",
+              WebkitLineClamp: 1,
+              overflow: "hidden",
+              fontSize: "var(--text-sm)",
+              color: "var(--text-tertiary)",
+              lineHeight: 1.32,
+              marginTop: 2,
+            }}
+          >
+            {c.descricao || "—"}
+          </div>
+        </>
+      )}
+      rodape={(c) => (
+        <>
+          {/*
+            ⚠️ A palavra "parcelas" fica JUNTO do numero.
+
+            Sozinho, "1/1" nao diz o que conta: podia ser progresso, nota, ou
+            qualquer outra razao. Duas palavras resolvem uma duvida que o cartao
+            nao tem como responder de outro jeito.
+          */}
+          <span
+            style={{
+              fontSize: "var(--text-sm)",
+              color: "var(--text-tertiary)",
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
+            {c.qtdParcelas > 0
+              ? `${c.parcelasPagas}/${c.qtdParcelas} ${c.qtdParcelas === 1 ? "parcela" : "parcelas"}`
+              : "Sem parcelas"}
+          </span>
+          <span style={{ flex: 1 }} />
+          <ValorDaConta pago={c.valorPago} total={c.total} quitada={c.situacao === "PAGA"} />
+        </>
+      )}
+    />
+  );
+}
+
+/**
+ * Quanto ja saiu e quanto era.
+ *
+ * Espelho do `ValorDaConta` da conta a receber, com a cor trocada: la o pago e
+ * `--credito`, aqui e `--debito`, porque este dinheiro saiu.
+ *
+ * ⚠️ Quitada, o total sozinho em vermelho ja diz tudo. Repetir o mesmo numero
+ * duas vezes, um vermelho e um preto, so faz procurar a diferenca que nao
+ * existe.
+ *
+ * ⚠️ E "quitada" vem da SITUACAO, e nao de comparar pago com total. Uma conta de
+ * 1.500 baixada com 500 de desconto pagou 1.000 e esta quitada: pela comparacao
+ * ela apareceria como parcial para sempre, com um "-1.000" ao lado de 1.500, e
+ * quem varre o quadro veria divida que nao existe mais.
+ */
+function ValorDaConta({
+  pago,
+  total,
+  quitada,
+}: {
+  pago: Centavos;
+  total: Centavos;
+  quitada: boolean;
+}) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+      {pago > 0 && !quitada && (
+        <span
+          style={{
+            fontSize: "var(--text-sm)",
+            fontWeight: "var(--fw-semi)",
+            fontVariantNumeric: "tabular-nums",
+            color: "var(--debito)",
+          }}
+        >
+          -{formatarSemSimbolo(pago)}
+        </span>
+      )}
+
+      <span
+        style={{
+          fontSize: "var(--text-sm)",
+          fontWeight: "var(--fw-semi)",
+          fontVariantNumeric: "tabular-nums",
+          color: quitada ? "var(--debito)" : undefined,
+        }}
+      >
+        {formatarSemSimbolo(total)}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * O vencimento, vermelho quando ja passou.
+ *
+ * ⚠️ Quem decide o vermelho e `estaVencida`, no dominio, e nao uma comparacao
+ * escrita aqui. Ela ja sabe que conta paga, cancelada ou suspensa nao vence, e
+ * duas implementacoes divergiriam no primeiro caso de borda — a tela pintaria de
+ * vermelho uma conta que o filtro "Vencidas" nao traz.
+ */
+function Vencimento({ data, vencida }: { data: DataISO | null; vencida: boolean }) {
+  if (!data) return <span style={{ color: "var(--text-tertiary)" }}>—</span>;
+
+  const atrasado = vencida;
+
+  return (
+    <span
+      style={{
+        fontVariantNumeric: "tabular-nums",
+        color: atrasado ? "var(--danger-text)" : "var(--text-primary)",
+        fontWeight: atrasado ? "var(--fw-medium)" : 400,
+      }}
+    >
+      {paraFormatoBR(data)}
+    </span>
   );
 }

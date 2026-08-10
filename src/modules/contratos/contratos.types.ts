@@ -30,6 +30,17 @@ export type Competencia = {
   geradaEm: string;
 };
 
+/**
+ * De que lado o dinheiro corre.
+ *
+ * ⚠️ O contrato serve aos DOIS lados, e o motor de recorrencia e um so.
+ * RECEITA gera conta a receber; DESPESA gera conta a pagar. `fkCliente` continua
+ * com esse nome nos dois casos porque ele aponta para `clientes`, que e a tabela
+ * de PESSOAS: cliente e fornecedor sao papeis, e a mesma pessoa pode ser os dois.
+ */
+export const NATUREZAS_CONTRATO = ["RECEITA", "DESPESA"] as const;
+export type NaturezaContrato = (typeof NATUREZAS_CONTRATO)[number];
+
 export type ContratoResumo = {
   id: number;
   numero: string | null;
@@ -43,6 +54,7 @@ export type ContratoResumo = {
   fim: DataISO | null;
   proximaCompetencia: DataISO | null;
   ativo: boolean;
+  natureza: NaturezaContrato;
   qtdCompetencias: number;
 };
 
@@ -59,6 +71,8 @@ export type ContratoNovo = {
   diaVencimento?: number | null;
   inicio?: DataISO | null;
   fim?: DataISO | null;
+  /** Omitida, o contrato nasce de RECEITA, que e o caso que ja existia. */
+  natureza?: NaturezaContrato;
 };
 
 /**
