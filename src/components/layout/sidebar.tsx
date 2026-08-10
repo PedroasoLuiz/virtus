@@ -10,9 +10,10 @@ import {
   TODAS_AS_ROTAS,
   type Grupo,
   type Item,
+  paiDaRota,
 } from "@/components/layout/rotas";
 import { useFavoritos } from "@/components/layout/favoritos";
-import { ArvoreNav, GrupoFlutuante, ItemNav, ehAtivo } from "@/components/layout/nav";
+import { ArvoreNav, Chevron, GrupoFlutuante, ItemNav, ehAtivo } from "@/components/layout/nav";
 import { Icon } from "@/components/layout/icones";
 import { MenuUsuario } from "@/components/layout/menu-usuario";
 import { BotaoLateralDoWhatsapp } from "@/components/whatsapp/botao-lateral";
@@ -242,34 +243,90 @@ export function Sidebar({
  * coluna.
  */
 function Favoritos({ telas, pathname }: { telas: Item[]; pathname: string }) {
+  /*
+   * ⚠️ Recolhivel, e comeca ABERTO.
+   *
+   * Favorito e atalho: escondido por padrao, ele deixa de ser atalho e vira mais
+   * um clique. Recolher existe para quem tem quinze e quer ver os grupos sem
+   * rolar — e quem recolhe faz isso uma vez.
+   */
+  const [aberto, setAberto] = useState(true);
+
+  /*
+   * ⚠️ Agrupado pelo PAI, e nao uma lista corrida.
+   *
+   * "Titulos" existe em contas a receber e em contas a pagar. Favoritando os
+   * dois, a lista mostrava "Titulos" duas vezes sem dizer qual era qual — e o
+   * atalho que deveria poupar tempo virava um chute entre dois iguais.
+   */
+  const porPai = new Map<string, Item[]>();
+  for (const t of telas) {
+    const pai = paiDaRota(t.href) ?? "Outros";
+    porPai.set(pai, [...(porPai.get(pai) ?? []), t]);
+  }
+
   return (
     <div style={{ marginBottom: 8 }}>
-      <div
+      <button
+        onClick={() => setAberto((v) => !v)}
         style={{
+          width: "100%",
           display: "flex",
           alignItems: "center",
           gap: 8,
           height: 32,
           padding: "0 8px",
+          border: "none",
+          background: "transparent",
+          borderRadius: "var(--radius-sm)",
+          cursor: "pointer",
+          fontFamily: "var(--font)",
           fontSize: "var(--text-base)",
           fontWeight: 550,
           color: "var(--sidebar-item-color)",
+          textAlign: "left",
           whiteSpace: "nowrap",
         }}
+        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--sidebar-item-bg-hover)")}
+        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
       >
         <span style={{ display: "flex", color: "var(--primary)" }}>
           <EstrelaCheia />
         </span>
         <span style={{ flex: 1 }}>Favoritos</span>
-      </div>
+        <Chevron aberto={aberto} tamanho={12} />
+      </button>
 
-      <div
-        style={{ display: "flex", flexDirection: "column", gap: "var(--nav-item-gap)" }}
-      >
-        {telas.map((t) => (
-          <ItemNav key={t.href} item={t} ativo={ehAtivo(t.href, pathname)} nivel={0} />
-        ))}
-      </div>
+      {aberto && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "var(--nav-item-gap)" }}>
+          {[...porPai.entries()].map(([pai, itens]) => (
+            <div key={pai}>
+              {/*
+                O nome do pai NAO e clicavel: ele nao leva a lugar nenhum, e um
+                grupo aqui e so contexto para distinguir dois filhos de mesmo
+                nome. Clicavel, prometeria uma tela que nao existe.
+              */}
+              <div
+                style={{
+                  padding: "0 8px 0 var(--nav-texto-x1)",
+                  height: 26,
+                  display: "flex",
+                  alignItems: "center",
+                  fontSize: "var(--text-sm)",
+                  color: "var(--sidebar-item-sub)",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {pai}
+              </div>
+
+              {itens.map((t) => (
+                <ItemNav key={t.href} item={t} ativo={ehAtivo(t.href, pathname)} nivel={2} />
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

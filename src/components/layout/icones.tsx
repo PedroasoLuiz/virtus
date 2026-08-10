@@ -42,6 +42,27 @@ export function Icon({ name, size = 15, color }: { name: string; size?: number; 
           <path d="M2.5 14c0-3.04 2.46-5.5 5.5-5.5s5.5 2.46 5.5 5.5" />
         </svg>
       );
+    /*
+     * Social: a nota do TikTok, pedida pelo Pedro.
+     *
+     * ⚠️ E o UNICO icone preenchido do menu, e por isso ele vem sem `stroke` e
+     * com `fill`. Herdando o `stroke` de 1.6px da familia, o contorno engrossaria
+     * por fora de uma forma que ja e solida e o simbolo viraria um borrao no
+     * tamanho de 15px em que o menu o pinta.
+     *
+     * ⚠️ `currentColor` no fill, e nao a cor da marca. O menu pinta o item ativo
+     * e o inativo com cores proprias; um preto fixo aqui deixaria este item
+     * apagado quando os vizinhos acendem.
+     *
+     * O path vem do Bootstrap Icons (MIT), ja desenhado na grade de 16 que o
+     * resto do arquivo usa.
+     */
+    case "social":
+      return (
+        <svg width={size} height={size} viewBox="0 0 16 16" fill={color ?? "currentColor"}>
+          <path d="M9 0h1.98c.144.715.54 1.617 1.235 2.512C12.895 3.389 13.797 4 15 4v2c-1.753 0-3.07-.814-4-1.829V11a5 5 0 1 1-5-5v2a3 3 0 1 0 3 3z" />
+        </svg>
+      );
     case "relatorios":
       return (
         <svg {...p}>

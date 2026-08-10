@@ -45,6 +45,21 @@ export const GRUPOS_POR_MODULO: Partial<Record<Modulo, Grupo[]>> = {
       ],
     },
     {
+      /*
+       * Suprimentos vem ANTES do financeiro porque e a ordem em que a despesa
+       * acontece: alguem pede, cota, compra — e so entao ha o que pagar. O menu
+       * conta a mesma historia que o processo.
+       */
+      key: "suprimentos",
+      label: "Suprimentos",
+      icon: "operacional",
+      items: [
+        { label: "Requisições", href: "/suprimentos/requisicoes" },
+        { label: "Cotações", href: "/suprimentos/cotacoes" },
+        { label: "Pedidos de compra", href: "/suprimentos/pedidos" },
+      ],
+    },
+    {
       key: "financeiro",
       label: "Financeiro",
       icon: "faturas",
@@ -65,7 +80,29 @@ export const GRUPOS_POR_MODULO: Partial<Record<Modulo, Grupo[]>> = {
             { label: "Baixas", href: "/recebimentos" },
           ],
         },
-        { label: "Contas a pagar", href: "/contas-pagar" },
+        {
+          /*
+           * Espelho exato do lado que recebe: o titulo e a baixa sao o mesmo
+           * assunto visto dos dois lados — o que a empresa deve, e o que ela
+           * pagou. Solto no primeiro nivel, "Contas a pagar" prometia a divida e
+           * nao levava a lugar nenhum quando a pergunta era "o que ja saiu".
+           */
+          key: "financeiro-pagar",
+          label: "Contas a pagar",
+          items: [
+            { label: "Títulos", href: "/contas-pagar" },
+            // "Baixas" pelo mesmo motivo do outro lado: e o nome que o
+            // financeiro usa para o gesto de dar por pago.
+            { label: "Baixas", href: "/contas-pagar/baixas" },
+            /*
+             * A despesa que se repete: aluguel, contador, energia, licenca.
+             * Fica AQUI e nao junto de "Contratos", que e do lado que recebe:
+             * quem cuida do que a empresa paga nao vai procurar a conta de luz
+             * na tela de contrato com cliente.
+             */
+            { label: "Recorrentes", href: "/contas-pagar/recorrentes" },
+          ],
+        },
         {
           key: "financeiro-caixas",
           label: "Caixas e Bancos",
@@ -98,6 +135,38 @@ export const GRUPOS_POR_MODULO: Partial<Record<Modulo, Grupo[]>> = {
       ],
     },
     {
+      /*
+       * Social fica no fim: nao participa do fluxo do dinheiro, e sim mostra o
+       * resultado da midia que o cliente paga. E consulta, e nao operacao.
+       *
+       * ⚠️ A rede e o NIVEL DO MEIO, e o assunto vem embaixo dela. Meta,
+       * TikTok e Google nao compartilham metrica, permissao nem token: cada uma
+       * e um bloco fechado. Agrupando por assunto ("Insights" no topo, com as
+       * redes dentro), a proxima rede teria de se espalhar por varios itens em
+       * vez de nascer como um so.
+       */
+      key: "social",
+      label: "Social",
+      icon: "social",
+      items: [
+        {
+          key: "social-meta",
+          label: "Meta",
+          /*
+           * ⚠️ Uma entrada so, e o painel dentro dela e por CLIENTE.
+           *
+           * Antes eram "Anuncios" e "Perfis", separados porque sao APIs,
+           * permissoes e tokens diferentes. Isso e verdade para quem escreve o
+           * codigo e falso para quem apresenta o resultado: falar de um cliente
+           * exigia abrir as duas telas e somar de cabeca. A falha de uma origem
+           * nao contamina a outra porque o painel diz o que faltou, em vez de
+           * uma tarja de erro cobrindo tudo.
+           */
+          items: [{ label: "Painel", href: "/insights" }],
+        },
+      ],
+    },
+    {
       key: "cadastros",
       label: "Cadastros",
       icon: "pessoas",
@@ -105,6 +174,15 @@ export const GRUPOS_POR_MODULO: Partial<Record<Modulo, Grupo[]>> = {
         { label: "Pessoas", href: "/pessoas" },
         { label: "Serviços", href: "/servicos" },
         { label: "Centro de custo", href: "/centro-custo" },
+        /*
+         * Integracoes e cadastro, e nao configuracao de plataforma.
+         *
+         * O que se liga aqui e conta de fora que pertence a EMPRESA e se associa
+         * a um CLIENTE dela — mesma natureza de pessoa, servico e centro de
+         * custo. Plataforma guarda o que a Vpay vende (plano, modulos), que e
+         * outro assunto e outro dono.
+         */
+        { label: "Integrações", href: "/configuracoes" },
       ],
     },
   ],
@@ -157,6 +235,32 @@ export const TODAS_AS_ROTAS: Item[] = [
   ...Object.values(GRUPOS_POR_MODULO).flatMap((g) => g?.flatMap(itensDe) ?? []),
   ...itensDe(GRUPO_PLATAFORMA),
 ];
+
+/**
+ * De quem a rota e filha: o subgrupo quando ha um, senao o grupo.
+ *
+ * ⚠️ Existe para os FAVORITOS. "Titulos" existe em contas a receber e em contas
+ * a pagar, e favoritando os dois o menu mostrava "Titulos" duas vezes, sem dizer
+ * qual era qual. Com o pai, viram "Contas a receber > Titulos" e "Contas a pagar
+ * > Titulos".
+ */
+export function paiDaRota(href: string): string | null {
+  for (const grupos of [
+    ...Object.values(GRUPOS_POR_MODULO).map((g) => g ?? []),
+    [GRUPO_PLATAFORMA],
+  ]) {
+    for (const grupo of grupos) {
+      for (const filho of grupo.items) {
+        if (ehSubgrupo(filho)) {
+          if (filho.items.some((i) => i.href === href)) return filho.label;
+        } else if (filho.href === href) {
+          return grupo.label;
+        }
+      }
+    }
+  }
+  return null;
+}
 
 export function rotuloDaRota(href: string): string | null {
   return TODAS_AS_ROTAS.find((i) => i.href === href)?.label ?? null;

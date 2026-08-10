@@ -3,7 +3,14 @@
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { useFavoritos } from "@/components/layout/favoritos";
-import { ehSubgrupo, telasDoGrupo, type Grupo, type Item, type Subgrupo } from "@/components/layout/rotas";
+import {
+  ehSubgrupo,
+  telasDoGrupo,
+  TODAS_AS_ROTAS,
+  type Grupo,
+  type Item,
+  type Subgrupo,
+} from "@/components/layout/rotas";
 import { Icon } from "@/components/layout/icones";
 
 /**
@@ -220,7 +227,7 @@ function Marcador({ x, aceso }: { x: string; aceso: boolean }) {
   );
 }
 
-function Chevron({ aberto, tamanho }: { aberto: boolean; tamanho: number }) {
+export function Chevron({ aberto, tamanho }: { aberto: boolean; tamanho: number }) {
   return (
     <span
       style={{
@@ -345,8 +352,28 @@ function Estrela({ preenchida }: { preenchida: boolean }) {
   );
 }
 
+/**
+ * Qual item do menu esta aceso.
+ *
+ * O casamento por PREFIXO existe para a tela de detalhe: em `/projetos/5` quem
+ * fica aceso e "Projetos", que e o item mais proximo que existe no menu.
+ *
+ * ⚠️ Mas prefixo sozinho acende DOIS itens quando uma tela mora dentro de
+ * outra. `/contas-pagar/baixas` casava com "Contas a pagar" e com "Baixas" ao
+ * mesmo tempo, e o menu apontava para Titulos enquanto a tela aberta era a de
+ * Baixas. Por isso o prefixo so vale quando nenhuma rota MAIS ESPECIFICA
+ * tambem casa: a mais especifica ganha, e o item generico apaga.
+ */
 export function ehAtivo(href: string, pathname: string): boolean {
-  return pathname === href || pathname.startsWith(href + "/");
+  if (pathname === href) return true;
+  if (!pathname.startsWith(href + "/")) return false;
+
+  return !TODAS_AS_ROTAS.some(
+    (r) =>
+      r.href !== href &&
+      r.href.startsWith(href + "/") &&
+      (pathname === r.href || pathname.startsWith(r.href + "/")),
+  );
 }
 
 /**
