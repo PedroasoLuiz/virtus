@@ -90,6 +90,28 @@ export function compacto(n: number): string {
   return `${(n / 1_000_000).toFixed(1).replace(".", ",")}M`;
 }
 
+/**
+ * O mesmo número, com o MILHÃO em verde.
+ *
+ * ⚠️ Verde só no milhão, e não a partir do mil. A cor aqui não é decoração: ela
+ * marca o número que sai da escala do resto da grade, e é o único caso em que um
+ * post se destaca sozinho. Aplicada também nos milhares, seis cartões ficariam
+ * todos verdes e o destaque deixaria de destacar.
+ *
+ * ⚠️ É `--primary`, o verde da marca, e não `--success`. Aquele é cor de estado,
+ * e um número grande não é um estado — é a mesma regra do verde de confirmação
+ * registrada no kit.
+ */
+export function Compacto({ valor }: { valor: number }) {
+  const emMilhoes = Math.abs(valor) >= 1_000_000;
+
+  return (
+    <span style={emMilhoes ? { color: "var(--primary)", fontWeight: "var(--fw-semi)" } : undefined}>
+      {compacto(valor)}
+    </span>
+  );
+}
+
 export function plural(n: number, um: string, varios: string): string {
   return `${inteiro(n)} ${n === 1 ? um : varios}`;
 }

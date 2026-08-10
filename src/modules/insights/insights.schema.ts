@@ -186,9 +186,9 @@ export const painelDoClienteSchema = z.object({
   pagina: z
     .object({
       fas: z.number(),
-      alcance: z.number(),
-      visualizacoes: z.number(),
-      engajamento: z.number(),
+      alcance: z.number().nullable(),
+      visualizacoes: z.number().nullable(),
+      engajamento: z.number().nullable(),
       alcancePorDia: serieSchema,
       visualizacoesPorDia: serieSchema,
       engajamentoPorDia: serieSchema,

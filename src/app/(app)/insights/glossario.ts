@@ -40,10 +40,10 @@ export const GLOSSARIO = {
   reacoes: "Curtidas mais comentários nas publicações do período.",
   fas: "Quantas pessoas curtiram a Página do Facebook.",
   alcancePagina:
-    "Quantas pessoas distintas viram a Página em cada dia, somando os dias. Quem viu na segunda e na terça conta duas vezes.",
+    "Quantas pessoas distintas viram a Página em cada dia, somando os dias. Quem viu na segunda e na terça conta duas vezes. Vem do alcance único da Meta, e some quando ela aposenta a métrica.",
   visualizacoes: "Quantas vezes alguém abriu a Página.",
   engajamento:
-    "Curtidas, comentários, compartilhamentos e cliques nas publicações da Página.",
+    "Curtidas, comentários, compartilhamentos e cliques nas publicações da Página. NÃO é visualização: uma publicação vista 100 mil vezes pode ter 49 mil engajamentos, porque ver e reagir são coisas diferentes.",
   publicacoes: "Quantas publicações o perfil tem ao todo.",
 } as const;
 

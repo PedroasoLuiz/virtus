@@ -478,21 +478,27 @@ export function BlocoDaPagina({ painel }: { painel: PainelDoCliente }) {
           segunda e na terça conta duas vezes. Sem a palavra, o número seria lido
           como alcance único e ficaria alto demais para o que significa.
         */}
+        {/*
+          ⚠️ "indisponível" no lugar de zero quando a métrica morreu. A Meta
+          aposentou várias métricas de Página em junho de 2026, e um zero ali
+          afirmaria que ninguém viu a Página — frase muito diferente de "a
+          métrica não existe mais".
+        */}
         <CartaoDeIndicador
           label="Alcance por dia"
-          valor={inteiro(pagina.alcance)}
+          valor={pagina.alcance == null ? "indisponível" : inteiro(pagina.alcance)}
           icone={<IconeOnda />}
           ajuda={GLOSSARIO.alcancePagina}
         />
         <CartaoDeIndicador
           label="Visualizações"
-          valor={inteiro(pagina.visualizacoes)}
+          valor={pagina.visualizacoes == null ? "indisponível" : inteiro(pagina.visualizacoes)}
           icone={<IconeOlho />}
           ajuda={GLOSSARIO.visualizacoes}
         />
         <CartaoDeIndicador
           label="Engajamento"
-          valor={inteiro(pagina.engajamento)}
+          valor={pagina.engajamento == null ? "indisponível" : inteiro(pagina.engajamento)}
           icone={<IconeCoracao />}
           ajuda={GLOSSARIO.engajamento}
         />

@@ -246,20 +246,43 @@ async function metricasDaPagina(
     return [];
   }
 
+  /*
+   * ⚠️ UMA metrica por conceito, e NENHUMA queda de um conceito para outro.
+   *
+   * A lista de alternativas era generosa demais: o alcance caia para
+   * `page_impressions` quando o unico morria, e as visualizacoes tambem podiam
+   * cair nele. Dois cartoes com rotulos diferentes exibiam o MESMO numero, e o
+   * "Alcance" dizia "pessoas distintas" mostrando total de exibicoes. Alternativa
+   * so vale entre nomes da MESMA coisa; entre coisas diferentes, ela vira mentira
+   * com cara de dado.
+   *
+   * Alcance sao pessoas distintas; exibicoes sao quantas vezes o conteudo
+   * apareceu; visitas sao quantas vezes alguem ABRIU a Pagina. Sao tres
+   * perguntas, e nenhuma responde pela outra.
+   *
+   * ⚠️ Serie VAZIA quando a metrica morreu, e a tela mostra "indisponivel" em vez
+   * de zero. Zero e uma afirmacao — "ninguem viu" —, e a Meta aposentou varias
+   * dessas em junho de 2026.
+   */
   const [alcancePorDia, visualizacoesPorDia, engajamentoPorDia] = await Promise.all([
-    // Alcance unico morreu em junho de 2026; o total de exibicoes sobreviveu.
-    serieDaMetrica(["page_impressions_unique", "page_impressions", "page_views_total"]),
-    serieDaMetrica(["page_views_total", "page_impressions"]),
-    serieDaMetrica(["page_post_engagements", "page_engaged_users"]),
+    serieDaMetrica(["page_impressions_unique"]),
+    serieDaMetrica(["page_views_total"]),
+    serieDaMetrica(["page_post_engagements"]),
   ]);
 
   const total = (serie: PontoDaSerie[]) => serie.reduce((s, p) => s + p.valor, 0);
 
+  /*
+   * ⚠️ NULO quando a serie nao veio, e nao zero. Ver o comentario acima: sem
+   * isto o painel afirmava "0 de alcance" numa Pagina que so nao respondeu.
+   */
+  const totalOuNulo = (serie: PontoDaSerie[]) => (serie.length === 0 ? null : total(serie));
+
   return {
     fas: Math.round(perfil.fan_count ?? 0),
-    alcance: total(alcancePorDia),
-    visualizacoes: total(visualizacoesPorDia),
-    engajamento: total(engajamentoPorDia),
+    alcance: totalOuNulo(alcancePorDia),
+    visualizacoes: totalOuNulo(visualizacoesPorDia),
+    engajamento: totalOuNulo(engajamentoPorDia),
     /*
      * ⚠️ As janelas de 90 dias sao CONCATENADAS na serie e somadas so no total.
      * Elas nao se sobrepoem, entao juntar os dias em ordem da a serie do periodo

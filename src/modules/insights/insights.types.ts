@@ -168,9 +168,16 @@ export type PontoDaSerie = { dia: string; valor: number };
  */
 export type MetricasDaPagina = {
   fas: number;
-  alcance: number;
-  visualizacoes: number;
-  engajamento: number;
+  /**
+   * ⚠️ NULO quer dizer "a Meta nao respondeu por esta metrica", e nao zero.
+   *
+   * Ela aposentou varias metricas de Pagina em junho de 2026. Um zero no lugar
+   * afirmaria que ninguem viu a Pagina naquele periodo, que e uma frase muito
+   * diferente de "a metrica nao existe mais".
+   */
+  alcance: number | null;
+  visualizacoes: number | null;
+  engajamento: number | null;
   /** As mesmas tres, dia a dia. Ja vinham na resposta e so eram somadas. */
   alcancePorDia: PontoDaSerie[];
   visualizacoesPorDia: PontoDaSerie[];

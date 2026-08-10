@@ -12,7 +12,7 @@ import {
   IconeSeta,
   Previa,
   Subtitulo,
-  compacto,
+  Compacto,
   dataBR,
   inteiro,
   plural,
@@ -74,25 +74,7 @@ function CartaoDePublicacao({ publicacao: p }: { publicacao: Publicacao }) {
         textDecoration: "none",
       }}
     >
-      <Previa imagem={p.imagem}>
-        {p.tipo !== "IMAGEM" && (
-          <span
-            style={{
-              position: "absolute",
-              top: 8,
-              right: 8,
-              padding: "2px 7px",
-              borderRadius: "var(--radius-full)",
-              background: "rgba(0, 0, 0, 0.62)",
-              color: "#fff",
-              fontSize: "var(--text-xs)",
-              fontWeight: "var(--fw-medium)",
-            }}
-          >
-            {p.tipo === "VIDEO" ? "Vídeo" : "Carrossel"}
-          </span>
-        )}
-      </Previa>
+      <Previa imagem={p.imagem} />
 
       <div style={{ padding: 12 }}>
         {/*
@@ -138,14 +120,14 @@ function CartaoDePublicacao({ publicacao: p }: { publicacao: Publicacao }) {
             title={`${inteiro(p.curtidas)} curtidas`}
           >
             <IconeCoracao pequeno />
-            {compacto(p.curtidas)}
+            <Compacto valor={p.curtidas} />
           </span>
           <span
             style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
             title={`${inteiro(p.comentarios)} comentários`}
           >
             <IconeBalao />
-            {compacto(p.comentarios)}
+            <Compacto valor={p.comentarios} />
           </span>
           {/*
             ⚠️ Compartilhamento só aparece quando EXISTE. O Instagram não expõe
@@ -158,7 +140,7 @@ function CartaoDePublicacao({ publicacao: p }: { publicacao: Publicacao }) {
               title={`${inteiro(p.compartilhamentos)} compartilhamentos`}
             >
               <IconeSeta />
-              {compacto(p.compartilhamentos)}
+              <Compacto valor={p.compartilhamentos} />
             </span>
           )}
           {/*
@@ -171,12 +153,39 @@ function CartaoDePublicacao({ publicacao: p }: { publicacao: Publicacao }) {
               title={`${inteiro(p.visualizacoes)} visualizações`}
             >
               <IconeOlho pequeno />
-              {compacto(p.visualizacoes)}
+              <Compacto valor={p.visualizacoes} />
             </span>
           )}
 
-          {/* A data cede o lugar quando os contadores enchem a linha. */}
-          <span style={{ marginLeft: "auto", whiteSpace: "nowrap" }}>{dataBR(p.data)}</span>
+        </div>
+
+        {/*
+          ⚠️ A data ganhou LINHA PRÓPRIA, com o tipo na outra ponta.
+
+          Ela vinha no fim da fila de contadores, empurrada por `margin-left:
+          auto`: com quatro contadores, a linha estourava a largura do cartão e a
+          data saía por fora. Numa linha só dela, o vão entre as duas pontas é o
+          que sobra, e nada mais precisa cedê-lo.
+
+          ⚠️ E o tipo saiu de cima da imagem. Ali ele tapava justamente o canto
+          da arte, que é o que a grade existe para mostrar.
+        */}
+        <div
+          style={{
+            marginTop: 6,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 8,
+            fontSize: "var(--text-xs)",
+            color: "var(--text-tertiary)",
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          <span style={{ whiteSpace: "nowrap" }}>{dataBR(p.data)}</span>
+          <span style={{ whiteSpace: "nowrap" }}>
+            {p.tipo === "VIDEO" ? "Vídeo" : p.tipo === "CARROSSEL" ? "Carrossel" : "Post"}
+          </span>
         </div>
       </div>
     </a>
