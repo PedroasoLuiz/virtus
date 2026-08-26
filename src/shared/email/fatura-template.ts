@@ -19,8 +19,9 @@ import "server-only";
  * feita com `<table>`, porque flex e grid o Outlook ignora.
  */
 
-const VERDE = "#006A28";
-const VERDE_CLARO = "#eef7f0";
+/* Azul da marca. E-mail nao le CSS var: se a identidade mudar, muda aqui. */
+const AZUL = "#0A52B9";
+const AZUL_CLARO = "#eef3fb";
 
 export function htmlDaFatura(dados: {
   empresaNome: string;
@@ -52,7 +53,7 @@ export function htmlDaFatura(dados: {
   <meta name="x-apple-disable-message-reformatting" />
   <title>${escapar(referencia ?? "Cobrança")}</title>
 </head>
-<body style="margin:0;padding:0;width:100%;background-color:#f4f6f4;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1a1a1a;-webkit-font-smoothing:antialiased;">
+<body style="margin:0;padding:0;width:100%;background-color:#f4f6f4;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#101012;-webkit-font-smoothing:antialiased;">
   <!-- Tabela externa: e o que centraliza em cliente que ignora margin:auto. -->
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f6f4;">
     <tr>
@@ -68,14 +69,14 @@ export function htmlDaFatura(dados: {
               <div style="font-size:13px;letter-spacing:0.04em;text-transform:uppercase;color:#8a8a8a;">
                 ${escapar(dados.empresaNome)}
               </div>
-              <div style="height:3px;width:44px;background-color:${VERDE};border-radius:2px;margin:14px auto 0;"></div>
+              <div style="height:3px;width:44px;background-color:${AZUL};border-radius:2px;margin:14px auto 0;"></div>
             </td>
           </tr>
 
           <!-- Assunto -->
           <tr>
             <td style="padding:22px 32px 0;text-align:center;">
-              <h1 style="margin:0;font-size:22px;line-height:1.3;font-weight:700;color:#1a1a1a;">
+              <h1 style="margin:0;font-size:22px;line-height:1.3;font-weight:700;color:#101012;">
                 ${referencia ? `Sua cobrança do ${escapar(referencia)}` : "Sua cobrança"}
               </h1>
               ${
@@ -100,7 +101,7 @@ export function htmlDaFatura(dados: {
           <!-- Quadro de valores -->
           <tr>
             <td style="padding:22px 32px 0;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:${VERDE_CLARO};border-radius:10px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:${AZUL_CLARO};border-radius:10px;">
                 <tr>
                   <td style="padding:18px 20px;">
                     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
@@ -120,7 +121,7 @@ export function htmlDaFatura(dados: {
             <td style="padding:24px 32px 0;">
               <!-- Fundo no proprio <a>: na celula, o padding do link nao
                    contava para a altura da caixa e o botao saia achatado. -->
-              <a href="${escapar(dados.urlDoPortal)}" style="display:block;width:100%;box-sizing:border-box;padding:16px 24px;background-color:${VERDE};color:#ffffff;font-size:15px;font-weight:600;text-align:center;text-decoration:none;border-radius:10px;">
+              <a href="${escapar(dados.urlDoPortal)}" style="display:block;width:100%;box-sizing:border-box;padding:16px 24px;background-color:${AZUL};color:#ffffff;font-size:15px;font-weight:600;text-align:center;text-decoration:none;border-radius:10px;">
                 Ver cobrança e documentos
               </a>
               <p style="margin:12px 0 0;font-size:12px;color:#8a8a8a;text-align:center;line-height:1.5;">
@@ -155,7 +156,7 @@ export function htmlDaFatura(dados: {
 function linha(rotulo: string, valor: string, destaque = false): string {
   return `<tr>
     <td style="padding:6px 0;font-size:14px;color:#5b6b5e;">${escapar(rotulo)}</td>
-    <td style="padding:6px 0;font-size:${destaque ? "20px" : "14px"};font-weight:${destaque ? "700" : "600"};color:${destaque ? VERDE : "#1a1a1a"};text-align:right;">${escapar(valor)}</td>
+    <td style="padding:6px 0;font-size:${destaque ? "20px" : "14px"};font-weight:${destaque ? "700" : "600"};color:${destaque ? AZUL : "#101012"};text-align:right;">${escapar(valor)}</td>
   </tr>`;
 }
 

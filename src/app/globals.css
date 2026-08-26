@@ -3,7 +3,7 @@
 /* ════════════════════════════════════════════════════════════════════════════
    VPAY — Design System
    Referencia: linguagem Apple aplicada a produto denso (ver docs/07).
-   Fonte unica: Inter. Cor de marca: verde VPay, como sotaque.
+   Fonte unica: Inter. Cor de marca: azul Virtus, como sotaque.
    ════════════════════════════════════════════════════════════════════════════ */
 
 :root {
@@ -105,30 +105,36 @@
   --surface-hover: rgba(0, 0, 0, 0.035);
   /* Fundo de conversa, para as previas de mensagem fora do painel. */
   --fundo-conversa: #efe7dd;
-  --surface-active: rgba(0, 106, 40, 0.06);
+  --surface-active: rgba(10, 82, 185, 0.06);
 
   /* Hairline: a elevacao vem daqui, nao de sombra. */
   --border: rgba(0, 0, 0, 0.08);
   --border-strong: rgba(0, 0, 0, 0.14);
 
-  --text-primary: #1d1d1f;
-  --text-secondary: #52525b;
+  --text-primary: #101012;
+  --text-secondary: #5d7281;
   --text-tertiary: #86868b;
   --text-disabled: #c7c7cc;
   --text-inverse: #ffffff;
 
-  /* ── Cor de marca — verde VPay ─────────────────────────────────────────
+  /* ── Cor de marca — azul Virtus ────────────────────────────────────────
+     Identidade 2026: o verde saiu. Primaria #0a52b9, com #001c79 (a primaria
+     escura) fazendo o estado pressionado, e #0cb7f2 como auxiliar de realce.
      Regra de ouro herdada do site da Virtus: sotaque em no maximo ~10% da
-     tela. Na duvida se um elemento leva verde, nao leva. */
-  --primary: #006a28;
-  --primary-hover: #005520;
+     tela. Na duvida se um elemento leva azul, nao leva. */
+  --primary: #0a52b9;
+  --primary-hover: #001c79;
   --primary-fg: #ffffff;
-  --primary-subtle: rgba(0, 106, 40, 0.07);
-  --primary-border: rgba(0, 106, 40, 0.2);
+  --primary-subtle: rgba(10, 82, 185, 0.07);
+  --primary-border: rgba(10, 82, 185, 0.2);
+  /* Auxiliar da marca. Realce sobre fundo escuro e sotaque de grafico — nunca
+     acao: quem clica e o `--primary`. */
+  --primary-aux: #0cb7f2;
 
   /* ── Status ────────────────────────────────────────────────────────────
-     Verde de status e SEMPRE tingido (fundo claro + texto escuro). Verde
-     preenchido e exclusivo de acao. Ver docs/07. */
+     O verde aqui e SEMANTICO (concluido, credito), nao e mais cor de marca:
+     por isso ele agora e sempre tingido, sem excecao. Preenchimento cheio e
+     exclusivo do azul de acao. Ver docs/07. */
   --success: #16a34a;
   --success-bg: #f0fdf4;
   --success-border: #a7e8bf;
@@ -148,10 +154,12 @@
   --danger-border: #fca5a5;
   --danger-text: #b91c1c;
 
-  --info: #0369a1;
-  --info-bg: #f0f9ff;
-  --info-border: #bae6fd;
-  --info-text: #0369a1;
+  /* Teal, e nao azul: com a marca azul, um `info` azul viraria a mesma cor
+     que o botao ao lado dele. O matiz e o que separa aviso de acao. */
+  --info: #0e7490;
+  --info-bg: #ecfeff;
+  --info-border: #a5f3fc;
+  --info-text: #0e7490;
 
   /* Roxo so existe para ETIQUETA. Nenhum status do sistema e roxo, e por isso
      ele nao tem `--roxo` cheio: tingido, ele nunca vai ser confundido com um
@@ -160,10 +168,10 @@
   --roxo-border: #d8b4fe;
   --roxo-text: #7e22ce;
 
-  --neutral: #6b7280;
+  --neutral: #5d7281;
   --neutral-bg: #f4f4f5;
   --neutral-border: #e4e4e7;
-  --neutral-text: #6b7280;
+  --neutral-text: #5d7281;
 
   /* Natureza do lancamento — nunca invertidos, mesmo com total negativo. */
   --credito: #15803d;
@@ -221,18 +229,18 @@
   --content-max: 1440px;
 
   /* ── Kanban ────────────────────────────────────────────────────────────
-     A coluna e um verde levemente mais escuro que a casca, a 35% de opacidade:
-     cheio, o verde virava bloco de cor e competia com o card branco. Diluido,
-     ele so marca o trilho.
+     A coluna e um azul acinzentado levemente mais escuro que a casca, a 35%
+     de opacidade: cheio, ele virava bloco de cor e competia com o card branco.
+     Diluido, so marca o trilho.
 
      A coluna encosta na base da tela — raio so em cima, para ler como trilho
      que continua abaixo da dobra, e nao como caixa boiando. */
-  --kanban-coluna-bg: rgba(228, 233, 228, 0.35);
+  --kanban-coluna-bg: rgba(227, 231, 239, 0.35);
 
-  /* Moldura do card: cinza claro puxado ao branco, sem o verde da coluna.
+  /* Moldura do card: cinza claro puxado ao branco, sem o azul da coluna.
      Ela envolve o cartao branco por 2px e da lugar a faixa de rodape, que fica
-     FORA do branco. Tingida de verde ela virava um segundo bloco de cor em
-     cima do fundo que ja e verde — dois tons proximos brigando. */
+     FORA do branco. Tingida de azul ela virava um segundo bloco de cor em
+     cima do fundo que ja e azul — dois tons proximos brigando. */
   --kanban-card-moldura: rgba(248, 248, 247, 0.75);
   --kanban-coluna-w: 274px;
   --kanban-gap: 12px;
@@ -254,12 +262,12 @@
   --dur-slow: 320ms;
 
   /* ── Graficos ──────────────────────────────────────────────────────────── */
-  --chart-1: #006a28;
-  --chart-2: #0369a1;
+  --chart-1: #0a52b9;
+  --chart-2: #0cb7f2;
   --chart-3: #e41e4c;
   --chart-4: #b45309;
   --chart-5: #7c3aed;
-  --chart-6: #0d9488;
+  --chart-6: #64748b;
 }
 
 .dark {
@@ -269,7 +277,7 @@
   --surface-3: #2c2c2e;
   --surface-hover: rgba(255, 255, 255, 0.055);
   --fundo-conversa: #0f1417;
-  --surface-active: rgba(0, 187, 71, 0.1);
+  --surface-active: rgba(56, 141, 255, 0.12);
 
   --border: rgba(255, 255, 255, 0.09);
   --border-strong: rgba(255, 255, 255, 0.16);
@@ -279,12 +287,14 @@
   --text-tertiary: #8e8e93;
   --text-disabled: #48484a;
 
-  --primary: #00bb47;
-  --primary-hover: #2ed167;
-  /* Verde claro nao carrega texto branco: da ~2:1 de contraste. */
-  --primary-fg: #06210f;
-  --primary-subtle: rgba(0, 187, 71, 0.12);
-  --primary-border: rgba(0, 187, 71, 0.3);
+  /* #0a52b9 sobre preto le como buraco: no escuro a marca sobe de luminancia
+     rumo ao auxiliar, sem sair do azul. */
+  --primary: #388dff;
+  --primary-hover: #5ea6ff;
+  --primary-fg: #ffffff;
+  --primary-subtle: rgba(56, 141, 255, 0.14);
+  --primary-border: rgba(56, 141, 255, 0.32);
+  --primary-aux: #0cb7f2;
 
   --success: #4ade80;
   --success-bg: rgba(74, 222, 128, 0.1);
@@ -302,10 +312,10 @@
   --danger-border: rgba(255, 69, 58, 0.26);
   --danger-text: #ff6961;
 
-  --info: #38bdf8;
-  --info-bg: rgba(56, 189, 248, 0.1);
-  --info-border: rgba(56, 189, 248, 0.26);
-  --info-text: #38bdf8;
+  --info: #2dd4bf;
+  --info-bg: rgba(45, 212, 191, 0.1);
+  --info-border: rgba(45, 212, 191, 0.26);
+  --info-text: #2dd4bf;
 
   --roxo-bg: rgba(192, 132, 252, 0.1);
   --roxo-border: rgba(192, 132, 252, 0.26);
@@ -328,9 +338,9 @@
   --nav-trilho-cor: rgba(255, 255, 255, 0.13);
   --nav-marcador-cor: #4d4d51;
 
-  /* No escuro o verde da coluna precisa vir do lado claro do fundo, nao do
+  /* No escuro o azul da coluna precisa vir do lado claro do fundo, nao do
      escuro: mais escuro que a casca ali significaria buraco, nao trilho. */
-  --kanban-coluna-bg: rgba(38, 48, 41, 0.35);
+  --kanban-coluna-bg: rgba(38, 46, 62, 0.35);
   --kanban-card-moldura: rgba(255, 255, 255, 0.07);
 
   --kbd-bg: rgba(255, 255, 255, 0.08);
@@ -346,12 +356,12 @@
   --shadow-md: 0 8px 28px rgba(0, 0, 0, 0.6);
   --shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.7);
 
-  --chart-1: #00bb47;
-  --chart-2: #38bdf8;
+  --chart-1: #388dff;
+  --chart-2: #0cb7f2;
   --chart-3: #f472a0;
   --chart-4: #fbbf24;
   --chart-5: #a78bfa;
-  --chart-6: #2dd4bf;
+  --chart-6: #94a3b8;
 }
 
 /* Expoe os tokens ao Tailwind v4 (bg-surface, text-secondary, rounded-lg...) */
@@ -365,6 +375,7 @@
   --color-primary: var(--primary);
   --color-primary-fg: var(--primary-fg);
   --color-primary-subtle: var(--primary-subtle);
+  --color-primary-aux: var(--primary-aux);
   --color-txt: var(--text-primary);
   --color-txt-secondary: var(--text-secondary);
   --color-txt-tertiary: var(--text-tertiary);
@@ -677,7 +688,7 @@ table td.col-avatar {
  *
  * ⚠️ O desenho e NOSSO, e nao o do sistema operacional. O nativo vem preto,
  * grande e diferente em cada navegador; trocado por um SVG em `background`, ele
- * fica no verde da marca e do mesmo tamanho dos outros icones da tabela.
+ * fica no azul da marca e do mesmo tamanho dos outros icones da tabela.
  */
 table td input[type="date"] {
   width: max-content;
@@ -691,14 +702,14 @@ table td input[type="date"]::-webkit-calendar-picker-indicator {
   margin-left: 4px;
   opacity: 1;
   cursor: pointer;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23006a28' stroke-width='2' stroke-linecap='round'><rect x='3.5' y='5' width='17' height='16' rx='2'/><path d='M8 3v4M16 3v4M3.5 10h17'/></svg>");
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230a52b9' stroke-width='2' stroke-linecap='round'><rect x='3.5' y='5' width='17' height='16' rx='2'/><path d='M8 3v4M16 3v4M3.5 10h17'/></svg>");
   background-size: 13px 13px;
   background-repeat: no-repeat;
 }
 
-/* No escuro o verde da marca clareia: o mesmo icone em #006a28 sumiria. */
+/* No escuro o azul da marca clareia: o mesmo icone em #0a52b9 sumiria. */
 :root[data-theme="dark"] table td input[type="date"]::-webkit-calendar-picker-indicator {
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2300bb47' stroke-width='2' stroke-linecap='round'><rect x='3.5' y='5' width='17' height='16' rx='2'/><path d='M8 3v4M16 3v4M3.5 10h17'/></svg>");
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23388dff' stroke-width='2' stroke-linecap='round'><rect x='3.5' y='5' width='17' height='16' rx='2'/><path d='M8 3v4M16 3v4M3.5 10h17'/></svg>");
 }
 
 /*

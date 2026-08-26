@@ -29,11 +29,11 @@ import { paraFormatoBR, periodoEmMeses, type DataISO } from "@/shared/utils/data
  * o recibo.
  */
 
-const VERDE = "#006B29";
-const TINTA = "#1D1D1F";
+const AZUL = "#0A52B9";
+const TINTA = "#101012";
 const CINZA = "#86868B";
 const REGUA = "#E3E3E3";
-const VERDE_CLARO = "#EAF3EC";
+const AZUL_CLARO = "#EAF0FA";
 
 /** jsPDF pesa ~400 KB e so serve a quem clica em imprimir. */
 const carregarPdf = () => import("@/app/(app)/tickets/pdf-recibo");
@@ -254,7 +254,7 @@ function Folha({
   return (
     <div className="folha">
       {/* Faixa da marca, sangrando de ponta a ponta. */}
-      <div style={{ height: "2.8mm", background: VERDE }} />
+      <div style={{ height: "2.8mm", background: AZUL }} />
 
       <div style={{ padding: "0 14mm", boxSizing: "border-box" }}>
         {/* ── Identificação ─────────────────────────────────────────────── */}
@@ -271,7 +271,7 @@ function Folha({
               style={{
                 fontSize: "20pt",
                 fontWeight: 700,
-                color: VERDE,
+                color: AZUL,
                 lineHeight: 1,
                 letterSpacing: "0.02em",
               }}
@@ -631,11 +631,11 @@ function Botao({
     textDecoration: "none",
     fontFamily: "Helvetica, Arial, sans-serif",
     cursor: "pointer",
-    border: secundario ? `1px solid ${VERDE}` : "1px solid transparent",
+    border: secundario ? `1px solid ${AZUL}` : "1px solid transparent",
     // Verde claro no vazado, e nao branco: sobre o cinza do visualizador o
     // branco virava um segundo "papel", competindo com a folha logo acima.
-    background: secundario ? VERDE_CLARO : VERDE,
-    color: secundario ? VERDE : "#ffffff",
+    background: secundario ? AZUL_CLARO : AZUL,
+    color: secundario ? AZUL : "#ffffff",
   };
 
   return href ? (

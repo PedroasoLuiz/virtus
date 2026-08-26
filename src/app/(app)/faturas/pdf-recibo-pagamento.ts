@@ -18,8 +18,10 @@ import { carregarLogo } from "../tickets/pdf-base";
  */
 
 const MARGEM = 40;
-const VERDE: [number, number, number] = [0, 106, 40];
-const TINTA: [number, number, number] = [29, 29, 31];
+/* Azul da marca (#0a52b9). jsPDF quer RGB numerico, entao o token de
+   `globals.css` nao chega aqui — se a marca mudar, muda tambem aqui. */
+const AZUL: [number, number, number] = [10, 82, 185];
+const TINTA: [number, number, number] = [16, 16, 18];
 const CINZA: [number, number, number] = [134, 134, 139];
 const REGUA: [number, number, number] = [226, 226, 228];
 
@@ -59,7 +61,7 @@ export async function imprimirReciboDePagamento(
   const direita = largura - MARGEM;
 
   // Faixa da marca, sangrando de ponta a ponta.
-  doc.setFillColor(...VERDE).rect(0, 0, largura, 8, "F");
+  doc.setFillColor(...AZUL).rect(0, 0, largura, 8, "F");
 
   let y = MARGEM + 18;
 
@@ -70,7 +72,7 @@ export async function imprimirReciboDePagamento(
     doc.addImage(logo.dados, "PNG", direita - 26 * proporcao, MARGEM, 26 * proporcao, 26);
   }
 
-  doc.setFont("helvetica", "bold").setFontSize(20).setTextColor(...VERDE);
+  doc.setFont("helvetica", "bold").setFontSize(20).setTextColor(...AZUL);
   doc.text("RECIBO DE PAGAMENTO", MARGEM, y);
 
   y += 22;
@@ -108,7 +110,7 @@ export async function imprimirReciboDePagamento(
   doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(...CINZA);
   doc.text("A importância de", MARGEM, y);
 
-  doc.setFont("helvetica", "bold").setFontSize(16).setTextColor(...VERDE);
+  doc.setFont("helvetica", "bold").setFontSize(16).setTextColor(...AZUL);
   doc.text(`R$ ${formatarSemSimbolo(r.valor as Centavos)}`, MARGEM, y + 20);
 
   /*
@@ -268,7 +270,7 @@ export async function imprimirResumoDaConta(
   const altura = doc.internal.pageSize.getHeight();
   const direita = largura - MARGEM;
 
-  doc.setFillColor(...VERDE).rect(0, 0, largura, 8, "F");
+  doc.setFillColor(...AZUL).rect(0, 0, largura, 8, "F");
 
   let y = MARGEM + 18;
 
@@ -278,7 +280,7 @@ export async function imprimirResumoDaConta(
     doc.addImage(logo.dados, "PNG", direita - 26 * p, MARGEM, 26 * p, 26);
   }
 
-  doc.setFont("helvetica", "bold").setFontSize(20).setTextColor(...VERDE);
+  doc.setFont("helvetica", "bold").setFontSize(20).setTextColor(...AZUL);
   doc.text("CONTA A RECEBER", MARGEM, y);
 
   y += 20;
@@ -330,7 +332,7 @@ export async function imprimirResumoDaConta(
     doc.text(String(p.numero), MARGEM, y);
     doc.text(p.vencimento ? paraFormatoBR(p.vencimento.slice(0, 10) as DataISO) : "—", MARGEM + 62, y);
 
-    doc.setTextColor(...(p.pago ? VERDE : CINZA));
+    doc.setTextColor(...(p.pago ? AZUL : CINZA));
     doc.text(p.pago ? "Paga" : "Em aberto", MARGEM + 160, y);
 
     doc.setTextColor(...TINTA);
@@ -411,7 +413,7 @@ function fechamento(
   const rotulo = direita - 160;
   const linhas: { texto: string; valor: number; cor: [number, number, number] }[] = [
     { texto: "Total", valor: v.total, cor: TINTA },
-    { texto: "Recebido", valor: v.pago, cor: VERDE },
+    { texto: "Recebido", valor: v.pago, cor: AZUL },
   ];
   if (v.desconto > 0) linhas.push({ texto: "Desconto", valor: v.desconto, cor: CINZA });
 

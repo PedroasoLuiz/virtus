@@ -26,8 +26,10 @@ const MARGEM = 40;
  * o valor cai exatamente sob a coluna que ele fecha.
  */
 const COL_NUM = 62;
-const VERDE: [number, number, number] = [0, 106, 40];
-const TINTA: [number, number, number] = [29, 29, 31];
+/* Azul da marca (#0a52b9). jsPDF quer RGB numerico, entao o token de
+   `globals.css` nao chega aqui — se a marca mudar, muda tambem aqui. */
+const AZUL: [number, number, number] = [10, 82, 185];
+const TINTA: [number, number, number] = [16, 16, 18];
 const CINZA: [number, number, number] = [134, 134, 139];
 const REGUA: [number, number, number] = [226, 226, 228];
 
@@ -40,7 +42,12 @@ const REGUA: [number, number, number] = [226, 226, 228];
  * fechamento sabe quando precisa de folha nova.
  */
 const RODAPE = 56;
-/** O vermelho de saida. Par do verde da marca, no mesmo peso de tinta. */
+/**
+ * O par entrada/saida. Verde e vermelho aqui sao SEMANTICOS, nao a marca: a
+ * marca virou azul, mas dinheiro que entra continua verde em qualquer extrato.
+ * Espelham `--credito` e `--debito` do design system.
+ */
+const CREDITO: [number, number, number] = [21, 128, 61];
 const VERMELHO: [number, number, number] = [185, 28, 28];
 
 const dinheiro = (v: Centavos) => formatarSemSimbolo(v);
@@ -102,12 +109,12 @@ async function cabecalho(
   // Faixa de ponta a ponta no topo, colada na borda: dá ao documento uma
   // identidade que sobrevive à fotocópia e ao arquivo em pasta, sem gastar
   // altura de conteúdo.
-  doc.setFillColor(...VERDE);
+  doc.setFillColor(...AZUL);
   doc.rect(0, 0, largura, 8, "F");
 
   const y = MARGEM;
 
-  doc.setFont("helvetica", "bold").setFontSize(20).setTextColor(...VERDE);
+  doc.setFont("helvetica", "bold").setFontSize(20).setTextColor(...AZUL);
   doc.text("EXTRATO", MARGEM, y + 14);
 
   /*
@@ -360,7 +367,7 @@ function movimentos(doc: jsPDF, extrato: Extrato, y: number, largura: number): n
        */
       if (d.column.index === 4) {
         const texto = String(d.cell.raw ?? "");
-        d.cell.styles.textColor = texto.startsWith("-") ? VERMELHO : VERDE;
+        d.cell.styles.textColor = texto.startsWith("-") ? VERMELHO : CREDITO;
       }
     },
   });
@@ -382,7 +389,7 @@ function fechamento(doc: jsPDF, extrato: Extrato, y: number, direita: number): n
      deixaria de distinguir o que entrou do que saiu. */
   const pares: [string, Centavos, [number, number, number]][] = [
     ["Saldo de abertura", extrato.saldoInicial, TINTA],
-    ["Entradas", extrato.entradas, VERDE],
+    ["Entradas", extrato.entradas, CREDITO],
     ["Saídas", extrato.saidas, VERMELHO],
   ];
 

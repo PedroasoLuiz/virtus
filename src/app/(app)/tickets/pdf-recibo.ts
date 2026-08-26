@@ -36,8 +36,10 @@ const MARGEM = 40;
  * dela: o valor cai exatamente sob a coluna "Total".
  */
 const COL_NUM = 62;
-const VERDE: [number, number, number] = [0, 106, 40];
-const TINTA: [number, number, number] = [29, 29, 31];
+/* Azul da marca (#0a52b9). jsPDF quer RGB numerico, entao o token de
+   `globals.css` nao chega aqui — se a marca mudar, muda tambem aqui. */
+const AZUL: [number, number, number] = [10, 82, 185];
+const TINTA: [number, number, number] = [16, 16, 18];
 const CINZA: [number, number, number] = [134, 134, 139];
 const REGUA: [number, number, number] = [226, 226, 228];
 
@@ -85,14 +87,14 @@ async function cabecalho(doc: jsPDF, t: TicketParaPDF, direita: number): Promise
   // Faixa de ponta a ponta no topo, colada na borda: dá ao documento uma
   // identidade que sobrevive à fotocópia e ao arquivo em pasta, sem gastar
   // altura de conteúdo.
-  doc.setFillColor(...VERDE);
+  doc.setFillColor(...AZUL);
   doc.rect(0, 0, largura, 8, "F");
 
   const y = MARGEM;
 
   // Só "TICKET": o número tem campo próprio logo abaixo, e repeti-lo aqui
   // punha o mesmo dado duas vezes na mesma dobra.
-  doc.setFont("helvetica", "bold").setFontSize(20).setTextColor(...VERDE);
+  doc.setFont("helvetica", "bold").setFontSize(20).setTextColor(...AZUL);
   doc.text("TICKET", MARGEM, y + 14);
 
   const logo = await carregarLogo(t.empresa.logo);
