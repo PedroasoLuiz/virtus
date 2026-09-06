@@ -97,6 +97,8 @@ export function CobrancaPublicaView({
           },
         },
         cobranca.empresa.razaoSocial ?? "",
+        // A pagina do cliente BAIXA. Imprimir e o gesto do sistema, nao o dele.
+        "baixar",
       );
     } finally {
       setImprimindo(null);

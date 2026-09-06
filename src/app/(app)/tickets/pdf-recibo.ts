@@ -60,7 +60,25 @@ function totalDoItem(i: TicketParaPDF["itens"][number]): number {
   return Math.max(0, bruto - i.desconto + i.acrescimo + despesas);
 }
 
-export async function imprimirRecibo(t: TicketParaPDF, emitidoPor: string): Promise<void> {
+/**
+ * O que fazer com o PDF depois de montado.
+ *
+ * ⚠️ Sao duas intencoes DIFERENTES, e nao um detalhe de implementacao.
+ *
+ * "imprimir" abre o PDF numa aba com a caixa de impressao ja chamada: e o que o
+ * botao de dentro do sistema faz, porque ali a pessoa quer o papel na hora.
+ *
+ * "baixar" salva o arquivo, e e o que a pagina publica precisa. O cliente
+ * clicou em "Baixar ticket em PDF", e receber uma aba com um blob no lugar de
+ * um arquivo na pasta de downloads e o contrario do que o botao prometeu.
+ */
+export type DestinoDoPdf = "imprimir" | "baixar";
+
+export async function imprimirRecibo(
+  t: TicketParaPDF,
+  emitidoPor: string,
+  destino: DestinoDoPdf = "imprimir",
+): Promise<void> {
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const largura = doc.internal.pageSize.getWidth();
   const direita = largura - MARGEM;
@@ -74,6 +92,13 @@ export async function imprimirRecibo(t: TicketParaPDF, emitidoPor: string): Prom
 
   observacoes(doc, t, y, largura);
   rodape(doc, emitidoPor, largura);
+
+  if (destino === "baixar") {
+    // `save` escreve direto na pasta de downloads, com nome de gente. Sem ele o
+    // arquivo chegaria como um identificador aleatorio de blob.
+    doc.save(`ticket-${t.numero}.pdf`);
+    return;
+  }
 
   doc.autoPrint();
   window.open(doc.output("bloburl"), "_blank");
