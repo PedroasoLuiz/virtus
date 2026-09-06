@@ -31,7 +31,6 @@ export const listarQuerySchema = paginacaoSchema.extend({
   busca: z.string().trim().max(120).optional(),
 });
 
-
 const origemSchema = z.object({
   ticketId: idSchema,
   valor: centavosPositivoSchema,
@@ -49,7 +48,10 @@ export const criarFaturaBodySchema = z
      * itens proprios — o servico vive no ticket, e copia-lo para ca criava um
      * segundo detalhamento que divergia no primeiro ajuste.
      */
-    origens: z.array(origemSchema).min(1, "Escolha ao menos um ticket").max(200),
+    origens: z
+      .array(origemSchema)
+      .min(1, "Escolha ao menos um ticket")
+      .max(200),
     parcelamento: z.object({
       quantidade: z.number().int().min(1).max(360),
       primeiroVencimento: dataISOSchema,
@@ -104,6 +106,16 @@ export const idParamSchema = z.object({ id: idSchema });
 export const ticketParamSchema = z.object({ id: idSchema, ticketId: idSchema });
 
 export const anexoParamSchema = z.object({ id: idSchema, anexoId: idSchema });
+
+/**
+ * O cancelamento de uma parcela a receber.
+ *
+ * ⚠️ O motivo e OPCIONAL, pelo mesmo motivo do lado que paga: exigir texto faria
+ * alguem digitar um ponto para passar da tela.
+ */
+export const cancelarParcelaBodySchema = z.object({
+  motivo: z.string().trim().max(300).nullish(),
+});
 
 export const parcelaParamSchema = z.object({
   id: idSchema,
@@ -170,6 +182,9 @@ export const faturaSchema = faturaResumoSchema.extend({
       desconto: z.number(),
       total: z.number(),
       pago: z.boolean(),
+      /* Combinada e nao vai mais ser cobrada: contrato encerrado antes dela. */
+      cancelada: z.boolean(),
+      motivoDoCancelamento: z.string().nullable(),
       pagamentoId: z.number().nullable(),
       pagoEm: z.string().nullable(),
       conciliado: z.boolean(),
@@ -231,6 +246,9 @@ export type ParcelaParam = z.infer<typeof parcelaParamSchema>;
 
 export type TipoDocumentoQuery = z.infer<typeof tipoDocumentoQuerySchema>;
 export type EnviarParcelaBody = z.infer<typeof enviarParcelaBodySchema>;
-export type EnviarParcelaWhatsappBody = z.infer<typeof enviarParcelaWhatsappBodySchema>;
+export type EnviarParcelaWhatsappBody = z.infer<
+  typeof enviarParcelaWhatsappBodySchema
+>;
 export type AlterarVencimentoBody = z.infer<typeof alterarVencimentoBodySchema>;
 
+export type CancelarParcelaBody = z.infer<typeof cancelarParcelaBodySchema>;

@@ -129,14 +129,19 @@ export function LancamentosDaConta<T>({
         descricao: l.descricao,
         valor: l.valor,
         centroCustoId: l.centroCustoId ? String(l.centroCustoId) : "",
-        centroCustoNome: comCodigo(l.centroCustoCodigo, l.centroCustoNome ?? ""),
+        centroCustoNome: comCodigo(
+          l.centroCustoCodigo,
+          l.centroCustoNome ?? "",
+        ),
       })),
     );
     setEditando(true);
   }
 
   function mudar(indice: number, mudanca: Partial<LinhaEditavel>) {
-    setLinhas((atual) => atual.map((l, i) => (i === indice ? { ...l, ...mudanca } : l)));
+    setLinhas((atual) =>
+      atual.map((l, i) => (i === indice ? { ...l, ...mudanca } : l)),
+    );
   }
 
   const novoTotal = linhas.reduce((soma, l) => soma + l.valor, 0);
@@ -193,7 +198,11 @@ export function LancamentosDaConta<T>({
      */
     aoMudar(dados.data as T);
     setEditando(false);
-    avisar("sucesso", "Lançamentos salvos", "As parcelas em aberto foram ajustadas ao novo total.");
+    avisar(
+      "sucesso",
+      "Lançamentos salvos",
+      "As parcelas em aberto foram ajustadas ao novo total.",
+    );
   }
 
   /*
@@ -207,18 +216,20 @@ export function LancamentosDaConta<T>({
     async (termo: string) => {
       const alvo = termo.trim().toLowerCase();
 
-      return centros
-        .filter((c) => c.tipo === "DESPESA" && c.ativo)
-        // Busca pelo codigo TAMBEM: quem sabe o codigo digita o codigo, e quem
-        // nao sabe digita o nome. Os dois chegam no mesmo lugar.
-        .filter(
-          (c) =>
-            !alvo ||
-            c.descricao.toLowerCase().includes(alvo) ||
-            (c.codigo ?? "").toLowerCase().includes(alvo),
-        )
-        .slice(0, 15)
-        .map((c) => ({ id: c.id, nome: comCodigo(c.codigo, c.descricao) }));
+      return (
+        centros
+          .filter((c) => c.tipo === "DESPESA" && c.ativo)
+          // Busca pelo codigo TAMBEM: quem sabe o codigo digita o codigo, e quem
+          // nao sabe digita o nome. Os dois chegam no mesmo lugar.
+          .filter(
+            (c) =>
+              !alvo ||
+              c.descricao.toLowerCase().includes(alvo) ||
+              (c.codigo ?? "").toLowerCase().includes(alvo),
+          )
+          .slice(0, 15)
+          .map((c) => ({ id: c.id, nome: comCodigo(c.codigo, c.descricao) }))
+      );
     },
     [centros],
   );
@@ -240,7 +251,12 @@ export function LancamentosDaConta<T>({
           ? () =>
               setLinhas((l) => [
                 ...l,
-                { descricao: "", valor: 0, centroCustoId: "", centroCustoNome: null },
+                {
+                  descricao: "",
+                  valor: 0,
+                  centroCustoId: "",
+                  centroCustoNome: null,
+                },
               ])
           : undefined
       }
@@ -281,7 +297,10 @@ export function LancamentosDaConta<T>({
 
         <tbody>
           {!editando && lancamentos.length === 0 && (
-            <EmptyRow colSpan={4} message="Esta conta não tem lançamentos detalhados." />
+            <EmptyRow
+              colSpan={4}
+              message="Esta conta não tem lançamentos detalhados."
+            />
           )}
 
           {!editando &&
@@ -295,7 +314,13 @@ export function LancamentosDaConta<T>({
                     entrega o nome completo sem gastar espaco.
                   */}
                   {l.centroCustoNome ? (
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 5,
+                      }}
+                    >
                       {/*
                         ⚠️ O CODIGO na celula, e o nome inteiro na dica. Codigo
                         e curto e cabe sempre; nome de centro e longo e ou corta,
@@ -307,7 +332,9 @@ export function LancamentosDaConta<T>({
                       </DicaFlutuante>
                     </span>
                   ) : (
-                    <span style={{ color: "var(--text-tertiary)" }}>Sem centro</span>
+                    <span style={{ color: "var(--text-tertiary)" }}>
+                      Sem centro
+                    </span>
                   )}
                 </Td>
 
@@ -316,7 +343,9 @@ export function LancamentosDaConta<T>({
                 <Td style={NUM}>
                   {formatarSemSimbolo(l.valor as Centavos)}
                   {totalExibido > 0 && (
-                    <div style={PESO}>{Math.round((l.valor / totalExibido) * 100)}%</div>
+                    <div style={PESO}>
+                      {Math.round((l.valor / totalExibido) * 100)}%
+                    </div>
                   )}
                 </Td>
 
@@ -392,7 +421,9 @@ export function LancamentosDaConta<T>({
                     style={inputDeCelula}
                   />
                   {totalExibido > 0 && (
-                    <div style={PESO}>{Math.round((l.valor / totalExibido) * 100)}%</div>
+                    <div style={PESO}>
+                      {Math.round((l.valor / totalExibido) * 100)}%
+                    </div>
                   )}
                 </Td>
 
@@ -417,7 +448,10 @@ export function LancamentosDaConta<T>({
                           </BotaoDeAcao>
                         </span>
 
-                        <BotaoDeAcao rotulo="Cancelar a edição" onClick={() => setEditando(false)}>
+                        <BotaoDeAcao
+                          rotulo="Cancelar a edição"
+                          onClick={() => setEditando(false)}
+                        >
                           <path d="M4.2 4.2l7.6 7.6M11.8 4.2l-7.6 7.6" />
                         </BotaoDeAcao>
                       </>
@@ -430,13 +464,17 @@ export function LancamentosDaConta<T>({
                     */}
                     <span
                       title={
-                        linhas.length === 1 ? "A conta precisa de ao menos um lançamento" : undefined
+                        linhas.length === 1
+                          ? "A conta precisa de ao menos um lançamento"
+                          : undefined
                       }
                     >
                       <BotaoDeAcao
                         rotulo="Tirar esta linha"
                         desabilitado={linhas.length === 1}
-                        onClick={() => setLinhas((atual) => atual.filter((_, n) => n !== i))}
+                        onClick={() =>
+                          setLinhas((atual) => atual.filter((_, n) => n !== i))
+                        }
                       >
                         <path d="M3 4.5h10M6.5 4.5V3h3v1.5M5 4.5l.6 8h4.8l.6-8" />
                       </BotaoDeAcao>
@@ -447,7 +485,6 @@ export function LancamentosDaConta<T>({
             ))}
         </tbody>
       </TableArea>
-
     </GrupoDeCampos>
   );
 }

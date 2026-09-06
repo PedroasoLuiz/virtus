@@ -24,7 +24,13 @@ import type { DataISO } from "@/shared/utils/datas";
  * Entre uma e outra existe o dia em que o dinheiro ainda nao apareceu na conta,
  * e e justamente esse intervalo que o financeiro precisa enxergar.
  */
-export const STATUS_FATURA = ["ABERTA", "FATURADA", "PARC. PAGA", "PAGA", "BAIXADA"] as const;
+export const STATUS_FATURA = [
+  "ABERTA",
+  "FATURADA",
+  "PARC. PAGA",
+  "PAGA",
+  "BAIXADA",
+] as const;
 
 export type StatusFatura = (typeof STATUS_FATURA)[number];
 
@@ -45,10 +51,12 @@ export const TRANSICOES_FATURA: Record<StatusFatura, StatusFatura[]> = {
   BAIXADA: [],
 };
 
-export function podeTransicionar(de: StatusFatura, para: StatusFatura): boolean {
+export function podeTransicionar(
+  de: StatusFatura,
+  para: StatusFatura,
+): boolean {
   return TRANSICOES_FATURA[de].includes(para);
 }
-
 
 export type ParcelaFatura = {
   id: number;
@@ -59,6 +67,14 @@ export type ParcelaFatura = {
   desconto: Centavos;
   total: Centavos;
   pago: boolean;
+  /**
+   * Combinada, mas nao vai mais ser cobrada: o contrato foi encerrado antes.
+   *
+   * ⚠️ Nao e o mesmo que apagada. A conta continua dizendo que o acordo previa
+   * doze parcelas; o que muda e que ela sai da cobranca e do "em aberto".
+   */
+  cancelada: boolean;
+  motivoDoCancelamento: string | null;
   pagamentoId: number | null;
   /** Data da baixa. E o fato que o recibo comprova — nao confundir com o vencimento. */
   pagoEm: DataISO | null;
@@ -78,7 +94,7 @@ export type FaturaResumo = {
   numero: number;
   clienteId: number | null;
   clienteNome: string | null;
-  /** Periodo apurado — "Apuracao" na tela do VPay. */
+  /** Periodo apurado — "Apuracao" na tela do Vope. */
   apuracaoInicio: DataISO | null;
   apuracaoFim: DataISO | null;
   /** Vencimento da proxima parcela em aberto. */
@@ -199,12 +215,10 @@ export const TIPOS_DE_RECEBIMENTO = [
 
 export type TipoDeRecebimento = (typeof TIPOS_DE_RECEBIMENTO)[number];
 
-
 export type OrigemNova = {
   ticketId: number;
   valor: Centavos;
 };
-
 
 export type FiltroFaturas = {
   status?: StatusFatura;

@@ -2,7 +2,11 @@ import { serverClient } from "@/infra/supabase/client";
 import { doBanco, paraBanco, type Centavos } from "@/shared/utils/money";
 import type { DataISO } from "@/shared/utils/datas";
 import { primeiroPreenchido } from "@/shared/utils/texto";
-import { intervalo, type Paginacao, type Pagina } from "@/shared/utils/paginacao";
+import {
+  intervalo,
+  type Paginacao,
+  type Pagina,
+} from "@/shared/utils/paginacao";
 import {
   STATUS_FATURA,
   type AnexoDaFatura,
@@ -17,7 +21,11 @@ import {
   type SituacaoFatura,
   type StatusFatura,
 } from "@/modules/faturas/faturas.types";
-import { saldoAReceber, totalRecebido, type Parcela } from "@/shared/domain/parcelas";
+import {
+  saldoAReceber,
+  totalRecebido,
+  type Parcela,
+} from "@/shared/domain/parcelas";
 import { nomeDaConta } from "@/shared/domain/conta-bancaria";
 import { dadosDaEmpresa } from "@/modules/empresa/empresa.repository";
 
@@ -47,7 +55,9 @@ export async function listar(
 
   let query = supabase
     .from("faturas")
-    .select(`${COLUNAS_FATURA}, clientes(razao, nomefantasia)`, { count: "exact" })
+    .select(`${COLUNAS_FATURA}, clientes(razao, nomefantasia)`, {
+      count: "exact",
+    })
     .eq("fkEmpresa", empresaId);
 
   if (filtro.status) query = query.eq("status", filtro.status);
@@ -55,7 +65,9 @@ export async function listar(
   // Canceladas ficam fora por padrao — sao ruido na operacao do dia a dia.
   if (!filtro.incluirCanceladas) query = query.eq("cancelada", false);
 
-  const { data, error, count } = await query.order("id", { ascending: false }).range(de, ate);
+  const { data, error, count } = await query
+    .order("id", { ascending: false })
+    .range(de, ate);
   if (error) throw error;
 
   const linhas = data ?? [];
@@ -85,7 +97,9 @@ export async function listar(
  * O legado buscava parcela a parcela dentro do laco de renderizacao — 25 linhas
  * na tela viravam 25 idas ao banco.
  */
-async function proximosVencimentos(faturaIds: number[]): Promise<Map<number, DataISO>> {
+async function proximosVencimentos(
+  faturaIds: number[],
+): Promise<Map<number, DataISO>> {
   const mapa = new Map<number, DataISO>();
   if (faturaIds.length === 0) return mapa;
 
@@ -144,7 +158,9 @@ export async function criarAnexo(
   if (error) throw error;
 }
 
-export async function apagarAnexo(anexoId: number): Promise<AnexoDaFatura | null> {
+export async function apagarAnexo(
+  anexoId: number,
+): Promise<AnexoDaFatura | null> {
   const supabase = await serverClient();
   const { data, error } = await supabase
     .from("faturasanexos")
@@ -156,7 +172,12 @@ export async function apagarAnexo(anexoId: number): Promise<AnexoDaFatura | null
   if (error) throw error;
   if (!data) return null;
 
-  return { id: data.id, nome: data.nome, caminho: data.caminho, criadoEm: data.created_at };
+  return {
+    id: data.id,
+    nome: data.nome,
+    caminho: data.caminho,
+    criadoEm: data.created_at,
+  };
 }
 /**
  * Quanto cada conta recebeu, e quanto ainda espera.
@@ -179,7 +200,7 @@ async function somarRecebido(
   const supabase = await serverClient();
   const { data, error } = await supabase
     .from("faturasparcelas")
-    .select("fkFatura, total, pago, pagamentosxparcelas(valor)")
+    .select("fkFatura, total, pago, cancelada, pagamentosxparcelas(valor)")
     .in("fkFatura", faturaIds);
 
   if (error) throw error;
@@ -198,9 +219,19 @@ async function somarRecebido(
 
     mapa.set(l.fkFatura, {
       recebido: atual.recebido + recebidoNaParcela,
-      // Parcela paga sai da conta do saldo mesmo que tenha recebido menos que o
-      // valor dela: a diferenca foi desconto, e desconto nao se cobra.
-      saldo: atual.saldo + (l.pago ? 0 : Math.max(0, (l.total ?? 0) - recebidoNaParcela)),
+      /*
+       * Parcela paga sai da conta do saldo mesmo que tenha recebido menos que o
+       * valor dela: a diferenca foi desconto, e desconto nao se cobra.
+       *
+       * ⚠️ A CANCELADA sai pelo mesmo caminho: ela nao vai ser cobrada, e somada
+       * deixaria a conta eternamente devendo o que o contrato encerrado ja
+       * dispensou. Mesma regra do `esperaDinheiro`, que a tela le.
+       */
+      saldo:
+        atual.saldo +
+        (l.pago || l.cancelada
+          ? 0
+          : Math.max(0, (l.total ?? 0) - recebidoNaParcela)),
     });
   }
 
@@ -208,7 +239,9 @@ async function somarRecebido(
 }
 
 /** Quantos tickets cada conta juntou. Uma consulta para a pagina inteira. */
-async function contarTickets(faturaIds: number[]): Promise<Map<number, number>> {
+async function contarTickets(
+  faturaIds: number[],
+): Promise<Map<number, number>> {
   const mapa = new Map<number, number>();
   if (faturaIds.length === 0) return mapa;
 
@@ -227,7 +260,10 @@ async function contarTickets(faturaIds: number[]): Promise<Map<number, number>> 
   return mapa;
 }
 
-export async function buscarPorId(empresaId: number, id: number): Promise<Fatura | null> {
+export async function buscarPorId(
+  empresaId: number,
+  id: number,
+): Promise<Fatura | null> {
   const supabase = await serverClient();
 
   const { data, error } = await supabase
@@ -245,23 +281,26 @@ export async function buscarPorId(empresaId: number, id: number): Promise<Fatura
   const [parcelas, tickets, historico, emitente, anexos] = await Promise.all([
     listarParcelas(id),
     listarTickets(id),
-    montarHistorico(data.created_at, data.updated_at, data.fkUserCriacao, data.fkUserModificacao),
+    montarHistorico(
+      data.created_at,
+      data.updated_at,
+      data.fkUserCriacao,
+      data.fkUserModificacao,
+    ),
     dadosDaEmpresa(empresaId),
     listarAnexos(id),
   ]);
-  const proximo = parcelas.find((p) => !p.pago)?.vencimento ?? null;
+  /* A cancelada nao entra na fila: ela nao espera dinheiro. Mesma razao do
+     `esperaDinheiro`, que ja cuida do saldo e da proxima a receber. */
+  const proximo =
+    parcelas.find((p) => !p.pago && !p.cancelada)?.vencimento ?? null;
 
   return {
     // A contagem vem da lista que ja foi buscada, e nao de outra consulta.
-    ...paraDominioResumo(
-      data,
-      proximo,
-      tickets.length,
-      {
-        recebido: totalRecebido(parcelas),
-        saldo: saldoAReceber(parcelas),
-      },
-    ),
+    ...paraDominioResumo(data, proximo, tickets.length, {
+      recebido: totalRecebido(parcelas),
+      saldo: saldoAReceber(parcelas),
+    }),
     observacoes: data.observacoes,
     rodape: data.rodape,
     parcelas,
@@ -269,7 +308,8 @@ export async function buscarPorId(empresaId: number, id: number): Promise<Fatura
     historico,
     emitente,
     anexos,
-    clienteDoc: (data.clientes as { cnpj?: string | null } | null)?.cnpj ?? null,
+    clienteDoc:
+      (data.clientes as { cnpj?: string | null } | null)?.cnpj ?? null,
   };
 }
 
@@ -283,8 +323,13 @@ export async function buscarPorId(empresaId: number, id: number): Promise<Fatura
 export async function saldoDosTickets(
   empresaId: number,
   ids: number[],
-): Promise<Map<number, { numero: string; saldo: Centavos; cancelado: boolean }>> {
-  const mapa = new Map<number, { numero: string; saldo: Centavos; cancelado: boolean }>();
+): Promise<
+  Map<number, { numero: string; saldo: Centavos; cancelado: boolean }>
+> {
+  const mapa = new Map<
+    number,
+    { numero: string; saldo: Centavos; cancelado: boolean }
+  >();
   if (ids.length === 0) return mapa;
 
   const supabase = await serverClient();
@@ -315,12 +360,16 @@ export async function saldoDosTickets(
  * E o que a tela mostra no lugar da lista de servicos: no modelo novo o servico
  * vive no ticket, e a conta a receber e composta por VALOR de um ou mais deles.
  */
-export async function listarTickets(faturaId: number): Promise<TicketDaFatura[]> {
+export async function listarTickets(
+  faturaId: number,
+): Promise<TicketDaFatura[]> {
   const supabase = await serverClient();
 
   const { data, error } = await supabase
     .from("faturasorigens")
-    .select("valor, fkOrdem, ordensservico!inner(id, idtenant, titulo, status, datafim, clientes(razao, nomefantasia))")
+    .select(
+      "valor, fkOrdem, ordensservico!inner(id, idtenant, titulo, status, datafim, clientes(razao, nomefantasia))",
+    )
     .eq("fkFatura", faturaId)
     .eq("origem", "TICKET")
     .order("fkOrdem", { ascending: true });
@@ -343,8 +392,11 @@ export async function listarTickets(faturaId: number): Promise<TicketDaFatura[]>
       valor: doBanco(l.valor),
       titulo: (t.titulo ?? "").trim(),
       status: (t.status ?? "").trim() || "—",
-      clienteNome: primeiroPreenchido(t.clientes?.nomefantasia, t.clientes?.razao),
-      encerradoEm: t.datafim ? ((t.datafim.slice(0, 10)) as DataISO) : null,
+      clienteNome: primeiroPreenchido(
+        t.clientes?.nomefantasia,
+        t.clientes?.razao,
+      ),
+      encerradoEm: t.datafim ? (t.datafim.slice(0, 10) as DataISO) : null,
     };
   });
 }
@@ -383,8 +435,9 @@ async function montarHistorico(
   };
 }
 
-
-export async function listarParcelas(faturaId: number): Promise<ParcelaFatura[]> {
+export async function listarParcelas(
+  faturaId: number,
+): Promise<ParcelaFatura[]> {
   const supabase = await serverClient();
 
   const { data, error } = await supabase
@@ -392,7 +445,7 @@ export async function listarParcelas(faturaId: number): Promise<ParcelaFatura[]>
     .select(
       // `pagamentos(data)` e a data REAL da baixa. O recibo comprova um fato, e
       // sem ela sobraria o vencimento no lugar — que e outra coisa.
-      "id, numeroparcela, vencimento, valor, acrescimo, desconto, total, pago, fkPagamento, nfs, boleto, comprovante, pagamentos(data, conciliado), pagamentosxparcelas(valor)",
+      "id, numeroparcela, vencimento, valor, acrescimo, desconto, total, pago, cancelada, cancelamento_motivo, fkPagamento, nfs, boleto, comprovante, pagamentos(data, conciliado), pagamentosxparcelas(valor)",
     )
     .eq("fkFatura", faturaId)
     .order("numeroparcela", { ascending: true });
@@ -402,13 +455,15 @@ export async function listarParcelas(faturaId: number): Promise<ParcelaFatura[]>
   return (data ?? []).map((l) => ({
     id: l.id,
     numero: l.numeroparcela ?? 0,
-    vencimento: l.vencimento ? ((l.vencimento.slice(0, 10)) as DataISO) : null,
+    vencimento: l.vencimento ? (l.vencimento.slice(0, 10) as DataISO) : null,
     valor: doBanco(l.valor),
     acrescimo: doBanco(l.acrescimo),
     desconto: doBanco(l.desconto),
     // `total` pode vir nulo em registro antigo; nesse caso o valor e a verdade.
     total: l.total == null ? doBanco(l.valor) : doBanco(l.total),
     pago: l.pago ?? false,
+    cancelada: l.cancelada ?? false,
+    motivoDoCancelamento: l.cancelamento_motivo,
     pagamentoId: l.fkPagamento,
     comprovante: l.comprovante,
     // Soma dos vinculos: e o que a parcela ja recebeu, de um ou de varios.
@@ -418,7 +473,8 @@ export async function listarParcelas(faturaId: number): Promise<ParcelaFatura[]>
         0,
       ),
     ),
-    pagoEm: (l.pagamentos as unknown as { data: string | null } | null)?.data ?? null,
+    pagoEm:
+      (l.pagamentos as unknown as { data: string | null } | null)?.data ?? null,
     /*
      * ⚠️ Conciliado e do PAGAMENTO, e nao da parcela.
      *
@@ -427,7 +483,8 @@ export async function listarParcelas(faturaId: number): Promise<ParcelaFatura[]>
      * cada titulo que ele fechou.
      */
     conciliado:
-      (l.pagamentos as unknown as { conciliado: boolean | null } | null)?.conciliado ?? false,
+      (l.pagamentos as unknown as { conciliado: boolean | null } | null)
+        ?.conciliado ?? false,
     nfs: l.nfs,
     boleto: l.boleto,
   }));
@@ -510,29 +567,33 @@ export async function criar(entrada: EntradaCriar): Promise<number> {
      * cobravel e ticket ainda aberto — dinheiro cobrado duas vezes.
      */
     if (entrada.origens.length > 0) {
-      const { error: erroOrigens } = await supabase.from("faturasorigens").insert(
-        entrada.origens.map((o) => ({
-          fkFatura: faturaId,
-          fkUserCriacao: entrada.usuarioId,
-          origem: "TICKET",
-          fkOrdem: o.ticketId,
-          valor: paraBanco(o.valor),
-        })),
-      );
+      const { error: erroOrigens } = await supabase
+        .from("faturasorigens")
+        .insert(
+          entrada.origens.map((o) => ({
+            fkFatura: faturaId,
+            fkUserCriacao: entrada.usuarioId,
+            origem: "TICKET",
+            fkOrdem: o.ticketId,
+            valor: paraBanco(o.valor),
+          })),
+        );
       if (erroOrigens) throw erroOrigens;
     }
 
-    const { error: erroParcelas } = await supabase.from("faturasparcelas").insert(
-      entrada.parcelas.map((p) => ({
-        fkFatura: faturaId,
-        fkUserCriacao: entrada.usuarioId,
-        numeroparcela: p.numero,
-        vencimento: p.vencimento,
-        valor: paraBanco(p.valor),
-        total: paraBanco(p.valor),
-        pago: false,
-      })),
-    );
+    const { error: erroParcelas } = await supabase
+      .from("faturasparcelas")
+      .insert(
+        entrada.parcelas.map((p) => ({
+          fkFatura: faturaId,
+          fkUserCriacao: entrada.usuarioId,
+          numeroparcela: p.numero,
+          vencimento: p.vencimento,
+          valor: paraBanco(p.valor),
+          total: paraBanco(p.valor),
+          pago: false,
+        })),
+      );
     if (erroParcelas) throw erroParcelas;
 
     return faturaId;
@@ -575,7 +636,11 @@ export async function definirCancelada(
 
   const { error } = await supabase
     .from("faturas")
-    .update({ cancelada, fkUserModificacao: usuarioId, updated_at: new Date().toISOString() })
+    .update({
+      cancelada,
+      fkUserModificacao: usuarioId,
+      updated_at: new Date().toISOString(),
+    })
     .eq("fkEmpresa", empresaId)
     .eq("id", faturaId);
 
@@ -595,7 +660,12 @@ export async function aplicarParcelamento(
   faturaId: number,
   usuarioId: string,
   plano: {
-    atualizar: { id: number; numero: number; vencimento: DataISO; valor: Centavos }[];
+    atualizar: {
+      id: number;
+      numero: number;
+      vencimento: DataISO;
+      valor: Centavos;
+    }[];
     criar: Parcela[];
     excluir: number[];
   },
@@ -649,41 +719,6 @@ export async function aplicarParcelamento(
   }
 }
 
-/**
- * ⚠️ APAGA as parcelas em aberto e recria. Use so onde nao ha o que preservar.
- *
- * As recriadas nascem sem anexo e com token novo: qualquer link de pagamento ja
- * enviado ao cliente para de abrir. Para mexer no cronograma de uma conta que ja
- * existe, o caminho e `aplicarParcelamento`.
- */
-export async function substituirParcelas(
-  faturaId: number,
-  usuarioId: string,
-  parcelas: Parcela[],
-): Promise<void> {
-  const supabase = await serverClient();
-
-  const { error: erroDelete } = await supabase
-    .from("faturasparcelas")
-    .delete()
-    .eq("fkFatura", faturaId)
-    .eq("pago", false);
-  if (erroDelete) throw erroDelete;
-
-  const { error } = await supabase.from("faturasparcelas").insert(
-    parcelas.map((p) => ({
-      fkFatura: faturaId,
-      fkUserCriacao: usuarioId,
-      numeroparcela: p.numero,
-      vencimento: p.vencimento,
-      valor: paraBanco(p.valor),
-      total: paraBanco(p.valor),
-      pago: false,
-    })),
-  );
-  if (error) throw error;
-}
-
 // ── Traducao linha -> dominio ───────────────────────────────────────────────
 
 type LinhaFatura = {
@@ -706,7 +741,10 @@ function paraDominioResumo(
   qtdTickets = 0,
   dinheiro: { recebido: number; saldo: number } = { recebido: 0, saldo: 0 },
 ): FaturaResumo {
-  const cliente = linha.clientes as { razao: string | null; nomefantasia: string | null } | null;
+  const cliente = linha.clientes as {
+    razao: string | null;
+    nomefantasia: string | null;
+  } | null;
   const status = normalizarStatus(linha.status);
   const cancelada = linha.cancelada ?? false;
 
@@ -715,8 +753,10 @@ function paraDominioResumo(
     numero: linha.id,
     clienteId: linha.fkCliente,
     clienteNome: primeiroPreenchido(cliente?.nomefantasia, cliente?.razao),
-    apuracaoInicio: linha.dataInicio ? ((linha.dataInicio.slice(0, 10)) as DataISO) : null,
-    apuracaoFim: linha.dataFim ? ((linha.dataFim.slice(0, 10)) as DataISO) : null,
+    apuracaoInicio: linha.dataInicio
+      ? (linha.dataInicio.slice(0, 10) as DataISO)
+      : null,
+    apuracaoFim: linha.dataFim ? (linha.dataFim.slice(0, 10) as DataISO) : null,
     proximoVencimento,
     status,
     cancelada,
@@ -733,7 +773,9 @@ function paraDominioResumo(
 
 function normalizarStatus(bruto: string | null): StatusFatura {
   const s = (bruto ?? "").trim().toUpperCase();
-  return (STATUS_FATURA as readonly string[]).includes(s) ? (s as StatusFatura) : "ABERTA";
+  return (STATUS_FATURA as readonly string[]).includes(s)
+    ? (s as StatusFatura)
+    : "ABERTA";
 }
 
 /** Guarda no registro a referencia do documento — caminho, nunca URL assinada. */
@@ -815,7 +857,11 @@ export async function destinatarioDaFatura(
           .select("email, contato, razao, nomefantasia")
           .eq("id", clienteId)
           .maybeSingle(),
-    supabase.from("empresas").select("nome, fantasia, razaosocial").eq("id", empresaId).maybeSingle(),
+    supabase
+      .from("empresas")
+      .select("nome, fantasia, razaosocial")
+      .eq("id", empresaId)
+      .maybeSingle(),
   ]);
 
   if (cliente?.error) throw cliente.error;
@@ -851,10 +897,9 @@ export async function destinatarioDaFatura(
 /**
  * Muda so o vencimento, sem tocar em valor nem em numero da parcela.
  *
- * ⚠️ Update pontual em vez de `substituirParcelas`: aquele apaga e recria a
- * grade inteira, e com ela sumiriam o token do link, a nota e o boleto ja
- * anexados. Prorrogar uma data nao pode invalidar a cobranca que ja esta na
- * mao do cliente.
+ * ⚠️ Update pontual: mexe so na data. Apagando e recriando a grade sumiriam o
+ * token do link, a nota e o boleto ja anexados, e prorrogar uma data nao pode
+ * invalidar a cobranca que ja esta na mao do cliente.
  *
  * `fkFatura` no filtro alem do id: sem ele, um id de parcela de outra conta
  * passaria, e a RLS por si so nao separa parcela de fatura dentro do tenant.
@@ -869,7 +914,11 @@ export async function alterarVencimentoDaParcela(
 
   const { error } = await supabase
     .from("faturasparcelas")
-    .update({ vencimento, updated_at: new Date().toISOString(), fkUserModificacao: usuarioId })
+    .update({
+      vencimento,
+      updated_at: new Date().toISOString(),
+      fkUserModificacao: usuarioId,
+    })
     .eq("id", parcelaId)
     .eq("fkFatura", faturaId);
 
@@ -899,7 +948,10 @@ export async function tokenDaParcela(parcelaId: number): Promise<string> {
 }
 
 /** Solta o ticket da conta. O TICKET fica; o que sai e o vinculo e o saldo. */
-export async function desvincularTicket(faturaId: number, ticketId: number): Promise<void> {
+export async function desvincularTicket(
+  faturaId: number,
+  ticketId: number,
+): Promise<void> {
   const supabase = await serverClient();
   const { error } = await supabase
     .from("faturasorigens")
@@ -911,11 +963,21 @@ export async function desvincularTicket(faturaId: number, ticketId: number): Pro
 }
 
 /** Apaga a conta e tudo que pende dela. Quem confere se pode e o servico. */
-export async function excluir(empresaId: number, faturaId: number): Promise<void> {
+export async function excluir(
+  empresaId: number,
+  faturaId: number,
+): Promise<void> {
   const supabase = await serverClient();
 
-  for (const tabela of ["faturasorigens", "faturasparcelas", "faturasanexos"] as const) {
-    const { error } = await supabase.from(tabela).delete().eq("fkFatura", faturaId);
+  for (const tabela of [
+    "faturasorigens",
+    "faturasparcelas",
+    "faturasanexos",
+  ] as const) {
+    const { error } = await supabase
+      .from(tabela)
+      .delete()
+      .eq("fkFatura", faturaId);
     if (error) throw error;
   }
 
@@ -930,7 +992,9 @@ export async function excluir(empresaId: number, faturaId: number): Promise<void
 
 // ── Baixas ──────────────────────────────────────────────────────────────────
 
-export async function listarContasBancarias(empresaId: number): Promise<ContaBancaria[]> {
+export async function listarContasBancarias(
+  empresaId: number,
+): Promise<ContaBancaria[]> {
   const supabase = await serverClient();
   const { data, error } = await supabase
     .from("contasbancarias")
@@ -944,4 +1008,65 @@ export async function listarContasBancarias(empresaId: number): Promise<ContaBan
   if (error) throw error;
 
   return (data ?? []).map((c) => ({ id: c.id, nome: nomeDaConta(c) }));
+}
+
+/**
+ * Cancela UMA parcela a receber: ela nao vai mais ser cobrada.
+ *
+ * ⚠️ Espelho exato do lado que paga, ate na guarda: parcela PAGA nunca entra, e
+ * a condicao esta no proprio UPDATE. Dinheiro que entrou nao vira "nao vai
+ * acontecer" por um erro de clique.
+ *
+ * ⚠️ `fkFatura` no filtro alem do id: sem ele, um id de parcela de outra conta
+ * passaria, e a RLS sozinha nao separa parcela de conta dentro do tenant.
+ */
+export async function cancelarParcela(
+  faturaId: number,
+  parcelaId: number,
+  usuarioId: string,
+  motivo: string | null,
+): Promise<boolean> {
+  const supabase = await serverClient();
+
+  const { data, error } = await supabase
+    .from("faturasparcelas")
+    .update({
+      cancelada: true,
+      cancelada_em: new Date().toISOString(),
+      cancelamento_motivo: motivo,
+      fkUserModificacao: usuarioId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("fkFatura", faturaId)
+    .eq("id", parcelaId)
+    .eq("pago", false)
+    .select("id");
+
+  if (error) throw error;
+  return (data ?? []).length > 0;
+}
+
+/** Desfaz: a parcela volta a ser cobrada. */
+export async function reativarParcela(
+  faturaId: number,
+  parcelaId: number,
+  usuarioId: string,
+): Promise<boolean> {
+  const supabase = await serverClient();
+
+  const { data, error } = await supabase
+    .from("faturasparcelas")
+    .update({
+      cancelada: false,
+      cancelada_em: null,
+      cancelamento_motivo: null,
+      fkUserModificacao: usuarioId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("fkFatura", faturaId)
+    .eq("id", parcelaId)
+    .select("id");
+
+  if (error) throw error;
+  return (data ?? []).length > 0;
 }

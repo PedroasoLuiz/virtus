@@ -55,7 +55,10 @@ export const criarRecebimentoBodySchema = z.object({
   /** Zero e o caso normal: so cartao e boleto costumam reter. */
   taxa: centavosSchema.default(0),
   observacoes: textoLongoSchema.nullish(),
-  destinos: z.array(destinoSchema).min(1, "Escolha ao menos uma parcela").max(200),
+  destinos: z
+    .array(destinoSchema)
+    .min(1, "Escolha ao menos uma parcela")
+    .max(200),
 });
 
 // ── Saida ───────────────────────────────────────────────────────────────────

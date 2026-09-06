@@ -10,8 +10,24 @@ export function periodo(de: string | null, ate: string | null): string {
     : paraFormatoBR(de as DataISO);
 }
 
-export function vencida(parcela: { pago: boolean; vencimento: string | null }): boolean {
-  return !parcela.pago && parcela.vencimento != null && parcela.vencimento < hoje();
+/**
+ * ⚠️ Parcela CANCELADA nunca esta vencida.
+ *
+ * Vencida fala de cobranca atrasada, e a cancelada nao vai ser cobrada. Sem esta
+ * condicao, encerrar um contrato pintava de vermelho justamente as parcelas que
+ * a pessoa acabou de tirar da cobranca.
+ */
+export function vencida(parcela: {
+  pago: boolean;
+  cancelada?: boolean;
+  vencimento: string | null;
+}): boolean {
+  return (
+    !parcela.pago &&
+    !parcela.cancelada &&
+    parcela.vencimento != null &&
+    parcela.vencimento < hoje()
+  );
 }
 
 /** dd/mm/aa. O seculo nao muda nada aqui, e a coluna encolhe um terco. */

@@ -170,7 +170,7 @@ export async function registrarBaixa(
    * O total do lancamento inclui o acrescimo.
    *
    * `valor` e o que abate divida; juros e multa sairam do banco junto e precisam
-   * estar no extrato, senao a linha do VPay fica menor que a do banco em todo
+   * estar no extrato, senao a linha do Vope fica menor que a do banco em todo
    * pagamento em atraso — e a conciliacao acusa diferenca que nao existe.
    */
   const total = entrada.destinos.reduce<Centavos>(
@@ -574,7 +574,6 @@ export async function substituirLancamentos(
       vencimento: p.vencimento ?? hoje(),
       valor: p.valor,
       pago: p.pago,
-      temDocumento: p.nfs != null || p.boleto != null || p.comprovante != null,
     })),
     total,
   );
@@ -631,7 +630,6 @@ export async function redefinirParcelasDaConta(
     vencimento: p.vencimento ?? hoje(),
     valor: p.total,
     pago: p.pago,
-    temDocumento: p.nfs != null || p.boleto != null || p.comprovante != null,
   }));
 
   const plano = redefinirParcelas(editaveis, itens, conta.total);
@@ -647,6 +645,22 @@ export async function redefinirParcelasDaConta(
   );
 
   await repo.aplicarParcelamento(contaId, usuarioId, plano);
+
+  /*
+   * A tela pode ter TIRADO parcelas, e com elas some quem segurava o arquivo.
+   *
+   * ⚠️ Depois da escrita e sem derrubar a operacao: a parcela ja saiu, e um
+   * arquivo orfao custa espaco — devolver erro faria a tela dizer que nao deu
+   * certo uma mudanca que ja esta gravada.
+   */
+  for (const id of plano.excluir) {
+    const parcela = conta.parcelas.find((p) => p.id === id);
+    if (!parcela) continue;
+
+    for (const referencia of [parcela.boleto, parcela.nfs, parcela.comprovante]) {
+      if (referencia) await apagarDocumento(referencia).catch(() => {});
+    }
+  }
 }
 
 // ── Documentos da parcela ───────────────────────────────────────────────────
@@ -867,4 +881,97 @@ export async function criarConta(
   conferirTotal(parcelas, total);
 
   return repo.criar(empresaId, usuarioId, numero, { ...entrada, descricao }, total, parcelas);
+}
+
+
+/**
+ * Cancela uma parcela: ela foi combinada, mas nao vai mais acontecer.
+ *
+ * ⚠️ Isto NAO e apagar. A conta continua dizendo que o acordo previa doze
+ * parcelas, e e isso que se explica seis meses depois; o que muda e que ela
+ * para de ser cobrada e sai do "em aberto".
+ *
+ * ⚠️ Parcela PAGA nao se cancela. Dinheiro que saiu nao vira "nao vai
+ * acontecer" — e um adiantamento pago em maio para uma parcela de julho e
+ * exatamente esse caso. Para desfazer um pagamento existe estornar a baixa.
+ *
+ * ⚠️ Uma de cada vez, pelo menu da propria linha. Uma acao de "encerrar a partir
+ * de tal data" decidia por varias parcelas de uma vez, e obrigava a confiar num
+ * corte que a tela nao mostrava antes de gravar.
+ */
+export async function cancelarParcelaDaConta(
+  empresaId: number,
+  usuarioId: string,
+  contaId: number,
+  parcelaId: number,
+  motivo: string | null,
+): Promise<void> {
+  const conta = await obterConta(empresaId, contaId);
+  if (conta.cancelada) throw new BusinessRuleError("Esta conta está cancelada");
+
+  const parcela = conta.parcelas.find((p) => p.id === parcelaId);
+  if (!parcela) throw new NotFoundError("Parcela nao encontrada nesta conta");
+  if (parcela.pago) {
+    throw new BusinessRuleError(
+      "Parcela paga não se cancela: estorne a baixa antes, se o pagamento não aconteceu",
+    );
+  }
+
+  const feito = await repo.cancelarParcela(contaId, parcelaId, usuarioId, motivo?.trim() || null);
+  if (!feito) throw new NotFoundError("Parcela nao encontrada nesta conta");
+}
+
+/** Desfaz o cancelamento: a parcela volta a ser cobrada. */
+export async function reativarParcelaDaConta(
+  empresaId: number,
+  usuarioId: string,
+  contaId: number,
+  parcelaId: number,
+): Promise<void> {
+  await obterConta(empresaId, contaId);
+
+  const feito = await repo.reativarParcela(contaId, parcelaId, usuarioId);
+  if (!feito) throw new NotFoundError("Parcela nao encontrada nesta conta");
+}
+
+
+/**
+ * Estorna a baixa: o dinheiro nao saiu, e as parcelas voltam a ficar em aberto.
+ *
+ * Espelho do `estornarRecebimento`. Correcao de baixa e estorno, e nao edicao:
+ * mexer no valor de um pagamento ja lancado reescreveria o que talvez ja tenha
+ * virado comprovante na mao do fornecedor.
+ *
+ * ⚠️ CONCILIADA nao se estorna. A linha do extrato aponta para este pagamento:
+ * apagando-o, o banco continuaria dizendo que o dinheiro saiu e o sistema nao
+ * teria mais onde encaixar aquela linha. Desfazer a conciliacao primeiro e o
+ * caminho, e ele existe na tela de conciliacao.
+ *
+ * ⚠️ Baixa no CARTAO tambem nao, e o motivo e que ela deixou rastro fora daqui:
+ * a compra virou linha da fatura do cartao, e `cartaofaturasparcelas` nao guarda
+ * de qual pagamento veio. Apagando so o pagamento, a fatura continuaria cobrando
+ * uma compra que o sistema deu por desfeita. O reconhecimento e por
+ * `fkContaBancaria` nulo, que e o mesmo mecanismo que mantem a baixa no cartao
+ * fora do saldo.
+ */
+export async function estornarBaixa(
+  empresaId: number,
+  id: number,
+): Promise<void> {
+  const baixa = await repo.baixaParaEstorno(empresaId, id);
+  if (!baixa) throw new NotFoundError("Baixa nao encontrada");
+
+  if (baixa.conciliado) {
+    throw new BusinessRuleError(
+      "Esta baixa já foi conciliada. Desfaça a conciliação antes de estornar.",
+    );
+  }
+
+  if (baixa.contaBancariaId == null) {
+    throw new BusinessRuleError(
+      "Baixa feita no cartão: remova a compra da fatura do cartão antes de estornar.",
+    );
+  }
+
+  await repo.apagarBaixa(id);
 }

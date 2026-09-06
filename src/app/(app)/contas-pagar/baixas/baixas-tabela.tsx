@@ -1,5 +1,7 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+
 import { useMemo, useState } from "react";
 import {
   EmptyRow,
@@ -51,7 +53,8 @@ const NUM: React.CSSProperties = {
 
 /** "3 parcelas · 2 contas". Com uma conta so, dizer isso e ruido. */
 function destino(b: BaixaPagarResumo): string {
-  const parcelas = b.qtdParcelas === 1 ? "1 parcela" : `${b.qtdParcelas} parcelas`;
+  const parcelas =
+    b.qtdParcelas === 1 ? "1 parcela" : `${b.qtdParcelas} parcelas`;
   return b.qtdContas > 1 ? `${parcelas} · ${b.qtdContas} contas` : parcelas;
 }
 
@@ -62,6 +65,7 @@ export function BaixasTabela({
   baixas: BaixaPagarResumo[];
   indicadores: IndicadoresDeBaixaPagar;
 }) {
+  const router = useRouter();
   const [detalhe, setDetalhe] = useState<number | null>(null);
   const [criando, setCriando] = useState(false);
   const [busca, setBusca] = useState("");
@@ -86,7 +90,10 @@ export function BaixasTabela({
 
   const totalPaginas = Math.max(1, Math.ceil(filtradas.length / PAGE_SIZE));
   const paginaAtual = Math.min(pagina, totalPaginas);
-  const visiveis = filtradas.slice((paginaAtual - 1) * PAGE_SIZE, paginaAtual * PAGE_SIZE);
+  const visiveis = filtradas.slice(
+    (paginaAtual - 1) * PAGE_SIZE,
+    paginaAtual * PAGE_SIZE,
+  );
 
   return (
     <PageLayout>
@@ -176,7 +183,9 @@ export function BaixasTabela({
                   <Td>
                     <MarcaDeConciliacao conciliado={b.conciliado} />
                   </Td>
-                  <Td style={NUM}>{b.data ? paraFormatoBR(b.data as DataISO) : "—"}</Td>
+                  <Td style={NUM}>
+                    {b.data ? paraFormatoBR(b.data as DataISO) : "—"}
+                  </Td>
                   <Td style={{ maxWidth: 240 }}>
                     <span
                       style={{
@@ -213,7 +222,12 @@ export function BaixasTabela({
         </TableFrame>
       </Panel>
 
-      <BaixaDrawer baixaId={detalhe} onClose={() => setDetalhe(null)} />
+      <BaixaDrawer
+        baixaId={detalhe}
+        onClose={() => setDetalhe(null)}
+        /* A baixa estornada deixou de existir: a lista atrás precisa reler. */
+        aoEstornar={() => router.refresh()}
+      />
       {criando && <NovaBaixaDrawer onClose={() => setCriando(false)} />}
     </PageLayout>
   );

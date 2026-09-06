@@ -6,7 +6,7 @@ import { Button, GrupoDeCampos, PanelTabs } from "@/components/ui/kit";
 import { useAvisos } from "@/components/ui/avisos";
 import { SEM_COBRANCA, type ParametrosDeCobranca } from "@/shared/domain/cobranca";
 import { formatarSemSimbolo, type Centavos } from "@/shared/utils/money";
-import { hoje, type DataISO } from "@/shared/utils/datas";
+import { ehDataISO, hoje, type DataISO } from "@/shared/utils/datas";
 import type { TipoDeRecebimento } from "@/modules/faturas/faturas.types";
 import { previsaoDeCredito, temTaxaDeCostume } from "@/shared/domain/recebimento";
 import type { ParcelaEmAberto } from "@/modules/recebimentos/recebimentos.types";
@@ -43,6 +43,17 @@ import { preencher, valorDaLinha, VAZIO, type Valores } from "./baixa-linhas";
  */
 const ABA_INFORMACOES = "Informações";
 const ABA_PAGAMENTOS = "Pagamentos";
+
+/**
+ * A data ja da para calcular em cima dela?
+ *
+ * ⚠️ `ehDataISO` sozinho nao basta: "0002-04-22" e uma data valida no calendario
+ * e chega do `input type=date` a cada tecla digitada. O piso de 1900 e o que
+ * separa uma data em construcao de uma data de verdade.
+ */
+function dataUtilizavel(v: string): v is DataISO {
+  return ehDataISO(v) && v >= "1900-01-01";
+}
 
 export function NovoRecebimentoDrawer({
   clientes,
@@ -364,14 +375,25 @@ export function NovoRecebimentoDrawer({
             }}
             aoMudarData={(v) => {
               setData(v);
-              // A previsao acompanha a data enquanto ninguem a corrigiu a mao:
-              // trocando o dia do pagamento, o credito anda junto.
-              if (!creditoNaMao) setDataCredito(previsaoDeCredito(tipo as TipoDeRecebimento, v as DataISO));
+              /*
+                A previsão acompanha a data enquanto ninguém a corrigiu à mão:
+                trocando o dia do pagamento, o crédito anda junto.
+
+                ⚠️ Só com a data PRONTA. O `input type=date` dispara `change` a
+                cada tecla, e no meio da digitação ele entrega "0002-04-22" — um
+                ano que existe no calendário e não existe em conta a receber. O
+                cast cego para `DataISO` mandava esse lixo para dentro da regra.
+              */
+              if (!creditoNaMao && dataUtilizavel(v)) {
+                setDataCredito(previsaoDeCredito(tipo as TipoDeRecebimento, v));
+              }
             }}
             aoMudarTipo={(v) => {
               setTipo(v);
               const novo = v as TipoDeRecebimento;
-              if (!creditoNaMao) setDataCredito(previsaoDeCredito(novo, data as DataISO));
+              if (!creditoNaMao && dataUtilizavel(data)) {
+                setDataCredito(previsaoDeCredito(novo, data));
+              }
               // Trocar para uma forma que nao costuma reter zera a taxa: ela
               // ficaria escondida e continuaria virando despesa em silencio.
               if (!temTaxaDeCostume(novo)) setTaxa(0);

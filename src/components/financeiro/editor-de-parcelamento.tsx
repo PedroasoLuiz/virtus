@@ -39,16 +39,24 @@ export type ParcelaDoEditor = {
   vencimento: string | null;
   total: number;
   pago: boolean;
+  /**
+   * Combinada, mas nao vai mais acontecer (contrato encerrado antes dela).
+   *
+   * ⚠️ Ela CONTINUA na tabela de baixo, e nao sobe para o bloco das pagas: nao
+   * foi paga, e o dinheiro dela nao saiu. O que ela tem em comum com a paga e
+   * nao se mexer — dai a mesma casca cinza, com marca propria na coluna.
+   */
+  cancelada?: boolean;
 };
-
 
 type LinhaDoParcelamento = {
   /** `null` numa parcela que ainda nao existe no banco. */
   id: number | null;
   vencimento: string;
   valor: number;
-  /** Paga ou com documento emitido: aparece, mas nao se mexe. */
+  /** Paga, cancelada ou com documento emitido: aparece, mas nao se mexe. */
   travada: boolean;
+  cancelada: boolean;
 };
 
 /**
@@ -107,9 +115,19 @@ function CheckPreenchido({ titulo, cor }: { titulo: string; cor?: string }) {
   return (
     <span
       title={titulo}
-      style={{ display: "inline-grid", placeItems: "center", color: cor ?? "var(--credito)" }}
+      style={{
+        display: "inline-grid",
+        placeItems: "center",
+        color: cor ?? "var(--credito)",
+      }}
     >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="currentColor"
+        aria-hidden
+      >
         <circle cx="12" cy="12" r="9" />
         <path
           d="M8 12.4l2.6 2.6L16 9.6"
@@ -119,6 +137,41 @@ function CheckPreenchido({ titulo, cor }: { titulo: string; cor?: string }) {
           strokeLinecap="round"
           strokeLinejoin="round"
         />
+      </svg>
+    </span>
+  );
+}
+
+/**
+ * A marca da parcela cancelada: circulo com um corte.
+ *
+ * ⚠️ Vazado e cinza, contra o check CHEIO da paga. Cheio, o olho leria as duas
+ * como resolvidas do mesmo jeito — e uma recebeu dinheiro, a outra deixou de
+ * existir. Mesmo desenho do menu da linha e da coluna de conferido, para a marca
+ * e a acao se reconhecerem.
+ */
+function CirculoCortado({ titulo }: { titulo: string }) {
+  return (
+    <span
+      title={titulo}
+      style={{
+        display: "inline-grid",
+        placeItems: "center",
+        color: "var(--text-disabled)",
+      }}
+    >
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        aria-hidden
+      >
+        <circle cx="12" cy="12" r="9" />
+        <path d="M8.5 15.5l7-7" />
       </svg>
     </span>
   );
@@ -160,6 +213,7 @@ export function EditorDeParcelamento({
       vencimento: p.vencimento ?? "",
       valor: p.total,
       travada: !pode.porParcela[p.id]?.pode,
+      cancelada: p.cancelada ?? false,
     })),
   );
 
@@ -184,7 +238,9 @@ export function EditorDeParcelamento({
 
     const ordem = linhas
       .map((l, i) => ({ i, venc: l.vencimento }))
-      .sort((a, b) => (a.venc === b.venc ? a.i - b.i : a.venc < b.venc ? -1 : 1));
+      .sort((a, b) =>
+        a.venc === b.venc ? a.i - b.i : a.venc < b.venc ? -1 : 1,
+      );
 
     const saida: number[] = [];
     for (const { i } of ordem) saida[i] = livre();
@@ -199,16 +255,24 @@ export function EditorDeParcelamento({
    * continua somando o cronograma INTEIRO — paginar a soma seria mostrar um
    * fechamento que nao fecha coisa nenhuma.
    */
-  const totalPaginas = Math.max(1, Math.ceil(linhas.length / POR_PAGINA_NO_PARCELAMENTO));
+  const totalPaginas = Math.max(
+    1,
+    Math.ceil(linhas.length / POR_PAGINA_NO_PARCELAMENTO),
+  );
   const paginaAtual = Math.min(pagina, totalPaginas);
   const primeira = (paginaAtual - 1) * POR_PAGINA_NO_PARCELAMENTO;
-  const visiveis = linhas.slice(primeira, primeira + POR_PAGINA_NO_PARCELAMENTO);
+  const visiveis = linhas.slice(
+    primeira,
+    primeira + POR_PAGINA_NO_PARCELAMENTO,
+  );
 
   const semData = linhas.some((l) => !l.vencimento);
   const semValor = linhas.some((l) => l.valor <= 0);
 
   function mudar(indice: number, mudanca: Partial<LinhaDoParcelamento>) {
-    setLinhas((atual) => atual.map((l, i) => (i === indice ? { ...l, ...mudanca } : l)));
+    setLinhas((atual) =>
+      atual.map((l, i) => (i === indice ? { ...l, ...mudanca } : l)),
+    );
   }
 
   /**
@@ -221,7 +285,9 @@ export function EditorDeParcelamento({
   function acrescentar() {
     // A parcela nova nasce no fim; sem isto, quem esta na pagina 1 clica no mais
     // e nao ve nada acontecer.
-    setPagina(Math.max(1, Math.ceil((linhas.length + 1) / POR_PAGINA_NO_PARCELAMENTO)));
+    setPagina(
+      Math.max(1, Math.ceil((linhas.length + 1) / POR_PAGINA_NO_PARCELAMENTO)),
+    );
 
     setLinhas((atual) => {
       const ultima = atual.at(-1);
@@ -240,6 +306,7 @@ export function EditorDeParcelamento({
           vencimento: somarUmMes(ultima.vencimento),
           valor: vai,
           travada: false,
+          cancelada: false,
         },
       ];
     });
@@ -254,7 +321,9 @@ export function EditorDeParcelamento({
       const restantes = atual.filter((_, i) => i !== indice);
       const ultima = restantes.at(-1)!;
 
-      return restantes.map((l) => (l === ultima ? { ...l, valor: l.valor + fora.valor } : l));
+      return restantes.map((l) =>
+        l === ultima ? { ...l, valor: l.valor + fora.valor } : l,
+      );
     });
   }
 
@@ -269,7 +338,11 @@ export function EditorDeParcelamento({
       metodo="PUT"
       podeSalvar={diferenca === 0 && !semData && !semValor}
       valores={() => ({
-        parcelas: linhas.map((l) => ({ id: l.id, vencimento: l.vencimento, valor: l.valor })),
+        parcelas: linhas.map((l) => ({
+          id: l.id,
+          vencimento: l.vencimento,
+          valor: l.valor,
+        })),
       })}
     >
       <Formulario>
@@ -338,7 +411,11 @@ export function EditorDeParcelamento({
                   fundo, ela le como uma faixa fechada no alto da tabela, e os
                   campos editaveis das outras linhas ganham contraste.
                 */
-                <Tr key={p.id} dimmed style={{ background: "var(--surface-hover)" }}>
+                <Tr
+                  key={p.id}
+                  dimmed
+                  style={{ background: "var(--surface-hover)" }}
+                >
                   <Td>{p.numero}</Td>
                   <Td>{p.vencimento ? curto(p.vencimento) : "—"}</Td>
                   <Td>{formatarSemSimbolo(p.total as Centavos)}</Td>
@@ -359,8 +436,22 @@ export function EditorDeParcelamento({
                 const i = primeira + indiceNaPagina;
 
                 return (
-                <Tr key={l.id ?? `nova-${i}`}>
-                  {/*
+                  <Tr
+                    key={l.id ?? `nova-${i}`}
+                    /*
+                    ⚠️ A cancelada usa a MESMA casca da paga: cinza e apagada.
+                    As duas não se mexem, e o olho aprende um desenho só para
+                    "esta linha está fechada". O que muda é a marca da coluna,
+                    que diz qual das duas.
+                  */
+                    dimmed={l.cancelada}
+                    style={
+                      l.cancelada
+                        ? { background: "var(--surface-hover)" }
+                        : undefined
+                    }
+                  >
+                    {/*
                     ⚠️ O numero e o que a parcela VAI ter depois de salvar, e nao a
                     posicao na tela.
 
@@ -369,81 +460,108 @@ export function EditorDeParcelamento({
                     numeros se trocam na hora. Mostrando a posicao do array, a
                     tabela diria "3" para a parcela que o banco vai gravar como 2.
                   */}
-                  <Td>{numeros[i]}</Td>
+                    <Td>{numeros[i]}</Td>
 
-                  <Td>
-                    <input
-                      type="date"
-                      disabled={l.travada}
-                      value={l.vencimento.slice(0, 10)}
-                      onChange={(e) => mudar(i, { vencimento: e.target.value })}
-                      style={inputDeCelula}
-                    />
-                  </Td>
+                    <Td>
+                      {/*
+                        ⚠️ Travada mostra a data como TEXTO, e não como campo
+                        desabilitado.
 
-                  <Td>
-                    {l.travada ? (
-                      formatarSemSimbolo(l.valor as Centavos)
-                    ) : (
-                      <CampoNumerico
-                        valor={l.valor}
-                        aoMudar={(v) => mudar(i, { valor: v })}
-                        escala={100}
-                        /*
+                        O pontilhado de baixo é o que diz "isto se digita": num
+                        campo travado ele convida a clicar e não responde. O
+                        valor e a porcentagem ao lado já faziam assim, e a data
+                        era a única célula travada com cara de editável.
+                      */}
+                      {l.travada ? (
+                        curto(l.vencimento)
+                      ) : (
+                        <input
+                          type="date"
+                          value={l.vencimento.slice(0, 10)}
+                          onChange={(e) =>
+                            mudar(i, { vencimento: e.target.value })
+                          }
+                          style={inputDeCelula}
+                        />
+                      )}
+                    </Td>
+
+                    <Td>
+                      {l.travada ? (
+                        formatarSemSimbolo(l.valor as Centavos)
+                      ) : (
+                        <CampoNumerico
+                          valor={l.valor}
+                          aoMudar={(v) => mudar(i, { valor: v })}
+                          escala={100}
+                          /*
                           ⚠️ Parcela de zero nao existe: ela nao vence, nao cobra
                           nada e nao fecha. O campo acusa em vermelho, e o salvar
                           fica travado enquanto houver uma — antes, a soma podia
                           ate fechar com uma linha zerada no meio, e o botao
                           desligado nao dizia por que.
                         */
-                        style={
-                          l.valor <= 0
-                            ? { ...inputDeCelula, color: "var(--danger-text)" }
-                            : inputDeCelula
-                        }
-                      />
-                    )}
-                  </Td>
+                          style={
+                            l.valor <= 0
+                              ? {
+                                  ...inputDeCelula,
+                                  color: "var(--danger-text)",
+                                }
+                              : inputDeCelula
+                          }
+                        />
+                      )}
+                    </Td>
 
-                  <Td>
-                    {l.travada ? (
-                      porcentagem(l.valor, total)
-                    ) : (
-                      <CampoNumerico
-                        valor={Math.round((l.valor / total) * 10000)}
-                        /*
-                         * ⚠️ A porcentagem vira VALOR na hora, e nao fica guardada
-                         * ao lado dele. Guardadas as duas, elas divergem no
-                         * arredondamento e a tabela passa a mostrar 33,33% de uma
-                         * parcela que vale outra coisa.
-                         */
-                        aoMudar={(pct) =>
-                          mudar(i, { valor: Math.round((total * pct) / 10000) })
-                        }
-                        escala={100}
-                        sufixo="%"
-                        style={inputDeCelula}
-                      />
-                    )}
-                  </Td>
+                    <Td>
+                      {l.travada ? (
+                        porcentagem(l.valor, total)
+                      ) : (
+                        <CampoNumerico
+                          valor={Math.round((l.valor / total) * 10000)}
+                          /*
+                           * ⚠️ A porcentagem vira VALOR na hora, e nao fica guardada
+                           * ao lado dele. Guardadas as duas, elas divergem no
+                           * arredondamento e a tabela passa a mostrar 33,33% de uma
+                           * parcela que vale outra coisa.
+                           */
+                          aoMudar={(pct) =>
+                            mudar(i, {
+                              valor: Math.round((total * pct) / 10000),
+                            })
+                          }
+                          escala={100}
+                          sufixo="%"
+                          style={inputDeCelula}
+                        />
+                      )}
+                    </Td>
 
-                  {/*
+                    {/*
                     Em aberto a celula fica vazia: um X ou um circulo vazado
                     acusariam uma pendencia, e parcela que ainda nem venceu nao
-                    esta devendo nada.
+                    esta devendo nada. A cancelada, sim, tem o que dizer.
                   */}
-                  <Td />
-
-                  <Td>
-                    <AcoesDaLinha>
-                      {!l.travada && linhas.length > 1 && (
-                        <BotaoDeAcao rotulo="Tirar esta parcela" perigo onClick={() => remover(i)}>
-                          <path d="M3.5 8h9" />
-                        </BotaoDeAcao>
+                    <Td>
+                      {l.cancelada && (
+                        <CirculoCortado titulo="Parcela cancelada. Reative antes de mexer nela." />
                       )}
-                    </AcoesDaLinha>
-                  </Td>
-                </Tr>
+                    </Td>
+
+                    <Td>
+                      <AcoesDaLinha>
+                        {!l.travada && linhas.length > 1 && (
+                          <BotaoDeAcao
+                            rotulo="Tirar esta parcela"
+                            perigo
+                            onClick={() => remover(i)}
+                          >
+                            <path d="M3.5 8h9" />
+                          </BotaoDeAcao>
+                        )}
+                      </AcoesDaLinha>
+                    </Td>
+                  </Tr>
                 );
               })}
             </tbody>
@@ -495,7 +613,10 @@ export function EditorDeParcelamento({
               */}
               {(semValor || semData) && (
                 <tr style={{ color: "var(--danger-text)" }}>
-                  <td colSpan={6} style={{ height: 28, fontSize: "var(--text-xs)" }}>
+                  <td
+                    colSpan={6}
+                    style={{ height: 28, fontSize: "var(--text-xs)" }}
+                  >
                     {semValor
                       ? "Toda parcela precisa de um valor maior que zero."
                       : "Toda parcela precisa de um vencimento."}
@@ -505,7 +626,10 @@ export function EditorDeParcelamento({
 
               {diferenca !== 0 && (
                 <tr style={{ color: "var(--danger-text)" }}>
-                  <td colSpan={2} style={{ height: 28, fontSize: "var(--text-xs)" }}>
+                  <td
+                    colSpan={2}
+                    style={{ height: 28, fontSize: "var(--text-xs)" }}
+                  >
                     {diferenca > 0 ? "Falta distribuir" : "Passou do total em"}
                   </td>
                   <td style={somaDaTabela}>
@@ -531,4 +655,3 @@ export function EditorDeParcelamento({
     </FormDrawer>
   );
 }
-

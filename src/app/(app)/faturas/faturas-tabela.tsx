@@ -87,7 +87,10 @@ export function FaturasTabela({
 
     if (!r.ok) {
       const dados = await r.json().catch(() => null);
-      avisar("atencao", dados?.error?.message ?? "Não foi possível mover a conta");
+      avisar(
+        "atencao",
+        dados?.error?.message ?? "Não foi possível mover a conta",
+      );
       return;
     }
     router.refresh();
@@ -122,14 +125,18 @@ export function FaturasTabela({
       if (status && f.situacao !== status) return false;
       if (!termo) return true;
       return (
-        String(f.numero).includes(termo) || (f.clienteNome ?? "").toLowerCase().includes(termo)
+        String(f.numero).includes(termo) ||
+        (f.clienteNome ?? "").toLowerCase().includes(termo)
       );
     });
   }, [faturas, busca, status]);
 
   const totalPaginas = Math.max(1, Math.ceil(filtradas.length / PAGE_SIZE));
   const paginaAtual = Math.min(pagina, totalPaginas);
-  const visiveis = filtradas.slice((paginaAtual - 1) * PAGE_SIZE, paginaAtual * PAGE_SIZE);
+  const visiveis = filtradas.slice(
+    (paginaAtual - 1) * PAGE_SIZE,
+    paginaAtual * PAGE_SIZE,
+  );
 
   return (
     <PageLayout>
@@ -207,7 +214,10 @@ export function FaturasTabela({
                     onClick={() => setDetalhe(f.id)}
                   >
                     <Td
-                      style={{ fontVariantNumeric: "tabular-nums", color: "var(--text-tertiary)" }}
+                      style={{
+                        fontVariantNumeric: "tabular-nums",
+                        color: "var(--text-tertiary)",
+                      }}
                     >
                       {f.numero}
                     </Td>
@@ -224,13 +234,26 @@ export function FaturasTabela({
                         {f.clienteNome ?? "—"}
                       </span>
                     </Td>
-                    <Td style={{ whiteSpace: "nowrap", color: "var(--text-secondary)" }}>
+                    <Td
+                      style={{
+                        whiteSpace: "nowrap",
+                        color: "var(--text-secondary)",
+                      }}
+                    >
                       {periodo(f.apuracaoInicio, f.apuracaoFim)}
                     </Td>
                     <Td style={{ whiteSpace: "nowrap" }}>
-                      <Vencimento data={f.proximoVencimento} situacao={f.situacao} />
+                      <Vencimento
+                        data={f.proximoVencimento}
+                        situacao={f.situacao}
+                      />
                     </Td>
-                    <Td style={{ textAlign: "center", fontVariantNumeric: "tabular-nums" }}>
+                    <Td
+                      style={{
+                        textAlign: "center",
+                        fontVariantNumeric: "tabular-nums",
+                      }}
+                    >
                       {f.qtdParcelas}
                     </Td>
                     <Td style={{ textAlign: "center" }}>
@@ -260,10 +283,12 @@ export function FaturasTabela({
         )}
       </Panel>
 
-      <FaturaDrawer emitidoPor={emitidoPor} faturaId={detalhe} onClose={() => setDetalhe(null)} />
-      {criando && (
-        <NovaFaturaDrawer onClose={() => setCriando(false)} />
-      )}
+      <FaturaDrawer
+        emitidoPor={emitidoPor}
+        faturaId={detalhe}
+        onClose={() => setDetalhe(null)}
+      />
+      {criando && <NovaFaturaDrawer onClose={() => setCriando(false)} />}
     </PageLayout>
   );
 }
@@ -276,7 +301,13 @@ export function FaturasTabela({
  * dinheiro comecou a entrar, e a data virou historico. Vermelho ali continuaria
  * pedindo uma acao que ja foi tomada.
  */
-function Vencimento({ data, situacao }: { data: DataISO | null; situacao: SituacaoFatura }) {
+function Vencimento({
+  data,
+  situacao,
+}: {
+  data: DataISO | null;
+  situacao: SituacaoFatura;
+}) {
   if (!data) return <span style={{ color: "var(--text-tertiary)" }}>—</span>;
 
   const semPagamento = situacao === "ABERTA" || situacao === "FATURADA";
@@ -296,7 +327,9 @@ function Vencimento({ data, situacao }: { data: DataISO | null; situacao: Situac
 
 function periodo(de: DataISO | null, ate: DataISO | null): string {
   if (!de) return "—";
-  return ate && ate !== de ? `${paraFormatoBR(de)} — ${paraFormatoBR(ate)}` : paraFormatoBR(de);
+  return ate && ate !== de
+    ? `${paraFormatoBR(de)} — ${paraFormatoBR(ate)}`
+    : paraFormatoBR(de);
 }
 
 const TOM: Record<SituacaoFatura, Tom> = {
@@ -339,11 +372,21 @@ function QuadroDeContas({
   aoAbrir: (id: number) => void;
   aoMover: (id: number, situacao: SituacaoFatura) => void;
 }) {
-  const colunas: SituacaoFatura[] = ["ABERTA", "FATURADA", "PARC. PAGA", "PAGA", "BAIXADA"];
+  const colunas: SituacaoFatura[] = [
+    "ABERTA",
+    "FATURADA",
+    "PARC. PAGA",
+    "PAGA",
+    "BAIXADA",
+  ];
 
   return (
     <Quadro
-      colunas={colunas.map((c, i) => ({ id: i, descricao: c, cor: COR_COLUNA[c] }))}
+      colunas={colunas.map((c, i) => ({
+        id: i,
+        descricao: c,
+        cor: COR_COLUNA[c],
+      }))}
       cartoes={faturas
         .filter((f) => !f.cancelada)
         .map((f) => ({

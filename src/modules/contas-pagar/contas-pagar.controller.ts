@@ -1,5 +1,6 @@
+import type { z } from "zod";
 import type { Entrada } from "@/shared/http/handler";
-import { created, ok } from "@/shared/http/response";
+import { created, noContent, ok } from "@/shared/http/response";
 import { empresaObrigatoria } from "@/shared/auth/contexto";
 import { AppError } from "@/shared/errors/app-error";
 import { metaDePaginacao } from "@/shared/utils/paginacao";
@@ -25,6 +26,7 @@ import {
   type TipoDocumentoQuery,
   type IdParam,
   type ListarQuery,
+  type CancelarParcelaBody,
 } from "@/modules/contas-pagar/contas-pagar.schema";
 
 /**
@@ -45,7 +47,46 @@ export async function listar({ query, ctx }: Entrada<undefined, ListarQuery, unk
 
 export async function obter({ params, ctx }: Entrada<undefined, undefined, IdParam>) {
   const empresaId = empresaObrigatoria(ctx);
-  return ok(contaDetalheSchema.parse(await service.obterConta(empresaId, params.id)));
+
+  /*
+   * ⚠️ O objeto passa pela ENTRADA do schema antes do `parse`.
+   *
+   * `parse` recebe `unknown`: um campo que o servico devolve e o schema nao
+   * declara e descartado em silencio, e a tela recebe a resposta sem ele. Ja
+   * aconteceu tres vezes no projeto, a ultima com o `documento` do extrato.
+   */
+  const saida: z.input<typeof contaDetalheSchema> = await service.obterConta(empresaId, params.id);
+
+  return ok(contaDetalheSchema.parse(saida));
+}
+
+export async function cancelarParcela({
+  body,
+  params,
+  ctx,
+}: Entrada<CancelarParcelaBody, undefined, ParcelaParam>) {
+  const empresaId = empresaObrigatoria(ctx);
+
+  await service.cancelarParcelaDaConta(
+    empresaId,
+    ctx.usuarioId,
+    params.id,
+    params.parcelaId,
+    body.motivo ?? null,
+  );
+
+  return noContent();
+}
+
+export async function reativarParcela({ params, ctx }: Entrada<undefined, undefined, ParcelaParam>) {
+  const empresaId = empresaObrigatoria(ctx);
+  await service.reativarParcelaDaConta(empresaId, ctx.usuarioId, params.id, params.parcelaId);
+  return noContent();
+}
+
+export async function estornarBaixa({ params, ctx }: Entrada<undefined, undefined, IdParam>) {
+  await service.estornarBaixa(empresaObrigatoria(ctx), params.id);
+  return noContent();
 }
 
 export async function listarTiposDeDocumento({ ctx }: Entrada<undefined, undefined, unknown>) {

@@ -15,6 +15,9 @@ export type Parcela = {
   desconto: number;
   total: number;
   pago: boolean;
+  /** Combinada, mas nao vai mais ser cobrada: o contrato foi encerrado antes. */
+  cancelada: boolean;
+  motivoDoCancelamento: string | null;
   /** Preenchido quando a baixa foi conciliada. E o que trava a edicao. */
   pagamentoId: number | null;
   /** Data da baixa. E o fato que o recibo comprova — nao e o vencimento. */
@@ -67,4 +70,3 @@ export type Fatura = {
     editadoPor: string | null;
   };
 };
-

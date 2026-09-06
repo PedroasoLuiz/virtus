@@ -29,7 +29,8 @@ export function Documentos({
   bloqueado: boolean;
   aoMudar: () => void;
 }) {
-  if (!nfs && !boleto && !comprovante) return <span style={{ color: "var(--text-disabled)" }}>—</span>;
+  if (!nfs && !boleto && !comprovante)
+    return <span style={{ color: "var(--text-disabled)" }}>—</span>;
 
   return (
     <span style={{ display: "inline-flex", gap: 4 }}>
@@ -140,34 +141,38 @@ function Bandeira({
           se manda para RECEBER, e trocar depois muda o que o cliente tem em maos
           sobre uma cobranca encerrada. */}
       {!bloqueado && (
-      <button
-        type="button"
-        title={`Remover ${rotulo}`}
-        aria-label={`Remover ${rotulo}`}
-        onClick={() =>
-          confirmar(`Remover ${rotulo} desta parcela?`, "Remover", remover, "O arquivo é apagado.")
-        }
-        style={{
-          display: "inline-grid",
-          placeItems: "center",
-          width: 16,
-          height: 19,
-          border: "none",
-          borderLeft: "1px solid var(--primary-border)",
-          background: "transparent",
-          padding: 0,
-          color: "var(--primary)",
-          cursor: "pointer",
-          fontSize: 9,
-        }}
-      >
-        ✕
-      </button>
+        <button
+          type="button"
+          title={`Remover ${rotulo}`}
+          aria-label={`Remover ${rotulo}`}
+          onClick={() =>
+            confirmar(
+              `Remover ${rotulo} desta parcela?`,
+              "Remover",
+              remover,
+              "O arquivo é apagado.",
+            )
+          }
+          style={{
+            display: "inline-grid",
+            placeItems: "center",
+            width: 16,
+            height: 19,
+            border: "none",
+            borderLeft: "1px solid var(--primary-border)",
+            background: "transparent",
+            padding: 0,
+            color: "var(--primary)",
+            cursor: "pointer",
+            fontSize: 9,
+          }}
+        >
+          ✕
+        </button>
       )}
     </span>
   );
 }
-
 
 /**
  * Total no rodape, com o resto atras de um clique.
@@ -215,7 +220,10 @@ export function AnexarDocumento({
     setEnviando(false);
 
     if (!r.ok) {
-      avisar("atencao", dados?.error?.message ?? "Não foi possível enviar o arquivo");
+      avisar(
+        "atencao",
+        dados?.error?.message ?? "Não foi possível enviar o arquivo",
+      );
       return;
     }
     aoMudar();
@@ -239,7 +247,14 @@ export function AnexarDocumento({
         opacity: enviando ? 0.5 : 1,
       }}
     >
-      <span style={{ display: "inline-grid", placeItems: "center", width: 16, flexShrink: 0 }}>
+      <span
+        style={{
+          display: "inline-grid",
+          placeItems: "center",
+          width: 16,
+          flexShrink: 0,
+        }}
+      >
         <svg
           width="14"
           height="14"
@@ -270,4 +285,3 @@ export function AnexarDocumento({
     </label>
   );
 }
-

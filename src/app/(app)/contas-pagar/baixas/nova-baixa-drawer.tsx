@@ -84,7 +84,9 @@ export function NovaBaixaDrawer({
   const router = useRouter();
   const { avisar } = useAvisos();
 
-  const [fornecedorId, setFornecedorId] = useState<number | null>(fornecedorInicial?.id ?? null);
+  const [fornecedorId, setFornecedorId] = useState<number | null>(
+    fornecedorInicial?.id ?? null,
+  );
   const [nomeDoFornecedor, setNomeDoFornecedor] = useState<string | null>(
     fornecedorInicial?.nome ?? null,
   );
@@ -101,16 +103,24 @@ export function NovaBaixaDrawer({
   const [salvando, setSalvando] = useState(false);
 
   const buscarFornecedores = useCallback(async (termo: string) => {
-    const p = new URLSearchParams({ perPage: "15", papel: "fornecedor", ativo: "true" });
+    const p = new URLSearchParams({
+      perPage: "15",
+      papel: "fornecedor",
+      ativo: "true",
+    });
     if (termo.trim()) p.set("busca", termo.trim());
 
     const r = await fetch(`/api/v1/clientes?${p.toString()}`);
     if (!r.ok) return [];
 
     const corpo = await r.json();
-    return ((corpo.data ?? []) as { id: number; razao: string; nomeFantasia: string | null }[]).map(
-      (c) => ({ id: c.id, nome: c.nomeFantasia?.trim() || c.razao }),
-    );
+    return (
+      (corpo.data ?? []) as {
+        id: number;
+        razao: string;
+        nomeFantasia: string | null;
+      }[]
+    ).map((c) => ({ id: c.id, nome: c.nomeFantasia?.trim() || c.razao }));
   }, []);
 
   useEffect(() => {
@@ -142,7 +152,9 @@ export function NovaBaixaDrawer({
 
   const [tipoDeOrigem, idDaOrigem] = origem.split(":");
   const cartaoEscolhido =
-    tipoDeOrigem === "cartao" ? (cartoes.find((c) => String(c.id) === idDaOrigem) ?? null) : null;
+    tipoDeOrigem === "cartao"
+      ? (cartoes.find((c) => String(c.id) === idDaOrigem) ?? null)
+      : null;
 
   /*
    * O efeito so BUSCA; quem limpa a lista e o proprio `aoEscolher`.
@@ -156,12 +168,18 @@ export function NovaBaixaDrawer({
 
     const controle = new AbortController();
 
-    fetch(`/api/v1/contas-pagar/parcelas-abertas?fornecedorId=${fornecedorId}`, {
-      signal: controle.signal,
-    })
+    fetch(
+      `/api/v1/contas-pagar/parcelas-abertas?fornecedorId=${fornecedorId}`,
+      {
+        signal: controle.signal,
+      },
+    )
       .then(async (r) => {
         const corpo = await r.json();
-        if (!r.ok) throw new Error(corpo?.error?.message ?? "Falha ao carregar as parcelas");
+        if (!r.ok)
+          throw new Error(
+            corpo?.error?.message ?? "Falha ao carregar as parcelas",
+          );
         const lista = corpo.data as Parcela[];
         setParcelas(lista);
 
@@ -172,10 +190,17 @@ export function NovaBaixaDrawer({
          * para marcar de novo seria repetir a pergunta. As outras ficam
          * disponiveis, porque o pagamento pode cobrir mais de uma.
          */
-        const alvo = parcelaInicial ? lista.find((p) => p.parcelaId === parcelaInicial) : null;
+        const alvo = parcelaInicial
+          ? lista.find((p) => p.parcelaId === parcelaInicial)
+          : null;
         if (alvo) {
           setDestinos({
-            [alvo.parcelaId]: { valor: alvo.emAberto, juros: 0, multa: 0, quitar: false },
+            [alvo.parcelaId]: {
+              valor: alvo.emAberto,
+              juros: 0,
+              multa: 0,
+              quitar: false,
+            },
           });
         }
       })
@@ -198,7 +223,7 @@ export function NovaBaixaDrawer({
    * O total que sai do banco inclui o acrescimo.
    *
    * ⚠️ `valor` abate divida; juros e multa saem junto e PRECISAM estar no
-   * lancamento. Guardando so o abatimento, a linha do VPay fica menor que a do
+   * lancamento. Guardando so o abatimento, a linha do Vope fica menor que a do
    * banco em todo pagamento em atraso, e a conciliacao acusa uma diferenca que
    * nao existe.
    */
@@ -218,13 +243,22 @@ export function NovaBaixaDrawer({
     setDestinos((atual) => {
       const copia = { ...atual };
       if (copia[p.parcelaId]) delete copia[p.parcelaId];
-      else copia[p.parcelaId] = { valor: p.emAberto, juros: 0, multa: 0, quitar: false };
+      else
+        copia[p.parcelaId] = {
+          valor: p.emAberto,
+          juros: 0,
+          multa: 0,
+          quitar: false,
+        };
       return copia;
     });
   }
 
   function mudarDestino(parcelaId: number, mudanca: Partial<Destino>) {
-    setDestinos((atual) => ({ ...atual, [parcelaId]: { ...atual[parcelaId], ...mudanca } }));
+    setDestinos((atual) => ({
+      ...atual,
+      [parcelaId]: { ...atual[parcelaId], ...mudanca },
+    }));
   }
 
   const motivoTravado = !fornecedorId
@@ -289,7 +323,12 @@ export function NovaBaixaDrawer({
       title="Nova baixa"
       acoes={
         <span title={motivoTravado}>
-          <Button size="xs" variant="primary" disabled={salvando || !!motivoTravado} onClick={criar}>
+          <Button
+            size="xs"
+            variant="primary"
+            disabled={salvando || !!motivoTravado}
+            onClick={criar}
+          >
             {salvando ? "Registrando…" : "Registrar baixa"}
           </Button>
         </span>
@@ -348,7 +387,11 @@ export function NovaBaixaDrawer({
               </Field>
 
               <Field label="Forma" required>
-                <select value={tipo} onChange={(e) => setTipo(e.target.value)} style={selectStyle}>
+                <select
+                  value={tipo}
+                  onChange={(e) => setTipo(e.target.value)}
+                  style={selectStyle}
+                >
                   {TIPOS_DE_PAGAMENTO.map((t) => (
                     <option key={t} value={t}>
                       {t}
@@ -400,7 +443,12 @@ export function NovaBaixaDrawer({
               {cartaoEscolhido && (
                 <Field label="Entra na fatura de">
                   <CampoBloqueado
-                    valor={competenciaBR(competenciaDaCompra(cartaoEscolhido.diaFechamento, data as DataISO))}
+                    valor={competenciaBR(
+                      competenciaDaCompra(
+                        cartaoEscolhido.diaFechamento,
+                        data as DataISO,
+                      ),
+                    )}
                     titulo="O dinheiro sai do banco quando esta fatura virar conta a pagar e ela for paga."
                   />
                 </Field>
@@ -412,7 +460,12 @@ export function NovaBaixaDrawer({
                   onChange={(e) => setObservacoes(e.target.value)}
                   rows={2}
                   maxLength={400}
-                  style={{ ...inputStyle, height: "auto", padding: 8, resize: "vertical" }}
+                  style={{
+                    ...inputStyle,
+                    height: "auto",
+                    padding: 8,
+                    resize: "vertical",
+                  }}
                 />
               </Field>
             </GrupoDeCampos>
@@ -441,9 +494,14 @@ export function NovaBaixaDrawer({
                 </TableHead>
 
                 <tbody>
-                  {parcelas == null && <EmptyRow colSpan={9} message="Carregando…" />}
+                  {parcelas == null && (
+                    <EmptyRow colSpan={9} message="Carregando…" />
+                  )}
                   {parcelas != null && parcelas.length === 0 && (
-                    <EmptyRow colSpan={9} message="Nenhuma parcela em aberto para este fornecedor." />
+                    <EmptyRow
+                      colSpan={9}
+                      message="Nenhuma parcela em aberto para este fornecedor."
+                    />
                   )}
 
                   {(parcelas ?? []).map((p, n) => {
@@ -467,7 +525,11 @@ export function NovaBaixaDrawer({
                             <MarcaDeUso
                               marcado={d != null}
                               desabilitado={!p.liberada && d == null}
-                              rotulo={d != null ? "Tirar esta parcela" : "Pagar esta parcela"}
+                              rotulo={
+                                d != null
+                                  ? "Tirar esta parcela"
+                                  : "Pagar esta parcela"
+                              }
                               onClick={() => alternar(p)}
                             />
                           </span>
@@ -485,19 +547,27 @@ export function NovaBaixaDrawer({
                           {p.numero}/{p.totalParcelas}
                         </Td>
                         <Td style={NUM}>
-                          {p.vencimento ? paraFormatoBR(p.vencimento as DataISO) : "—"}
+                          {p.vencimento
+                            ? paraFormatoBR(p.vencimento as DataISO)
+                            : "—"}
                         </Td>
-                        <Td style={NUM}>{formatarSemSimbolo(p.emAberto as Centavos)}</Td>
+                        <Td style={NUM}>
+                          {formatarSemSimbolo(p.emAberto as Centavos)}
+                        </Td>
 
                         <Td>
                           {d ? (
                             <CampoNumerico
                               valor={d.valor}
                               escala={100}
-                              aoMudar={(v) => mudarDestino(p.parcelaId, { valor: v })}
+                              aoMudar={(v) =>
+                                mudarDestino(p.parcelaId, { valor: v })
+                              }
                             />
                           ) : (
-                            <span style={{ color: "var(--text-disabled)" }}>—</span>
+                            <span style={{ color: "var(--text-disabled)" }}>
+                              —
+                            </span>
                           )}
                         </Td>
 
@@ -506,10 +576,14 @@ export function NovaBaixaDrawer({
                             <CampoNumerico
                               valor={d.juros}
                               escala={100}
-                              aoMudar={(v) => mudarDestino(p.parcelaId, { juros: v })}
+                              aoMudar={(v) =>
+                                mudarDestino(p.parcelaId, { juros: v })
+                              }
                             />
                           ) : (
-                            <span style={{ color: "var(--text-disabled)" }}>—</span>
+                            <span style={{ color: "var(--text-disabled)" }}>
+                              —
+                            </span>
                           )}
                         </Td>
 
@@ -518,10 +592,14 @@ export function NovaBaixaDrawer({
                             <CampoNumerico
                               valor={d.multa}
                               escala={100}
-                              aoMudar={(v) => mudarDestino(p.parcelaId, { multa: v })}
+                              aoMudar={(v) =>
+                                mudarDestino(p.parcelaId, { multa: v })
+                              }
                             />
                           ) : (
-                            <span style={{ color: "var(--text-disabled)" }}>—</span>
+                            <span style={{ color: "var(--text-disabled)" }}>
+                              —
+                            </span>
                           )}
                         </Td>
 
@@ -534,10 +612,14 @@ export function NovaBaixaDrawer({
                                   ? "Não perdoar a diferença"
                                   : "Fechar a parcela perdoando a diferença"
                               }
-                              onClick={() => mudarDestino(p.parcelaId, { quitar: !d.quitar })}
+                              onClick={() =>
+                                mudarDestino(p.parcelaId, { quitar: !d.quitar })
+                              }
                             />
                           ) : (
-                            <span style={{ color: "var(--text-disabled)" }}>—</span>
+                            <span style={{ color: "var(--text-disabled)" }}>
+                              —
+                            </span>
                           )}
                         </Td>
                       </Tr>

@@ -133,7 +133,10 @@ export function ContasTabela({
 
   const totalPaginas = Math.max(1, Math.ceil(filtradas.length / PAGE_SIZE));
   const paginaAtual = Math.min(pagina, totalPaginas);
-  const visiveis = filtradas.slice((paginaAtual - 1) * PAGE_SIZE, paginaAtual * PAGE_SIZE);
+  const visiveis = filtradas.slice(
+    (paginaAtual - 1) * PAGE_SIZE,
+    paginaAtual * PAGE_SIZE,
+  );
 
   return (
     <PageLayout>
@@ -183,116 +186,122 @@ export function ContasTabela({
         </PageHeader>
 
         {modo === "kanban" ? (
-          <QuadroDeContas
-            itens={filtradas}
-            aoAbrir={setDetalhe}
-          />
+          <QuadroDeContas itens={filtradas} aoAbrir={setDetalhe} />
         ) : (
-        <TableFrame>
-          <TableArea minWidth={880}>
-            <TableHead>
-              <Th minWidth={60}>Nº</Th>
-              <Th>Descrição</Th>
-              <Th minWidth={180}>Fornecedor</Th>
-              <Th minWidth={100}>Vencimento</Th>
-              {/*
+          <TableFrame>
+            <TableArea minWidth={880}>
+              <TableHead>
+                <Th minWidth={60}>Nº</Th>
+                <Th>Descrição</Th>
+                <Th minWidth={180}>Fornecedor</Th>
+                <Th minWidth={100}>Vencimento</Th>
+                {/*
                 ⚠️ Tudo a esquerda, inclusive numero e dinheiro. Havia
                 "Parcelas" e "Situacao" centralizadas e "Valor" a direita: tres
                 eixos diferentes na mesma tabela, e o olho refazia a mira em
                 cada coluna.
               */}
-              <Th minWidth={80}>Parcelas</Th>
-              <Th minWidth={100}>Situação</Th>
-              <Th minWidth={110}>Valor</Th>
-            </TableHead>
-            <tbody>
-              {visiveis.length === 0 && <EmptyRow colSpan={7} />}
-              {visiveis.map(({ conta, situacao: s, vencida }, i) => (
-                <Tr
-                  key={conta.id}
-                  delay={Math.min(i * 20, 150)}
-                  dimmed={conta.cancelada}
-                  onClick={() => setDetalhe(conta.id)}
-                >
-                  <Td style={{ fontVariantNumeric: "tabular-nums", color: "var(--text-tertiary)" }}>
-                    {conta.numero ?? conta.id}
-                  </Td>
-                  <Td style={{ maxWidth: 280 }}>
-                    <span
+                <Th minWidth={80}>Parcelas</Th>
+                <Th minWidth={100}>Situação</Th>
+                <Th minWidth={110}>Valor</Th>
+              </TableHead>
+              <tbody>
+                {visiveis.length === 0 && <EmptyRow colSpan={7} />}
+                {visiveis.map(({ conta, situacao: s, vencida }, i) => (
+                  <Tr
+                    key={conta.id}
+                    delay={Math.min(i * 20, 150)}
+                    dimmed={conta.cancelada}
+                    onClick={() => setDetalhe(conta.id)}
+                  >
+                    <Td
                       style={{
-                        display: "block",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                        fontWeight: "var(--fw-medium)",
+                        fontVariantNumeric: "tabular-nums",
+                        color: "var(--text-tertiary)",
                       }}
                     >
-                      {conta.descricao || "—"}
-                    </span>
-                  </Td>
-                  <Td style={{ maxWidth: 200, color: "var(--text-secondary)" }}>
-                    <span
-                      style={{
-                        display: "block",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
+                      {conta.numero ?? conta.id}
+                    </Td>
+                    <Td style={{ maxWidth: 280 }}>
+                      <span
+                        style={{
+                          display: "block",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          fontWeight: "var(--fw-medium)",
+                        }}
+                      >
+                        {conta.descricao || "—"}
+                      </span>
+                    </Td>
+                    <Td
+                      style={{ maxWidth: 200, color: "var(--text-secondary)" }}
                     >
-                      {conta.fornecedorNome ?? "—"}
-                    </span>
-                  </Td>
-                  {/*
+                      <span
+                        style={{
+                          display: "block",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {conta.fornecedorNome ?? "—"}
+                      </span>
+                    </Td>
+                    {/*
                     ⚠️ VENCIDA vive AQUI, na data, e nao na coluna de situacao.
                     Ela e um fato sobre o calendario, e o lugar de um fato sobre
                     o calendario e do lado da data que o produziu.
                   */}
-                  <Td
-                    style={{
-                      whiteSpace: "nowrap",
-                      fontVariantNumeric: "tabular-nums",
-                      color: vencida ? "var(--danger-text)" : undefined,
-                      fontWeight: vencida ? "var(--fw-medium)" : undefined,
-                    }}
-                  >
-                    {conta.proximoVencimento
-                      ? paraFormatoBR(conta.proximoVencimento as DataISO)
-                      : "—"}
-                  </Td>
-                  <Td style={{ fontVariantNumeric: "tabular-nums" }}>
-                    {conta.qtdParcelas > 0 ? `${conta.parcelasPagas}/${conta.qtdParcelas}` : "—"}
-                  </Td>
-                  <Td>
-                    {/* Cancelada ganha a propria pastilha: ela nao esta num
+                    <Td
+                      style={{
+                        whiteSpace: "nowrap",
+                        fontVariantNumeric: "tabular-nums",
+                        color: vencida ? "var(--danger-text)" : undefined,
+                        fontWeight: vencida ? "var(--fw-medium)" : undefined,
+                      }}
+                    >
+                      {conta.proximoVencimento
+                        ? paraFormatoBR(conta.proximoVencimento as DataISO)
+                        : "—"}
+                    </Td>
+                    <Td style={{ fontVariantNumeric: "tabular-nums" }}>
+                      {conta.qtdParcelas > 0
+                        ? `${conta.parcelasPagas}/${conta.qtdParcelas}`
+                        : "—"}
+                    </Td>
+                    <Td>
+                      {/* Cancelada ganha a propria pastilha: ela nao esta num
                         ponto do caminho, saiu do caminho. */}
-                    {conta.cancelada ? (
-                      <Badge tom="danger">CANCELADA</Badge>
-                    ) : (
-                      <Badge tom={TOM[s]}>{s}</Badge>
-                    )}
-                  </Td>
-                  <Td
-                    style={{
-                      whiteSpace: "nowrap",
-                      fontVariantNumeric: "tabular-nums",
-                      fontWeight: "var(--fw-medium)",
-                      color: "var(--debito)",
-                    }}
-                  >
-                    {formatarSemSimbolo(conta.total)}
-                  </Td>
-                </Tr>
-              ))}
-            </tbody>
-          </TableArea>
-          <Pagination
-            page={paginaAtual}
-            totalPages={totalPaginas}
-            total={filtradas.length}
-            pageSize={PAGE_SIZE}
-            onPage={setPagina}
-          />
-        </TableFrame>
+                      {conta.cancelada ? (
+                        <Badge tom="danger">CANCELADA</Badge>
+                      ) : (
+                        <Badge tom={TOM[s]}>{s}</Badge>
+                      )}
+                    </Td>
+                    <Td
+                      style={{
+                        whiteSpace: "nowrap",
+                        fontVariantNumeric: "tabular-nums",
+                        fontWeight: "var(--fw-medium)",
+                        color: "var(--debito)",
+                      }}
+                    >
+                      {formatarSemSimbolo(conta.total)}
+                    </Td>
+                  </Tr>
+                ))}
+              </tbody>
+            </TableArea>
+            <Pagination
+              page={paginaAtual}
+              totalPages={totalPaginas}
+              total={filtradas.length}
+              pageSize={PAGE_SIZE}
+              onPage={setPagina}
+            />
+          </TableFrame>
         )}
       </Panel>
 
@@ -340,14 +349,28 @@ function QuadroDeContas({
   itens,
   aoAbrir,
 }: {
-  itens: { conta: ContaPagarResumo; situacao: SituacaoConta; vencida: boolean }[];
+  itens: {
+    conta: ContaPagarResumo;
+    situacao: SituacaoConta;
+    vencida: boolean;
+  }[];
   aoAbrir: (id: number) => void;
 }) {
-  const colunas: SituacaoConta[] = ["ABERTA", "PARCIAL", "PAGA", "BAIXADA", "SUSPENSA"];
+  const colunas: SituacaoConta[] = [
+    "ABERTA",
+    "PARCIAL",
+    "PAGA",
+    "BAIXADA",
+    "SUSPENSA",
+  ];
 
   return (
     <Quadro
-      colunas={colunas.map((c, i) => ({ id: i, descricao: c, cor: COR_COLUNA[c] }))}
+      colunas={colunas.map((c, i) => ({
+        id: i,
+        descricao: c,
+        cor: COR_COLUNA[c],
+      }))}
       cartoes={itens
         .filter(({ conta }) => !conta.cancelada)
         .map(({ conta, situacao, vencida }) => ({
@@ -449,7 +472,11 @@ function QuadroDeContas({
               : "Sem parcelas"}
           </span>
           <span style={{ flex: 1 }} />
-          <ValorDaConta pago={c.valorPago} total={c.total} quitada={c.situacao === "PAGA"} />
+          <ValorDaConta
+            pago={c.valorPago}
+            total={c.total}
+            quitada={c.situacao === "PAGA"}
+          />
         </>
       )}
     />
@@ -517,7 +544,13 @@ function ValorDaConta({
  * duas implementacoes divergiriam no primeiro caso de borda — a tela pintaria de
  * vermelho uma conta que o filtro "Vencidas" nao traz.
  */
-function Vencimento({ data, vencida }: { data: DataISO | null; vencida: boolean }) {
+function Vencimento({
+  data,
+  vencida,
+}: {
+  data: DataISO | null;
+  vencida: boolean;
+}) {
   if (!data) return <span style={{ color: "var(--text-tertiary)" }}>—</span>;
 
   const atrasado = vencida;

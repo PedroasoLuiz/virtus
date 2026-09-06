@@ -1,7 +1,12 @@
 import { logger } from "@/shared/utils/logger";
 import * as whatsapp from "@/modules/whatsapp/whatsapp.service";
 import { paraFormatoMeta } from "@/modules/whatsapp/whatsapp.types";
-import { AppError, BusinessRuleError, NotFoundError, isAppError } from "@/shared/errors/app-error";
+import {
+  AppError,
+  BusinessRuleError,
+  NotFoundError,
+  isAppError,
+} from "@/shared/errors/app-error";
 import {
   centavos,
   formatarSemSimbolo,
@@ -16,7 +21,6 @@ import {
   redefinirParcelas,
   type ItemDoParcelamento,
   oQuePodeNaConta,
-  type ParcelaEditavel,
   conferirTotal,
   excluirParcela,
   gerarParcelas,
@@ -63,7 +67,10 @@ export async function listarFaturas(
   return repo.listar(empresaId, filtro, paginacao);
 }
 
-export async function obterFatura(empresaId: number, id: number): Promise<Fatura> {
+export async function obterFatura(
+  empresaId: number,
+  id: number,
+): Promise<Fatura> {
   const fatura = await repo.buscarPorId(empresaId, id);
   if (!fatura) throw new NotFoundError("Fatura nao encontrada");
   return fatura;
@@ -213,7 +220,6 @@ async function conferirOrigens(
   }
 }
 
-
 // ── Ciclo de vida ───────────────────────────────────────────────────────────
 
 export async function alterarStatus(
@@ -277,16 +283,27 @@ export async function redefinirParcelasDaFatura(
   const fatura = await obterFatura(empresaId, faturaId);
   garantirPodeMexerNasParcelas(fatura);
 
-  const plano = redefinirParcelas(paraParcelasEditaveis(fatura), itens, fatura.total);
+  const plano = redefinirParcelas(
+    paraParcelasExistentes(fatura),
+    itens,
+    fatura.total,
+  );
 
   // Barato, e transforma um erro de centavos num 422 explicito em vez de num
   // titulo silenciosamente errado no banco.
   conferirTotal(
-    [...fatura.parcelas.filter((p) => p.pago), ...plano.atualizar, ...plano.criar],
+    [
+      ...fatura.parcelas.filter((p) => p.pago),
+      ...plano.atualizar,
+      ...plano.criar,
+    ],
     fatura.total,
   );
 
   await repo.aplicarParcelamento(faturaId, usuarioId, plano);
+
+  // A tela pode ter TIRADO parcelas, e com elas some quem segurava o arquivo.
+  await apagarDocumentosDasParcelas(fatura, plano.excluir);
 }
 
 /**
@@ -305,7 +322,7 @@ export async function adicionarParcelaNaFatura(
   const fatura = await obterFatura(empresaId, faturaId);
   garantirPodeMexerNasParcelas(fatura);
 
-  const existentes = paraParcelasEditaveis(fatura);
+  const existentes = paraParcelasExistentes(fatura);
 
   const plano = divisao
     ? dividirParcela(existentes, divisao.origemId, {
@@ -318,7 +335,8 @@ export async function adicionarParcelaNaFatura(
           atualizar: [
             {
               id: simples.atualizar.id,
-              numero: existentes.find((p) => p.id === simples.atualizar.id)!.numero,
+              numero: existentes.find((p) => p.id === simples.atualizar.id)!
+                .numero,
               valor: simples.atualizar.valor,
             },
           ],
@@ -329,17 +347,37 @@ export async function adicionarParcelaNaFatura(
   const porId = new Map(existentes.map((p) => [p.id, p]));
   const mudadas = new Map(plano.atualizar.map((p) => [p.id, p]));
 
-  const novasParcelas = existentes
+  /*
+   * ⚠️ Atualiza no LUGAR (`aplicarParcelamento`), e nao apaga e recria.
+   *
+   * Antes daqui saia um `substituirParcelas`, que derrubava TODAS as parcelas em
+   * aberto: dividir uma parcela levava junto o boleto, a nota e o token do link
+   * publico das outras, e o cliente que ja tinha recebido o link caia num 404.
+   * Passou a doer de verdade quando a parcela com documento deixou de ser
+   * intocavel — antes o dano ficava escondido atras da propria trava.
+   */
+  const atualizar = existentes
     .filter((p) => !p.pago)
     .map((p) => ({
+      id: p.id,
       numero: mudadas.get(p.id)?.numero ?? p.numero,
       vencimento: porId.get(p.id)!.vencimento,
       valor: mudadas.get(p.id)?.valor ?? p.valor,
-    }))
-    .concat(plano.criar);
+    }));
 
-  conferirTotal([...fatura.parcelas.filter((p) => p.pago), ...novasParcelas], fatura.total);
-  await repo.substituirParcelas(faturaId, usuarioId, novasParcelas);
+  // `criar` aqui e UMA parcela: os dois caminhos deste servico acrescentam uma
+  // so. O `aplicarParcelamento` fala em lista porque o editor manda varias.
+  const criar = [plano.criar];
+
+  conferirTotal(
+    [...fatura.parcelas.filter((p) => p.pago), ...atualizar, ...criar],
+    fatura.total,
+  );
+  await repo.aplicarParcelamento(faturaId, usuarioId, {
+    atualizar,
+    criar,
+    excluir: [],
+  });
 }
 
 export async function excluirParcelaDaFatura(
@@ -351,19 +389,57 @@ export async function excluirParcelaDaFatura(
   const fatura = await obterFatura(empresaId, faturaId);
   garantirPodeMexerNasParcelas(fatura);
 
-  const plano = excluirParcela(paraParcelasEditaveis(fatura), parcelaId);
+  const plano = excluirParcela(paraParcelasExistentes(fatura), parcelaId);
 
   const porId = new Map(paraParcelasExistentes(fatura).map((p) => [p.id, p]));
-  const novasParcelas = plano.atualizar
+  const atualizar = plano.atualizar
     .filter((p) => !porId.get(p.id)?.pago)
     .map((p) => ({
+      id: p.id,
       numero: p.numero,
       vencimento: porId.get(p.id)!.vencimento,
       valor: p.valor,
     }));
 
-  conferirTotal([...fatura.parcelas.filter((p) => p.pago), ...novasParcelas], fatura.total);
-  await repo.substituirParcelas(faturaId, usuarioId, novasParcelas);
+  conferirTotal(
+    [...fatura.parcelas.filter((p) => p.pago), ...atualizar],
+    fatura.total,
+  );
+  await repo.aplicarParcelamento(faturaId, usuarioId, {
+    atualizar,
+    criar: [],
+    excluir: [plano.excluir],
+  });
+
+  await apagarDocumentosDasParcelas(fatura, [plano.excluir]);
+}
+
+/**
+ * Apaga do storage o que estava pendurado na parcela que acabou de sair.
+ *
+ * ⚠️ Depois da escrita, e nunca antes: falhando o parcelamento, a parcela
+ * continua na tela e o arquivo dela precisa continuar existindo.
+ *
+ * ⚠️ Falha aqui nao derruba a operacao. A parcela ja saiu, e um arquivo orfao
+ * no bucket custa espaco; devolver erro faria a tela dizer que nao deu certo uma
+ * mudanca que ja esta gravada.
+ */
+async function apagarDocumentosDasParcelas(
+  fatura: Fatura,
+  ids: number[],
+): Promise<void> {
+  for (const id of ids) {
+    const parcela = fatura.parcelas.find((p) => p.id === id);
+    if (!parcela) continue;
+
+    for (const referencia of [
+      parcela.boleto,
+      parcela.nfs,
+      parcela.comprovante,
+    ]) {
+      if (referencia) await apagarDocumento(referencia).catch(() => {});
+    }
+  }
 }
 
 /**
@@ -376,26 +452,14 @@ export async function excluirParcelaDaFatura(
 function garantirPodeMexerNasParcelas(fatura: Fatura): void {
   const pode = oQuePodeNaConta({
     cancelada: fatura.cancelada,
-    parcelas: paraParcelasEditaveis(fatura),
+    parcelas: paraParcelasExistentes(fatura),
   });
 
   if (!pode.parcelas.pode) {
-    throw new BusinessRuleError(pode.parcelas.motivo ?? "Esta conta nao aceita alterar parcelas");
+    throw new BusinessRuleError(
+      pode.parcelas.motivo ?? "Esta conta nao aceita alterar parcelas",
+    );
   }
-}
-
-/**
- * As parcelas do jeito que a regra le, com a marca de documento emitido.
- *
- * ⚠️ Boleto e nota contam como documento; comprovante NAO. Comprovante e prova de
- * que o dinheiro entrou; os outros dois sao promessas que sairam com um valor
- * escrito, e mexer na parcela depois deixa o documento mentindo.
- */
-function paraParcelasEditaveis(fatura: Fatura): ParcelaEditavel[] {
-  return paraParcelasExistentes(fatura).map((p) => {
-    const original = fatura.parcelas.find((x) => x.id === p.id)!;
-    return { ...p, temDocumento: Boolean(original.boleto || original.nfs) };
-  });
 }
 
 /**
@@ -535,7 +599,9 @@ export async function enviarParcelaPorEmail(
    * o cliente abre, nao tem o que pagar, e liga perguntando.
    */
   if (!parcela.nfs && !parcela.boleto) {
-    throw new BusinessRuleError("Anexe a nota fiscal ou o boleto antes de enviar.");
+    throw new BusinessRuleError(
+      "Anexe a nota fiscal ou o boleto antes de enviar.",
+    );
   }
 
   /*
@@ -560,7 +626,9 @@ export async function enviarParcelaPorEmail(
    */
   const tickets = fatura.tickets.map((t) => t.numero);
   const referencia =
-    tickets.length === 1 ? `ticket ${tickets[0]}` : `tickets ${tickets.join(", ")}`;
+    tickets.length === 1
+      ? `ticket ${tickets[0]}`
+      : `tickets ${tickets.join(", ")}`;
 
   await enviarEmail({
     para: [para],
@@ -574,7 +642,8 @@ export async function enviarParcelaPorEmail(
       empresaNome: destino.empresaNome,
       tickets,
       clienteNome: destino.clienteNome,
-      competencia: periodoEmMeses(fatura.apuracaoInicio, fatura.apuracaoFim) ?? "—",
+      competencia:
+        periodoEmMeses(fatura.apuracaoInicio, fatura.apuracaoFim) ?? "—",
       vencimento: parcela.vencimento ? paraFormatoBR(parcela.vencimento) : "—",
       valor: formatarSemSimbolo(parcela.total),
       // So aparece quando ha mais de uma: "Parcela 1 de 1" e ruido.
@@ -637,7 +706,8 @@ export async function enviarParcelaPorWhatsapp(
   const parcela = fatura.parcelas.find((p) => p.id === parcelaId);
 
   if (!parcela) throw new NotFoundError("Parcela nao encontrada nesta conta");
-  if (fatura.cancelada) throw new BusinessRuleError("Conta cancelada nao e enviada");
+  if (fatura.cancelada)
+    throw new BusinessRuleError("Conta cancelada nao e enviada");
   if (parcela.pago) throw new BusinessRuleError("Esta parcela ja foi baixada");
 
   const destino = await repo.destinatarioDaFatura(empresaId, fatura.clienteId);
@@ -676,7 +746,9 @@ export async function enviarParcelaPorWhatsapp(
       {
         nome: destino.clienteNome ?? "cliente",
         valor: formatarSemSimbolo(parcela.total),
-        vencimento: parcela.vencimento ? paraFormatoBR(parcela.vencimento) : "a combinar",
+        vencimento: parcela.vencimento
+          ? paraFormatoBR(parcela.vencimento)
+          : "a combinar",
         ticket: tickets.length > 0 ? tickets.join(", ") : String(fatura.id),
         // So o token: o comeco da URL ja esta fixo no modelo aprovado.
         link: token,
@@ -738,9 +810,15 @@ export async function anexarNaConta(
   arquivo: File,
 ): Promise<void> {
   const fatura = await obterFatura(empresaId, faturaId);
-  if (fatura.cancelada) throw new BusinessRuleError("Conta cancelada nao recebe anexo");
+  if (fatura.cancelada)
+    throw new BusinessRuleError("Conta cancelada nao recebe anexo");
 
-  const caminho = caminhoDoDocumento(empresaId, faturaId, "anexo", arquivo.name);
+  const caminho = caminhoDoDocumento(
+    empresaId,
+    faturaId,
+    "anexo",
+    arquivo.name,
+  );
   await enviarDocumento(caminho, arquivo);
   await repo.criarAnexo(faturaId, usuarioId, {
     nome: arquivo.name,
@@ -787,7 +865,10 @@ export async function linkDoAnexo(
  * registro de um dinheiro que entrou, e o saldo dos tickets volta como se nunca
  * tivesse sido cobrado. Conta errada que ja recebeu se CANCELA.
  */
-export async function excluirConta(empresaId: number, faturaId: number): Promise<void> {
+export async function excluirConta(
+  empresaId: number,
+  faturaId: number,
+): Promise<void> {
   const fatura = await obterFatura(empresaId, faturaId);
 
   if (fatura.parcelas.some((p) => p.pago)) {
@@ -810,4 +891,57 @@ export async function excluirConta(empresaId: number, faturaId: number): Promise
 
 export function contasBancarias(empresaId: number) {
   return repo.listarContasBancarias(empresaId);
+}
+
+/**
+ * Cancela uma parcela a receber: ela foi combinada, mas nao vai mais ser cobrada.
+ *
+ * Espelho exato do lado que paga, ate nas guardas.
+ *
+ * ⚠️ Isto NAO e apagar, e nao e desconto. Apagar sumiria com o combinado;
+ * desconto diria que a divida foi PERDOADA, o que muda a DRE — e um contrato
+ * encerrado nao perdoa nada, ele deixa de gerar cobranca.
+ *
+ * ⚠️ Parcela RECEBIDA nao se cancela. Dinheiro que entrou nao vira "nao vai
+ * acontecer": para desfazer, existe estornar o recebimento.
+ */
+export async function cancelarParcelaDaFatura(
+  empresaId: number,
+  usuarioId: string,
+  faturaId: number,
+  parcelaId: number,
+  motivo: string | null,
+): Promise<void> {
+  const fatura = await obterFatura(empresaId, faturaId);
+  if (fatura.cancelada)
+    throw new BusinessRuleError("Esta conta está cancelada");
+
+  const parcela = fatura.parcelas.find((p) => p.id === parcelaId);
+  if (!parcela) throw new NotFoundError("Parcela nao encontrada nesta conta");
+  if (parcela.pago) {
+    throw new BusinessRuleError(
+      "Parcela recebida não se cancela: estorne o recebimento antes, se o dinheiro não entrou",
+    );
+  }
+
+  const feito = await repo.cancelarParcela(
+    faturaId,
+    parcelaId,
+    usuarioId,
+    motivo?.trim() || null,
+  );
+  if (!feito) throw new NotFoundError("Parcela nao encontrada nesta conta");
+}
+
+/** Desfaz o cancelamento: a parcela volta a ser cobrada. */
+export async function reativarParcelaDaFatura(
+  empresaId: number,
+  usuarioId: string,
+  faturaId: number,
+  parcelaId: number,
+): Promise<void> {
+  await obterFatura(empresaId, faturaId);
+
+  const feito = await repo.reativarParcela(faturaId, parcelaId, usuarioId);
+  if (!feito) throw new NotFoundError("Parcela nao encontrada nesta conta");
 }

@@ -7,6 +7,10 @@ export default async function ContasPagarPage() {
   const { ctx, visao } = await sessaoUI();
   if (ctx.empresaId == null) return <SemEmpresa />;
 
-  const { itens } = await listarContas(ctx.empresaId, {}, { page: 1, perPage: 200 });
+  const { itens } = await listarContas(
+    ctx.empresaId,
+    {},
+    { page: 1, perPage: 200 },
+  );
   return <ContasTabela contas={itens} visaoInicial={visao} />;
 }

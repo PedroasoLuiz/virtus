@@ -108,7 +108,7 @@ async function resumoDeParcelas(contaIds: number[]): Promise<Map<number, ResumoP
   const supabase = await serverClient();
   const { data, error } = await supabase
     .from("contaspagarparcelas")
-    .select("fkContaPagar, vencimento, pago, valor, total, fkPagamento")
+    .select("fkContaPagar, vencimento, pago, cancelada, valor, total, fkPagamento")
     .in("fkContaPagar", contaIds)
     .order("vencimento", { ascending: true });
 
@@ -136,6 +136,18 @@ async function resumoDeParcelas(contaIds: number[]): Promise<Map<number, ResumoP
       valorPago: ZERO,
       conciliada: true,
     };
+    /*
+     * ⚠️ A CANCELADA nao conta como parcela da conta nem como pendencia.
+     *
+     * Ela continua na ficha, contando o que se combinou; aqui a pergunta e
+     * outra — quantas faltam e para quando —, e uma parcela que ninguem vai
+     * pagar deixaria a conta eternamente "3 de 12" com nove que nao existem.
+     */
+    if (linha.cancelada) {
+      mapa.set(id, atual);
+      continue;
+    }
+
     atual.qtd += 1;
 
     if (linha.pago) {
@@ -204,6 +216,15 @@ export type ParcelaConta = {
   desconto: Centavos;
   total: Centavos;
   pago: boolean;
+  /**
+   * Combinada, mas nao vai mais acontecer: o contrato foi encerrado antes dela.
+   *
+   * ⚠️ Nao e o mesmo que apagada. A conta continua dizendo que o acordo previa
+   * doze parcelas, e e isso que se explica depois; o que muda e que ela para de
+   * ser cobrada e sai do "em aberto".
+   */
+  cancelada: boolean;
+  motivoDoCancelamento: string | null;
   /** O dinheiro desta parcela ja bateu no extrato. */
   conciliado: boolean;
   nfs: string | null;
@@ -265,14 +286,18 @@ export async function buscarPorId(
   ]);
 
   const tipo = tipos.find((t) => t.id === data.fkTipoDocumento);
+  /* A cancelada sai da CONTAGEM e da fila, pela mesma razao da listagem: ela
+     nao espera dinheiro. Continua na lista de parcelas, que e o historico. */
+  const cobraveis = parcelas.filter((p) => !p.cancelada);
+
   const resumo = paraDominio(data, {
-    qtd: parcelas.length,
-    pagas: parcelas.filter((p) => p.pago).length,
-    proximo: parcelas.find((p) => !p.pago)?.vencimento ?? null,
-    valorPago: parcelas
+    qtd: cobraveis.length,
+    pagas: cobraveis.filter((p) => p.pago).length,
+    proximo: cobraveis.find((p) => !p.pago)?.vencimento ?? null,
+    valorPago: cobraveis
       .filter((p) => p.pago)
       .reduce<Centavos>((s, p) => somar(s, p.total), ZERO),
-    conciliada: parcelas.filter((p) => p.pago).every((p) => p.conciliado),
+    conciliada: cobraveis.filter((p) => p.pago).every((p) => p.conciliado),
   });
 
   return {
@@ -317,7 +342,7 @@ export async function listarParcelas(contaId: number): Promise<ParcelaConta[]> {
   const { data, error } = await supabase
     .from("contaspagarparcelas")
     .select(
-      "id, numeroparcela, vencimento, valor, acrescimo, desconto, total, pago, nfs, boleto, comprovante, fkPagamento",
+      "id, numeroparcela, vencimento, valor, acrescimo, desconto, total, pago, cancelada, cancelamento_motivo, nfs, boleto, comprovante, fkPagamento",
     )
     .eq("fkContaPagar", contaId)
     .order("numeroparcela", { ascending: true });
@@ -336,6 +361,8 @@ export async function listarParcelas(contaId: number): Promise<ParcelaConta[]> {
     // `total` pode vir nulo em registro antigo; nesse caso o valor e a verdade.
     total: l.total == null ? doBanco(l.valor) : doBanco(l.total),
     pago: l.pago ?? false,
+    cancelada: l.cancelada ?? false,
+    motivoDoCancelamento: l.cancelamento_motivo,
     conciliado: l.fkPagamento != null && conciliados.has(l.fkPagamento),
     nfs: l.nfs,
     boleto: l.boleto,
@@ -940,7 +967,7 @@ export async function parcelasAPagar(
   const { data, error } = await supabase
     .from("contaspagar")
     .select(
-      "id, numero, descricao, contaspagarparcelas(id, numeroparcela, vencimento, valor, total, pago)",
+      "id, numero, descricao, contaspagarparcelas(id, numeroparcela, vencimento, valor, total, pago, cancelada)",
     )
     .eq("fkEmpresa", empresaId)
     .eq("fkFornecedor", fornecedorId)
@@ -960,6 +987,7 @@ export async function parcelasAPagar(
       valor: number | null;
       total: number | null;
       pago: boolean | null;
+      cancelada: boolean | null;
     }[];
   }[];
 
@@ -974,7 +1002,14 @@ export async function parcelasAPagar(
     );
 
     for (const p of todas) {
-      if (p.pago) continue;
+      /*
+       * ⚠️ A CANCELADA nao entra na fila de baixa.
+       *
+       * Oferecida, ela apareceria para pagamento junto das outras — e pagar uma
+       * parcela que o contrato encerrado dispensou e dinheiro saindo por engano,
+       * que e o erro que esta tela existe para nao cometer.
+       */
+      if (p.pago || p.cancelada) continue;
 
       const total = p.total == null ? doBanco(p.valor) : doBanco(p.total);
       const quitado = quitados.get(p.id) ?? ZERO;
@@ -1918,4 +1953,125 @@ export async function contaDoAnexo(anexoId: number): Promise<number | null> {
 
   if (error) throw error;
   return data?.fkContaPagar ?? null;
+}
+
+
+/**
+ * Cancela UMA parcela: ela nao vai mais acontecer.
+ *
+ * ⚠️ Parcela PAGA nunca entra, e a condicao esta no proprio UPDATE. O servico ja
+ * recusa, mas dinheiro que saiu nao pode virar "nao vai acontecer" por um erro
+ * de clique — uma guarda no `where` torna isso impossivel, e nao improvavel.
+ *
+ * ⚠️ `fkContaPagar` no filtro alem do id: sem ele, um id de parcela de outra
+ * conta passaria, e a RLS sozinha nao separa parcela de conta dentro do tenant.
+ */
+export async function cancelarParcela(
+  contaId: number,
+  parcelaId: number,
+  usuarioId: string,
+  motivo: string | null,
+): Promise<boolean> {
+  const supabase = await serverClient();
+
+  const { data, error } = await supabase
+    .from("contaspagarparcelas")
+    .update({
+      cancelada: true,
+      cancelada_em: new Date().toISOString(),
+      cancelamento_motivo: motivo,
+      fkUserModificacao: usuarioId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("fkContaPagar", contaId)
+    .eq("id", parcelaId)
+    .eq("pago", false)
+    .select("id");
+
+  if (error) throw error;
+  return (data ?? []).length > 0;
+}
+
+/** Desfaz: a parcela volta a ser cobrada. */
+export async function reativarParcela(
+  contaId: number,
+  parcelaId: number,
+  usuarioId: string,
+): Promise<boolean> {
+  const supabase = await serverClient();
+
+  const { data, error } = await supabase
+    .from("contaspagarparcelas")
+    .update({
+      cancelada: false,
+      cancelada_em: null,
+      cancelamento_motivo: null,
+      fkUserModificacao: usuarioId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("fkContaPagar", contaId)
+    .eq("id", parcelaId)
+    .select("id");
+
+  if (error) throw error;
+  return (data ?? []).length > 0;
+}
+
+
+/**
+ * De onde o dinheiro saiu, e se ele ja foi conferido no extrato.
+ *
+ * ⚠️ Consulta propria, pequena, so para o estorno. `buscarBaixaPorId` monta a
+ * ficha inteira com fornecedor, conta e destinos; aqui basta saber se pode
+ * desfazer, e a decisao nao deve depender de uma consulta que existe para
+ * desenhar tela.
+ */
+export async function baixaParaEstorno(
+  empresaId: number,
+  pagamentoId: number,
+): Promise<{ conciliado: boolean; contaBancariaId: number | null } | null> {
+  const supabase = await serverClient();
+
+  const { data, error } = await supabase
+    .from("pagamentos")
+    .select("id, conciliado, fkContaBancaria")
+    .eq("fkEmpresa", empresaId)
+    .eq("id", pagamentoId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return null;
+
+  return {
+    conciliado: data.conciliado ?? false,
+    contaBancariaId: data.fkContaBancaria,
+  };
+}
+
+/**
+ * Apaga a baixa: o rateio primeiro, o pagamento depois.
+ *
+ * ⚠️ Nesta ordem, e nao ao contrario. E o rateio que o gatilho le para decidir
+ * se a parcela esta paga: apagando o pagamento primeiro, as linhas do rateio
+ * ficariam apontando para um pagamento que nao existe mais ate a segunda
+ * consulta terminar — e nesse intervalo a parcela continuaria dizendo que
+ * recebeu dinheiro de ninguem.
+ *
+ * ⚠️ O DESCONTO volta sozinho, e por isso nao ha o que devolver aqui. Do lado
+ * que paga ele mora no vinculo (`pagamentosxparcelaspagar.desconto`), e nao na
+ * parcela: sumindo o vinculo, some o perdao junto. No lado que recebe e
+ * diferente, e la existe um `devolverDesconto` por causa disso.
+ */
+export async function apagarBaixa(pagamentoId: number): Promise<void> {
+  const supabase = await serverClient();
+
+  const { error: erroRateio } = await supabase
+    .from("pagamentosxparcelaspagar")
+    .delete()
+    .eq("fkPagamento", pagamentoId);
+
+  if (erroRateio) throw erroRateio;
+
+  const { error } = await supabase.from("pagamentos").delete().eq("id", pagamentoId);
+  if (error) throw error;
 }

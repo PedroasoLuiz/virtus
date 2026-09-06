@@ -73,6 +73,17 @@ export const atualizarContaBodySchema = z.object({
 
 export const parcelaParamSchema = z.object({ id: idSchema, parcelaId: idSchema });
 
+/**
+ * O cancelamento de uma parcela.
+ *
+ * ⚠️ O motivo e OPCIONAL. Sem ele o registro fica pior — "por que a parcela 5
+ * nao e mais cobrada?" e a pergunta que aparece depois —, mas exigir texto faria
+ * alguem digitar um ponto para passar da tela, e "." nao explica nada a ninguem.
+ */
+export const cancelarParcelaBodySchema = z.object({
+  motivo: z.string().trim().max(300).nullish(),
+});
+
 /** ⚠️ Enum fechado: `tipo` escolhe COLUNA, e coluna nao se aceita como texto livre. */
 export const tipoDocumentoQuerySchema = z.object({
   tipo: z.enum(["nfs", "boleto", "comprovante"]),
@@ -186,6 +197,9 @@ export const contaDetalheSchema = contaResumoSchema.extend({
       desconto: z.number(),
       total: z.number(),
       pago: z.boolean(),
+      /* Combinada e nao vai mais acontecer: contrato encerrado antes dela. */
+      cancelada: z.boolean(),
+      motivoDoCancelamento: z.string().nullable(),
       conciliado: z.boolean(),
       nfs: z.string().nullable(),
       boleto: z.string().nullable(),
@@ -373,5 +387,6 @@ export type SubstituirLancamentosBody = z.infer<typeof substituirLancamentosBody
 export type RedefinirParcelasBody = z.infer<typeof redefinirParcelasBodySchema>;
 export type AtualizarContaBody = z.infer<typeof atualizarContaBodySchema>;
 export type ParcelaParam = z.infer<typeof parcelaParamSchema>;
+export type CancelarParcelaBody = z.infer<typeof cancelarParcelaBodySchema>;
 export type TipoDocumentoQuery = z.infer<typeof tipoDocumentoQuerySchema>;
 export type IdParam = z.infer<typeof idParamSchema>;

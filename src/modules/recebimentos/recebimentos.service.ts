@@ -1,6 +1,12 @@
 import { BusinessRuleError, NotFoundError } from "@/shared/errors/app-error";
 import { previsaoDeCredito } from "@/shared/domain/recebimento";
-import { formatarSemSimbolo, somar, subtrair, type Centavos, ZERO } from "@/shared/utils/money";
+import {
+  formatarSemSimbolo,
+  somar,
+  subtrair,
+  type Centavos,
+  ZERO,
+} from "@/shared/utils/money";
 import type { Pagina, Paginacao } from "@/shared/utils/paginacao";
 import { paradaNaFila, proximaAReceber } from "@/shared/domain/parcelas";
 import type { ParametrosDeCobranca } from "@/shared/domain/cobranca";
@@ -42,7 +48,11 @@ export async function indicadoresDeRecebimento(
   hojeISO: string,
 ): Promise<IndicadoresDeRecebimento> {
   const mes = hojeISO.slice(0, 7);
-  return repo.indicadores(empresaId, mesesAtras(mes, MESES_DO_GRAFICO - 1), mes);
+  return repo.indicadores(
+    empresaId,
+    mesesAtras(mes, MESES_DO_GRAFICO - 1),
+    mes,
+  );
 }
 
 /** Quantos meses o cartao do topo desenha, contando o corrente. */
@@ -61,7 +71,10 @@ function mesesAtras(mes: string, quantos: number): string {
   return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, "0")}`;
 }
 
-export async function obterRecebimento(empresaId: number, id: number): Promise<Recebimento> {
+export async function obterRecebimento(
+  empresaId: number,
+  id: number,
+): Promise<Recebimento> {
   const recebimento = await repo.buscarPorId(empresaId, id);
   if (!recebimento) throw new NotFoundError("Recebimento nao encontrado");
   return recebimento;
@@ -127,14 +140,16 @@ export async function registrarRecebimento(
 
   const ids = entrada.destinos.map((d) => d.parcelaId);
   if (new Set(ids).size !== ids.length) {
-    throw new BusinessRuleError("A mesma parcela aparece duas vezes no recebimento");
+    throw new BusinessRuleError(
+      "A mesma parcela aparece duas vezes no recebimento",
+    );
   }
 
   /*
    * O total do lancamento inclui o acrescimo.
    *
    * `valor` e o que abate divida; juros e multa entraram no banco junto e
-   * precisam estar no extrato, senao a linha do VPay fica menor que a do banco
+   * precisam estar no extrato, senao a linha do Vope fica menor que a do banco
    * em todo pagamento em atraso — e a conciliacao acusa diferenca que nao existe.
    */
   const total = entrada.destinos.reduce<Centavos>(
@@ -153,7 +168,9 @@ export async function registrarRecebimento(
   const taxa = entrada.taxa ?? (ZERO as Centavos);
   if (taxa < 0) throw new BusinessRuleError("A taxa nao pode ser negativa");
   if (taxa >= total) {
-    throw new BusinessRuleError("A taxa nao pode ser igual nem maior que o valor recebido");
+    throw new BusinessRuleError(
+      "A taxa nao pode ser igual nem maior que o valor recebido",
+    );
   }
 
   /*
@@ -163,10 +180,13 @@ export async function registrarRecebimento(
    * D+30, boleto no dia util seguinte, PIX na hora. A tela sugere o mesmo numero,
    * e quem cadastra corrige quando o contrato com a adquirente e outro.
    */
-  const dataCredito = entrada.dataCredito ?? previsaoDeCredito(entrada.tipo, entrada.data);
+  const dataCredito =
+    entrada.dataCredito ?? previsaoDeCredito(entrada.tipo, entrada.data);
 
   if (dataCredito < entrada.data) {
-    throw new BusinessRuleError("O dinheiro nao pode cair antes de o cliente pagar");
+    throw new BusinessRuleError(
+      "O dinheiro nao pode cair antes de o cliente pagar",
+    );
   }
 
   /*
@@ -208,7 +228,9 @@ export async function registrarRecebimento(
 
   // A fila e conferida por CONTA: sao acordos independentes, e travar a segunda
   // porque a primeira atrasou impediria de receber dinheiro que entrou mesmo.
-  for (const faturaId of new Set(entrada.destinos.map((d) => donas.get(d.parcelaId)!.faturaId))) {
+  for (const faturaId of new Set(
+    entrada.destinos.map((d) => donas.get(d.parcelaId)!.faturaId),
+  )) {
     const parada = paradaNaFila(paraFila(abertas, faturaId), entrada.destinos);
 
     if (parada) {
@@ -233,7 +255,12 @@ export async function registrarRecebimento(
     const diferenca = subtrair(parcela.total, novoTotal);
 
     if (diferenca > 0) {
-      await repo.encerrarDiferenca(d.parcelaId, usuarioId, novoTotal, diferenca);
+      await repo.encerrarDiferenca(
+        d.parcelaId,
+        usuarioId,
+        novoTotal,
+        diferenca,
+      );
       descontos.set(d.parcelaId, diferenca);
     }
   }
@@ -295,7 +322,8 @@ export async function estornarRecebimento(
    * lesse o saldo nesse intervalo veria uma divida encolhida sem motivo.
    */
   for (const d of recebimento.destinos) {
-    if (d.desconto > 0) await repo.devolverDesconto(d.parcelaId, usuarioId, d.desconto);
+    if (d.desconto > 0)
+      await repo.devolverDesconto(d.parcelaId, usuarioId, d.desconto);
   }
 
   await repo.apagar(id);

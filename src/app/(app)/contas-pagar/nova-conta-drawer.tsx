@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useRouter } from "next/navigation";
 import { Drawer } from "@/components/ui/drawer";
 import {
@@ -108,7 +115,28 @@ const LINHA_VAZIA: LinhaLancamento = {
   centroCustoId: "",
 };
 
-export function NovaContaDrawer({ onClose }: { onClose: () => void }) {
+/**
+ * Os dados que a conta ja nasce sabendo, quando ela vem de outra tela.
+ *
+ * ⚠️ Existe para a conciliacao: a linha do extrato ja traz data, valor e
+ * historico do banco, e obrigar a redigitar os tres seria pedir de novo o que a
+ * pessoa acabou de ler na tela ao lado. O fornecedor NAO vem — o historico do
+ * banco vem abreviado e as vezes traz a maquininha no lugar de quem recebeu, e
+ * escolher por ele seria adivinhar.
+ */
+export type ContaInicial = {
+  valor?: Centavos;
+  emissao?: string;
+  descricao?: string;
+};
+
+export function NovaContaDrawer({
+  onClose,
+  inicial,
+}: {
+  onClose: () => void;
+  inicial?: ContaInicial;
+}) {
   const router = useRouter();
   const { avisar } = useAvisos();
   const listaDeSiglas = useId();
@@ -124,9 +152,15 @@ export function NovaContaDrawer({ onClose }: { onClose: () => void }) {
 
   // Comeca com UMA linha: a conta mais comum tem exatamente um lancamento, e
   // abrir com a tabela vazia obrigaria um clique antes de qualquer digitacao.
-  const [lancamentos, setLancamentos] = useState<LinhaLancamento[]>([{ ...LINHA_VAZIA }]);
+  const [lancamentos, setLancamentos] = useState<LinhaLancamento[]>([
+    {
+      ...LINHA_VAZIA,
+      ...(inicial?.valor != null ? { valor: inicial.valor } : {}),
+      ...(inicial?.descricao ? { descricao: inicial.descricao } : {}),
+    },
+  ]);
 
-  const [emissao, setEmissao] = useState<string>(hoje());
+  const [emissao, setEmissao] = useState<string>(inicial?.emissao ?? hoje());
   const [observacoes, setObservacoes] = useState("");
 
   const [arquivos, setArquivos] = useState<File[]>([]);
@@ -142,7 +176,11 @@ export function NovaContaDrawer({ onClose }: { onClose: () => void }) {
    * empresa compra de quem ela atende.
    */
   const buscarFornecedores = useCallback(async (termo: string) => {
-    const p = new URLSearchParams({ perPage: "15", papel: "fornecedor", ativo: "true" });
+    const p = new URLSearchParams({
+      perPage: "15",
+      papel: "fornecedor",
+      ativo: "true",
+    });
     if (termo.trim()) p.set("busca", termo.trim());
 
     const r = await fetch(`/api/v1/clientes?${p.toString()}`);
@@ -150,9 +188,13 @@ export function NovaContaDrawer({ onClose }: { onClose: () => void }) {
 
     const corpo = await r.json();
 
-    return ((corpo.data ?? []) as { id: number; razao: string; nomeFantasia: string | null }[]).map(
-      (c) => ({ id: c.id, nome: c.nomeFantasia?.trim() || c.razao }),
-    );
+    return (
+      (corpo.data ?? []) as {
+        id: number;
+        razao: string;
+        nomeFantasia: string | null;
+      }[]
+    ).map((c) => ({ id: c.id, nome: c.nomeFantasia?.trim() || c.razao }));
   }, []);
 
   useEffect(() => {
@@ -203,7 +245,9 @@ export function NovaContaDrawer({ onClose }: { onClose: () => void }) {
    * estava digitando a outra.
    */
   const tipoEscolhido = useMemo(
-    () => tipos.find((t) => t.sigla.toLowerCase() === sigla.trim().toLowerCase()) ?? null,
+    () =>
+      tipos.find((t) => t.sigla.toLowerCase() === sigla.trim().toLowerCase()) ??
+      null,
     [tipos, sigla],
   );
 
@@ -223,16 +267,21 @@ export function NovaContaDrawer({ onClose }: { onClose: () => void }) {
    * repartiu em tres nao quer o trabalho desfeito porque corrigiu um centavo num
    * lancamento. O que muda passa a aparecer em "Falta parcelar".
    */
-  const [parcelasEditadas, setParcelasEditadas] = useState<LinhaParcela[] | null>(null);
+  const [parcelasEditadas, setParcelasEditadas] = useState<
+    LinhaParcela[] | null
+  >(null);
 
   const parcelas: LinhaParcela[] =
-    parcelasEditadas ?? (total > 0 ? [{ vencimento: hoje(), valor: total }] : []);
+    parcelasEditadas ??
+    (total > 0 ? [{ vencimento: hoje(), valor: total }] : []);
 
   const parcelado = parcelas.reduce((soma, p) => soma + p.valor, 0);
   const faltaParcelar = total - parcelado;
 
   function mudarParcela(indice: number, mudanca: Partial<LinhaParcela>) {
-    setParcelasEditadas(parcelas.map((p, i) => (i === indice ? { ...p, ...mudanca } : p)));
+    setParcelasEditadas(
+      parcelas.map((p, i) => (i === indice ? { ...p, ...mudanca } : p)),
+    );
   }
 
   /**
@@ -264,32 +313,35 @@ export function NovaContaDrawer({ onClose }: { onClose: () => void }) {
     const ultima = restantes.length - 1;
 
     setParcelasEditadas(
-      restantes.map((p, i) => (i === ultima ? { ...p, valor: p.valor + fora.valor } : p)),
+      restantes.map((p, i) =>
+        i === ultima ? { ...p, valor: p.valor + fora.valor } : p,
+      ),
     );
   }
 
-
   function mudarLinha(indice: number, mudanca: Partial<LinhaLancamento>) {
-    setLancamentos((l) => l.map((linha, i) => (i === indice ? { ...linha, ...mudanca } : linha)));
+    setLancamentos((l) =>
+      l.map((linha, i) => (i === indice ? { ...linha, ...mudanca } : linha)),
+    );
   }
 
   const motivoTravado = !fornecedorId
     ? "Escolha o fornecedor"
     : !tipoEscolhido
-        ? "Informe a espécie do documento"
-        : documento.trim().length === 0
-          ? "Informe o número do documento"
-          : lancamentos.some((l) => l.descricao.trim().length === 0)
-            ? "Descreva cada lançamento"
-            : lancamentos.some((l) => l.valor <= 0)
-              ? "Cada lançamento precisa de um valor"
-              : total <= 0
-                ? "O total da conta precisa ser maior que zero"
-                : parcelas.some((p) => !p.vencimento)
-                  ? "Informe o vencimento de cada parcela"
-                  : faltaParcelar !== 0
-                    ? "As parcelas precisam somar o total da conta"
-                    : undefined;
+      ? "Informe a espécie do documento"
+      : documento.trim().length === 0
+        ? "Informe o número do documento"
+        : lancamentos.some((l) => l.descricao.trim().length === 0)
+          ? "Descreva cada lançamento"
+          : lancamentos.some((l) => l.valor <= 0)
+            ? "Cada lançamento precisa de um valor"
+            : total <= 0
+              ? "O total da conta precisa ser maior que zero"
+              : parcelas.some((p) => !p.vencimento)
+                ? "Informe o vencimento de cada parcela"
+                : faltaParcelar !== 0
+                  ? "As parcelas precisam somar o total da conta"
+                  : undefined;
 
   async function criar() {
     setSalvando(true);
@@ -313,7 +365,10 @@ export function NovaContaDrawer({ onClose }: { onClose: () => void }) {
         })),
         origem: { tipo: "AVULSA" },
         observacoes: observacoes.trim() || null,
-        parcelas: parcelas.map((p) => ({ vencimento: p.vencimento, valor: p.valor })),
+        parcelas: parcelas.map((p) => ({
+          vencimento: p.vencimento,
+          valor: p.valor,
+        })),
       }),
     });
 
@@ -343,10 +398,13 @@ export function NovaContaDrawer({ onClose }: { onClose: () => void }) {
       const corpo = new FormData();
       corpo.append("arquivo", arquivo);
 
-      const envio = await fetch(`/api/v1/contas-pagar/${dados.data.id}/anexos`, {
-        method: "POST",
-        body: corpo,
-      });
+      const envio = await fetch(
+        `/api/v1/contas-pagar/${dados.data.id}/anexos`,
+        {
+          method: "POST",
+          body: corpo,
+        },
+      );
 
       if (!envio.ok) falharam.push(arquivo.name);
     }
@@ -383,7 +441,12 @@ export function NovaContaDrawer({ onClose }: { onClose: () => void }) {
          * proprio botao nunca aparece — que e justamente quando ele precisa.
          */
         <span title={motivoTravado}>
-          <Button size="xs" variant="primary" disabled={salvando || !!motivoTravado} onClick={criar}>
+          <Button
+            size="xs"
+            variant="primary"
+            disabled={salvando || !!motivoTravado}
+            onClick={criar}
+          >
             {salvando ? "Criando…" : "Criar conta"}
           </Button>
         </span>
@@ -415,7 +478,11 @@ export function NovaContaDrawer({ onClose }: { onClose: () => void }) {
             lado confirma que a sigla certa foi entendida, e por isso ele e
             bloqueado — dois campos editaveis para o mesmo fato divergiriam.
           */}
-          <Field label="Documento" required hint="Digite a sigla: DAS, NFS-e, CT.">
+          <Field
+            label="Documento"
+            required
+            hint="Digite a sigla: DAS, NFS-e, CT."
+          >
             <div style={{ display: "flex", gap: 8 }}>
               <input
                 value={sigla}
@@ -423,7 +490,12 @@ export function NovaContaDrawer({ onClose }: { onClose: () => void }) {
                 list={listaDeSiglas}
                 maxLength={12}
                 placeholder="Sigla"
-                style={{ ...inputStyle, width: 96, flexShrink: 0, textTransform: "uppercase" }}
+                style={{
+                  ...inputStyle,
+                  width: 96,
+                  flexShrink: 0,
+                  textTransform: "uppercase",
+                }}
               />
               <datalist id={listaDeSiglas}>
                 {tipos.map((t) => (
@@ -437,7 +509,9 @@ export function NovaContaDrawer({ onClose }: { onClose: () => void }) {
                 <CampoBloqueado
                   valor={
                     tipoEscolhido?.nome ??
-                    (sigla.trim() ? "Sigla não reconhecida" : "Escolha a espécie")
+                    (sigla.trim()
+                      ? "Sigla não reconhecida"
+                      : "Escolha a espécie")
                   }
                 />
               </div>
@@ -457,8 +531,10 @@ export function NovaContaDrawer({ onClose }: { onClose: () => void }) {
             />
           </Field>
 
-
-          <Field label="Emissão" hint="A data do documento, e não a do vencimento.">
+          <Field
+            label="Emissão"
+            hint="A data do documento, e não a do vencimento."
+          >
             <input
               type="date"
               value={emissao}
@@ -466,7 +542,10 @@ export function NovaContaDrawer({ onClose }: { onClose: () => void }) {
               style={inputStyle}
             />
           </Field>
-          <Field label="Total da conta" hint="A soma dos lançamentos. É ele que as parcelas repartem.">
+          <Field
+            label="Total da conta"
+            hint="A soma dos lançamentos. É ele que as parcelas repartem."
+          >
             <CampoBloqueado valor={formatarSemSimbolo(total as Centavos)} />
           </Field>
 
@@ -482,7 +561,12 @@ export function NovaContaDrawer({ onClose }: { onClose: () => void }) {
               rows={3}
               placeholder="Anotação de quem trabalha nesta conta"
               maxLength={4000}
-              style={{ ...inputStyle, height: "auto", padding: 8, resize: "vertical" }}
+              style={{
+                ...inputStyle,
+                height: "auto",
+                padding: 8,
+                resize: "vertical",
+              }}
             />
           </Field>
         </GrupoDeCampos>
@@ -524,7 +608,6 @@ export function NovaContaDrawer({ onClose }: { onClose: () => void }) {
                 linhas nao sustentam.
               */}
 
-
               <TableArea minWidth={0}>
                 <TableHead>
                   <Th minWidth={44}>#</Th>
@@ -535,7 +618,10 @@ export function NovaContaDrawer({ onClose }: { onClose: () => void }) {
 
                 <tbody>
                   {parcelas.length === 0 && (
-                    <EmptyRow colSpan={4} message="Informe o valor dos lançamentos primeiro." />
+                    <EmptyRow
+                      colSpan={4}
+                      message="Informe o valor dos lançamentos primeiro."
+                    />
                   )}
 
                   {parcelas.map((p, i) => (
@@ -546,7 +632,9 @@ export function NovaContaDrawer({ onClose }: { onClose: () => void }) {
                         <input
                           type="date"
                           value={p.vencimento}
-                          onChange={(e) => mudarParcela(i, { vencimento: e.target.value })}
+                          onChange={(e) =>
+                            mudarParcela(i, { vencimento: e.target.value })
+                          }
                           style={inputDeCelula}
                         />
                       </Td>
@@ -567,7 +655,11 @@ export function NovaContaDrawer({ onClose }: { onClose: () => void }) {
                           devolver, a soma deixaria de fechar e o salvar travaria.
                         */}
                         <span
-                          title={parcelas.length === 1 ? "A conta precisa de ao menos uma parcela" : undefined}
+                          title={
+                            parcelas.length === 1
+                              ? "A conta precisa de ao menos uma parcela"
+                              : undefined
+                          }
                         >
                           <BotaoDeAcao
                             rotulo="Tirar esta parcela"
@@ -588,8 +680,13 @@ export function NovaContaDrawer({ onClose }: { onClose: () => void }) {
                 edita e "quanto ainda preciso distribuir para poder salvar".
               */}
               {faltaParcelar !== 0 && (
-                <Field label="Falta parcelar" hint="Precisa chegar a zero para salvar.">
-                  <CampoBloqueado valor={formatarSemSimbolo(faltaParcelar as Centavos)} />
+                <Field
+                  label="Falta parcelar"
+                  hint="Precisa chegar a zero para salvar."
+                >
+                  <CampoBloqueado
+                    valor={formatarSemSimbolo(faltaParcelar as Centavos)}
+                  />
                 </Field>
               )}
             </GrupoDeCampos>
@@ -618,7 +715,8 @@ export function NovaContaDrawer({ onClose }: { onClose: () => void }) {
                   // Limpo para que escolher o MESMO arquivo de novo volte a
                   // disparar o evento.
                   e.target.value = "";
-                  if (escolhidos.length > 0) setArquivos((a) => [...a, ...escolhidos]);
+                  if (escolhidos.length > 0)
+                    setArquivos((a) => [...a, ...escolhidos]);
                 }}
               />
 
@@ -631,7 +729,10 @@ export function NovaContaDrawer({ onClose }: { onClose: () => void }) {
 
                 <tbody>
                   {arquivos.length === 0 && (
-                    <EmptyRow colSpan={3} message="Use o + para anexar a nota ou o contrato." />
+                    <EmptyRow
+                      colSpan={3}
+                      message="Use o + para anexar a nota ou o contrato."
+                    />
                   )}
 
                   {arquivos.map((a, i) => (
@@ -651,12 +752,18 @@ export function NovaContaDrawer({ onClose }: { onClose: () => void }) {
 
                       {/* Em KB porque o limite do bucket e de 20 MB: em bytes o
                           numero nao se le, e em MB quase todo anexo daria 0,1. */}
-                      <Td style={NUM}>{Math.max(1, Math.round(a.size / 1024))} KB</Td>
+                      <Td style={NUM}>
+                        {Math.max(1, Math.round(a.size / 1024))} KB
+                      </Td>
 
                       <Td>
                         <BotaoDeAcao
                           rotulo="Tirar este arquivo"
-                          onClick={() => setArquivos((atual) => atual.filter((_, n) => n !== i))}
+                          onClick={() =>
+                            setArquivos((atual) =>
+                              atual.filter((_, n) => n !== i),
+                            )
+                          }
                         >
                           <path d="M3 4.5h10M6.5 4.5V3h3v1.5M5 4.5l.6 8h4.8l.6-8" />
                         </BotaoDeAcao>
@@ -678,14 +785,16 @@ export function NovaContaDrawer({ onClose }: { onClose: () => void }) {
                 lineHeight: 1.6,
               }}
             >
-              Gerar a conta a partir de um pedido de compra ainda não existe. Enquanto isso, a
-              despesa entra em Lançamentos.
+              Gerar a conta a partir de um pedido de compra ainda não existe.
+              Enquanto isso, a despesa entra em Lançamentos.
             </p>
           ) : (
             <GrupoDeCampos
               titulo="O que está sendo pago"
               legenda="Cada linha tem o próprio centro de custo, e é por elas que a DRE separa o custo. Desconto entra como linha e subtrai."
-              onIncluir={() => setLancamentos((l) => [...l, { ...LINHA_VAZIA }])}
+              onIncluir={() =>
+                setLancamentos((l) => [...l, { ...LINHA_VAZIA }])
+              }
             >
               {/*
                 ⚠️ SEM moldura em volta: o cartao do drawer ja e a moldura, e as
@@ -719,7 +828,10 @@ export function NovaContaDrawer({ onClose }: { onClose: () => void }) {
 
                 <tbody>
                   {lancamentos.length === 0 && (
-                    <EmptyRow colSpan={4} message="Use o + para incluir o que está sendo pago." />
+                    <EmptyRow
+                      colSpan={4}
+                      message="Use o + para incluir o que está sendo pago."
+                    />
                   )}
 
                   {lancamentos.map((l, i) => (
@@ -727,13 +839,17 @@ export function NovaContaDrawer({ onClose }: { onClose: () => void }) {
                       <Td>
                         <select
                           value={l.centroCustoId}
-                          onChange={(e) => mudarLinha(i, { centroCustoId: e.target.value })}
+                          onChange={(e) =>
+                            mudarLinha(i, { centroCustoId: e.target.value })
+                          }
                           style={inputDeCelula}
                         >
                           <option value="">Sem centro</option>
                           {centrosDeDespesa.map((c) => (
                             <option key={c.id} value={c.id}>
-                              {c.codigo ? `${c.codigo} · ${c.descricao}` : c.descricao}
+                              {c.codigo
+                                ? `${c.codigo} · ${c.descricao}`
+                                : c.descricao}
                             </option>
                           ))}
                         </select>
@@ -742,7 +858,9 @@ export function NovaContaDrawer({ onClose }: { onClose: () => void }) {
                       <Td>
                         <input
                           value={l.descricao}
-                          onChange={(e) => mudarLinha(i, { descricao: e.target.value })}
+                          onChange={(e) =>
+                            mudarLinha(i, { descricao: e.target.value })
+                          }
                           maxLength={255}
                           placeholder="O que é esta linha"
                           style={inputDeCelula}
@@ -780,7 +898,9 @@ export function NovaContaDrawer({ onClose }: { onClose: () => void }) {
                             rotulo="Tirar esta linha"
                             desabilitado={lancamentos.length === 1}
                             onClick={() =>
-                              setLancamentos((linhas) => linhas.filter((_, n) => n !== i))
+                              setLancamentos((linhas) =>
+                                linhas.filter((_, n) => n !== i),
+                              )
                             }
                           >
                             <path d="M3 4.5h10M6.5 4.5V3h3v1.5M5 4.5l.6 8h4.8l.6-8" />
@@ -794,7 +914,6 @@ export function NovaContaDrawer({ onClose }: { onClose: () => void }) {
             </GrupoDeCampos>
           )}
         </div>
-
       </Formulario>
     </Drawer>
   );

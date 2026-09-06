@@ -36,7 +36,12 @@ export type ReciboParaPDF = {
   clienteNome: string | null;
   clienteDoc: string | null;
   /** Os tickets que a conta cobre. E a referencia que o cliente reconhece. */
-  tickets: { numero: number; titulo: string; valor: number; data: string | null }[];
+  tickets: {
+    numero: number;
+    titulo: string;
+    valor: number;
+    data: string | null;
+  }[];
   /** As que ainda faltam. Quem assina o recibo quer saber o que sobra. */
   emAberto: { numero: number; vencimento: string | null; total: number }[];
   /** O fechamento da CONTA, nao desta parcela: e o que sobra depois dela. */
@@ -69,14 +74,27 @@ export async function imprimirReciboDePagamento(
   const logo = await carregarLogo(r.emitente.logo);
   if (logo) {
     const proporcao = logo.largura / logo.altura;
-    doc.addImage(logo.dados, "PNG", direita - 26 * proporcao, MARGEM, 26 * proporcao, 26);
+    doc.addImage(
+      logo.dados,
+      "PNG",
+      direita - 26 * proporcao,
+      MARGEM,
+      26 * proporcao,
+      26,
+    );
   }
 
-  doc.setFont("helvetica", "bold").setFontSize(20).setTextColor(...AZUL);
+  doc
+    .setFont("helvetica", "bold")
+    .setFontSize(20)
+    .setTextColor(...AZUL);
   doc.text("RECIBO DE PAGAMENTO", MARGEM, y);
 
   y += 22;
-  doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(...CINZA);
+  doc
+    .setFont("helvetica", "normal")
+    .setFontSize(9)
+    .setTextColor(...CINZA);
   doc.text("Conta", MARGEM, y);
   doc.text("Parcela", MARGEM, y + 13);
   doc.text("Pago em", MARGEM, y + 26);
@@ -84,7 +102,11 @@ export async function imprimirReciboDePagamento(
   doc.setFont("helvetica", "bold").setTextColor(...TINTA);
   doc.text(String(r.numeroConta), MARGEM + 56, y);
   doc.text(`${r.parcela} de ${r.totalParcelas}`, MARGEM + 56, y + 13);
-  doc.text(r.pagoEm ? paraFormatoBR(r.pagoEm.slice(0, 10) as DataISO) : "—", MARGEM + 56, y + 26);
+  doc.text(
+    r.pagoEm ? paraFormatoBR(r.pagoEm.slice(0, 10) as DataISO) : "—",
+    MARGEM + 56,
+    y + 26,
+  );
 
   y += 52;
 
@@ -92,11 +114,17 @@ export async function imprimirReciboDePagamento(
   //
   // Sem rotulo: nome grande logo abaixo de "RECIBO DE PAGAMENTO" so pode ser de
   // quem pagou, e a etiqueta gastava uma linha para dizer o obvio.
-  doc.setFont("helvetica", "bold").setFontSize(12).setTextColor(...TINTA);
+  doc
+    .setFont("helvetica", "bold")
+    .setFontSize(12)
+    .setTextColor(...TINTA);
   doc.text(r.clienteNome ?? "—", MARGEM, y);
 
   if (r.clienteDoc) {
-    doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(...CINZA);
+    doc
+      .setFont("helvetica", "normal")
+      .setFontSize(8.5)
+      .setTextColor(...CINZA);
     doc.text(r.clienteDoc, MARGEM, y + 13);
   }
 
@@ -107,10 +135,16 @@ export async function imprimirReciboDePagamento(
   // Sem regua acima: o espaco ja separa, e a linha logo abaixo do nome do
   // cliente parecia fechar um bloco que nao tinha comecado.
   y += 10;
-  doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(...CINZA);
+  doc
+    .setFont("helvetica", "normal")
+    .setFontSize(9)
+    .setTextColor(...CINZA);
   doc.text("A importância de", MARGEM, y);
 
-  doc.setFont("helvetica", "bold").setFontSize(16).setTextColor(...AZUL);
+  doc
+    .setFont("helvetica", "bold")
+    .setFontSize(16)
+    .setTextColor(...AZUL);
   doc.text(`R$ ${formatarSemSimbolo(r.valor as Centavos)}`, MARGEM, y + 20);
 
   /*
@@ -119,7 +153,10 @@ export async function imprimirReciboDePagamento(
    * E o que impede alterar um algarismo depois de assinado: "1.500,00" vira
    * "5.500,00" com uma canetada; "mil e quinhentos reais" nao.
    */
-  doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(...TINTA);
+  doc
+    .setFont("helvetica", "normal")
+    .setFontSize(9)
+    .setTextColor(...TINTA);
   doc.text(
     doc.splitTextToSize(`(${valorPorExtenso(r.valor)})`, largura - MARGEM * 2),
     MARGEM,
@@ -127,7 +164,10 @@ export async function imprimirReciboDePagamento(
   );
 
   y += 52;
-  doc.setFont("helvetica", "normal").setFontSize(9.5).setTextColor(...TINTA);
+  doc
+    .setFont("helvetica", "normal")
+    .setFontSize(9.5)
+    .setTextColor(...TINTA);
   doc.text(
     doc.splitTextToSize(
       "Declaramos para os devidos fins que recebemos a quantia acima, referente ao que segue, " +
@@ -161,16 +201,23 @@ export async function imprimirReciboDePagamento(
 
     for (const p of r.emAberto) {
       y += 15;
-      doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(...TINTA);
+      doc
+        .setFont("helvetica", "normal")
+        .setFontSize(8.5)
+        .setTextColor(...TINTA);
       doc.text(String(p.numero), MARGEM, y);
       doc.setTextColor(...CINZA);
       doc.text(
-        p.vencimento ? paraFormatoBR(p.vencimento.slice(0, 10) as DataISO) : "—",
+        p.vencimento
+          ? paraFormatoBR(p.vencimento.slice(0, 10) as DataISO)
+          : "—",
         MARGEM + 62,
         y,
       );
       doc.setTextColor(...TINTA);
-      doc.text(formatarSemSimbolo(p.total as Centavos), direita, y, { align: "right" });
+      doc.text(formatarSemSimbolo(p.total as Centavos), direita, y, {
+        align: "right",
+      });
       doc.setDrawColor(...REGUA).line(MARGEM, y + 5, direita, y + 5);
     }
   }
@@ -203,23 +250,42 @@ export async function imprimirReciboDePagamento(
   const inicioData = MARGEM + 24;
   const inicioAssinatura = inicioData + larguraData + 26;
 
-  doc.setFont("helvetica", "normal").setFontSize(10).setTextColor(...TINTA);
+  doc
+    .setFont("helvetica", "normal")
+    .setFontSize(10)
+    .setTextColor(...TINTA);
   doc.text("____ / ____ / ________", inicioData, linhaAssinatura - 3);
 
   doc.setDrawColor(...TINTA).setLineWidth(0.8);
   doc.line(inicioAssinatura, linhaAssinatura, direita - 24, linhaAssinatura);
 
-  doc.setFont("helvetica", "bold").setFontSize(9).setTextColor(...TINTA);
+  doc
+    .setFont("helvetica", "bold")
+    .setFontSize(9)
+    .setTextColor(...TINTA);
   const centroAssinatura = (inicioAssinatura + direita - 24) / 2;
-  doc.text(r.emitente.razaoSocial ?? "—", centroAssinatura, linhaAssinatura + 13, {
-    align: "center",
-  });
+  doc.text(
+    r.emitente.razaoSocial ?? "—",
+    centroAssinatura,
+    linhaAssinatura + 13,
+    {
+      align: "center",
+    },
+  );
 
   if (r.emitente.cnpj) {
-    doc.setFont("helvetica", "normal").setFontSize(8).setTextColor(...CINZA);
-    doc.text(`CNPJ ${r.emitente.cnpj}`, centroAssinatura, linhaAssinatura + 23, {
-      align: "center",
-    });
+    doc
+      .setFont("helvetica", "normal")
+      .setFontSize(8)
+      .setTextColor(...CINZA);
+    doc.text(
+      `CNPJ ${r.emitente.cnpj}`,
+      centroAssinatura,
+      linhaAssinatura + 23,
+      {
+        align: "center",
+      },
+    );
   }
 
   doc.setFontSize(7.5).setTextColor(...CINZA);
@@ -250,7 +316,12 @@ export type ResumoParaPDF = {
   pago: number;
   /** Somado das parcelas. Sem ele os numeros nao fecham e parece erro de conta. */
   desconto: number;
-  tickets: { numero: number; titulo: string; valor: number; data: string | null }[];
+  tickets: {
+    numero: number;
+    titulo: string;
+    valor: number;
+    data: string | null;
+  }[];
   parcelas: {
     numero: number;
     vencimento: string | null;
@@ -280,11 +351,17 @@ export async function imprimirResumoDaConta(
     doc.addImage(logo.dados, "PNG", direita - 26 * p, MARGEM, 26 * p, 26);
   }
 
-  doc.setFont("helvetica", "bold").setFontSize(20).setTextColor(...AZUL);
+  doc
+    .setFont("helvetica", "bold")
+    .setFontSize(20)
+    .setTextColor(...AZUL);
   doc.text("CONTA A RECEBER", MARGEM, y);
 
   y += 20;
-  doc.setFont("helvetica", "normal").setFontSize(9).setTextColor(...CINZA);
+  doc
+    .setFont("helvetica", "normal")
+    .setFontSize(9)
+    .setTextColor(...CINZA);
   doc.text("Número", MARGEM, y);
   doc.text("Situação", MARGEM, y + 13);
   if (r.competencia) doc.text("Apuração", MARGEM, y + 26);
@@ -300,11 +377,17 @@ export async function imprimirResumoDaConta(
   //
   // Sem rotulo, e sem a coluna do emitente: a marca ja esta no topo, o emitente
   // e sempre o mesmo, e o unico nome nesta altura so pode ser o do cliente.
-  doc.setFont("helvetica", "bold").setFontSize(12).setTextColor(...TINTA);
+  doc
+    .setFont("helvetica", "bold")
+    .setFontSize(12)
+    .setTextColor(...TINTA);
   doc.text(r.clienteNome ?? "—", MARGEM, y);
 
   if (r.clienteDoc) {
-    doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(...CINZA);
+    doc
+      .setFont("helvetica", "normal")
+      .setFontSize(8.5)
+      .setTextColor(...CINZA);
     doc.text(r.clienteDoc, MARGEM, y + 13);
   }
 
@@ -328,15 +411,24 @@ export async function imprimirResumoDaConta(
 
   for (const p of r.parcelas) {
     y += 16;
-    doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(...TINTA);
+    doc
+      .setFont("helvetica", "normal")
+      .setFontSize(8.5)
+      .setTextColor(...TINTA);
     doc.text(String(p.numero), MARGEM, y);
-    doc.text(p.vencimento ? paraFormatoBR(p.vencimento.slice(0, 10) as DataISO) : "—", MARGEM + 62, y);
+    doc.text(
+      p.vencimento ? paraFormatoBR(p.vencimento.slice(0, 10) as DataISO) : "—",
+      MARGEM + 62,
+      y,
+    );
 
     doc.setTextColor(...(p.pago ? AZUL : CINZA));
     doc.text(p.pago ? "Paga" : "Em aberto", MARGEM + 160, y);
 
     doc.setTextColor(...TINTA);
-    doc.text(formatarSemSimbolo(p.total as Centavos), direita, y, { align: "right" });
+    doc.text(formatarSemSimbolo(p.total as Centavos), direita, y, {
+      align: "right",
+    });
     doc.setDrawColor(...REGUA).line(MARGEM, y + 5, direita, y + 5);
   }
 
@@ -348,7 +440,10 @@ export async function imprimirResumoDaConta(
     desconto: r.desconto,
   });
 
-  doc.setFont("helvetica", "normal").setFontSize(7.5).setTextColor(...CINZA);
+  doc
+    .setFont("helvetica", "normal")
+    .setFontSize(7.5)
+    .setTextColor(...CINZA);
   doc.text(
     `Emitido em ${paraFormatoBR(new Date().toISOString().slice(0, 10) as DataISO)}${emitidoPor ? ` por ${emitidoPor}` : ""}`,
     MARGEM,
@@ -367,7 +462,12 @@ export async function imprimirResumoDaConta(
  */
 function composicao(
   doc: jsPDF,
-  tickets: { numero: number; titulo: string; valor: number; data: string | null }[],
+  tickets: {
+    numero: number;
+    titulo: string;
+    valor: number;
+    data: string | null;
+  }[],
   y: number,
   direita: number,
 ): number {
@@ -381,14 +481,23 @@ function composicao(
 
   for (const t of tickets) {
     atual += 16;
-    doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(...TINTA);
+    doc
+      .setFont("helvetica", "normal")
+      .setFontSize(8.5)
+      .setTextColor(...TINTA);
     doc.text(String(t.numero), MARGEM, atual);
 
     doc.setTextColor(...CINZA);
-    doc.text(t.data ? paraFormatoBR(t.data.slice(0, 10) as DataISO) : "—", MARGEM + 62, atual);
+    doc.text(
+      t.data ? paraFormatoBR(t.data.slice(0, 10) as DataISO) : "—",
+      MARGEM + 62,
+      atual,
+    );
 
     doc.setTextColor(...TINTA);
-    doc.text(formatarSemSimbolo(t.valor as Centavos), direita, atual, { align: "right" });
+    doc.text(formatarSemSimbolo(t.valor as Centavos), direita, atual, {
+      align: "right",
+    });
 
     doc.setDrawColor(...REGUA).line(MARGEM, atual + 5, direita, atual + 5);
   }
@@ -411,11 +520,16 @@ function fechamento(
   v: { total: number; pago: number; desconto: number },
 ): number {
   const rotulo = direita - 160;
-  const linhas: { texto: string; valor: number; cor: [number, number, number] }[] = [
+  const linhas: {
+    texto: string;
+    valor: number;
+    cor: [number, number, number];
+  }[] = [
     { texto: "Total", valor: v.total, cor: TINTA },
     { texto: "Recebido", valor: v.pago, cor: AZUL },
   ];
-  if (v.desconto > 0) linhas.push({ texto: "Desconto", valor: v.desconto, cor: CINZA });
+  if (v.desconto > 0)
+    linhas.push({ texto: "Desconto", valor: v.desconto, cor: CINZA });
 
   let atual = y;
   doc.setFont("helvetica", "normal").setFontSize(9);
@@ -423,15 +537,22 @@ function fechamento(
     doc.setTextColor(...CINZA);
     doc.text(l.texto, rotulo, atual);
     doc.setTextColor(...l.cor);
-    doc.text(formatarSemSimbolo(l.valor as Centavos), direita, atual, { align: "right" });
+    doc.text(formatarSemSimbolo(l.valor as Centavos), direita, atual, {
+      align: "right",
+    });
     atual += 15;
   }
 
   doc.setFont("helvetica", "bold").setTextColor(...TINTA);
   doc.text("Em aberto", rotulo, atual);
-  doc.text(formatarSemSimbolo((v.total - v.pago - v.desconto) as Centavos), direita, atual, {
-    align: "right",
-  });
+  doc.text(
+    formatarSemSimbolo((v.total - v.pago - v.desconto) as Centavos),
+    direita,
+    atual,
+    {
+      align: "right",
+    },
+  );
 
   return atual;
 }
@@ -443,18 +564,36 @@ function colunas(
   direita: number,
   cols: { texto: string; x: number; direita?: boolean }[],
 ): number {
-  doc.setFont("helvetica", "bold").setFontSize(7).setTextColor(...CINZA);
+  doc
+    .setFont("helvetica", "bold")
+    .setFontSize(7)
+    .setTextColor(...CINZA);
   for (const c of cols) {
     doc.text(c.texto, c.x, y + 14, c.direita ? { align: "right" } : undefined);
   }
-  doc.setDrawColor(...REGUA).setLineWidth(0.6).line(MARGEM, y + 19, direita, y + 19);
+  doc
+    .setDrawColor(...REGUA)
+    .setLineWidth(0.6)
+    .line(MARGEM, y + 19, direita, y + 19);
   return y + 19;
 }
 
 /** Titulo de secao com a regua embaixo. Repetido tres vezes; vale a funcao. */
-function secao(doc: jsPDF, titulo: string, y: number, esquerda: number, direita: number): number {
-  doc.setFont("helvetica", "bold").setFontSize(7).setTextColor(...CINZA);
+function secao(
+  doc: jsPDF,
+  titulo: string,
+  y: number,
+  esquerda: number,
+  direita: number,
+): number {
+  doc
+    .setFont("helvetica", "bold")
+    .setFontSize(7)
+    .setTextColor(...CINZA);
   doc.text(titulo, esquerda, y);
-  doc.setDrawColor(...REGUA).setLineWidth(0.6).line(esquerda, y + 6, direita, y + 6);
+  doc
+    .setDrawColor(...REGUA)
+    .setLineWidth(0.6)
+    .line(esquerda, y + 6, direita, y + 6);
   return y + 6;
 }

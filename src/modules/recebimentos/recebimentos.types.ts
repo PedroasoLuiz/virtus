@@ -1,6 +1,9 @@
 import type { Centavos } from "@/shared/utils/money";
 import type { DataISO } from "@/shared/utils/datas";
-import { TIPOS_DE_RECEBIMENTO, type TipoDeRecebimento } from "@/modules/faturas/faturas.types";
+import {
+  TIPOS_DE_RECEBIMENTO,
+  type TipoDeRecebimento,
+} from "@/modules/faturas/faturas.types";
 
 /**
  * Recebimento: UM dinheiro que entrou, repartido entre as parcelas que ele paga.

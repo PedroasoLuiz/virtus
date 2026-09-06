@@ -1,9 +1,22 @@
 import { serverClient } from "@/infra/supabase/client";
-import { doBanco, paraBanco, somar, ZERO, type Centavos } from "@/shared/utils/money";
+import {
+  doBanco,
+  paraBanco,
+  somar,
+  ZERO,
+  type Centavos,
+} from "@/shared/utils/money";
 import { primeiroPreenchido } from "@/shared/utils/texto";
-import { intervalo, type Pagina, type Paginacao } from "@/shared/utils/paginacao";
+import {
+  intervalo,
+  type Pagina,
+  type Paginacao,
+} from "@/shared/utils/paginacao";
 import type { DataISO } from "@/shared/utils/datas";
-import { SEM_COBRANCA, type ParametrosDeCobranca } from "@/shared/domain/cobranca";
+import {
+  SEM_COBRANCA,
+  type ParametrosDeCobranca,
+} from "@/shared/domain/cobranca";
 import { nomeDaConta } from "@/shared/domain/conta-bancaria";
 import type {
   DestinoDoRecebimento,
@@ -87,6 +100,14 @@ export async function parcelasEmAberto(
       "id, numeroparcela, vencimento, valor, total, pago, pagamentosxparcelas(valor), faturas!inner(id, fkEmpresa, fkCliente, cancelada, parcelas)",
     )
     .eq("pago", false)
+    /*
+     * ⚠️ A CANCELADA nao entra na fila de recebimento.
+     *
+     * Oferecida, ela apareceria para baixa junto das outras — e receber uma
+     * parcela que o contrato encerrado dispensou faz o sistema afirmar uma
+     * entrada de dinheiro que ninguem cobrou.
+     */
+    .eq("cancelada", false)
     .eq("faturas.fkEmpresa", empresaId)
     .eq("faturas.fkCliente", clienteId)
     .eq("faturas.cancelada", false)
@@ -99,10 +120,9 @@ export async function parcelasEmAberto(
       const f = l.faturas as unknown as { id: number; parcelas: number | null };
       const total = devido(l.total, l.valor);
       const recebido = doBanco(
-        ((l.pagamentosxparcelas ?? []) as unknown as { valor: number }[]).reduce(
-          (soma, v) => soma + (v.valor ?? 0),
-          0,
-        ),
+        (
+          (l.pagamentosxparcelas ?? []) as unknown as { valor: number }[]
+        ).reduce((soma, v) => soma + (v.valor ?? 0), 0),
       );
 
       return {
@@ -113,7 +133,9 @@ export async function parcelasEmAberto(
         faturaNumero: f.id,
         numero: l.numeroparcela ?? 0,
         totalParcelas: f.parcelas ?? 0,
-        vencimento: l.vencimento ? ((l.vencimento.slice(0, 10)) as DataISO) : null,
+        vencimento: l.vencimento
+          ? (l.vencimento.slice(0, 10) as DataISO)
+          : null,
         total,
         recebido,
         emAberto: (total - recebido) as Centavos,
@@ -167,7 +189,10 @@ export async function listar(
   const itens = linhas
     .map((l) => {
       const linhasDoRateio = destinos.get(l.id) ?? [];
-      return { resumo: paraResumo(l, linhasDoRateio), clientes: clientesDe(linhasDoRateio) };
+      return {
+        resumo: paraResumo(l, linhasDoRateio),
+        clientes: clientesDe(linhasDoRateio),
+      };
     })
     // O filtro por cliente e aplicado aqui e nao no `where` porque o cliente
     // nao mora em `pagamentos`: ele vem pelo caminho parcela -> conta -> cliente,
@@ -202,7 +227,9 @@ export async function indicadores(
   const [janela, pendentes, total] = await Promise.all([
     supabase
       .from("pagamentos")
-      .select("id, data, valor, tipo, conciliado, pagamentosxparcelas!inner(id)")
+      .select(
+        "id, data, valor, tipo, conciliado, pagamentosxparcelas!inner(id)",
+      )
       .eq("fkEmpresa", empresaId)
       .ilike("natureza", RECEITA)
       .gte("data", `${desdeMes}-01`),
@@ -214,7 +241,10 @@ export async function indicadores(
       .eq("conciliado", false),
     supabase
       .from("pagamentos")
-      .select("id, pagamentosxparcelas!inner(id)", { count: "exact", head: true })
+      .select("id, pagamentosxparcelas!inner(id)", {
+        count: "exact",
+        head: true,
+      })
       .eq("fkEmpresa", empresaId)
       .ilike("natureza", RECEITA),
   ]);
@@ -256,7 +286,10 @@ export async function indicadores(
       qtd: porMes.get(mes)?.qtd ?? 0,
     })),
     aConciliar: {
-      valor: (pendentes.data ?? []).reduce<Centavos>((s, l) => somar(s, doBanco(l.valor)), ZERO),
+      valor: (pendentes.data ?? []).reduce<Centavos>(
+        (s, l) => somar(s, doBanco(l.valor)),
+        ZERO,
+      ),
       qtd: (pendentes.data ?? []).length,
     },
     totalDeBaixas: total.count ?? 0,
@@ -281,13 +314,18 @@ function mesesEntre(de: string, ate: string): string[] {
 
   const meses: string[] = [];
   for (let i = indice(de); i <= indice(ate); i++) {
-    meses.push(`${Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, "0")}`);
+    meses.push(
+      `${Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, "0")}`,
+    );
   }
 
   return meses;
 }
 
-export async function buscarPorId(empresaId: number, id: number): Promise<Recebimento | null> {
+export async function buscarPorId(
+  empresaId: number,
+  id: number,
+): Promise<Recebimento | null> {
   const supabase = await serverClient();
 
   const { data, error } = await supabase
@@ -377,7 +415,9 @@ async function destinosDe(ids: number[]): Promise<Map<number, LinhaDestino[]>> {
         faturaId: p.faturas.id,
         faturaNumero: p.faturas.id,
         numero: p.numeroparcela ?? 0,
-        vencimento: p.vencimento ? ((p.vencimento.slice(0, 10)) as DataISO) : null,
+        vencimento: p.vencimento
+          ? (p.vencimento.slice(0, 10) as DataISO)
+          : null,
         valor: doBanco(l.valor),
         juros: doBanco(l.juros),
         multa: doBanco(l.multa),
@@ -413,14 +453,19 @@ function paraResumo(
     conta: string | null;
   } | null;
 
-  const nomes = [...new Set(destinos.map((d) => d.clienteNome).filter(Boolean))] as string[];
+  const nomes = [
+    ...new Set(destinos.map((d) => d.clienteNome).filter(Boolean)),
+  ] as string[];
 
   return {
     id: linha.id,
-    data: linha.data ? ((linha.data.slice(0, 10)) as DataISO) : null,
+    data: linha.data ? (linha.data.slice(0, 10) as DataISO) : null,
     tipo: linha.tipo,
     valor: doBanco(linha.valor),
-    abatido: destinos.reduce<Centavos>((s, d) => somar(s, d.destino.valor), ZERO),
+    abatido: destinos.reduce<Centavos>(
+      (s, d) => somar(s, d.destino.valor),
+      ZERO,
+    ),
     juros: destinos.reduce<Centavos>((s, d) => somar(s, d.destino.juros), ZERO),
     multa: destinos.reduce<Centavos>((s, d) => somar(s, d.destino.multa), ZERO),
     // Um pagamento e de UM pagador. Mais de um nome aqui so aconteceria com
@@ -436,7 +481,11 @@ function paraResumo(
 
 /** Os clientes alcancados por um rateio. Serve ao filtro, nao a resposta. */
 function clientesDe(destinos: LinhaDestino[]): number[] {
-  return [...new Set(destinos.map((d) => d.clienteId).filter((c): c is number => c != null))];
+  return [
+    ...new Set(
+      destinos.map((d) => d.clienteId).filter((c): c is number => c != null),
+    ),
+  ];
 }
 
 /**
@@ -448,8 +497,16 @@ function clientesDe(destinos: LinhaDestino[]): number[] {
  */
 export async function donasDasParcelas(
   ids: number[],
-): Promise<Map<number, { empresaId: number | null; clienteId: number | null; faturaId: number }>> {
-  const mapa = new Map<number, { empresaId: number | null; clienteId: number | null; faturaId: number }>();
+): Promise<
+  Map<
+    number,
+    { empresaId: number | null; clienteId: number | null; faturaId: number }
+  >
+> {
+  const mapa = new Map<
+    number,
+    { empresaId: number | null; clienteId: number | null; faturaId: number }
+  >();
   if (ids.length === 0) return mapa;
 
   const supabase = await serverClient();
@@ -468,7 +525,11 @@ export async function donasDasParcelas(
       cancelada: boolean | null;
     };
     if (f.cancelada) continue;
-    mapa.set(l.id, { empresaId: f.fkEmpresa, clienteId: f.fkCliente, faturaId: f.id });
+    mapa.set(l.id, {
+      empresaId: f.fkEmpresa,
+      clienteId: f.fkCliente,
+      faturaId: f.id,
+    });
   }
 
   return mapa;
@@ -564,20 +625,22 @@ export async function criar(
   }
 
   try {
-    const { error: erroRateio } = await supabase.from("pagamentosxparcelas").insert(
-      entrada.destinos.map((d) => ({
-        fkPagamento: pagamentoId,
-        fkParcela: d.parcelaId,
-        valor: paraBanco(d.valor),
-        juros: paraBanco(d.juros),
-        multa: paraBanco(d.multa),
-        // Guardado por linha para que o estorno saiba o que devolver: sem isso,
-        // desfazer a baixa apagaria o dinheiro que entrou e deixaria a divida
-        // perdoada perdida.
-        desconto: paraBanco(descontos.get(d.parcelaId) ?? (0 as Centavos)),
-        fkUserCriacao: usuarioId,
-      })),
-    );
+    const { error: erroRateio } = await supabase
+      .from("pagamentosxparcelas")
+      .insert(
+        entrada.destinos.map((d) => ({
+          fkPagamento: pagamentoId,
+          fkParcela: d.parcelaId,
+          valor: paraBanco(d.valor),
+          juros: paraBanco(d.juros),
+          multa: paraBanco(d.multa),
+          // Guardado por linha para que o estorno saiba o que devolver: sem isso,
+          // desfazer a baixa apagaria o dinheiro que entrou e deixaria a divida
+          // perdoada perdida.
+          desconto: paraBanco(descontos.get(d.parcelaId) ?? (0 as Centavos)),
+          fkUserCriacao: usuarioId,
+        })),
+      );
     if (erroRateio) throw erroRateio;
   } catch (erro) {
     await supabase.from("pagamentos").delete().eq("id", pagamentoId);
@@ -702,7 +765,9 @@ export async function parametrosDeCobranca(
 
   const { data, error } = await supabase
     .from("parametroscobranca")
-    .select("fkCliente, multa_percentual, juros_percentual, juros_periodo, carencia_dias")
+    .select(
+      "fkCliente, multa_percentual, juros_percentual, juros_periodo, carencia_dias",
+    )
     .eq("fkEmpresa", empresaId)
     .or(`fkCliente.eq.${clienteId},fkCliente.is.null`);
 
@@ -721,7 +786,10 @@ export async function parametrosDeCobranca(
 }
 
 /** Nome do cliente para a descricao do lancamento no extrato. */
-export async function nomeDoCliente(empresaId: number, clienteId: number): Promise<string | null> {
+export async function nomeDoCliente(
+  empresaId: number,
+  clienteId: number,
+): Promise<string | null> {
   const supabase = await serverClient();
   const { data, error } = await supabase
     .from("clientes")

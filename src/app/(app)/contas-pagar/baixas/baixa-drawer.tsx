@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Drawer } from "@/components/ui/drawer";
+import { BotaoDeCabecalho, Drawer } from "@/components/ui/drawer";
+import { useAvisos } from "@/components/ui/avisos";
 import {
   Alert,
   CampoBloqueado,
@@ -33,20 +34,64 @@ import type { BaixaPagar } from "@/modules/contas-pagar/contas-pagar.types";
 export function BaixaDrawer({
   baixaId,
   onClose,
+  aoEstornar,
 }: {
   baixaId: number | null;
   onClose: () => void;
+  /** A lista atrás precisa recarregar: a baixa deixou de existir. */
+  aoEstornar?: () => void;
 }) {
   // `key` remonta a cada baixa: o estado nasce vazio sozinho, sem limpar a mao
   // num efeito, e sem mostrar o registro anterior enquanto carrega.
   return baixaId == null ? null : (
-    <Conteudo key={baixaId} baixaId={baixaId} onClose={onClose} />
+    <Conteudo
+      key={baixaId}
+      baixaId={baixaId}
+      onClose={onClose}
+      aoEstornar={aoEstornar}
+    />
   );
 }
 
-function Conteudo({ baixaId, onClose }: { baixaId: number; onClose: () => void }) {
+function Conteudo({
+  baixaId,
+  onClose,
+  aoEstornar,
+}: {
+  baixaId: number;
+  onClose: () => void;
+  aoEstornar?: () => void;
+}) {
   const [baixa, setBaixa] = useState<BaixaPagar | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const { avisar, confirmar } = useAvisos();
+
+  /**
+   * Estornar: o dinheiro não saiu, e as parcelas voltam a ficar em aberto.
+   *
+   * ⚠️ Correção de baixa é ESTORNO, e não edição. Mexer no valor de um pagamento
+   * já lançado reescreveria o que talvez já tenha virado comprovante na mão do
+   * fornecedor; estornar e lançar de novo deixa rastro do que aconteceu.
+   */
+  async function estornar() {
+    const r = await fetch(`/api/v1/contas-pagar/baixas/${baixaId}`, {
+      method: "DELETE",
+    });
+
+    if (!r.ok) {
+      const dados = await r.json().catch(() => null);
+      avisar("atencao", dados?.error?.message ?? "Não foi possível estornar");
+      return;
+    }
+
+    avisar(
+      "sucesso",
+      "Baixa estornada",
+      "As parcelas voltaram a ficar em aberto.",
+    );
+    aoEstornar?.();
+    onClose();
+  }
 
   useEffect(() => {
     const controle = new AbortController();
@@ -54,7 +99,8 @@ function Conteudo({ baixaId, onClose }: { baixaId: number; onClose: () => void }
     fetch(`/api/v1/contas-pagar/baixas/${baixaId}`, { signal: controle.signal })
       .then(async (r) => {
         const corpo = await r.json();
-        if (!r.ok) throw new Error(corpo?.error?.message ?? "Falha ao carregar a baixa");
+        if (!r.ok)
+          throw new Error(corpo?.error?.message ?? "Falha ao carregar a baixa");
         setBaixa(corpo.data as BaixaPagar);
       })
       .catch((e: unknown) => {
@@ -68,6 +114,38 @@ function Conteudo({ baixaId, onClose }: { baixaId: number; onClose: () => void }
     <Drawer
       open
       onClose={onClose}
+      headerExtra={
+        baixa ? (
+          /*
+            ⚠️ Estornar aparece TRAVADO quando não pode, e não escondido.
+
+            Sumir faria parecer que o sistema não sabe estornar, e a pessoa
+            procuraria o gesto em outro lugar. Travado com o motivo, ele responde
+            a pergunta na hora: conciliada, desfaça a conciliação antes.
+          */
+          <BotaoDeCabecalho
+            rotulo={
+              baixa.conciliado
+                ? "Baixa conciliada não é estornada: desfaça a conciliação antes"
+                : "Estornar esta baixa"
+            }
+            perigo
+            desabilitado={baixa.conciliado}
+            onClick={() =>
+              confirmar(
+                `Estornar a baixa ${baixa.id}?`,
+                "Estornar",
+                () => void estornar(),
+                "O lançamento é apagado e as parcelas voltam a ficar em aberto. O desconto dado na baixa volta a ser devido.",
+              )
+            }
+          >
+            {/* Seta que volta: desfazer o que já foi lançado. */}
+            <path d="M3 8a5 5 0 1 1 1.6 3.7" />
+            <path d="M3 4.6V8h3.4" />
+          </BotaoDeCabecalho>
+        ) : undefined
+      }
       /*
         ⚠️ SEM marca no cabecalho. Aquele espaco e de ACAO, e nao de estado: um
         icone ali disputa lugar com os botoes e ensina que aquela area as vezes
@@ -125,7 +203,9 @@ function Conteudo({ baixaId, onClose }: { baixaId: number; onClose: () => void }
             </Field>
 
             <Field label="Valor">
-              <CampoBloqueado valor={formatarSemSimbolo(baixa.valor as Centavos)} />
+              <CampoBloqueado
+                valor={formatarSemSimbolo(baixa.valor as Centavos)}
+              />
             </Field>
 
             <Field
@@ -161,7 +241,10 @@ function Conteudo({ baixaId, onClose }: { baixaId: number; onClose: () => void }
 
               <tbody>
                 {baixa.destinos.length === 0 && (
-                  <EmptyRow colSpan={5} message="Esta baixa não aponta para nenhuma parcela." />
+                  <EmptyRow
+                    colSpan={5}
+                    message="Esta baixa não aponta para nenhuma parcela."
+                  />
                 )}
 
                 {baixa.destinos.map((d, i) => (
@@ -176,10 +259,16 @@ function Conteudo({ baixaId, onClose }: { baixaId: number; onClose: () => void }
                     </Td>
                     <Td style={NUM}>{d.numero}</Td>
                     <Td style={NUM}>
-                      {d.vencimento ? paraFormatoBR(d.vencimento as DataISO) : "—"}
+                      {d.vencimento
+                        ? paraFormatoBR(d.vencimento as DataISO)
+                        : "—"}
                     </Td>
-                    <Td style={NUM}>{formatarSemSimbolo(d.total as Centavos)}</Td>
-                    <Td style={NUM}>{formatarSemSimbolo(d.valor as Centavos)}</Td>
+                    <Td style={NUM}>
+                      {formatarSemSimbolo(d.total as Centavos)}
+                    </Td>
+                    <Td style={NUM}>
+                      {formatarSemSimbolo(d.valor as Centavos)}
+                    </Td>
                   </Tr>
                 ))}
               </tbody>

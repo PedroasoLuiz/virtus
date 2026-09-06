@@ -1,7 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { BotaoDeCabecalho, BotaoHistorico, Drawer } from "@/components/ui/drawer";
+import {
+  BotaoDeCabecalho,
+  BotaoHistorico,
+  Drawer,
+} from "@/components/ui/drawer";
 import { useAvisos } from "@/components/ui/avisos";
 import { NovoRecebimentoDrawer } from "../recebimentos/novo-recebimento-drawer";
 import { Icon } from "@/components/layout/icones";
@@ -12,6 +16,7 @@ import {
   EmptyRow,
   Field,
   GrupoDeCampos,
+  MarcaDeConciliacao,
   PanelTabs,
   TableArea,
   TableHead,
@@ -52,21 +57,36 @@ import { ItemDoMenu, MenuDeLinha } from "@/components/ui/menu-de-linha";
  * texto solto: a tela ainda nao edita nada, e o cadeado explica por que.
  */
 
-
 export function FaturaDrawer({
   faturaId,
   emitidoPor,
   onClose,
+  nivel,
 }: {
   faturaId: number | null;
   /** Quem assina o rodape dos documentos. Vazio quando a tela nao sabe. */
   emitidoPor?: string;
   onClose: () => void;
+  /**
+   * O andar em que ele abre. Padrao 1, o da tela de listagem.
+   *
+   * ⚠️ Existe porque o extrato abre este mesmo drawer POR CIMA dele: a coluna
+   * "Registro" leva da linha do banco ate o titulo sem sair da conferencia. No
+   * andar 1 os dois ficariam empilhados no mesmo z, e fechar um fecharia a
+   * leitura do outro junto.
+   */
+  nivel?: 1 | 2 | 3;
 }) {
   // `key` remonta a cada fatura: o estado nasce vazio sozinho, sem limpar a mao
   // dentro de um efeito, e sem mostrar o registro anterior enquanto carrega.
   return faturaId == null ? null : (
-    <Conteudo key={faturaId} faturaId={faturaId} emitidoPor={emitidoPor ?? ""} onClose={onClose} />
+    <Conteudo
+      key={faturaId}
+      faturaId={faturaId}
+      emitidoPor={emitidoPor ?? ""}
+      onClose={onClose}
+      nivel={nivel}
+    />
   );
 }
 
@@ -74,14 +94,18 @@ function Conteudo({
   faturaId,
   emitidoPor,
   onClose,
+  nivel,
 }: {
   faturaId: number;
   emitidoPor: string;
   onClose: () => void;
+  nivel?: 1 | 2 | 3;
 }) {
   const [fatura, setFatura] = useState<Fatura | null>(null);
   const [erro, setErro] = useState<string | null>(null);
-  const [aba, setAba] = useState<"tickets" | "produtos" | "parcelas">("tickets");
+  const [aba, setAba] = useState<"tickets" | "produtos" | "parcelas">(
+    "tickets",
+  );
   // Ticket aberto por cima da conta: o drawer empilha, o de tras nao fecha.
   const [ticketAberto, setTicketAberto] = useState<number | null>(null);
   // Guarda QUAL parcela, e nao um booleano: a baixa acontece sobre uma parcela
@@ -91,11 +115,16 @@ function Conteudo({
   const { avisar, confirmar } = useAvisos();
 
   async function cancelarConta() {
-    const r = await fetch(`/api/v1/faturas/${faturaId}/cancelamento`, { method: "PUT" });
+    const r = await fetch(`/api/v1/faturas/${faturaId}/cancelamento`, {
+      method: "PUT",
+    });
     const dados = await r.json().catch(() => null);
 
     if (!r.ok) {
-      avisar("atencao", dados?.error?.message ?? "Não foi possível cancelar a cobrança");
+      avisar(
+        "atencao",
+        dados?.error?.message ?? "Não foi possível cancelar a cobrança",
+      );
       return;
     }
 
@@ -108,7 +137,10 @@ function Conteudo({
 
     if (!r.ok) {
       const dados = await r.json().catch(() => null);
-      avisar("atencao", dados?.error?.message ?? "Não foi possível excluir a conta");
+      avisar(
+        "atencao",
+        dados?.error?.message ?? "Não foi possível excluir a conta",
+      );
       return;
     }
     avisar("sucesso", "Conta a receber excluída");
@@ -162,7 +194,10 @@ function Conteudo({
     const dados = await r.json().catch(() => null);
 
     if (!r.ok) {
-      avisar("atencao", dados?.error?.message ?? "Não foi possível remover o ticket");
+      avisar(
+        "atencao",
+        dados?.error?.message ?? "Não foi possível remover o ticket",
+      );
       return;
     }
 
@@ -182,11 +217,57 @@ function Conteudo({
    * caminho de leitura: com a tela remendando o proprio estado a partir da
    * resposta de cada acao, a divergencia aparece na terceira acao seguida.
    */
+  /**
+   * Cancela uma parcela: ela foi combinada, mas não vai mais ser cobrada.
+   *
+   * ⚠️ Espelho do lado que paga. NÃO é apagar nem dar desconto: apagar sumiria
+   * com o combinado, e desconto diria que a dívida foi perdoada — o que muda a
+   * DRE. Contrato encerrado não perdoa nada, ele deixa de gerar cobrança.
+   */
+  async function cancelarParcela(parcelaId: number) {
+    const r = await fetch(
+      `/api/v1/faturas/${faturaId}/parcelas/${parcelaId}/cancelamento`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      },
+    );
+
+    if (!r.ok) {
+      const corpo = await r.json().catch(() => null);
+      avisar("atencao", corpo?.error?.message ?? "Não foi possível cancelar");
+      return;
+    }
+
+    recarregar();
+  }
+
+  async function reativarParcela(parcelaId: number) {
+    const r = await fetch(
+      `/api/v1/faturas/${faturaId}/parcelas/${parcelaId}/cancelamento`,
+      {
+        method: "DELETE",
+      },
+    );
+
+    if (!r.ok) {
+      const corpo = await r.json().catch(() => null);
+      avisar("atencao", corpo?.error?.message ?? "Não foi possível reativar");
+      return;
+    }
+
+    recarregar();
+  }
+
   const recarregar = useCallback(() => {
     fetch(`/api/v1/faturas/${faturaId}`)
       .then(async (r) => {
         const corpo = await r.json();
-        if (!r.ok) throw new Error(corpo?.error?.message ?? "Falha ao carregar a fatura");
+        if (!r.ok)
+          throw new Error(
+            corpo?.error?.message ?? "Falha ao carregar a fatura",
+          );
         setFatura(corpo.data);
       })
       .catch((e: unknown) => {
@@ -200,7 +281,10 @@ function Conteudo({
     fetch(`/api/v1/faturas/${faturaId}`, { signal: controle.signal })
       .then(async (r) => {
         const corpo = await r.json();
-        if (!r.ok) throw new Error(corpo?.error?.message ?? "Falha ao carregar a fatura");
+        if (!r.ok)
+          throw new Error(
+            corpo?.error?.message ?? "Falha ao carregar a fatura",
+          );
         setFatura(corpo.data);
       })
       .catch((e: unknown) => {
@@ -235,24 +319,28 @@ function Conteudo({
           vencimento: (p.vencimento ?? "") as DataISO,
           valor: p.total as Centavos,
           pago: p.pago,
-          temDocumento: Boolean(p.boleto || p.nfs),
+          cancelada: p.cancelada,
         })),
       })
     : null;
 
   const pago = fatura ? totalRecebido(fatura.parcelas) : 0;
   const emAberto = fatura ? saldoAReceber(fatura.parcelas) : 0;
-  const descontado = fatura ? fatura.parcelas.reduce((s, p) => s + p.desconto, 0) : 0;
+  const descontado = fatura
+    ? fatura.parcelas.reduce((s, p) => s + p.desconto, 0)
+    : 0;
   const temBaixa = fatura?.parcelas.some((p) => p.pago) ?? false;
 
   // A unica que pode receber agora. As de tras dela ficam com o "Dar baixa"
   // desabilitado, dizendo por que.
   const proxima = fatura ? proximaAReceber(fatura.parcelas) : null;
-  const parcelaEmBaixa = fatura?.parcelas.find((p) => p.id === baixando) ?? null;
+  const parcelaEmBaixa =
+    fatura?.parcelas.find((p) => p.id === baixando) ?? null;
 
   return (
     <Drawer
       open
+      nivel={nivel}
       onClose={onClose}
       /*
         ⚠️ O título não carrega mais o número. Ele virou o campo "Código" logo no
@@ -377,44 +465,48 @@ function Conteudo({
               gap: "var(--form-gap-campo)",
             }}
           >
-              {/*
+            {/*
                 ⚠️ O código vem PRIMEIRO, e é campo com cadeado como os outros.
 
                 Ele é o que se dita ao telefone e o que o cliente cita ao pagar:
                 escrito só no título do drawer, some quando a pessoa rola a
                 tabela, e não dá para copiar.
               */}
-              <Field label="Código">
-                <CampoBloqueado
-                  valor={String(fatura.numero)}
-                  titulo="O número é dado pelo sistema quando a conta nasce."
-                />
-              </Field>
+            <Field label="Código">
+              <CampoBloqueado
+                valor={String(fatura.numero)}
+                titulo="O número é dado pelo sistema quando a conta nasce."
+              />
+            </Field>
 
-              <Field label="Cliente">
-                <CampoBloqueado valor={fatura.clienteNome ?? "—"} />
-              </Field>
+            <Field label="Cliente">
+              <CampoBloqueado valor={fatura.clienteNome ?? "—"} />
+            </Field>
 
-              {/*
+            {/*
                 ⚠️ O documento aparece LOGO ABAIXO do nome, e não noutra seção.
 
                 Dois clientes com nome parecido são a hora exata em que alguém
                 confere o CNPJ, e é a mesma hora em que ele precisa ser copiado
                 para o boleto ou para a nota.
               */}
-              <Field label={ehPessoaFisica(fatura.clienteDoc) ? "CPF" : "CNPJ"}>
-                <CampoBloqueado
-                  valor={fatura.clienteDoc ? formatarDocumento(fatura.clienteDoc) : "—"}
-                />
-              </Field>
+            <Field label={ehPessoaFisica(fatura.clienteDoc) ? "CPF" : "CNPJ"}>
+              <CampoBloqueado
+                valor={
+                  fatura.clienteDoc ? formatarDocumento(fatura.clienteDoc) : "—"
+                }
+              />
+            </Field>
 
-              <Field label="Apuração">
-                <CampoBloqueado valor={periodo(fatura.apuracaoInicio, fatura.apuracaoFim)} />
-              </Field>
+            <Field label="Apuração">
+              <CampoBloqueado
+                valor={periodo(fatura.apuracaoInicio, fatura.apuracaoFim)}
+              />
+            </Field>
 
-              <Field label="Situação">
-                <CampoBloqueado valor={fatura.situacao} />
-              </Field>
+            <Field label="Situação">
+              <CampoBloqueado valor={fatura.situacao} />
+            </Field>
 
             {/*
               ⚠️ Os três valores viraram CAMPO, um por linha, e saíram do rodapé.
@@ -425,7 +517,9 @@ function Conteudo({
               como todo dado da ficha, e dá para copiar o valor.
             */}
             <Field label="Total">
-              <CampoBloqueado valor={formatarSemSimbolo(fatura.total as Centavos)} />
+              <CampoBloqueado
+                valor={formatarSemSimbolo(fatura.total as Centavos)}
+              />
             </Field>
 
             <Field label="Recebido">
@@ -440,12 +534,16 @@ function Conteudo({
             */}
             {descontado > 0 && (
               <Field label="Desconto">
-                <CampoBloqueado valor={formatarSemSimbolo(descontado as Centavos)} />
+                <CampoBloqueado
+                  valor={formatarSemSimbolo(descontado as Centavos)}
+                />
               </Field>
             )}
 
             <Field label="Em aberto">
-              <CampoBloqueado valor={formatarSemSimbolo(emAberto as Centavos)} />
+              <CampoBloqueado
+                valor={formatarSemSimbolo(emAberto as Centavos)}
+              />
             </Field>
 
             {fatura.observacoes && (
@@ -477,7 +575,13 @@ function Conteudo({
                   : `Parcelas (${fatura.parcelas.length})`
             }
             onChange={(t) =>
-              setAba(t.startsWith("Tickets") ? "tickets" : t === "Produtos" ? "produtos" : "parcelas")
+              setAba(
+                t.startsWith("Tickets")
+                  ? "tickets"
+                  : t === "Produtos"
+                    ? "produtos"
+                    : "parcelas",
+              )
             }
           />
 
@@ -495,78 +599,91 @@ function Conteudo({
               legenda="Cada ticket entra com o valor que foi tirado dele, e a soma é o total desta conta. O detalhe do serviço mora dentro do ticket: o menu da linha abre."
             >
               <TableArea minWidth={0}>
-              <TableHead>
-                <Th minWidth={70}>Código</Th>
-                <Th minWidth={110}>Encerrado</Th>
-                <Th align="right" minWidth={110}>
-                  Valor
-                </Th>
-                <Th> </Th>
-              </TableHead>
+                <TableHead>
+                  <Th minWidth={70}>Código</Th>
+                  <Th minWidth={110}>Encerrado</Th>
+                  <Th align="right" minWidth={110}>
+                    Valor
+                  </Th>
+                  <Th> </Th>
+                </TableHead>
 
-              <tbody>
-                {fatura.tickets.length === 0 && (
-                  <EmptyRow colSpan={4} message="Nenhum ticket vinculado a esta conta." />
-                )}
+                <tbody>
+                  {fatura.tickets.length === 0 && (
+                    <EmptyRow
+                      colSpan={4}
+                      message="Nenhum ticket vinculado a esta conta."
+                    />
+                  )}
 
-                {fatura.tickets.map((t) => (
-                  <Tr key={t.ticketId}>
-                    <Td style={{ fontVariantNumeric: "tabular-nums" }}>{t.numero}</Td>
+                  {fatura.tickets.map((t) => (
+                    <Tr key={t.ticketId}>
+                      <Td style={{ fontVariantNumeric: "tabular-nums" }}>
+                        {t.numero}
+                      </Td>
 
-                    <Td>
-                      {t.encerradoEm ? (
-                        paraFormatoBR(t.encerradoEm as DataISO)
-                      ) : (
-                        <span style={{ color: "var(--text-disabled)" }}>—</span>
-                      )}
-                    </Td>
+                      <Td>
+                        {t.encerradoEm ? (
+                          paraFormatoBR(t.encerradoEm as DataISO)
+                        ) : (
+                          <span style={{ color: "var(--text-disabled)" }}>
+                            —
+                          </span>
+                        )}
+                      </Td>
 
-                    <Td style={tdNum}>{formatarSemSimbolo(t.valor as Centavos)}</Td>
+                      <Td style={tdNum}>
+                        {formatarSemSimbolo(t.valor as Centavos)}
+                      </Td>
 
-                    <Td>
-                      <AcoesDaLinha>
-                        <MenuDeLinha>
-                          {(fechar) => (
-                    <>
-                      <ItemDoMenu
-                        rotulo="Abrir ticket"
-                        icone={<Icon name="ticket" size={14} />}
-                        onClick={() => {
-                          fechar();
-                          setTicketAberto(t.ticketId);
-                        }}
-                      />
+                      <Td>
+                        <AcoesDaLinha>
+                          <MenuDeLinha>
+                            {(fechar) => (
+                              <>
+                                <ItemDoMenu
+                                  rotulo="Abrir ticket"
+                                  icone={<Icon name="ticket" size={14} />}
+                                  onClick={() => {
+                                    fechar();
+                                    setTicketAberto(t.ticketId);
+                                  }}
+                                />
 
-                      {/* Tirar o ticket devolve o saldo dele; sendo o unico, a
+                                {/* Tirar o ticket devolve o saldo dele; sendo o unico, a
                           conta inteira vai junto. Recusado quando ha baixa: o
                           dinheiro entrou contra ESTE ticket, e soltar o vinculo
                           faria o saldo voltar como se nada tivesse sido cobrado. */}
-                      <ItemDoMenu
-                        rotulo="Remover desta conta"
-                        perigo
-                        desabilitado={temBaixa}
-                        motivo={temBaixa ? "Conta com parcela baixada" : undefined}
-                        onClick={() => {
-                          fechar();
-                          confirmar(
-                            `Remover o ticket ${t.numero} desta conta?`,
-                            "Remover",
-                            () => desvincularTicket(t.ticketId),
-                            fatura.tickets.length === 1
-                              ? "É o único ticket, então a conta a receber será excluída."
-                              : "O saldo dele volta a ficar disponível para cobrar.",
-                          );
-                        }}
-                      >
-                        <path d="M12 4L4 12M4 4l8 8" />
-                      </ItemDoMenu>
-                            </>
-                          )}
-                        </MenuDeLinha>
-                      </AcoesDaLinha>
-                    </Td>
-                  </Tr>
-                ))}
+                                <ItemDoMenu
+                                  rotulo="Remover desta conta"
+                                  perigo
+                                  desabilitado={temBaixa}
+                                  motivo={
+                                    temBaixa
+                                      ? "Conta com parcela baixada"
+                                      : undefined
+                                  }
+                                  onClick={() => {
+                                    fechar();
+                                    confirmar(
+                                      `Remover o ticket ${t.numero} desta conta?`,
+                                      "Remover",
+                                      () => desvincularTicket(t.ticketId),
+                                      fatura.tickets.length === 1
+                                        ? "É o único ticket, então a conta a receber será excluída."
+                                        : "O saldo dele volta a ficar disponível para cobrar.",
+                                    );
+                                  }}
+                                >
+                                  <path d="M12 4L4 12M4 4l8 8" />
+                                </ItemDoMenu>
+                              </>
+                            )}
+                          </MenuDeLinha>
+                        </AcoesDaLinha>
+                      </Td>
+                    </Tr>
+                  ))}
                 </tbody>
               </TableArea>
             </GrupoDeCampos>
@@ -592,19 +709,19 @@ function Conteudo({
               legenda="Peça, material ou licença. Uma conta pode ser só de produto, sem serviço nenhum. Ainda não entram: eles mexem no total, e o total hoje é exatamente o que veio dos tickets."
             >
               <TableArea minWidth={0}>
-              <TableHead>
-                <Th>Descrição</Th>
-                <Th align="right" minWidth={90}>
-                  Quantidade
-                </Th>
-                <Th align="right" minWidth={110}>
-                  Valor
-                </Th>
-              </TableHead>
+                <TableHead>
+                  <Th>Descrição</Th>
+                  <Th align="right" minWidth={90}>
+                    Quantidade
+                  </Th>
+                  <Th align="right" minWidth={110}>
+                    Valor
+                  </Th>
+                </TableHead>
 
-              <tbody>
-                <EmptyRow colSpan={3} message="Nenhum produto nesta conta." />
-              </tbody>
+                <tbody>
+                  <EmptyRow colSpan={3} message="Nenhum produto nesta conta." />
+                </tbody>
               </TableArea>
             </GrupoDeCampos>
           ) : (
@@ -618,15 +735,17 @@ function Conteudo({
                 voltava com recusa; sumindo, quem passa o mouse no título nem
                 descobre que existia.
               */
-              onIncluir={pode?.parcelas.pode ? () => setDividindo(true) : undefined}
+              onIncluir={
+                pode?.parcelas.pode ? () => setDividindo(true) : undefined
+              }
               // O rótulo diz o que acontece: a tela abre o cronograma inteiro,
               // e nao acrescenta uma parcela solta.
               rotuloIncluir="Mexer no parcelamento"
             >
               <TableArea minWidth={0}>
-              <TableHead>
-                <Th minWidth={54}>#</Th>
-                {/*
+                <TableHead>
+                  <Th minWidth={54}>#</Th>
+                  {/*
                   ⚠️ Conciliado é sobre o EXTRATO, não sobre a baixa.
 
                   Dar baixa é dizer "recebi"; conciliar é ter conferido que o
@@ -638,107 +757,155 @@ function Conteudo({
                   colunas respondem "em que pé está esta parcela", e o resto é o
                   conteúdo dela.
                 */}
-                <Th minWidth={90}>Conciliado</Th>
-                <Th minWidth={110}>Vencimento</Th>
-                <Th align="right" minWidth={120}>
-                  Valor
-                </Th>
-                <Th minWidth={90}>Documentos</Th>
-                <Th> </Th>
-              </TableHead>
+                  <Th minWidth={90}>Conciliado</Th>
+                  <Th minWidth={110}>Vencimento</Th>
+                  <Th align="right" minWidth={120}>
+                    Valor
+                  </Th>
+                  <Th minWidth={90}>Documentos</Th>
+                  <Th> </Th>
+                </TableHead>
 
-              <tbody>
-                {fatura.parcelas.length === 0 && (
-                  <EmptyRow colSpan={6} message="Nenhuma parcela gerada." />
-                )}
+                <tbody>
+                  {fatura.parcelas.length === 0 && (
+                    <EmptyRow colSpan={6} message="Nenhuma parcela gerada." />
+                  )}
 
-                {fatura.parcelas.map((p) => (
-                  <Tr
-                    key={p.id}
-                    /*
+                  {fatura.parcelas.map((p) => (
+                    <Tr
+                      key={p.id}
+                      /*
                       ⚠️ Vencida pinta a LINHA toda. A data sozinha em vermelho se
                       perde no meio da tabela, e atraso é o único estado aqui que
                       pede ação hoje.
                     */
-                    style={
-                      vencida(p)
-                        ? { background: "var(--danger-bg)", color: "var(--danger-text)" }
-                        : undefined
-                    }
-                  >
-                    <Td>
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
-                        <Bolinha parcela={p} />
-                        {p.numero}
-                      </span>
-                    </Td>
-
-                    <Td>
-                      <MarcaDeConciliado parcela={p} />
-                    </Td>
-
-                    <Td>
-                      {p.vencimento ? (
-                        curto(p.vencimento)
-                      ) : (
-                        <span style={{ color: "var(--text-disabled)" }}>—</span>
-                      )}
-                    </Td>
-
-                    <Td style={tdNum}>
-                      {formatarSemSimbolo(p.total as Centavos)}
-
-                      {/* Desconto dado na baixa: sem mostrar aqui, a soma das
-                          parcelas não fecha com o total e parece erro de conta. */}
-                      {p.desconto > 0 && (
-                        <div
-                          title={`Desconto de ${formatarSemSimbolo(p.desconto as Centavos)}`}
+                      /*
+                        ⚠️ A cancelada fica APAGADA, e não escondida: ela conta a
+                        história do contrato — doze combinadas, quatro cobradas.
+                      */
+                      style={
+                        p.cancelada
+                          ? { color: "var(--text-disabled)" }
+                          : vencida(p)
+                            ? {
+                                background: "var(--danger-bg)",
+                                color: "var(--danger-text)",
+                              }
+                            : undefined
+                      }
+                    >
+                      <Td>
+                        <span
                           style={{
-                            marginTop: 1,
-                            fontSize: "var(--text-xs)",
-                            color: "var(--credito)",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 7,
                           }}
                         >
-                          −{formatarSemSimbolo(p.desconto as Centavos)}
-                        </div>
-                      )}
-                    </Td>
+                          <Bolinha parcela={p} />
+                          {p.numero}
+                        </span>
+                      </Td>
 
-                    <Td>
-                      <Documentos
-                        faturaId={fatura.id}
-                        parcelaId={p.id}
-                        boleto={p.boleto}
-                        nfs={p.nfs}
-                        comprovante={p.comprovante}
-                        bloqueado={p.pagamentoId != null || fatura.situacao === "CANCELADA"}
-                        aoMudar={recarregar}
-                      />
-                    </Td>
+                      <Td>
+                        <MarcaDeConciliado parcela={p} />
+                      </Td>
 
-                    <Td>
-                      <AcoesDaLinha>
-                        <MenuDeLinha>
-                          {(fechar) => (
-                            <AcoesDaParcela
-                              aoBaixar={() => setBaixando(p.id)}
-                              aoEditarParcelamento={() => setDividindo(true)}
-                              fatura={fatura}
-                              emitidoPor={emitidoPor}
-                              parcela={p}
-                              proxima={proxima}
-                              bloqueado={
-                                p.pagamentoId != null || fatura.situacao === "CANCELADA"
-                              }
-                              aoMudar={recarregar}
-                              fechar={fechar}
-                            />
-                          )}
-                        </MenuDeLinha>
-                      </AcoesDaLinha>
-                    </Td>
-                  </Tr>
-                ))}
+                      <Td>
+                        {p.vencimento ? (
+                          curto(p.vencimento)
+                        ) : (
+                          <span style={{ color: "var(--text-disabled)" }}>
+                            —
+                          </span>
+                        )}
+                      </Td>
+
+                      <Td style={tdNum}>
+                        {formatarSemSimbolo(p.total as Centavos)}
+
+                        {/* Mesma anatomia do desconto logo abaixo: o valor em
+                          cima, e o que aconteceu com ele numa segunda linha. */}
+                        {p.cancelada && (
+                          <div
+                            title={
+                              p.motivoDoCancelamento ??
+                              "Não vai ser cobrada: continua na conta como histórico"
+                            }
+                            style={{
+                              marginTop: 1,
+                              fontSize: "var(--text-xs)",
+                              color: "var(--text-disabled)",
+                            }}
+                          >
+                            cancelada
+                          </div>
+                        )}
+
+                        {/* Desconto dado na baixa: sem mostrar aqui, a soma das
+                          parcelas não fecha com o total e parece erro de conta. */}
+                        {p.desconto > 0 && (
+                          <div
+                            title={`Desconto de ${formatarSemSimbolo(p.desconto as Centavos)}`}
+                            style={{
+                              marginTop: 1,
+                              fontSize: "var(--text-xs)",
+                              color: "var(--credito)",
+                            }}
+                          >
+                            −{formatarSemSimbolo(p.desconto as Centavos)}
+                          </div>
+                        )}
+                      </Td>
+
+                      <Td>
+                        <Documentos
+                          faturaId={fatura.id}
+                          parcelaId={p.id}
+                          boleto={p.boleto}
+                          nfs={p.nfs}
+                          comprovante={p.comprovante}
+                          bloqueado={
+                            p.pagamentoId != null ||
+                            fatura.situacao === "CANCELADA"
+                          }
+                          aoMudar={recarregar}
+                        />
+                      </Td>
+
+                      <Td>
+                        <AcoesDaLinha>
+                          <MenuDeLinha>
+                            {(fechar) => (
+                              <AcoesDaParcela
+                                aoBaixar={() => setBaixando(p.id)}
+                                aoEditarParcelamento={() => setDividindo(true)}
+                                fatura={fatura}
+                                emitidoPor={emitidoPor}
+                                parcela={p}
+                                proxima={proxima}
+                                bloqueado={
+                                  p.pagamentoId != null ||
+                                  fatura.situacao === "CANCELADA"
+                                }
+                                aoMudar={recarregar}
+                                fechar={fechar}
+                                aoCancelar={() =>
+                                  confirmar(
+                                    `Cancelar a parcela ${p.numero}?`,
+                                    "Cancelar parcela",
+                                    () => void cancelarParcela(p.id),
+                                    "Ela deixa de ser cobrada e continua na conta, marcada como cancelada.",
+                                  )
+                                }
+                                aoReativar={() => void reativarParcela(p.id)}
+                              />
+                            )}
+                          </MenuDeLinha>
+                        </AcoesDaLinha>
+                      </Td>
+                    </Tr>
+                  ))}
                 </tbody>
               </TableArea>
             </GrupoDeCampos>
@@ -760,7 +927,9 @@ function Conteudo({
        */}
       {fatura && parcelaEmBaixa && fatura.clienteId != null && (
         <NovoRecebimentoDrawer
-          clientes={[{ id: fatura.clienteId, nome: fatura.clienteNome ?? "Cliente" }]}
+          clientes={[
+            { id: fatura.clienteId, nome: fatura.clienteNome ?? "Cliente" },
+          ]}
           clienteInicial={fatura.clienteId}
           parcelaInicial={parcelaEmBaixa.id}
           onClose={() => setBaixando(null)}
@@ -789,7 +958,11 @@ function Conteudo({
         />
       )}
 
-      <TicketDrawer ticketId={ticketAberto} somenteLeitura onClose={() => setTicketAberto(null)} />
+      <TicketDrawer
+        ticketId={ticketAberto}
+        somenteLeitura
+        onClose={() => setTicketAberto(null)}
+      />
     </Drawer>
   );
 }
@@ -823,7 +996,6 @@ function Conteudo({
  * que ela soma — que e justamente a unica coisa que ela precisa fazer certo.
  */
 
-
 /** Quanto esta parcela representa da conta. So leitura: o valor e quem manda. */
 /**
  * Um mes depois, sem estourar o fim do mes.
@@ -832,36 +1004,6 @@ function Conteudo({
  * 02/03. Somando MES, o dia combinado se mantem, e dia 31 em mes de 30 recua para
  * o ultimo dia — que e o que qualquer boleto faz.
  */
-/**
- * O circulo cheio com o check dentro.
- *
- * ⚠️ Cheio quer dizer "fechado, nao ha o que fazer aqui". O check solto lia como
- * item de lista de tarefas, que e justamente o oposto: ali ainda ha o que fazer.
- *
- * Mora aqui e nao em dois lugares porque a parcela paga e a baixa conferida
- * dizem a mesma coisa com o mesmo desenho — duas copias divergiriam no primeiro
- * ajuste de tamanho.
- */
-function CheckPreenchido({ titulo, cor }: { titulo: string; cor?: string }) {
-  return (
-    <span
-      title={titulo}
-      style={{ display: "inline-grid", placeItems: "center", color: cor ?? "var(--credito)" }}
-    >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-        <circle cx="12" cy="12" r="9" />
-        <path
-          d="M8 12.4l2.6 2.6L16 9.6"
-          fill="none"
-          stroke="var(--surface)"
-          strokeWidth="2.6"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    </span>
-  );
-}
 
 /**
  * A marca de conciliado de uma parcela.
@@ -874,44 +1016,26 @@ function CheckPreenchido({ titulo, cor }: { titulo: string; cor?: string }) {
  * estado que pede ação de alguém, e é o que quem fecha o mês vai procurar.
  */
 function MarcaDeConciliado({ parcela }: { parcela: Parcela }) {
+  /*
+   * ⚠️ A MESMA marca do lado que paga (`MarcaDeConciliacao` do kit), e não um
+   * desenho próprio.
+   *
+   * Aqui havia um par inteiro só desta tela: check em `--credito` e um círculo
+   * de atenção em `--warning-text`. Era o mesmo fato — "isto já bateu com o
+   * extrato" — pintado de duas cores diferentes em duas telas do mesmo sistema,
+   * e quem trabalha nos dois lados aprendia duas vezes.
+   *
+   * ⚠️ O traço continua sendo só de quem NÃO recebeu: ali não há conferência
+   * pendente, porque não há dinheiro a conferir.
+   */
+  if (parcela.cancelada)
+    return <MarcaDeConciliacao conciliado={false} cancelada />;
+
   if (!parcela.pago) {
     return <span style={{ color: "var(--text-disabled)" }}>—</span>;
   }
 
-  const ok = parcela.conciliado;
-
-  return (
-    <span
-      title={
-        ok
-          ? "A baixa desta parcela já bateu com o extrato da conta."
-          : "Recebida, mas ainda não conferida no extrato."
-      }
-      style={{
-        display: "inline-grid",
-        placeItems: "center",
-        color: ok ? "var(--credito)" : "var(--warning-text)",
-      }}
-    >
-      {ok ? (
-        <CheckPreenchido titulo="A baixa desta parcela já bateu com o extrato da conta." />
-      ) : (
-        <svg
-          width="15"
-          height="15"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.1"
-          strokeLinecap="round"
-          aria-hidden
-        >
-          <circle cx="12" cy="12" r="8.5" />
-          <path d="M12 7.6v5M12 15.9v.2" />
-        </svg>
-      )}
-    </span>
-  );
+  return <MarcaDeConciliacao conciliado={parcela.conciliado} />;
 }
 
 /**
@@ -950,6 +1074,8 @@ function AcoesDaParcela({
   bloqueado,
   aoMudar,
   fechar,
+  aoCancelar,
+  aoReativar,
 }: {
   aoBaixar: () => void;
   aoEditarParcelamento: () => void;
@@ -962,6 +1088,8 @@ function AcoesDaParcela({
   aoMudar: () => void;
   /** Abre o formulario de vencimento, que vive fora deste menu. */
   fechar: () => void;
+  aoCancelar: () => void;
+  aoReativar: () => void;
 }) {
   const { avisar, confirmar } = useAvisos();
   const faturaId = fatura.id;
@@ -974,7 +1102,8 @@ function AcoesDaParcela({
    * afirmando o que nao aconteceu.
    */
   async function recibo() {
-    const { imprimirReciboDePagamento } = await import("./pdf-recibo-pagamento");
+    const { imprimirReciboDePagamento } =
+      await import("./pdf-recibo-pagamento");
 
     await imprimirReciboDePagamento(
       {
@@ -995,10 +1124,19 @@ function AcoesDaParcela({
         // As que sobram depois desta. Quem assina quer saber o que falta.
         emAberto: fatura.parcelas
           .filter((x) => !x.pago && x.id !== parcela.id)
-          .map((x) => ({ numero: x.numero, vencimento: x.vencimento, total: x.total })),
+          .map((x) => ({
+            numero: x.numero,
+            vencimento: x.vencimento,
+            total: x.total,
+          })),
         totalConta: fatura.total,
-        pagoConta: fatura.parcelas.filter((x) => x.pago).reduce((soma, x) => soma + x.total, 0),
-        descontoConta: fatura.parcelas.reduce((soma, x) => soma + x.desconto, 0),
+        pagoConta: fatura.parcelas
+          .filter((x) => x.pago)
+          .reduce((soma, x) => soma + x.total, 0),
+        descontoConta: fatura.parcelas.reduce(
+          (soma, x) => soma + x.desconto,
+          0,
+        ),
         emitente: fatura.emitente,
       },
       emitidoPor,
@@ -1006,11 +1144,14 @@ function AcoesDaParcela({
   }
 
   async function enviar() {
-    const r = await fetch(`/api/v1/faturas/${faturaId}/parcelas/${parcela.id}/enviar`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-    });
+    const r = await fetch(
+      `/api/v1/faturas/${faturaId}/parcelas/${parcela.id}/enviar`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      },
+    );
     const dados = await r.json().catch(() => null);
 
     if (!r.ok) {
@@ -1021,11 +1162,14 @@ function AcoesDaParcela({
   }
 
   async function enviarWhatsapp() {
-    const r = await fetch(`/api/v1/faturas/${faturaId}/parcelas/${parcela.id}/whatsapp`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-    });
+    const r = await fetch(
+      `/api/v1/faturas/${faturaId}/parcelas/${parcela.id}/whatsapp`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      },
+    );
     const dados = await r.json().catch(() => null);
 
     if (!r.ok) {
@@ -1073,24 +1217,26 @@ function AcoesDaParcela({
           anexar um antes de existir recebimento cria uma parcela em aberto com
           prova de pagamento — a contradicao que o conferente do extrato leva
           meia hora para desfazer. */}
-      {parcela.pago && !parcela.comprovante && fatura.situacao !== "CANCELADA" && (
-        <AnexarDocumento
-          tipo="comprovante"
-          rotulo="Anexar comprovante"
-          faturaId={faturaId}
-          parcelaId={parcela.id}
-          aoMudar={() => {
-            fechar();
-            aoMudar();
-          }}
-        >
-          {/* Cedula com o visto: o papel recortado ja e o recibo, e a folha com
+      {parcela.pago &&
+        !parcela.comprovante &&
+        fatura.situacao !== "CANCELADA" && (
+          <AnexarDocumento
+            tipo="comprovante"
+            rotulo="Anexar comprovante"
+            faturaId={faturaId}
+            parcelaId={parcela.id}
+            aoMudar={() => {
+              fechar();
+              aoMudar();
+            }}
+          >
+            {/* Cedula com o visto: o papel recortado ja e o recibo, e a folha com
               dobra ja e a nota. Comprovante e dinheiro que ENTROU. */}
-          <rect x="1.6" y="4" width="12.8" height="8" rx="1" />
-          <circle cx="8" cy="8" r="1.8" />
-          <path d="M11.4 12.6l1.6 1.6 2.6-2.8" />
-        </AnexarDocumento>
-      )}
+            <rect x="1.6" y="4" width="12.8" height="8" rx="1" />
+            <circle cx="8" cy="8" r="1.8" />
+            <path d="M11.4 12.6l1.6 1.6 2.6-2.8" />
+          </AnexarDocumento>
+        )}
 
       {/* Dar baixa mora aqui, e nao no rodape: quem recebe olha a LINHA da
           parcela que venceu, e o botao no rodape obrigava a achar de novo, na
@@ -1128,6 +1274,42 @@ function AcoesDaParcela({
         quer mexer numa parcela abre o menu DELA. Agora esta nos dois lugares, e
         os dois levam a mesma tela.
       */}
+      {/*
+        ⚠️ Cancelar mora no menu DA LINHA, e não num "encerrar a partir de tal
+        data": aquele decidiria por várias parcelas a partir de um corte que a
+        tela não mostra antes de gravar. Mesma decisão do lado que paga.
+      */}
+      <ItemDoMenu
+        rotulo={parcela.cancelada ? "Reativar parcela" : "Cancelar parcela"}
+        desabilitado={parcela.pago || fatura.situacao === "CANCELADA"}
+        motivo={
+          parcela.pago
+            ? "Parcela recebida não se cancela: estorne o recebimento antes"
+            : fatura.situacao === "CANCELADA"
+              ? "Esta conta está cancelada"
+              : undefined
+        }
+        onClick={() => {
+          fechar();
+          if (parcela.cancelada) aoReativar();
+          else aoCancelar();
+        }}
+      >
+        {parcela.cancelada ? (
+          <>
+            {/* Seta que volta: o que foi cancelado torna a valer. */}
+            <path d="M3 8a5 5 0 1 1 1.6 3.7" />
+            <path d="M3 4.6V8h3.4" />
+          </>
+        ) : (
+          <>
+            {/* Círculo com um corte: existe, e deixou de valer. */}
+            <circle cx="8" cy="8" r="6" />
+            <path d="M4.4 11.6L11.6 4.4" />
+          </>
+        )}
+      </ItemDoMenu>
+
       {fatura.situacao !== "CANCELADA" && (
         <ItemDoMenu
           rotulo="Editar parcelamento"
@@ -1212,7 +1394,12 @@ function AcoesDaParcela({
 function Bolinha({
   parcela,
 }: {
-  parcela: { pago: boolean; vencimento: string | null; pagamentoId: number | null };
+  parcela: {
+    pago: boolean;
+    cancelada?: boolean;
+    vencimento: string | null;
+    pagamentoId: number | null;
+  };
 }) {
   /*
    * Conciliada e diferente de paga: paga e "o cliente pagou", conciliada e
@@ -1223,9 +1410,11 @@ function Bolinha({
     ? "Conciliada"
     : parcela.pago
       ? "Paga"
-      : vencida(parcela)
-        ? "Vencida"
-        : "Em aberto";
+      : parcela.cancelada
+        ? "Cancelada"
+        : vencida(parcela)
+          ? "Vencida"
+          : "Em aberto";
 
   return (
     <span
@@ -1246,9 +1435,10 @@ function Bolinha({
               : "var(--text-disabled)",
         // Conciliada ganha anel: a cor sozinha ja distingue de "paga", mas o
         // anel diz que aquela linha esta FECHADA, e nao so quitada.
-        boxShadow: parcela.pagamentoId ? "0 0 0 2px var(--primary-subtle)" : undefined,
+        boxShadow: parcela.pagamentoId
+          ? "0 0 0 2px var(--primary-subtle)"
+          : undefined,
       }}
     />
   );
 }
-

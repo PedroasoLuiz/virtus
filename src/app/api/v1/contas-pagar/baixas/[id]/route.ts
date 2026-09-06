@@ -15,3 +15,16 @@ export const GET = handler(
   { params: idParamSchema, requerModulo: "financeiro" },
   controller.obterBaixa,
 );
+
+/**
+ * Estornar: o dinheiro nao saiu, e as parcelas voltam a ficar em aberto.
+ *
+ * ⚠️ DELETE, e nao um PATCH de "estornada". A baixa nao vira um registro
+ * cancelado que fica na lista: ela deixa de existir, e o que existe de novo sao
+ * as parcelas em aberto. Um pagamento estornado que continuasse na listagem
+ * apareceria somando zero no total de baixas do mes, sem dizer por que.
+ */
+export const DELETE = handler(
+  { params: idParamSchema, requerModulo: "financeiro" },
+  controller.estornarBaixa,
+);

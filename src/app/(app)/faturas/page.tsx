@@ -19,7 +19,11 @@ export default async function FaturasPage() {
    * para escolher uma. O drawer passou a perguntar ao servidor conforme se
    * digita, como o da baixa ja fazia.
    */
-  const { itens } = await listarFaturas(ctx.empresaId, {}, { page: 1, perPage: 100 });
+  const { itens } = await listarFaturas(
+    ctx.empresaId,
+    {},
+    { page: 1, perPage: 100 },
+  );
 
   return (
     <FaturasTabela

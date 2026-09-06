@@ -24,7 +24,12 @@ import {
 } from "@/components/ui/kit";
 import { useAvisos } from "@/components/ui/avisos";
 import { formatarSemSimbolo, type Centavos } from "@/shared/utils/money";
-import { hoje, paraFormatoBR, periodoEmMeses, type DataISO } from "@/shared/utils/datas";
+import {
+  hoje,
+  paraFormatoBR,
+  periodoEmMeses,
+  type DataISO,
+} from "@/shared/utils/datas";
 
 /**
  * Quantos tickets cabem numa pagina.
@@ -54,7 +59,7 @@ const NUM: React.CSSProperties = {
 /**
  * Nova conta a receber, a partir dos tickets em aberto.
  *
- * O caminho do dinheiro no VPay e ticket -> conta a receber -> baixa. Esta tela
+ * O caminho do dinheiro no Vope e ticket -> conta a receber -> baixa. Esta tela
  * e o meio: escolhe o cliente, mostra o que ele tem em aberto, e vira cobranca.
  *
  * ⚠️ O valor de cada ticket NAO se edita aqui: entra o saldo inteiro. Quem
@@ -101,7 +106,11 @@ export function NovaFaturaDrawer({ onClose }: { onClose: () => void }) {
    * aparecer. Mesmo caminho que o drawer da baixa ja seguia.
    */
   const buscarClientes = useCallback(async (termo: string) => {
-    const p = new URLSearchParams({ perPage: "15", papel: "cliente", ativo: "true" });
+    const p = new URLSearchParams({
+      perPage: "15",
+      papel: "cliente",
+      ativo: "true",
+    });
     if (termo.trim()) p.set("busca", termo.trim());
 
     const r = await fetch(`/api/v1/clientes?${p.toString()}`);
@@ -109,9 +118,13 @@ export function NovaFaturaDrawer({ onClose }: { onClose: () => void }) {
 
     const corpo = await r.json();
 
-    return ((corpo.data ?? []) as { id: number; razao: string; nomeFantasia: string | null }[]).map(
-      (c) => ({ id: c.id, nome: c.nomeFantasia?.trim() || c.razao }),
-    );
+    return (
+      (corpo.data ?? []) as {
+        id: number;
+        razao: string;
+        nomeFantasia: string | null;
+      }[]
+    ).map((c) => ({ id: c.id, nome: c.nomeFantasia?.trim() || c.razao }));
   }, []);
 
   /*
@@ -126,10 +139,15 @@ export function NovaFaturaDrawer({ onClose }: { onClose: () => void }) {
 
     const controle = new AbortController();
 
-    fetch(`/api/v1/tickets/faturaveis?clienteId=${clienteId}`, { signal: controle.signal })
+    fetch(`/api/v1/tickets/faturaveis?clienteId=${clienteId}`, {
+      signal: controle.signal,
+    })
       .then(async (r) => {
         const corpo = await r.json();
-        if (!r.ok) throw new Error(corpo?.error?.message ?? "Falha ao carregar os tickets");
+        if (!r.ok)
+          throw new Error(
+            corpo?.error?.message ?? "Falha ao carregar os tickets",
+          );
         setTickets(corpo.data as TicketFaturavel[]);
       })
       .catch((e: unknown) => {
@@ -145,14 +163,20 @@ export function NovaFaturaDrawer({ onClose }: { onClose: () => void }) {
   const todos = tickets ?? [];
   const totalPaginas = Math.max(1, Math.ceil(todos.length / POR_PAGINA));
   const paginaAtual = Math.min(pagina, totalPaginas);
-  const visiveis = todos.slice((paginaAtual - 1) * POR_PAGINA, paginaAtual * POR_PAGINA);
+  const visiveis = todos.slice(
+    (paginaAtual - 1) * POR_PAGINA,
+    paginaAtual * POR_PAGINA,
+  );
 
   const escolhidos = useMemo(
     () => (tickets ?? []).filter((t) => (valores[t.id] ?? 0) > 0),
     [tickets, valores],
   );
 
-  const total = escolhidos.reduce((soma, t) => soma + (valores[t.id] ?? 0), 0) as Centavos;
+  const total = escolhidos.reduce(
+    (soma, t) => soma + (valores[t.id] ?? 0),
+    0,
+  ) as Centavos;
 
   /*
    * A competência sai do período dos tickets escolhidos, não de um campo.
@@ -161,9 +185,15 @@ export function NovaFaturaDrawer({ onClose }: { onClose: () => void }) {
    * já disse qual é a competência, e digitá-la de novo só cria a chance de
    * divergir do que está sendo cobrado.
    */
-  const datas = escolhidos.flatMap((t) => [t.inicio, t.fim]).filter(Boolean) as string[];
-  const apuracaoInicio = datas.length ? datas.reduce((a, b) => (a < b ? a : b)) : hoje();
-  const apuracaoFim = datas.length ? datas.reduce((a, b) => (a > b ? a : b)) : hoje();
+  const datas = escolhidos
+    .flatMap((t) => [t.inicio, t.fim])
+    .filter(Boolean) as string[];
+  const apuracaoInicio = datas.length
+    ? datas.reduce((a, b) => (a < b ? a : b))
+    : hoje();
+  const apuracaoFim = datas.length
+    ? datas.reduce((a, b) => (a > b ? a : b))
+    : hoje();
 
   /**
    * Marca ou desmarca um ticket.
@@ -201,7 +231,10 @@ export function NovaFaturaDrawer({ onClose }: { onClose: () => void }) {
          * primeiro ajuste — e quebraria o faturamento parcial, onde o valor
          * cobrado não é o do serviço.
          */
-        origens: escolhidos.map((t) => ({ ticketId: t.id, valor: valores[t.id] })),
+        origens: escolhidos.map((t) => ({
+          ticketId: t.id,
+          valor: valores[t.id],
+        })),
         parcelamento: {
           quantidade: parcelas,
           primeiroVencimento,
@@ -244,7 +277,11 @@ export function NovaFaturaDrawer({ onClose }: { onClose: () => void }) {
           size="xs"
           variant="primary"
           disabled={salvando || escolhidos.length === 0}
-          title={escolhidos.length === 0 ? "Escolha ao menos um ticket para cobrar" : undefined}
+          title={
+            escolhidos.length === 0
+              ? "Escolha ao menos um ticket para cobrar"
+              : undefined
+          }
           onClick={criar}
         >
           {salvando ? "Criando…" : emitir ? "Criar e emitir" : "Criar rascunho"}
@@ -336,7 +373,9 @@ export function NovaFaturaDrawer({ onClose }: { onClose: () => void }) {
                   min={1}
                   max={360}
                   value={parcelas}
-                  onChange={(e) => setParcelas(Math.max(1, Number(e.target.value) || 1))}
+                  onChange={(e) =>
+                    setParcelas(Math.max(1, Number(e.target.value) || 1))
+                  }
                   style={inputStyle}
                 />
               </Field>
@@ -351,13 +390,18 @@ export function NovaFaturaDrawer({ onClose }: { onClose: () => void }) {
               </Field>
 
               {parcelas > 1 && (
-                <Field label="Intervalo" hint="Dias entre uma parcela e a seguinte.">
+                <Field
+                  label="Intervalo"
+                  hint="Dias entre uma parcela e a seguinte."
+                >
                   <input
                     type="number"
                     min={1}
                     max={365}
                     value={intervalo}
-                    onChange={(e) => setIntervalo(Math.max(1, Number(e.target.value) || 30))}
+                    onChange={(e) =>
+                      setIntervalo(Math.max(1, Number(e.target.value) || 30))
+                    }
                     style={inputStyle}
                   />
                 </Field>
@@ -370,7 +414,12 @@ export function NovaFaturaDrawer({ onClose }: { onClose: () => void }) {
                   rows={2}
                   placeholder="Sai no documento enviado ao cliente"
                   maxLength={400}
-                  style={{ ...inputStyle, height: "auto", padding: 8, resize: "vertical" }}
+                  style={{
+                    ...inputStyle,
+                    height: "auto",
+                    padding: 8,
+                    resize: "vertical",
+                  }}
                 />
               </Field>
 
@@ -382,7 +431,10 @@ export function NovaFaturaDrawer({ onClose }: { onClose: () => void }) {
                   ⚠️ O interruptor do kit, no lugar de uma caixa de marcar nativa
                   com rotulo proprio alinhado a mao pela altura do campo.
                 */}
-                <ActiveToggle active={emitir} onChange={() => setEmitir((e) => !e)} />
+                <ActiveToggle
+                  active={emitir}
+                  onChange={() => setEmitir((e) => !e)}
+                />
               </Field>
             </GrupoDeCampos>
 
@@ -392,7 +444,11 @@ export function NovaFaturaDrawer({ onClose }: { onClose: () => void }) {
               letra. E a mesma decisao da aba de pagamentos da baixa.
             */}
             <div>
-              <PanelTabs tabs={[ABA_TICKETS, ABA_PRODUTOS]} active={aba} onChange={setAba} />
+              <PanelTabs
+                tabs={[ABA_TICKETS, ABA_PRODUTOS]}
+                active={aba}
+                onChange={setAba}
+              />
 
               {aba === ABA_PRODUTOS ? (
                 /*
@@ -414,8 +470,8 @@ export function NovaFaturaDrawer({ onClose }: { onClose: () => void }) {
                     lineHeight: 1.6,
                   }}
                 >
-                  Cobrar produto direto na conta ainda não existe. Por enquanto o
-                  produto entra pelo ticket, e o ticket entra aqui.
+                  Cobrar produto direto na conta ainda não existe. Por enquanto
+                  o produto entra pelo ticket, e o ticket entra aqui.
                 </p>
               ) : (
                 <>
@@ -449,7 +505,9 @@ export function NovaFaturaDrawer({ onClose }: { onClose: () => void }) {
                     </TableHead>
 
                     <tbody>
-                      {tickets == null && <EmptyRow colSpan={4} message="Carregando…" />}
+                      {tickets == null && (
+                        <EmptyRow colSpan={4} message="Carregando…" />
+                      )}
                       {tickets != null && tickets.length === 0 && (
                         <EmptyRow
                           colSpan={4}
@@ -483,11 +541,16 @@ export function NovaFaturaDrawer({ onClose }: { onClose: () => void }) {
 
                           <Td>
                             {t.inicio || t.fim
-                              ? periodoEmMeses(t.inicio as DataISO, t.fim as DataISO)
+                              ? periodoEmMeses(
+                                  t.inicio as DataISO,
+                                  t.fim as DataISO,
+                                )
                               : "—"}
                           </Td>
 
-                          <Td style={NUM}>{formatarSemSimbolo(t.saldo as Centavos)}</Td>
+                          <Td style={NUM}>
+                            {formatarSemSimbolo(t.saldo as Centavos)}
+                          </Td>
                         </Tr>
                       ))}
                     </tbody>

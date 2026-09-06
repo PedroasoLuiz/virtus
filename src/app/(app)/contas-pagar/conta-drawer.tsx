@@ -7,7 +7,10 @@ import { ItemDoMenu, MenuDeLinha } from "@/components/ui/menu-de-linha";
 import { NovaBaixaDrawer } from "./baixas/nova-baixa-drawer";
 import { EditorDeParcelamento } from "@/components/financeiro/editor-de-parcelamento";
 import { oQuePodeNaConta } from "@/shared/domain/parcelas";
-import { LancamentosDaConta, type LancamentoDaConta } from "./lancamentos-da-conta";
+import {
+  LancamentosDaConta,
+  type LancamentoDaConta,
+} from "./lancamentos-da-conta";
 import {
   AcoesDaLinha,
   Alert,
@@ -50,6 +53,9 @@ type Parcela = {
   desconto: number;
   total: number;
   pago: boolean;
+  /** Combinada, mas nao vai mais acontecer: o contrato foi encerrado antes. */
+  cancelada: boolean;
+  motivoDoCancelamento: string | null;
   /** O dinheiro desta parcela ja bateu no extrato. */
   conciliado: boolean;
   nfs: string | null;
@@ -80,8 +86,17 @@ type Conta = {
   fornecedorDoc: string | null;
   centroCustoNome: string | null;
   parcelas: Parcela[];
-  anexos: { id: number; nome: string; caminho: string; criadoEm: string | null }[];
-  rateio: { centroCustoId: number | null; centroCustoNome: string | null; valor: number }[];
+  anexos: {
+    id: number;
+    nome: string;
+    caminho: string;
+    criadoEm: string | null;
+  }[];
+  rateio: {
+    centroCustoId: number | null;
+    centroCustoNome: string | null;
+    valor: number;
+  }[];
   lancamentos: LancamentoDaConta[];
 };
 
@@ -91,18 +106,44 @@ const NUM: React.CSSProperties = {
   fontVariantNumeric: "tabular-nums",
 };
 
-export function ContaDrawer({ contaId, onClose }: { contaId: number | null; onClose: () => void }) {
+export function ContaDrawer({
+  contaId,
+  onClose,
+  nivel,
+}: {
+  contaId: number | null;
+  onClose: () => void;
+  /**
+   * O andar em que ele abre. Padrao 1, o da tela de listagem.
+   *
+   * ⚠️ Existe porque o extrato abre este mesmo drawer POR CIMA dele: a coluna
+   * "Registro" leva da linha do banco ate o titulo sem sair da conferencia. No
+   * andar 1 os dois ficariam empilhados no mesmo z, e fechar um fecharia a
+   * leitura do outro junto.
+   */
+  nivel?: 1 | 2 | 3;
+}) {
   // `key` remonta a cada conta: o estado nasce vazio sozinho, sem limpar a mao
   // dentro de um efeito, e sem mostrar o registro anterior enquanto carrega.
   return contaId == null ? null : (
-    <Conteudo key={contaId} contaId={contaId} onClose={onClose} />
+    <Conteudo key={contaId} contaId={contaId} onClose={onClose} nivel={nivel} />
   );
 }
 
-function Conteudo({ contaId, onClose }: { contaId: number; onClose: () => void }) {
+function Conteudo({
+  contaId,
+  onClose,
+  nivel,
+}: {
+  contaId: number;
+  onClose: () => void;
+  nivel?: 1 | 2 | 3;
+}) {
   const [conta, setConta] = useState<Conta | null>(null);
   const [erro, setErro] = useState<string | null>(null);
-  const [aba, setAba] = useState<"lancamentos" | "parcelas" | "anexos">("lancamentos");
+  const [aba, setAba] = useState<"lancamentos" | "parcelas" | "anexos">(
+    "lancamentos",
+  );
   /** A parcela que o menu da linha mandou baixar. */
   const [baixando, setBaixando] = useState<number | null>(null);
   /** O total que a edicao de lancamentos ainda nao gravou. Nulo fora de edicao. */
@@ -126,7 +167,10 @@ function Conteudo({ contaId, onClose }: { contaId: number; onClose: () => void }
     setSalvandoObs(false);
 
     if (!r.ok) {
-      avisar("atencao", dados?.error?.message ?? "Não foi possível salvar a observação");
+      avisar(
+        "atencao",
+        dados?.error?.message ?? "Não foi possível salvar a observação",
+      );
       return;
     }
 
@@ -147,11 +191,17 @@ function Conteudo({ contaId, onClose }: { contaId: number; onClose: () => void }
     const corpo = new FormData();
     corpo.append("arquivo", arquivo);
 
-    const r = await fetch(`/api/v1/contas-pagar/${contaId}/anexos`, { method: "POST", body: corpo });
+    const r = await fetch(`/api/v1/contas-pagar/${contaId}/anexos`, {
+      method: "POST",
+      body: corpo,
+    });
     const dados = await r.json().catch(() => null);
 
     if (!r.ok) {
-      avisar("atencao", dados?.error?.message ?? "Não foi possível enviar o arquivo");
+      avisar(
+        "atencao",
+        dados?.error?.message ?? "Não foi possível enviar o arquivo",
+      );
       return;
     }
 
@@ -166,12 +216,56 @@ function Conteudo({ contaId, onClose }: { contaId: number; onClose: () => void }
     const dados = await r.json().catch(() => null);
 
     if (!r.ok) {
-      avisar("atencao", dados?.error?.message ?? "Não foi possível remover o arquivo");
+      avisar(
+        "atencao",
+        dados?.error?.message ?? "Não foi possível remover o arquivo",
+      );
       return;
     }
 
     setConta(dados.data as Conta);
     avisar("sucesso", "Arquivo removido");
+  }
+
+  /**
+   * Cancela uma parcela: ela foi combinada, mas não vai mais acontecer.
+   *
+   * ⚠️ NÃO é apagar. A conta continua dizendo que o acordo previa doze parcelas,
+   * e é isso que se explica depois; o que muda é que ela para de ser cobrada e
+   * sai do "em aberto".
+   */
+  async function cancelarParcela(parcelaId: number) {
+    const r = await fetch(
+      `/api/v1/contas-pagar/${contaId}/parcelas/${parcelaId}/cancelamento`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      },
+    );
+
+    if (!r.ok) {
+      const corpo = await r.json().catch(() => null);
+      avisar("atencao", corpo?.error?.message ?? "Não foi possível cancelar");
+      return;
+    }
+
+    await recarregar();
+  }
+
+  async function reativarParcela(parcelaId: number) {
+    const r = await fetch(
+      `/api/v1/contas-pagar/${contaId}/parcelas/${parcelaId}/cancelamento`,
+      { method: "DELETE" },
+    );
+
+    if (!r.ok) {
+      const corpo = await r.json().catch(() => null);
+      avisar("atencao", corpo?.error?.message ?? "Não foi possível reativar");
+      return;
+    }
+
+    await recarregar();
   }
 
   /** Relê a conta do servidor. Usado depois de gravar por outro caminho. */
@@ -189,7 +283,8 @@ function Conteudo({ contaId, onClose }: { contaId: number; onClose: () => void }
     fetch(`/api/v1/contas-pagar/${contaId}`, { signal: controle.signal })
       .then(async (r) => {
         const corpo = await r.json();
-        if (!r.ok) throw new Error(corpo?.error?.message ?? "Falha ao carregar a conta");
+        if (!r.ok)
+          throw new Error(corpo?.error?.message ?? "Falha ao carregar a conta");
         setConta(corpo.data);
         setObservacoes((corpo.data as Conta).observacoes ?? "");
       })
@@ -210,9 +305,20 @@ function Conteudo({ contaId, onClose }: { contaId: number; onClose: () => void }
    * em aberto para sempre. Parcela paga nao espera mais nada. Mesma regra do
    * lado que recebe.
    */
-  const pago = conta ? conta.parcelas.filter((p) => p.pago).reduce((s, p) => s + p.total, 0) : 0;
+  const pago = conta
+    ? conta.parcelas.filter((p) => p.pago).reduce((s, p) => s + p.total, 0)
+    : 0;
+  /*
+   * ⚠️ Parcela CANCELADA nao entra no "em aberto".
+   *
+   * Ela continua na conta porque foi combinada, mas ninguem vai pagar: somada,
+   * a conta ficaria devendo para sempre um dinheiro que o contrato encerrado ja
+   * dispensou.
+   */
   const emAberto = conta
-    ? conta.parcelas.filter((p) => !p.pago).reduce((s, p) => s + p.total, 0)
+    ? conta.parcelas
+        .filter((p) => !p.pago && !p.cancelada)
+        .reduce((s, p) => s + p.total, 0)
     : 0;
 
   /*
@@ -238,6 +344,7 @@ function Conteudo({ contaId, onClose }: { contaId: number; onClose: () => void }
   return (
     <Drawer
       open
+      nivel={nivel}
       onClose={onClose}
       /*
         ⚠️ O titulo nao carrega mais o numero. Ele virou o campo "Código" no alto
@@ -342,7 +449,11 @@ function Conteudo({ contaId, onClose }: { contaId: number; onClose: () => void }
             */}
             <Field label={ehPessoaFisica(conta.fornecedorDoc) ? "CPF" : "CNPJ"}>
               <CampoBloqueado
-                valor={conta.fornecedorDoc ? formatarDocumento(conta.fornecedorDoc) : "—"}
+                valor={
+                  conta.fornecedorDoc
+                    ? formatarDocumento(conta.fornecedorDoc)
+                    : "—"
+                }
               />
             </Field>
 
@@ -360,7 +471,9 @@ function Conteudo({ contaId, onClose }: { contaId: number; onClose: () => void }
               <CampoBloqueado
                 valor={
                   conta.documento
-                    ? [conta.tipoDocumentoSigla, conta.documento].filter(Boolean).join(" ")
+                    ? [conta.tipoDocumentoSigla, conta.documento]
+                        .filter(Boolean)
+                        .join(" ")
                     : "—"
                 }
               />
@@ -368,7 +481,9 @@ function Conteudo({ contaId, onClose }: { contaId: number; onClose: () => void }
 
             <Field label="Emissão">
               <CampoBloqueado
-                valor={conta.emissao ? paraFormatoBR(conta.emissao as DataISO) : "—"}
+                valor={
+                  conta.emissao ? paraFormatoBR(conta.emissao as DataISO) : "—"
+                }
               />
             </Field>
 
@@ -406,7 +521,7 @@ function Conteudo({ contaId, onClose }: { contaId: number; onClose: () => void }
               {/*
                 ⚠️ O campo continua o MESMO: mesma caixa, mesmo tamanho, mesmo
                 cadeado. O total novo entra DENTRO dele, depois do antigo, no
-                verde da marca. Trocado por outro componente, o bloco pulava de
+                cor da marca. Trocado por outro componente, o bloco pulava de
                 altura ao entrar em edicao.
               */}
               <CampoBloqueado
@@ -436,7 +551,9 @@ function Conteudo({ contaId, onClose }: { contaId: number; onClose: () => void }
             </Field>
 
             <Field label="Em aberto">
-              <CampoBloqueado valor={formatarSemSimbolo(emAberto as Centavos)} />
+              <CampoBloqueado
+                valor={formatarSemSimbolo(emAberto as Centavos)}
+              />
             </Field>
 
             {/*
@@ -450,7 +567,10 @@ function Conteudo({ contaId, onClose }: { contaId: number; onClose: () => void }
               ela nasce depois. Travada, obrigaria a abrir outra tela para
               escrever "combinei prorrogar com o fornecedor".
             */}
-            <Field label="Observações" hint={salvandoObs ? "Salvando…" : "Salva ao sair do campo."}>
+            <Field
+              label="Observações"
+              hint={salvandoObs ? "Salvando…" : "Salva ao sair do campo."}
+            >
               <textarea
                 value={observacoes}
                 onChange={(e) => setObservacoes(e.target.value)}
@@ -463,7 +583,12 @@ function Conteudo({ contaId, onClose }: { contaId: number; onClose: () => void }
                 rows={3}
                 maxLength={4000}
                 placeholder="Anotação de quem trabalha nesta conta"
-                style={{ ...inputStyle, height: "auto", padding: 8, resize: "vertical" }}
+                style={{
+                  ...inputStyle,
+                  height: "auto",
+                  padding: 8,
+                  resize: "vertical",
+                }}
               />
             </Field>
           </div>
@@ -523,7 +648,9 @@ function Conteudo({ contaId, onClose }: { contaId: number; onClose: () => void }
                 Fica visivel e travado enquanto o editor nao existe: escondido,
                 ninguem descobriria que ele vai existir.
               */
-              onIncluir={conta.cancelada ? undefined : () => setParcelando(true)}
+              onIncluir={
+                conta.cancelada ? undefined : () => setParcelando(true)
+              }
               rotuloIncluir="Mexer no parcelamento"
             >
               {/*
@@ -562,33 +689,77 @@ function Conteudo({ contaId, onClose }: { contaId: number; onClose: () => void }
                         se perde no meio da tabela, e atraso e o unico estado aqui
                         que pede acao hoje.
                       */
+                      /*
+                        ⚠️ A cancelada fica APAGADA, e nao escondida. Ela continua
+                        contando a história do contrato — doze combinadas, quatro
+                        aconteceram — e sumindo da tabela essa história se perde.
+                      */
                       style={
-                        parcelaVencida(p)
-                          ? { background: "var(--danger-bg)", color: "var(--danger-text)" }
-                          : undefined
+                        p.cancelada
+                          ? { color: "var(--text-disabled)" }
+                          : parcelaVencida(p)
+                            ? {
+                                background: "var(--danger-bg)",
+                                color: "var(--danger-text)",
+                              }
+                            : undefined
                       }
                     >
                       <Td>
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 7,
+                          }}
+                        >
                           <Bolinha parcela={p} />
                           {p.numero}
                         </span>
                       </Td>
 
                       <Td>
-                        <MarcaDeConciliacao conciliado={p.conciliado} />
+                        <MarcaDeConciliacao
+                          conciliado={p.conciliado}
+                          cancelada={p.cancelada}
+                        />
                       </Td>
 
                       <Td style={NUM}>
                         {p.vencimento ? (
                           paraFormatoBR(p.vencimento as DataISO)
                         ) : (
-                          <span style={{ color: "var(--text-disabled)" }}>—</span>
+                          <span style={{ color: "var(--text-disabled)" }}>
+                            —
+                          </span>
                         )}
                       </Td>
 
                       <Td style={NUM}>
                         {formatarSemSimbolo(p.total as Centavos)}
+
+                        {/*
+                          ⚠️ Mesma anatomia do desconto logo abaixo: o valor em
+                          cima, e o que aconteceu com ele numa segunda linha
+                          menor. Era um risco em cima do número, que dizia
+                          "isto não vale" sem dizer por quê — e risco some na
+                          impressão e para quem enxerga pouco.
+                        */}
+                        {p.cancelada && (
+                          <div
+                            title={
+                              p.motivoDoCancelamento ??
+                              "Não vai mais acontecer: continua na conta como histórico"
+                            }
+                            style={{
+                              marginTop: 1,
+                              fontSize: "var(--text-xs)",
+                              color: "var(--text-disabled)",
+                            }}
+                          >
+                            cancelada
+                          </div>
+                        )}
 
                         {/* Desconto dado na baixa: sem mostrar aqui, a soma das
                             parcelas nao fecha com o total e parece erro de conta. */}
@@ -607,7 +778,11 @@ function Conteudo({ contaId, onClose }: { contaId: number; onClose: () => void }
                       </Td>
 
                       <Td>
-                        <Anexos boleto={p.boleto} nfs={p.nfs} comprovante={p.comprovante} />
+                        <Anexos
+                          boleto={p.boleto}
+                          nfs={p.nfs}
+                          comprovante={p.comprovante}
+                        />
                       </Td>
 
                       <Td>
@@ -622,6 +797,15 @@ function Conteudo({ contaId, onClose }: { contaId: number; onClose: () => void }
                                 aoBaixar={() => setBaixando(p.id)}
                                 aoEditarParcelamento={() => setParcelando(true)}
                                 aoMudar={setConta}
+                                aoCancelar={() =>
+                                  confirmar(
+                                    `Cancelar a parcela ${p.numero}?`,
+                                    "Cancelar parcela",
+                                    () => void cancelarParcela(p.id),
+                                    "Ela deixa de ser cobrada e continua na conta, marcada como cancelada.",
+                                  )
+                                }
+                                aoReativar={() => void reativarParcela(p.id)}
                               />
                             )}
                           </MenuDeLinha>
@@ -689,14 +873,19 @@ function Conteudo({ contaId, onClose }: { contaId: number; onClose: () => void }
 
                 <tbody>
                   {conta.anexos.length === 0 && (
-                    <EmptyRow colSpan={3} message="Nenhum arquivo anexado a esta conta." />
+                    <EmptyRow
+                      colSpan={3}
+                      message="Nenhum arquivo anexado a esta conta."
+                    />
                   )}
 
                   {conta.anexos.map((a, i) => (
                     <Tr key={a.id} delay={i * 12}>
                       <Td>{a.nome}</Td>
                       <Td style={NUM}>
-                        {a.criadoEm ? paraFormatoBR(a.criadoEm.slice(0, 10) as DataISO) : "—"}
+                        {a.criadoEm
+                          ? paraFormatoBR(a.criadoEm.slice(0, 10) as DataISO)
+                          : "—"}
                       </Td>
                       <Td>
                         {/*
@@ -767,6 +956,7 @@ function Conteudo({ contaId, onClose }: { contaId: number; onClose: () => void }
             vencimento: p.vencimento,
             total: p.total,
             pago: p.pago,
+            cancelada: p.cancelada,
           }))}
           pode={oQuePodeNaConta({
             cancelada: conta.cancelada,
@@ -776,10 +966,7 @@ function Conteudo({ contaId, onClose }: { contaId: number; onClose: () => void }
               vencimento: (p.vencimento ?? hoje()) as DataISO,
               valor: p.total as Centavos,
               pago: p.pago,
-              // ⚠️ Comprovante conta como documento: mexer no vencimento de uma
-              // parcela cuja prova de pagamento ja foi emitida faria o papel
-              // apontar para uma data que nao existe mais.
-              temDocumento: p.nfs != null || p.boleto != null || p.comprovante != null,
+              cancelada: p.cancelada,
             })),
           })}
           onClose={() => setParcelando(false)}
@@ -792,7 +979,10 @@ function Conteudo({ contaId, onClose }: { contaId: number; onClose: () => void }
 
       {baixando != null && conta && (
         <NovaBaixaDrawer
-          fornecedorInicial={{ id: conta.fornecedorId ?? 0, nome: conta.fornecedorNome }}
+          fornecedorInicial={{
+            id: conta.fornecedorId ?? 0,
+            nome: conta.fornecedorNome,
+          }}
           parcelaInicial={baixando}
           onClose={() => setBaixando(null)}
         />
@@ -807,8 +997,21 @@ function Conteudo({ contaId, onClose }: { contaId: number; onClose: () => void }
  * ⚠️ So parcela NAO paga vence. Numa paga a data e historia, e pintar a linha de
  * vermelho encheria a tabela de atraso que ja foi resolvido.
  */
-function parcelaVencida(p: { pago: boolean; vencimento: string | null }): boolean {
-  return !p.pago && p.vencimento != null && p.vencimento < hoje();
+/**
+ * ⚠️ Parcela CANCELADA nunca esta vencida.
+ *
+ * Vencida fala de cobranca atrasada, e a cancelada nao vai ser cobrada. Sem esta
+ * condicao, encerrar um contrato pintava de vermelho justamente as parcelas que
+ * a pessoa acabou de dizer que nao existem mais.
+ */
+function parcelaVencida(p: {
+  pago: boolean;
+  cancelada?: boolean;
+  vencimento: string | null;
+}): boolean {
+  return (
+    !p.pago && !p.cancelada && p.vencimento != null && p.vencimento < hoje()
+  );
 }
 
 /**
@@ -820,15 +1023,29 @@ function parcelaVencida(p: { pago: boolean; vencimento: string | null }): boolea
 function Bolinha({
   parcela,
 }: {
-  parcela: { pago: boolean; conciliado: boolean; vencimento: string | null };
+  parcela: {
+    pago: boolean;
+    cancelada?: boolean;
+    conciliado: boolean;
+    vencimento: string | null;
+  };
 }) {
+  /*
+   * ⚠️ Cancelada e testada ANTES de vencida e de "em aberto", e depois de paga.
+   *
+   * Depois de paga porque dinheiro que saiu manda em qualquer marca; antes das
+   * outras duas porque uma parcela que nao vai acontecer nao esta esperando nem
+   * atrasada.
+   */
   const estado = parcela.conciliado
     ? "Conciliada"
     : parcela.pago
       ? "Paga"
-      : parcelaVencida(parcela)
-        ? "Vencida"
-        : "Em aberto";
+      : parcela.cancelada
+        ? "Cancelada"
+        : parcelaVencida(parcela)
+          ? "Vencida"
+          : "Em aberto";
 
   const cor =
     estado === "Conciliada"
@@ -871,6 +1088,8 @@ function AcoesDaParcela({
   aoBaixar,
   aoEditarParcelamento,
   aoMudar,
+  aoCancelar,
+  aoReativar,
 }: {
   contaId: number;
   parcela: Parcela;
@@ -879,6 +1098,8 @@ function AcoesDaParcela({
   aoBaixar: () => void;
   aoEditarParcelamento: () => void;
   aoMudar: (conta: Conta) => void;
+  aoCancelar: () => void;
+  aoReativar: () => void;
 }) {
   const entrada = useRef<HTMLInputElement>(null);
   const [tipo, setTipo] = useState<"nfs" | "boleto" | "comprovante">("nfs");
@@ -948,6 +1169,33 @@ function AcoesDaParcela({
         }}
       />
 
+      {/*
+        ⚠️ Cancelar mora no menu DA LINHA, e não num botão de "encerrar a partir
+        de tal data" acima da tabela.
+
+        Aquele decidia por várias parcelas de uma vez, a partir de um corte que a
+        tela não mostrava antes de gravar. Aqui a pessoa vê a parcela, cancela
+        aquela, e repete quantas vezes quiser — e o que aconteceu está sempre à
+        vista, linha a linha.
+      */}
+      <ItemDoMenu
+        rotulo={parcela.cancelada ? "Reativar parcela" : "Cancelar parcela"}
+        icone={parcela.cancelada ? <IconeReativar /> : <IconeCancelar />}
+        desabilitado={parcela.pago || cancelada}
+        motivo={
+          parcela.pago
+            ? "Parcela paga não se cancela: estorne a baixa antes"
+            : cancelada
+              ? "Esta conta está cancelada"
+              : undefined
+        }
+        onClick={() => {
+          fechar();
+          if (parcela.cancelada) aoReativar();
+          else aoCancelar();
+        }}
+      />
+
       <ItemDoMenu
         rotulo={parcela.nfs ? "Trocar a nota" : "Anexar nota"}
         icone={<IconeNota />}
@@ -970,7 +1218,9 @@ function AcoesDaParcela({
         cobra de novo. Ele nem existia como coluna ate agora.
       */}
       <ItemDoMenu
-        rotulo={parcela.comprovante ? "Trocar o comprovante" : "Anexar comprovante"}
+        rotulo={
+          parcela.comprovante ? "Trocar o comprovante" : "Anexar comprovante"
+        }
         icone={<IconeComprovante />}
         desabilitado={cancelada}
         motivo={cancelada ? "Conta cancelada não recebe documento" : undefined}
@@ -1137,3 +1387,39 @@ function Anexo({ href, rotulo }: { href: string; rotulo: string }) {
   );
 }
 
+/** Círculo com um corte: existe, e deixou de valer. */
+function IconeCancelar() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+    >
+      <circle cx="8" cy="8" r="6" />
+      <path d="M4.4 11.6L11.6 4.4" />
+    </svg>
+  );
+}
+
+/** Seta que volta: o que foi cancelado torna a valer. */
+function IconeReativar() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M3 8a5 5 0 1 1 1.6 3.7" />
+      <path d="M3 4.6V8h3.4" />
+    </svg>
+  );
+}

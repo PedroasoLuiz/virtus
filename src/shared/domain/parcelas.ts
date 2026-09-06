@@ -35,6 +35,15 @@ export type Parcela = {
 export type ParcelaExistente = Parcela & {
   id: number;
   pago: boolean;
+  /**
+   * Combinada, mas nao vai mais acontecer (contrato encerrado antes dela).
+   *
+   * ⚠️ So o lado que PAGA tem isso hoje, e por isso e opcional. Ela continua
+   * somando no total da conta — o cronograma inteiro foi combinado —, mas nao
+   * se mexe nela sem antes reativar: mudar valor ou data de uma parcela que nao
+   * vai acontecer e escrever sobre um registro que ja foi encerrado.
+   */
+  cancelada?: boolean;
 };
 
 export const INTERVALO_PADRAO_DIAS = 30;
@@ -65,11 +74,19 @@ export function gerarParcelas({
   if (total <= 0) {
     throw new BusinessRuleError("Total do titulo deve ser maior que zero");
   }
-  if (!Number.isInteger(quantidade) || quantidade < 1 || quantidade > MAX_PARCELAS) {
-    throw new BusinessRuleError(`Quantidade de parcelas deve estar entre 1 e ${MAX_PARCELAS}`);
+  if (
+    !Number.isInteger(quantidade) ||
+    quantidade < 1 ||
+    quantidade > MAX_PARCELAS
+  ) {
+    throw new BusinessRuleError(
+      `Quantidade de parcelas deve estar entre 1 e ${MAX_PARCELAS}`,
+    );
   }
   if (!Number.isInteger(intervaloDias) || intervaloDias < 1) {
-    throw new BusinessRuleError("Intervalo entre parcelas deve ser de ao menos 1 dia");
+    throw new BusinessRuleError(
+      "Intervalo entre parcelas deve ser de ao menos 1 dia",
+    );
   }
 
   const valores = dividir(total, quantidade);
@@ -79,7 +96,9 @@ export function gerarParcelas({
     // O deslocamento parte SEMPRE da data original, nao da anterior ja
     // ajustada — senao o ajuste de dia util acumula e a ultima parcela sai
     // dias adiante do previsto.
-    vencimento: proximoDiaUtil(somarDias(primeiroVencimento, intervaloDias * i)),
+    vencimento: proximoDiaUtil(
+      somarDias(primeiroVencimento, intervaloDias * i),
+    ),
     valor,
   }));
 }
@@ -105,7 +124,9 @@ export function adicionarParcela(parcelas: ParcelaExistente[]): {
   if (ultima.pago) {
     // Guarda que o legado nao tinha: dividir uma parcela ja baixada
     // desalinharia o titulo do pagamento registrado.
-    throw new BusinessRuleError("A ultima parcela ja foi paga e nao pode ser dividida");
+    throw new BusinessRuleError(
+      "A ultima parcela ja foi paga e nao pode ser dividida",
+    );
   }
   if (ultima.valor < 2) {
     throw new BusinessRuleError("Parcela pequena demais para ser dividida");
@@ -144,7 +165,9 @@ export function excluirParcela(
   const ordenadas = ordenar(parcelas);
 
   if (ordenadas.length <= 1) {
-    throw new BusinessRuleError("Nao e possivel excluir a unica parcela do titulo");
+    throw new BusinessRuleError(
+      "Nao e possivel excluir a unica parcela do titulo",
+    );
   }
 
   const alvo = ordenadas.find((p) => p.id === idExcluir);
@@ -189,10 +212,20 @@ export type ParcelaNaFila = {
   total: number;
   recebido: number;
   pago: boolean;
+  /** Combinada, mas nao vai mais ser cobrada: contrato encerrado antes dela. */
+  cancelada?: boolean;
 };
 
+/**
+ * A parcela ainda espera dinheiro?
+ *
+ * ⚠️ E o unico lugar que responde isso deste lado, e por isso a CANCELADA entra
+ * aqui: o saldo a receber, a proxima da fila e a ordem de cobranca saem todos
+ * desta funcao. Filtrando a cancelada em cada um deles, bastaria esquecer um
+ * para a conta continuar cobrando o que o contrato encerrado ja dispensou.
+ */
 export function esperaDinheiro(p: ParcelaNaFila): boolean {
-  return !p.pago && p.total - p.recebido > 0;
+  return !p.pago && !p.cancelada && p.total - p.recebido > 0;
 }
 
 /**
@@ -206,7 +239,9 @@ export function esperaDinheiro(p: ParcelaNaFila): boolean {
  * Uma parcela paga nao espera mais nada, com desconto ou sem.
  */
 export function saldoAReceber(parcelas: ParcelaNaFila[]): number {
-  return parcelas.filter(esperaDinheiro).reduce((s, p) => s + (p.total - p.recebido), 0);
+  return parcelas
+    .filter(esperaDinheiro)
+    .reduce((s, p) => s + (p.total - p.recebido), 0);
 }
 
 /** O que de fato entrou, somando parcela quitada e parcela recebida pela metade. */
@@ -239,7 +274,9 @@ export function filaDeRecebimento<T extends ParcelaNaFila>(parcelas: T[]): T[] {
  * sem receber usa o desconto da baixa, que registra a decisao; pular nao
  * registra nada.
  */
-export function proximaAReceber<T extends ParcelaNaFila>(parcelas: T[]): T | null {
+export function proximaAReceber<T extends ParcelaNaFila>(
+  parcelas: T[],
+): T | null {
   return filaDeRecebimento(parcelas).find(esperaDinheiro) ?? null;
 }
 
@@ -280,14 +317,20 @@ export function paradaNaFila<T extends ParcelaNaFila>(
  * transforma um erro de centavos num 422 explicito em vez de num titulo
  * silenciosamente errado.
  */
-export function conferirTotal(parcelas: { valor: Centavos }[], total: Centavos): void {
+export function conferirTotal(
+  parcelas: { valor: Centavos }[],
+  total: Centavos,
+): void {
   const soma = parcelas.reduce<Centavos>((acc, p) => somar(acc, p.valor), ZERO);
   if (soma !== total) {
-    throw new BusinessRuleError("Soma das parcelas nao confere com o total do titulo", {
-      soma,
-      total,
-      diferenca: subtrair(soma, total),
-    });
+    throw new BusinessRuleError(
+      "Soma das parcelas nao confere com o total do titulo",
+      {
+        soma,
+        total,
+        diferenca: subtrair(soma, total),
+      },
+    );
   }
 }
 
@@ -297,14 +340,15 @@ function ordenar(parcelas: ParcelaExistente[]): ParcelaExistente[] {
 
 // ── O que da para fazer nesta conta ─────────────────────────────────────────
 
-/**
- * Uma parcela, do ponto de vista de quem quer MEXER nela.
- *
- * âš ï¸ `temDocumento` e boleto ou nota emitidos, e nao o comprovante. Comprovante e
- * prova de que o dinheiro entrou; boleto e nota sao promessas que sairam com um
- * valor escrito, e mudar a parcela depois deixa o documento mentindo.
+/*
+ * Aqui existia um tipo `ParcelaEditavel`, que era a parcela mais a marca
+ * `temDocumento`, e essa marca travava a parcela com boleto ou nota emitidos.
+ * Ela deixou de existir: quem anexa esses arquivos e a propria empresa, a mao, e
+ * enquanto a parcela nao foi baixada mudar a data e gesto legitimo — o documento
+ * novo sai depois. O que sustenta isso do lado tecnico e `aplicarParcelamento`,
+ * que atualiza a parcela NO LUGAR, entao o anexo e o token do link publico
+ * sobrevivem a mudanca.
  */
-export type ParcelaEditavel = ParcelaExistente & { temDocumento: boolean };
 
 export type Permissao = {
   pode: boolean;
@@ -345,7 +389,7 @@ const LIBERADO: Permissao = { pode: true, motivo: null };
  */
 export function oQuePodeNaConta(conta: {
   cancelada: boolean;
-  parcelas: ParcelaEditavel[];
+  parcelas: ParcelaExistente[];
 }): OQuePodeNaConta {
   if (conta.cancelada) {
     const negado = { pode: false, motivo: "Esta conta está cancelada." };
@@ -377,15 +421,24 @@ export function oQuePodeNaConta(conta: {
     tickets,
     parcelas,
     porParcela: Object.fromEntries(
+      /*
+       * A BAIXA e a trava principal. Boleto e nota emitidos travavam junto, e
+       * isso estava errado: eles sao anexados a mao, entao a data combinada com
+       * o cliente mudava e o sistema recusava registrar o combinado.
+       *
+       * ⚠️ A CANCELADA tambem trava, e continua aparecendo no cronograma: ela
+       * soma no total da conta, entao esconde-la faria a conferencia da soma
+       * acusar diferenca; e deixa-la editavel faria alguem mudar o valor de uma
+       * parcela que ja foi dada por encerrada.
+       */
       conta.parcelas.map((p) => [
         p.id,
         p.pago
           ? { pode: false, motivo: "Parcela já recebida." }
-          : p.temDocumento
+          : p.cancelada
             ? {
                 pode: false,
-                motivo:
-                  "Já saiu boleto ou nota desta parcela. Mudar o valor ou o vencimento deixaria o documento dizendo outra coisa.",
+                motivo: "Parcela cancelada. Reative antes de mexer nela.",
               }
             : LIBERADO,
       ]),
@@ -406,22 +459,23 @@ export function oQuePodeNaConta(conta: {
  * (que manda no sistema) passaria a discordar da numeracao.
  */
 export function dividirParcela(
-  parcelas: ParcelaEditavel[],
+  parcelas: ParcelaExistente[],
   idOrigem: number,
   novo: { valor: Centavos; vencimento: DataISO },
-): { atualizar: { id: number; numero: number; valor: Centavos }[]; criar: Parcela } {
+): {
+  atualizar: { id: number; numero: number; valor: Centavos }[];
+  criar: Parcela;
+} {
   const alvo = parcelas.find((p) => p.id === idOrigem);
 
   if (!alvo) throw new BusinessRuleError("Parcela nao pertence a esta conta");
-  if (alvo.pago) throw new BusinessRuleError("Parcela ja recebida nao pode ser dividida");
-  if (alvo.temDocumento) {
-    throw new BusinessRuleError(
-      "Ja saiu boleto ou nota desta parcela; mudar o valor deixaria o documento dizendo outra coisa",
-    );
-  }
+  if (alvo.pago)
+    throw new BusinessRuleError("Parcela ja recebida nao pode ser dividida");
 
   if (novo.valor <= 0) {
-    throw new BusinessRuleError("O valor da parcela nova deve ser maior que zero");
+    throw new BusinessRuleError(
+      "O valor da parcela nova deve ser maior que zero",
+    );
   }
   if (novo.valor >= alvo.valor) {
     // Igual deixaria a parcela de origem zerada; maior, negativa.
@@ -430,16 +484,18 @@ export function dividirParcela(
     );
   }
   if (novo.vencimento <= alvo.vencimento) {
-    throw new BusinessRuleError("O vencimento da parcela nova tem de ser depois do da origem");
+    throw new BusinessRuleError(
+      "O vencimento da parcela nova tem de ser depois do da origem",
+    );
   }
 
-  const comANova: ParcelaEditavel[] = [
+  const comANova: ParcelaExistente[] = [
     ...parcelas.map((p) =>
       p.id === idOrigem ? { ...p, valor: subtrair(p.valor, novo.valor) } : p,
     ),
     // Id negativo: ela ainda nao existe no banco, e so serve para a renumeracao
     // enxergar a nova no lugar certo da fila.
-    { id: -1, numero: 0, pago: false, temDocumento: false, ...novo },
+    { id: -1, numero: 0, pago: false, ...novo },
   ];
 
   const numerada = renumerar(comANova);
@@ -449,7 +505,11 @@ export function dividirParcela(
     atualizar: numerada
       .filter((p) => p.id !== -1)
       .map((p) => ({ id: p.id, numero: p.numero, valor: p.valor })),
-    criar: { numero: nova.numero, vencimento: nova.vencimento, valor: nova.valor },
+    criar: {
+      numero: nova.numero,
+      vencimento: nova.vencimento,
+      valor: nova.valor,
+    },
   };
 }
 
@@ -465,11 +525,13 @@ export function dividirParcela(
  * recebimento.
  */
 export function redistribuirTotal(
-  parcelas: ParcelaEditavel[],
+  parcelas: ParcelaExistente[],
   novoTotal: Centavos,
 ): { id: number; numero: number; vencimento: DataISO; valor: Centavos }[] {
   if (parcelas.some((p) => p.pago)) {
-    throw new BusinessRuleError("Conta com parcela recebida nao tem o total redistribuido");
+    throw new BusinessRuleError(
+      "Conta com parcela recebida nao tem o total redistribuido",
+    );
   }
   if (parcelas.length === 0) throw new BusinessRuleError("Conta sem parcelas");
   if (novoTotal < parcelas.length) {
@@ -495,7 +557,7 @@ export function redistribuirTotal(
  * "parcela 2", e renumerar depois faria o papel dele apontar para outra. As em
  * aberto ficam com os numeros que sobram, na ordem em que vencem.
  */
-function renumerar(parcelas: ParcelaEditavel[]): ParcelaEditavel[] {
+function renumerar(parcelas: ParcelaExistente[]): ParcelaExistente[] {
   const pagas = parcelas.filter((p) => p.pago);
   const usados = new Set(pagas.map((p) => p.numero));
 
@@ -519,7 +581,6 @@ function renumerar(parcelas: ParcelaEditavel[]): ParcelaEditavel[] {
   return [...pagas, ...abertas].sort((a, b) => a.numero - b.numero);
 }
 
-
 /**
  * O parcelamento inteiro, do jeito que a tela desenhou.
  *
@@ -540,11 +601,16 @@ export type ItemDoParcelamento = {
 };
 
 export function redefinirParcelas(
-  existentes: ParcelaEditavel[],
+  existentes: ParcelaExistente[],
   itens: ItemDoParcelamento[],
   totalDaConta: Centavos,
 ): {
-  atualizar: { id: number; numero: number; vencimento: DataISO; valor: Centavos }[];
+  atualizar: {
+    id: number;
+    numero: number;
+    vencimento: DataISO;
+    valor: Centavos;
+  }[];
   criar: Parcela[];
   excluir: number[];
 } {
@@ -558,25 +624,17 @@ export function redefinirParcelas(
 
   for (const item of itens) {
     if (item.valor <= 0) {
-      throw new BusinessRuleError("Toda parcela precisa de um valor maior que zero");
+      throw new BusinessRuleError(
+        "Toda parcela precisa de um valor maior que zero",
+      );
     }
 
     if (item.id == null) continue;
 
     const atual = porId.get(item.id);
     if (!atual) {
-      throw new BusinessRuleError("Parcela nao pertence a esta conta, ou ja foi recebida");
-    }
-
-    /*
-     * âš ï¸ Parcela com boleto ou nota emitidos nao muda de valor nem de data.
-     *
-     * Sao promessas que sairam com um numero escrito. O comprovante nao entra
-     * nessa conta: ele e prova de que o dinheiro entrou, e nao promessa.
-     */
-    if (atual.temDocumento && (atual.valor !== item.valor || atual.vencimento !== item.vencimento)) {
       throw new BusinessRuleError(
-        `Ja saiu boleto ou nota da parcela ${atual.numero}; mudar o valor ou o vencimento deixaria o documento dizendo outra coisa`,
+        "Parcela nao pertence a esta conta, ou ja foi recebida",
       );
     }
   }
@@ -596,11 +654,21 @@ export function redefinirParcelas(
   const vieram = new Set(itens.filter((i) => i.id != null).map((i) => i.id));
   const excluir = abertas.filter((p) => !vieram.has(p.id)).map((p) => p.id);
 
+  /*
+   * Parcela com anexo TAMBEM sai, e quem apaga o arquivo do storage e o servico.
+   * Recusar aqui deixaria o cronograma refem de um boleto que a propria empresa
+   * anexou; deixar sair sem apagar encheria o storage de orfaos.
+   *
+   * ⚠️ A CANCELADA nao sai. Ela nao vai acontecer, mas continua somando no total
+   * da conta e contando o que se combinou: removida pelo cronograma, a soma
+   * deixaria de bater e o historico do contrato sumiria por um caminho que nao
+   * pergunta nada. Para tira-la de vez, reative e remova.
+   */
   for (const id of excluir) {
-    const p = porId.get(id)!;
-    if (p.temDocumento) {
+    const p = porId.get(id);
+    if (p?.cancelada) {
       throw new BusinessRuleError(
-        `A parcela ${p.numero} tem boleto ou nota emitidos e nao pode ser removida`,
+        `A parcela ${p.numero} está cancelada. Reative antes de removê-la do cronograma.`,
       );
     }
   }
@@ -609,7 +677,7 @@ export function redefinirParcelas(
    * A numeracao sai da ORDEM DE VENCIMENTO, e as pagas nao trocam de numero: o
    * recibo que o cliente tem na mao diz "parcela 2".
    */
-  const paraNumerar: ParcelaEditavel[] = [
+  const paraNumerar: ParcelaExistente[] = [
     ...pagas,
     ...itens.map((i, indice) => ({
       // Id negativo distingue a parcela nova sem confundir com id de banco, e o
@@ -619,7 +687,6 @@ export function redefinirParcelas(
       vencimento: i.vencimento,
       valor: i.valor,
       pago: false,
-      temDocumento: false,
     })),
   ];
 
@@ -628,11 +695,19 @@ export function redefinirParcelas(
   return {
     atualizar: numeradas
       .filter((p) => p.id > 0)
-      .map((p) => ({ id: p.id, numero: p.numero, vencimento: p.vencimento, valor: p.valor })),
+      .map((p) => ({
+        id: p.id,
+        numero: p.numero,
+        vencimento: p.vencimento,
+        valor: p.valor,
+      })),
     criar: numeradas
       .filter((p) => p.id < 0)
-      .map((p) => ({ numero: p.numero, vencimento: p.vencimento, valor: p.valor })),
+      .map((p) => ({
+        numero: p.numero,
+        vencimento: p.vencimento,
+        valor: p.valor,
+      })),
     excluir,
   };
 }
-
