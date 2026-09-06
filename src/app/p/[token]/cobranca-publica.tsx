@@ -114,6 +114,26 @@ export function CobrancaPublicaView({
           box-shadow: 0 2px 10px rgba(0,0,0,0.10);
         }
         .folha table { border-collapse: collapse; width: 100%; }
+
+        /* O cartao nasce do canto de baixo e da direita — de onde o botao
+           esta — em vez de aparecer inteiro de uma vez. */
+        .cartao-downloads {
+          transform-origin: bottom right;
+          animation: abre-downloads 150ms cubic-bezier(0.2, 0, 0, 1);
+        }
+        @keyframes abre-downloads {
+          from { opacity: 0; transform: scale(0.9) translateY(8px); }
+          to   { opacity: 1; transform: scale(1) translateY(0); }
+        }
+
+        .girando { animation: gira 800ms linear infinite; }
+        @keyframes gira { to { transform: rotate(360deg); } }
+
+        /* Quem pediu menos movimento nao ganha movimento nenhum: o cartao
+           aparece pronto, e a espera para de girar. */
+        @media (prefers-reduced-motion: reduce) {
+          .cartao-downloads, .girando { animation: none; }
+        }
       `}</style>
 
       {cobranca.tickets.map((t) => (
@@ -121,42 +141,326 @@ export function CobrancaPublicaView({
           <FolhaAjustada>
             <Folha ticket={t} empresa={cobranca.empresa} fatura={cobranca.faturaNumero} />
           </FolhaAjustada>
-
-          {/* Imprimir por ticket so quando ha mais de um: com um so, ele desce
-              para o bloco de acoes junto com os outros. */}
-          {cobranca.tickets.length > 1 && (
-            <div style={{ maxWidth: 340, margin: "12px auto 0" }}>
-              <Botao secundario onClick={() => imprimir(t)}>
-                {imprimindo === t.numero ? "Gerando…" : `Baixar ticket ${t.numero} em PDF`}
-              </Botao>
-            </div>
-          )}
         </div>
       ))}
 
       {/*
-       * Um bloco so de acoes, empilhado.
+       * ⚠️ Os downloads sairam do fim da pagina e viraram um botao FIXO.
        *
-       * Lado a lado, tres botoes de download viram tres alvos pequenos no
-       * celular; empilhados, cada um ocupa a largura inteira e a ordem diz o que
-       * fazer primeiro: pagar, depois guardar a nota, depois o documento.
+       * Empilhados abaixo da folha, eles so existiam para quem rolava ate o
+       * fim — e a folha tem 297mm, entao no celular sao varias telas de rolagem
+       * antes de aparecer o boleto. O documento e para ler; baixar e para poder
+       * fazer a qualquer momento.
        */}
-      <div style={{ maxWidth: 340, margin: "0 auto", padding: "4px 0 8px" }}>
-        {cobranca.temBoleto && (
-          <Botao href={`/p/${token}/documento?tipo=boleto`}>Baixar boleto</Botao>
-        )}
-        {cobranca.temNfs && (
-          <Botao href={`/p/${token}/documento?tipo=nfs`} secundario>
-            Baixar nota fiscal
-          </Botao>
-        )}
-        {cobranca.tickets.length === 1 && (
-          <Botao secundario onClick={() => imprimir(cobranca.tickets[0])}>
-            {imprimindo != null ? "Gerando…" : "Baixar ticket em PDF"}
-          </Botao>
-        )}
-      </div>
+      <BotaoDeDownloads
+        token={token}
+        temBoleto={cobranca.temBoleto}
+        temNfs={cobranca.temNfs}
+        tickets={cobranca.tickets}
+        imprimir={imprimir}
+        imprimindo={imprimindo}
+      />
     </div>
+  );
+}
+
+/** Quanto esperar entre um download e o proximo, no "baixar todos". */
+const ENTRE_DOWNLOADS = 700;
+
+/**
+ * O botao flutuante de downloads, e o cartao que ele abre.
+ *
+ * ⚠️ Canto inferior DIREITO, e fixo. E onde o polegar alcanca sem trocar a mao
+ * de posicao, e onde ele nao cobre o texto que se esta lendo — no esquerdo,
+ * numa folha centralizada, ele encostaria na margem do documento.
+ *
+ * ⚠️ O cartao abre PARA CIMA, ancorado no proprio botao. Ele nasce do canto de
+ * onde foi chamado: crescer para baixo o jogaria para fora da tela, e crescer
+ * do centro faria parecer um modal, que pede uma decisao — e aqui nao ha
+ * decisao, so uma lista de coisas para levar.
+ */
+function BotaoDeDownloads({
+  token,
+  temBoleto,
+  temNfs,
+  tickets,
+  imprimir,
+  imprimindo,
+}: {
+  token: string;
+  temBoleto: boolean;
+  temNfs: boolean;
+  tickets: TicketPublico[];
+  imprimir: (t: TicketPublico) => Promise<void>;
+  imprimindo: number | null;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const [baixandoTodos, setBaixandoTodos] = useState(false);
+
+  /*
+   * Baixar arquivo do servidor sem sair da pagina.
+   *
+   * A rota `/p/{token}/documento` transmite o arquivo com
+   * `Content-Disposition: attachment`, e da MESMA origem — entao um `<a>`
+   * clicado por codigo dispara o download e a pagina fica onde estava. Um
+   * `window.open` abriria uma aba que fecha sozinha, piscando na tela.
+   */
+  function baixarArquivo(tipo: "boleto" | "nfs") {
+    const a = document.createElement("a");
+    a.href = `/p/${token}/documento?tipo=${tipo}`;
+    a.download = "";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
+  /*
+   * ⚠️ Um de cada vez, com pausa entre eles.
+   *
+   * Disparados no mesmo instante, o navegador trata a rajada como popup e
+   * bloqueia do segundo em diante — sem avisar ninguem, e o cliente fica
+   * achando que baixou tudo. A pausa tambem deixa a barra de downloads
+   * acompanhar.
+   */
+  async function baixarTodos() {
+    setBaixandoTodos(true);
+    setAberto(false);
+
+    try {
+      if (temBoleto) {
+        baixarArquivo("boleto");
+        await new Promise((ok) => setTimeout(ok, ENTRE_DOWNLOADS));
+      }
+      if (temNfs) {
+        baixarArquivo("nfs");
+        await new Promise((ok) => setTimeout(ok, ENTRE_DOWNLOADS));
+      }
+      for (const t of tickets) {
+        // O PDF e gerado no navegador: aqui a espera e a propria geracao.
+        await imprimir(t);
+      }
+    } finally {
+      setBaixandoTodos(false);
+    }
+  }
+
+  const quantos = (temBoleto ? 1 : 0) + (temNfs ? 1 : 0) + tickets.length;
+  if (quantos === 0) return null;
+
+  const ocupado = baixandoTodos || imprimindo != null;
+
+  return (
+    <div style={{ position: "fixed", right: 20, bottom: 20, zIndex: 60 }}>
+      {aberto && (
+        /* Camada que fecha ao clicar fora. Transparente: o cartao e pequeno, e
+           escurecer a pagina inteira por causa dele seria peso demais. */
+        <div onClick={() => setAberto(false)} style={{ position: "fixed", inset: 0, zIndex: -1 }} />
+      )}
+
+      {aberto && (
+        <div
+          className="cartao-downloads"
+          style={{
+            position: "absolute",
+            right: 0,
+            bottom: 66,
+            minWidth: 232,
+            padding: 6,
+            borderRadius: 14,
+            background: "#ffffff",
+            border: `1px solid ${REGUA}`,
+            boxShadow: "0 10px 30px rgba(0,0,0,0.16)",
+          }}
+        >
+          {temBoleto && (
+            <ItemDeDownload
+              rotulo="Baixar boleto"
+              onClick={() => {
+                baixarArquivo("boleto");
+                setAberto(false);
+              }}
+              icone={
+                <>
+                  <rect x="2.5" y="3.5" width="11" height="9" rx="1" />
+                  <path d="M5 6v4M7 6v4M9.5 6v4M11.5 6v4" />
+                </>
+              }
+            />
+          )}
+
+          {temNfs && (
+            <ItemDeDownload
+              rotulo="Baixar nota fiscal"
+              onClick={() => {
+                baixarArquivo("nfs");
+                setAberto(false);
+              }}
+              icone={
+                <>
+                  <path d="M3.5 2h6l3 3v9h-9z" />
+                  <path d="M5.5 8h5M5.5 10.5h3" />
+                </>
+              }
+            />
+          )}
+
+          {tickets.map((t) => (
+            <ItemDeDownload
+              key={t.numero}
+              rotulo={
+                imprimindo === t.numero
+                  ? "Gerando…"
+                  : tickets.length > 1
+                    ? `Baixar ticket ${t.numero} em PDF`
+                    : "Baixar ticket em PDF"
+              }
+              onClick={() => {
+                void imprimir(t);
+                setAberto(false);
+              }}
+              icone={
+                <>
+                  <path d="M3.5 2h6l3 3v9h-9z" />
+                  <path d="M6 11.5l2 2 2-2M8 7v6.5" />
+                </>
+              }
+            />
+          ))}
+
+          {/* "Todos" so quando ha mais de uma coisa: com uma so, ele seria o
+              mesmo botao escrito de outro jeito. */}
+          {quantos > 1 && (
+            <>
+              <div style={{ height: 1, background: REGUA, margin: "5px 8px" }} />
+              <ItemDeDownload
+                rotulo="Baixar todos"
+                destaque
+                onClick={() => void baixarTodos()}
+                icone={
+                  <>
+                    <path d="M8 2v8M5 7.5l3 3 3-3" />
+                    <path d="M3 12.5h10" />
+                  </>
+                }
+              />
+            </>
+          )}
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={() => setAberto((a) => !a)}
+        aria-label={aberto ? "Fechar downloads" : "Baixar documentos"}
+        aria-expanded={aberto}
+        style={{
+          width: 56,
+          height: 56,
+          borderRadius: "50%",
+          border: "none",
+          background: AZUL,
+          color: "#ffffff",
+          display: "grid",
+          placeItems: "center",
+          cursor: "pointer",
+          boxShadow: "0 6px 18px rgba(10,82,185,0.38)",
+          transition: "transform 160ms cubic-bezier(0.2, 0, 0, 1)",
+          transform: aberto ? "rotate(90deg)" : "none",
+        }}
+      >
+        {ocupado ? (
+          <span className="girando" style={{ display: "block", width: 20, height: 20 }}>
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+            >
+              <path d="M8 2a6 6 0 1 1-4.24 1.76" />
+            </svg>
+          </span>
+        ) : (
+          <svg
+            width="22"
+            height="22"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            {aberto ? (
+              <path d="M4 4l8 8M12 4l-8 8" />
+            ) : (
+              <>
+                <path d="M8 2.5v8M4.5 7.5l3.5 3.5 3.5-3.5" />
+                <path d="M3 13h10" />
+              </>
+            )}
+          </svg>
+        )}
+      </button>
+    </div>
+  );
+}
+
+/** Uma linha do cartao de downloads: icone a esquerda, rotulo a direita. */
+function ItemDeDownload({
+  rotulo,
+  icone,
+  destaque,
+  onClick,
+}: {
+  rotulo: string;
+  icone: React.ReactNode;
+  destaque?: boolean;
+  onClick: () => void;
+}) {
+  const [hover, setHover] = useState(false);
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        width: "100%",
+        padding: "10px",
+        border: "none",
+        borderRadius: 9,
+        background: hover ? AZUL_CLARO : "transparent",
+        color: destaque ? AZUL : TINTA,
+        fontWeight: destaque ? 600 : 500,
+        fontSize: 14,
+        fontFamily: "Helvetica, Arial, sans-serif",
+        textAlign: "left",
+        whiteSpace: "nowrap",
+        cursor: "pointer",
+      }}
+    >
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke={destaque ? AZUL : CINZA}
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        style={{ flexShrink: 0 }}
+      >
+        {icone}
+      </svg>
+      {rotulo}
+    </button>
   );
 }
 
@@ -605,46 +909,3 @@ function quantidade(q: number, unidade: ItemPublico["unidade"]): string {
   return Number.isInteger(q) ? `${q} un` : `${q.toFixed(2).replace(".", ",")} un`;
 }
 
-/** Botao de acao: largura inteira, empilhado. Serve a link e a clique. */
-function Botao({
-  href,
-  onClick,
-  secundario,
-  children,
-}: {
-  href?: string;
-  onClick?: () => void;
-  secundario?: boolean;
-  children: React.ReactNode;
-}) {
-  const estilo: React.CSSProperties = {
-    display: "block",
-    width: "100%",
-    boxSizing: "border-box",
-    // Alto o bastante para o dedo: 48px e o minimo confortavel no celular.
-    padding: "15px 24px",
-    marginBottom: 10,
-    borderRadius: 10,
-    fontWeight: 600,
-    fontSize: 15,
-    textAlign: "center",
-    textDecoration: "none",
-    fontFamily: "Helvetica, Arial, sans-serif",
-    cursor: "pointer",
-    border: secundario ? `1px solid ${AZUL}` : "1px solid transparent",
-    // Verde claro no vazado, e nao branco: sobre o cinza do visualizador o
-    // branco virava um segundo "papel", competindo com a folha logo acima.
-    background: secundario ? AZUL_CLARO : AZUL,
-    color: secundario ? AZUL : "#ffffff",
-  };
-
-  return href ? (
-    <a href={href} style={estilo}>
-      {children}
-    </a>
-  ) : (
-    <button type="button" onClick={onClick} style={estilo}>
-      {children}
-    </button>
-  );
-}
