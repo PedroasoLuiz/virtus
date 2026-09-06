@@ -97,8 +97,13 @@
   --radius-full: 9999px;
 
   /* ── Cor — chrome neutro ───────────────────────────────────────────────
-     Cinzas da familia Apple: canvas #F5F5F7, tinta #1D1D1F. */
-  --bg: #f1f1f0;
+     Cinzas da familia Apple, agora com o desvio para o AZUL e nao para o
+     amarelo. Eram quentes de origem (#f1f1f0: o verde e o vermelho acima do
+     azul), heranca da epoca em que a marca era verde e o cinza morno casava
+     com ela. Sob o azul o mesmo cinza puxa para o sepia, e o contraste com a
+     marca fica sujo. Agora o azul e o canal mais alto por 2 ou 3 pontos: o
+     olho nao chama de "cinza azulado", so para de ver amarelado. */
+  --bg: #f0f1f3;
   --surface: #ffffff;
   --surface-2: #fafafc;
   --surface-3: #f0f0f3;
@@ -193,7 +198,7 @@
   --nav-trilho-cor: rgba(0, 0, 0, 0.11);
   --nav-trilho-largura: 1px;
   --nav-marcador: 5px;
-  --nav-marcador-cor: #c6c6c2;
+  --nav-marcador-cor: #c2c4ca;
 
   /* Eixo X do trilho em cada nivel. O do nivel 1 cai no centro do icone do
      grupo (8px de padding + metade de 15px de icone), entao a linha parece
@@ -219,10 +224,10 @@
   /* ── Layout ────────────────────────────────────────────────────────────── */
   --sidebar-w: 220px;
   --sidebar-w-collapsed: 56px;
-  --sidebar-bg: #f5f5f3;
-  --sidebar-item-color: #3d3d3b;
+  --sidebar-bg: #f4f5f7;
+  --sidebar-item-color: #3b3d42;
   --sidebar-item-hover: #111111;
-  --sidebar-item-sub: #5c5c58;
+  --sidebar-item-sub: #585b63;
   --sidebar-item-bg-hover: rgba(0, 0, 0, 0.03);
   --drawer-w: 620px;
   --drawer-w-lg: 900px;
