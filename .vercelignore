@@ -1,0 +1,11 @@
+# O que NAO sobe para a Vercel.
+#
+# ⚠️ Existe por causa do `vercel --prod` rodado da maquina: ele empacota a pasta
+# como ela esta, e nao o que o git tem. Os fontes de arte e os despejos de banco
+# vivem na raiz sem estar versionados, e o .mov de 168 MB estourava sozinho o
+# limite de 100 MB do upload. O build a partir do git nunca os viu.
+404.mov
+*.ofx
+bancos.sql
+_legado
+docs

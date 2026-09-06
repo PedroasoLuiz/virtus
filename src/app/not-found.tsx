@@ -21,13 +21,21 @@ import Link from "next/link";
 export const metadata = { title: "Página não encontrada · Vope" };
 
 /**
- * Onde a borda de cima do circulo cruza a arte.
+ * A mancha azul atras do recado.
  *
- * ⚠️ E menos que a altura do desenho, e e isso que faz o notebook ficar entre o
- * azul e o branco. Subindo o valor, o desenho afunda no circulo; descendo, ele
- * descola e o circulo vira uma bolha solta atras do texto.
+ * ⚠️ ELIPSE, e nao circulo — e a geometria que obriga, nao gosto.
+ *
+ * Um circulo tem uma medida so, e aqui ela e puxada para dois lados opostos:
+ * larga o bastante para o texto respirar nas laterais, e baixa o bastante para
+ * nao sobrar meio palmo de azul embaixo do botao. Redondo, os dois pedidos se
+ * excluem — alargar empurra a base para baixo na mesma proporcao. Com largura e
+ * altura separadas, cada um se resolve sozinho.
+ *
+ * ⚠️ `topo` cai no MEIO da altura da arte: e o que poe o notebook entre o azul e
+ * o fundo da pagina, metade em cada um. Subindo, o desenho afunda; descendo, ele
+ * descola e a mancha vira uma bolha solta atras do texto.
  */
-const DESCIDA_DO_CIRCULO = 96;
+const MANCHA = { topo: 100, largura: 400, altura: 272 };
 
 export default function NaoEncontrada() {
   return (
@@ -37,7 +45,15 @@ export default function NaoEncontrada() {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        padding: "40px 24px",
+        /*
+          ⚠️ Recuo de baixo maior que o de cima, e nao centralizacao pura.
+
+          A mancha azul desce abaixo do botao, entao o centro geometrico do
+          bloco fica mais baixo que o centro que o olho enxerga: centralizado
+          pela caixa, o conjunto parecia afundado na tela. A folga extra
+          embaixo devolve a diferenca.
+        */
+        padding: "32px 24px 104px",
         background: "var(--bg)",
         textAlign: "center",
       }}
@@ -63,7 +79,7 @@ export default function NaoEncontrada() {
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          width: 360,
+          width: 400,
           maxWidth: "100%",
         }}
       >
@@ -72,10 +88,10 @@ export default function NaoEncontrada() {
           style={{
             position: "absolute",
             left: "50%",
-            top: DESCIDA_DO_CIRCULO,
+            top: MANCHA.topo,
             transform: "translateX(-50%)",
-            width: 330,
-            aspectRatio: "1",
+            width: MANCHA.largura,
+            height: MANCHA.altura,
             borderRadius: "50%",
             background: "var(--primary-subtle)",
             zIndex: 0,
@@ -108,7 +124,7 @@ export default function NaoEncontrada() {
             height={360}
             style={{
               width: "100%",
-              maxWidth: 300,
+              maxWidth: 372,
               height: "auto",
               display: "block",
               margin: "0 auto",
@@ -120,7 +136,7 @@ export default function NaoEncontrada() {
               /* Colado na arte: as duas dizem a mesma coisa, uma em desenho e
                  outra em palavra, e separadas pareciam dois assuntos. */
               margin: "2px 0 0",
-              fontSize: "var(--text-2xl)",
+              fontSize: "var(--text-3xl)",
               fontWeight: "var(--fw-semi)",
               letterSpacing: "var(--tracking-tight)",
               color: "var(--text-primary)",
@@ -131,7 +147,7 @@ export default function NaoEncontrada() {
 
           <p
             style={{
-              margin: "8px auto 0",
+              margin: "10px auto 0",
               maxWidth: 300,
               fontSize: "var(--text-md)",
               lineHeight: "var(--lh-relaxed)",
