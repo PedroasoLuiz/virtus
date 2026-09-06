@@ -135,6 +135,35 @@ export async function atualizar(
   if (error) throw error;
 }
 
+/**
+ * Liga e desliga a conta, sem tocar em mais nada.
+ *
+ * ⚠️ `update` com UM campo, de proposito. `atualizar` acima grava o cadastro
+ * inteiro, e serve a um formulario que carregou o cadastro inteiro. Aqui quem
+ * chama e a listagem, que so conhece a situacao: reusar `atualizar` faria o
+ * clique no interruptor apagar saldo de partida, taxas e prazo de credito.
+ */
+export async function definirSituacao(
+  empresaId: number,
+  usuarioId: string,
+  id: number,
+  ativo: boolean,
+): Promise<void> {
+  const supabase = await serverClient();
+
+  const { error } = await supabase
+    .from("contasbancarias")
+    .update({
+      ativo,
+      updated_at: new Date().toISOString(),
+      fkUserModificacao: usuarioId,
+    })
+    .eq("fkEmpresa", empresaId)
+    .eq("id", id);
+
+  if (error) throw error;
+}
+
 export async function excluir(empresaId: number, id: number): Promise<void> {
   const supabase = await serverClient();
   const { error } = await supabase

@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   AcoesDaLinha,
-  Badge,
+  ActiveToggle,
   BotaoDeAcao,
   EmptyRow,
   IncluirButton,
@@ -62,6 +62,34 @@ export function ContasTabela({
     );
   }, [contas, busca]);
 
+  /**
+   * ⚠️ Sem estado local: quem guarda a situacao e o servidor.
+   *
+   * Um `useState` por linha daria o retorno imediato do clique, mas ficaria
+   * mentindo quando a gravacao falhasse — e o interruptor e justamente onde a
+   * mentira custa caro, porque a conta pareceria fora do ar continuando a
+   * aparecer nas listas de escolha. O `refresh` traz a verdade de volta.
+   */
+  async function alternarSituacao(conta: ContaBancaria) {
+    const r = await fetch(`/api/v1/contas/${conta.id}/situacao`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ativo: !conta.ativo }),
+    });
+
+    if (!r.ok) {
+      const dados = await r.json().catch(() => null);
+      avisar(
+        "atencao",
+        dados?.error?.message ?? "Não foi possível mudar a situação da conta",
+      );
+      return;
+    }
+
+    avisar("sucesso", conta.ativo ? "Conta inativada" : "Conta ativada");
+    router.refresh();
+  }
+
   async function excluir(conta: ContaBancaria) {
     const r = await fetch(`/api/v1/contas/${conta.id}`, { method: "DELETE" });
 
@@ -105,8 +133,8 @@ export function ContasTabela({
               <Th minWidth={130}>Banco</Th>
               <Th minWidth={110}>Agência</Th>
               <Th minWidth={110}>Tipo</Th>
-              <Th align="center" minWidth={90}>
-                Situação
+              <Th align="center" minWidth={70}>
+                Ativo
               </Th>
               <Th align="right" minWidth={110}>
                 Ações
@@ -142,10 +170,24 @@ export function ContasTabela({
                   <Td style={{ color: "var(--text-secondary)" }}>
                     {c.tipo ?? "—"}
                   </Td>
+                  {/*
+                    ⚠️ Interruptor, e nao etiqueta.
+
+                    A etiqueta so DIZIA a situacao: para desativar uma conta era
+                    preciso abrir o cadastro, achar o campo e salvar. E o gesto
+                    mais comum da tela — conta que se encerra no banco —, e era
+                    o mais escondido. O mesmo interruptor do drawer, para nao
+                    haver dois desenhos do mesmo gesto.
+                  */}
                   <Td style={{ textAlign: "center" }}>
-                    <Badge tom={c.ativo ? "success" : "neutral"}>
-                      {c.ativo ? "Ativa" : "Inativa"}
-                    </Badge>
+                    {/* A linha inteira abre o extrato: sem parar o clique aqui,
+                        ligar a conta abriria o extrato junto. */}
+                    <span onClick={(e) => e.stopPropagation()}>
+                      <ActiveToggle
+                        active={c.ativo}
+                        onChange={() => alternarSituacao(c)}
+                      />
+                    </span>
                   </Td>
                   <Td>
                     <AcoesDaLinha>

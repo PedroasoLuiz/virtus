@@ -43,6 +43,17 @@ export const contaBodySchema = z.object({
   tarifaBoleto: centavosSchema.nullish(),
 });
 
+/**
+ * A situacao da conta, sozinha.
+ *
+ * ⚠️ Corpo PROPRIO, e nao um PUT parcial em `contaBodySchema`. Aquele contrato
+ * tem `default` em quase tudo — `saldoInicial` cai para zero, `aceitaCartao`
+ * para falso, as taxas para nulo —, e o repositorio grava o objeto inteiro.
+ * Ligar o interruptor pela listagem, que so conhece a situacao, zeraria o saldo
+ * de partida e o contrato de cartao da conta sem dizer nada.
+ */
+export const situacaoBodySchema = z.object({ ativo: z.boolean() });
+
 export const extratoQuerySchema = z.object({
   de: dataISOSchema,
   ate: dataISOSchema,
@@ -112,5 +123,6 @@ export type ConciliacaoParam = z.infer<typeof conciliacaoParamSchema>;
 export type ConciliacaoBody = z.infer<typeof conciliacaoBodySchema>;
 
 export type ContaBody = z.infer<typeof contaBodySchema>;
+export type SituacaoBody = z.infer<typeof situacaoBodySchema>;
 export type ExtratoQuery = z.infer<typeof extratoQuerySchema>;
 export type IdParam = z.infer<typeof idParamSchema>;

@@ -40,6 +40,25 @@ export async function atualizarConta(
 }
 
 /**
+ * Ativa ou inativa a conta.
+ *
+ * ⚠️ Nao ha regra de negocio impedindo desativar conta com movimento — ao
+ * contrario de excluir. Inativa, ela some das listas de escolha e para de
+ * receber lancamento novo, mas o historico continua inteiro, e e justamente
+ * por isso que desativar e o caminho e apagar nao e.
+ */
+export async function definirSituacaoDaConta(
+  empresaId: number,
+  usuarioId: string,
+  id: number,
+  ativo: boolean,
+): Promise<ContaBancaria> {
+  await obterConta(empresaId, id);
+  await repo.definirSituacao(empresaId, usuarioId, id, ativo);
+  return obterConta(empresaId, id);
+}
+
+/**
  * ⚠️ Recusa depois de qualquer movimento.
  *
  * Apagar a conta apagaria o "onde" de todo lancamento que passou por ela: o

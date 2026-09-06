@@ -12,6 +12,7 @@ import {
   type ContaBody,
   type ExtratoQuery,
   type IdParam,
+  type SituacaoBody,
 } from "@/modules/contas/contas.schema";
 import type { DataISO } from "@/shared/utils/datas";
 
@@ -37,6 +38,21 @@ export async function atualizar({ body, params, ctx }: Entrada<ContaBody, undefi
     ctx.usuarioId,
     params.id,
     paraDominio(body),
+  );
+
+  return ok(contaSchema.parse(conta));
+}
+
+export async function definirSituacao({
+  body,
+  params,
+  ctx,
+}: Entrada<SituacaoBody, undefined, IdParam>) {
+  const conta = await service.definirSituacaoDaConta(
+    empresaObrigatoria(ctx),
+    ctx.usuarioId,
+    params.id,
+    body.ativo,
   );
 
   return ok(contaSchema.parse(conta));
