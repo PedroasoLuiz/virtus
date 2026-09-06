@@ -104,7 +104,7 @@ export function CobrancaPublicaView({
   }
 
   return (
-    <div style={{ width: "100%" }}>
+    <div style={{ width: "100%" }} className="tela-cobranca">
       <style>{`
         .folha {
           width: 210mm; min-height: 297mm; background: #fff;
@@ -134,7 +134,49 @@ export function CobrancaPublicaView({
         @media (prefers-reduced-motion: reduce) {
           .cartao-downloads, .girando { animation: none; }
         }
+
+        /*
+          Impressao pelo navegador nao sai daqui.
+
+          A folha esta encolhida por transform scale para caber na tela, e o que
+          a impressora recebe disso e uma folha cortada no meio, com o resto em
+          branco. O PDF do botao e gerado do zero, em A4 de verdade. Entao o
+          Ctrl+P nao imprime a tela: imprime um recado dizendo onde esta o
+          documento bom. (Sem crase neste comentario: ele mora dentro de um
+          template literal, e a crase o fecharia.)
+
+          O recado e irmao das folhas, entao esconder e por :not e nao por
+          display:none no envoltorio inteiro.
+        */
+        @media print {
+          .tela-cobranca > *:not(.recado-impressao) { display: none !important; }
+          .recado-impressao { display: block !important; }
+        }
       `}</style>
+
+      {/*
+        So existe no papel. Em tela fica escondido, e a impressao o revela no
+        lugar da pagina inteira.
+      */}
+      <div
+        className="recado-impressao"
+        style={{
+          display: "none",
+          padding: "40mm 20mm",
+          fontFamily: "Helvetica, Arial, sans-serif",
+          color: TINTA,
+          textAlign: "center",
+        }}
+      >
+        <p style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>
+          Baixe o documento antes de imprimir
+        </p>
+        <p style={{ fontSize: 13, lineHeight: 1.7, margin: "12px 0 0", color: CINZA }}>
+          Esta página mostra o documento reduzido para caber na tela, e impressa assim
+          ela sai cortada. Use o botão azul no canto inferior direito para baixar o
+          arquivo em PDF, e imprima o arquivo.
+        </p>
+      </div>
 
       {cobranca.tickets.map((t) => (
         <div key={t.numero} style={{ marginBottom: 20 }}>
@@ -164,8 +206,28 @@ export function CobrancaPublicaView({
   );
 }
 
-/** Quanto esperar entre um download e o proximo, no "baixar todos". */
-const ENTRE_DOWNLOADS = 700;
+/**
+ * Quanto o endereco do blob sobrevive depois do clique.
+ *
+ * Revogado na hora, o download morre antes de comecar em parte dos
+ * navegadores; um minuto e folga de sobra e nao vaza memoria de verdade,
+ * porque a pagina toda tem vida curta.
+ */
+const LIMPEZA_DO_BLOB = 60_000;
+
+/**
+ * O nome com que o arquivo e salvo.
+ *
+ * ⚠️ Vem do `Content-Disposition` que o servidor mandou, que ja traduz o UUID
+ * interno para "nota-fiscal.pdf". Sem ele o navegador salvaria com o nome do
+ * blob, que e um identificador aleatorio sem extensao — e o cliente ficaria com
+ * um arquivo que nem abre com dois cliques.
+ */
+function nomeDoArquivo(resposta: Response, tipo: "boleto" | "nfs"): string {
+  const cabecalho = resposta.headers.get("content-disposition") ?? "";
+  const achado = cabecalho.match(/filename="?([^";]+)"?/i);
+  return achado?.[1] ?? (tipo === "nfs" ? "nota-fiscal.pdf" : "boleto.pdf");
+}
 
 /**
  * O botao flutuante de downloads, e o cartao que ele abre.
@@ -198,43 +260,77 @@ function BotaoDeDownloads({
   const [baixandoTodos, setBaixandoTodos] = useState(false);
 
   /*
-   * Baixar arquivo do servidor sem sair da pagina.
+   * ⚠️ Ctrl+P e DESVIADO para esta lista, e nao bloqueado.
    *
-   * A rota `/p/{token}/documento` transmite o arquivo com
-   * `Content-Disposition: attachment`, e da MESMA origem — entao um `<a>`
-   * clicado por codigo dispara o download e a pagina fica onde estava. Um
-   * `window.open` abriria uma aba que fecha sozinha, piscando na tela.
+   * Bloquear impressao nao existe: o menu do navegador, o botao direito e o
+   * atalho do sistema continuam la, e pagina nenhuma tira isso de quem esta
+   * lendo. O que da para fazer e responder ao gesto — quem apertou Ctrl+P quer
+   * o documento no papel, e o caminho para isso e o PDF, que sai em A4 de
+   * verdade em vez da folha encolhida da tela.
+   *
+   * O ouvinte mora AQUI, e nao na pagina, porque e este componente que sabe
+   * abrir a lista: la em cima ele teria de avisar por estado, e sincronizar
+   * estado dentro de efeito e o que a regra do projeto proibe.
    */
-  function baixarArquivo(tipo: "boleto" | "nfs") {
-    const a = document.createElement("a");
-    a.href = `/p/${token}/documento?tipo=${tipo}`;
-    a.download = "";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-  }
+  useEffect(() => {
+    const aoTeclar = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        setAberto(true);
+      }
+    };
+
+    window.addEventListener("keydown", aoTeclar);
+    return () => window.removeEventListener("keydown", aoTeclar);
+  }, []);
 
   /*
-   * ⚠️ Um de cada vez, com pausa entre eles.
+   * Baixar o arquivo de verdade, e nao abrir o visualizador.
    *
-   * Disparados no mesmo instante, o navegador trata a rajada como popup e
-   * bloqueia do segundo em diante — sem avisar ninguem, e o cliente fica
-   * achando que baixou tudo. A pausa tambem deixa a barra de downloads
-   * acompanhar.
+   * ⚠️ BUSCA o arquivo e salva o blob, em vez de apontar um `<a>` para a rota.
+   *
+   * A rota ja manda `Content-Disposition: attachment`, e mesmo assim apontar um
+   * link para ela nao bastava: o navegador decide sozinho abrir PDF no
+   * visualizador dele, e o que o cliente via era a nota na tela, para salvar na
+   * mao. Com o conteudo em maos e um `download` com nome, nao ha decisao a
+   * tomar — o arquivo vai para a pasta de downloads.
+   *
+   * ⚠️ E devolve uma PROMESSA que termina quando o arquivo chegou. E o que
+   * torna o "baixar todos" confiavel: cada um espera o anterior de verdade, em
+   * vez de um intervalo chutado que ora sobra ora falta.
    */
+  async function baixarArquivo(tipo: "boleto" | "nfs") {
+    const resposta = await fetch(`/p/${token}/documento?tipo=${tipo}`);
+    if (!resposta.ok) return;
+
+    const blob = await resposta.blob();
+    const endereco = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = endereco;
+    a.download = nomeDoArquivo(resposta, tipo);
+    document.body.appendChild(a);
+    a.click();
+
+    /*
+     * ⚠️ A limpeza espera um pouco. Tirar o `<a>` e revogar o endereco no
+     * mesmo instante do clique cancela o download em alguns navegadores, que
+     * ainda nao terminaram de ler o blob quando ele deixa de existir.
+     */
+    setTimeout(() => {
+      a.remove();
+      URL.revokeObjectURL(endereco);
+    }, LIMPEZA_DO_BLOB);
+  }
+
+  /* Baixa tudo, um de cada vez, esperando cada arquivo chegar. */
   async function baixarTodos() {
     setBaixandoTodos(true);
     setAberto(false);
 
     try {
-      if (temBoleto) {
-        baixarArquivo("boleto");
-        await new Promise((ok) => setTimeout(ok, ENTRE_DOWNLOADS));
-      }
-      if (temNfs) {
-        baixarArquivo("nfs");
-        await new Promise((ok) => setTimeout(ok, ENTRE_DOWNLOADS));
-      }
+      if (temBoleto) await baixarArquivo("boleto");
+      if (temNfs) await baixarArquivo("nfs");
       for (const t of tickets) {
         // O PDF e gerado no navegador: aqui a espera e a propria geracao.
         await imprimir(t);
@@ -276,7 +372,7 @@ function BotaoDeDownloads({
             <ItemDeDownload
               rotulo="Baixar boleto"
               onClick={() => {
-                baixarArquivo("boleto");
+                void baixarArquivo("boleto");
                 setAberto(false);
               }}
               icone={
@@ -292,7 +388,7 @@ function BotaoDeDownloads({
             <ItemDeDownload
               rotulo="Baixar nota fiscal"
               onClick={() => {
-                baixarArquivo("nfs");
+                void baixarArquivo("nfs");
                 setAberto(false);
               }}
               icone={
