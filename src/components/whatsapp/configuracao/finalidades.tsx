@@ -1582,7 +1582,7 @@ function CartaoDeBotao({ texto }: { texto: string }) {
 }
 
 /**
- * Copiar, no verde da marca e sem moldura.
+ * Copiar, na cor da marca e sem moldura.
  *
  * Mesmo desenho do copiar da URL de callback: é uma ação de apoio ao lado do
  * dado, não um botão com peso próprio. A confirmação troca o ícone por um

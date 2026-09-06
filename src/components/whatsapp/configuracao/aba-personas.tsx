@@ -1048,7 +1048,7 @@ function AreaDePermissoes({
 /**
  * O convite para a IA escrever a persona.
  *
- * ⚠️ Fundo branco, texto e borda no verde da marca, com um halo que pulsa. É a
+ * ⚠️ Fundo branco, texto e borda na cor da marca, com um halo que pulsa. É a
  * única coisa da tela que brilha, e de propósito: ela não é um campo a mais do
  * formulário, é um atalho que só existe para quem tem IA ligada. Sem o brilho
  * ela virava mais um botão secundário e ninguém descobria.

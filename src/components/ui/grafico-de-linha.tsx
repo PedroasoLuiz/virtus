@@ -97,6 +97,7 @@ export function GraficoDeLinha({
   rotularEixo,
   altura = 190,
   seletor,
+  rotularPonto = dataBR,
 }: {
   titulo: string;
   pontos: PontoDoGrafico[];
@@ -123,6 +124,14 @@ export function GraficoDeLinha({
    * aqui amarraria o kit ao Insights.
    */
   seletor?: React.ReactNode;
+  /**
+   * Como escrever o PONTO no balao. Padrao: a data por extenso.
+   *
+   * ⚠️ Existe porque a serie nem sempre e diaria. A DRE anda de mes em mes, e o
+   * padrao imprimiria "01/03/2026" num ponto que fala do marco inteiro — uma
+   * precisao que o numero nao tem.
+   */
+  rotularPonto?: (dia: string) => string;
 }) {
   /*
    * ⚠️ O ponto sob o mouse é o único estado deste componente, e por isso ele
@@ -502,7 +511,7 @@ export function GraficoDeLinha({
                   y={desenho.y(pontos[sobre].valor)}
                   limite={desenho.L}
                   valor={rotular(pontos[sobre].valor)}
-                  dia={dataBR(pontos[sobre].dia)}
+                  dia={rotularPonto(pontos[sobre].dia)}
                 />
               </>
             )}
@@ -513,7 +522,7 @@ export function GraficoDeLinha({
               fontSize="11"
               fill="var(--text-tertiary)"
             >
-              {dataBR(pontos[0].dia)}
+              {rotularPonto(pontos[0].dia)}
             </text>
             <text
               x={desenho.L - desenho.margem.dir}
@@ -522,7 +531,7 @@ export function GraficoDeLinha({
               fontSize="11"
               fill="var(--text-tertiary)"
             >
-              {dataBR(pontos[pontos.length - 1].dia)}
+              {rotularPonto(pontos[pontos.length - 1].dia)}
             </text>
           </svg>
         </div>

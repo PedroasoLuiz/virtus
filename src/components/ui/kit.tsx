@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 /**
@@ -149,11 +149,17 @@ export function PageHeader({
         alignItems: "center",
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap", width: "100%" }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 16,
+          flexWrap: "wrap",
+          width: "100%",
+        }}
+      >
         <div style={{ flex: 1, minWidth: 0 }}>
-          {acima && (
-            <Migalha rotulo={acima.rotulo} href={acima.href} />
-          )}
+          {acima && <Migalha rotulo={acima.rotulo} href={acima.href} />}
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <h1
               style={{
@@ -168,7 +174,9 @@ export function PageHeader({
               {title}
             </h1>
 
-            {onIncluir && <BotaoMais rotulo={rotuloIncluir} onClick={onIncluir} />}
+            {onIncluir && (
+              <BotaoMais rotulo={rotuloIncluir} onClick={onIncluir} />
+            )}
           </div>
           {description && (
             <p
@@ -185,7 +193,15 @@ export function PageHeader({
           )}
         </div>
         {children && (
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", flexShrink: 0 }}>
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              alignItems: "center",
+              flexWrap: "wrap",
+              flexShrink: 0,
+            }}
+          >
             {children}
           </div>
         )}
@@ -266,7 +282,9 @@ export function TableArea({
      * e ali nao ha nada grudado para tapar.
      */
     <div style={{ flex: 1, overflow: "auto", minHeight: 0, paddingBottom: 8 }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", minWidth }}>{children}</table>
+      <table style={{ width: "100%", borderCollapse: "collapse", minWidth }}>
+        {children}
+      </table>
     </div>
   );
 }
@@ -370,7 +388,9 @@ export function Th({
   return (
     <th
       className={className}
-      aria-sort={ordem ? (ordem === "asc" ? "ascending" : "descending") : undefined}
+      aria-sort={
+        ordem ? (ordem === "asc" ? "ascending" : "descending") : undefined
+      }
       // Sem `padding`: ele vem do CSS, pelo mesmo motivo do `Td`.
       style={{
         textAlign: align,
@@ -437,7 +457,8 @@ export function Tr({
       onMouseLeave={(e) => {
         /* Volta ao que o `style` pediu, e nao ao vazio: sem isto, o realce da
            linha escolhida sumia na primeira passagem do mouse. */
-        e.currentTarget.style.backgroundColor = (style?.background as string) ?? "";
+        e.currentTarget.style.backgroundColor =
+          (style?.background as string) ?? "";
       }}
     >
       {children}
@@ -501,7 +522,14 @@ export const tdNum: React.CSSProperties = {
  */
 export function AcoesDaLinha({ children }: { children: React.ReactNode }) {
   return (
-    <span style={{ display: "inline-flex", gap: 4, justifyContent: "flex-end", width: "100%" }}>
+    <span
+      style={{
+        display: "inline-flex",
+        gap: 4,
+        justifyContent: "flex-end",
+        width: "100%",
+      }}
+    >
       {children}
     </span>
   );
@@ -522,7 +550,7 @@ export function BotaoDeAcao({
   desabilitado?: boolean;
   perigo?: boolean;
   /**
-   * Tinge SO o icone com o verde da marca.
+   * Tinge SO o icone com a cor da marca.
    *
    * ⚠️ A moldura continua a mesma dos outros. Colorir o botao inteiro o
    * transformaria em botao primario no meio de uma linha de acoes de apoio, e
@@ -675,7 +703,13 @@ export function Indicador({
       >
         {valor}
       </div>
-      <div style={{ fontSize: "var(--text-sm)", color: "var(--text-tertiary)", marginTop: 2 }}>
+      <div
+        style={{
+          fontSize: "var(--text-sm)",
+          color: "var(--text-tertiary)",
+          marginTop: 2,
+        }}
+      >
         {detalhe}
       </div>
     </div>
@@ -683,7 +717,11 @@ export function Indicador({
 }
 
 /** A faixa de indicadores. Quebra sozinha: cada cartao pede 200px e divide o resto. */
-export function FaixaDeIndicadores({ children }: { children: React.ReactNode }) {
+export function FaixaDeIndicadores({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <div
       style={{
@@ -722,7 +760,13 @@ export function SkeletonRows({
   return (
     <>
       {Array.from({ length: rows }, (_, i) => (
-        <tr key={i} style={{ borderBottom: "1px solid var(--border)", height: "var(--h-row)" }}>
+        <tr
+          key={i}
+          style={{
+            borderBottom: "1px solid var(--border)",
+            height: "var(--h-row)",
+          }}
+        >
           {Array.from({ length: cols }, (_, j) => {
             const rotulo = labels?.[j]?.trim() ?? "";
 
@@ -765,8 +809,18 @@ export function EmptyRow({
 }) {
   return (
     <tr>
-      <td colSpan={colSpan} style={{ padding: "48px 16px", textAlign: "center" }}>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+      <td
+        colSpan={colSpan}
+        style={{ padding: "48px 16px", textAlign: "center" }}
+      >
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 6,
+          }}
+        >
           <svg
             width="32"
             height="32"
@@ -779,7 +833,14 @@ export function EmptyRow({
             <circle cx="11" cy="11" r="8" />
             <path d="M21 21l-4.35-4.35" />
           </svg>
-          <span style={{ fontSize: "var(--text-base)", color: "var(--text-tertiary)" }}>{message}</span>
+          <span
+            style={{
+              fontSize: "var(--text-base)",
+              color: "var(--text-tertiary)",
+            }}
+          >
+            {message}
+          </span>
         </div>
       </td>
     </tr>
@@ -836,13 +897,21 @@ export function Pagination({
         {de}–{ate} de {total}
       </span>
       <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-        <BotaoPagina disabled={page <= 1} onClick={() => onPage(page - 1)} rotulo="Anterior">
+        <BotaoPagina
+          disabled={page <= 1}
+          onClick={() => onPage(page - 1)}
+          rotulo="Anterior"
+        >
           ‹
         </BotaoPagina>
         <span style={{ padding: "0 8px", color: "var(--text-secondary)" }}>
           {page} / {totalPages}
         </span>
-        <BotaoPagina disabled={page >= totalPages} onClick={() => onPage(page + 1)} rotulo="Proxima">
+        <BotaoPagina
+          disabled={page >= totalPages}
+          onClick={() => onPage(page + 1)}
+          rotulo="Proxima"
+        >
           ›
         </BotaoPagina>
       </div>
@@ -917,14 +986,26 @@ export function Button({
   title?: string;
 }) {
   const cores: Record<string, React.CSSProperties> = {
-    primary: { background: "var(--primary)", color: "var(--primary-fg)", border: "1px solid transparent" },
+    primary: {
+      background: "var(--primary)",
+      color: "var(--primary-fg)",
+      border: "1px solid transparent",
+    },
     secondary: {
       background: "var(--surface)",
       color: "var(--text-primary)",
       border: "1px solid var(--border-strong)",
     },
-    ghost: { background: "transparent", color: "var(--text-secondary)", border: "1px solid transparent" },
-    danger: { background: "var(--danger)", color: "#fff", border: "1px solid transparent" },
+    ghost: {
+      background: "transparent",
+      color: "var(--text-secondary)",
+      border: "1px solid transparent",
+    },
+    danger: {
+      background: "var(--danger)",
+      color: "#fff",
+      border: "1px solid transparent",
+    },
   };
 
   return (
@@ -939,7 +1020,11 @@ export function Button({
         justifyContent: "center",
         gap: 6,
         height:
-          size === "xs" ? "var(--h-btn-xs)" : size === "sm" ? "var(--h-btn-sm)" : "var(--h-btn)",
+          size === "xs"
+            ? "var(--h-btn-xs)"
+            : size === "sm"
+              ? "var(--h-btn-sm)"
+              : "var(--h-btn)",
         padding: size === "xs" ? "0 10px" : size === "sm" ? "0 12px" : "0 16px",
         borderRadius: size === "xs" ? "var(--radius-sm)" : "var(--radius-md)",
         fontSize: size === "xs" ? "var(--text-sm)" : "var(--text-base)",
@@ -1014,7 +1099,9 @@ export function CabecalhoDeSecao({
      * e sem folga o titulo de uma cola no fim da anterior e as quatro viram uma
      * parede so.
      */
-    <div style={{ marginTop: primeiro ? 11 : 22, marginBottom: colado ? 10 : 26 }}>
+    <div
+      style={{ marginTop: primeiro ? 11 : 22, marginBottom: colado ? 10 : 26 }}
+    >
       {/*
         O mais fica COLADO no titulo, e nao na outra ponta da linha.
         
@@ -1063,7 +1150,13 @@ export function CabecalhoDeSecao({
  * escrito repetiria "Adicionar" quatro vezes na mesma tela. O nome vive no
  * `title` e no `aria-label`, onde serve a quem precisa dele.
  */
-export function BotaoMais({ rotulo, onClick }: { rotulo: string; onClick?: () => void }) {
+export function BotaoMais({
+  rotulo,
+  onClick,
+}: {
+  rotulo: string;
+  onClick?: () => void;
+}) {
   return (
     <button
       type="button"
@@ -1103,10 +1196,27 @@ export function BotaoMais({ rotulo, onClick }: { rotulo: string; onClick?: () =>
   );
 }
 
-export function IncluirButton({ onClick, rotulo = "Incluir" }: { onClick?: () => void; rotulo?: string }) {
+export function IncluirButton({
+  onClick,
+  rotulo = "Incluir",
+}: {
+  onClick?: () => void;
+  rotulo?: string;
+}) {
   return (
-    <Button variant="primary" size="sm" onClick={onClick} style={{ padding: "0 16px" }}>
-      <svg width="11" height="11" viewBox="0 0 12 12" fill="currentColor" style={{ flexShrink: 0 }}>
+    <Button
+      variant="primary"
+      size="sm"
+      onClick={onClick}
+      style={{ padding: "0 16px" }}
+    >
+      <svg
+        width="11"
+        height="11"
+        viewBox="0 0 12 12"
+        fill="currentColor"
+        style={{ flexShrink: 0 }}
+      >
         <path d="M6.75 1.75a.75.75 0 0 0-1.5 0V5.25H1.75a.75.75 0 0 0 0 1.5H5.25v3.5a.75.75 0 0 0 1.5 0V6.75h3.5a.75.75 0 0 0 0-1.5H6.75V1.75z" />
       </svg>
       {rotulo}
@@ -1288,7 +1398,13 @@ function LupaIcon() {
 // FILTROS
 // ════════════════════════════════════════════════════════════════
 
-export function FilterItem({ label, children }: { label: string; children: React.ReactNode }) {
+export function FilterItem({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
       <span
@@ -1346,7 +1462,8 @@ export function FilterButton({
 
   useEffect(() => {
     const fora = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setAberto(false);
+      if (ref.current && !ref.current.contains(e.target as Node))
+        setAberto(false);
     };
     document.addEventListener("mousedown", fora);
     return () => document.removeEventListener("mousedown", fora);
@@ -1364,7 +1481,11 @@ export function FilterButton({
           padding: "0 10px",
           borderRadius: "var(--radius-md)",
           border: "1px solid var(--border)",
-          backgroundColor: ativo ? "var(--primary-subtle)" : aberto ? "var(--surface-3)" : "var(--surface)",
+          backgroundColor: ativo
+            ? "var(--primary-subtle)"
+            : aberto
+              ? "var(--surface-3)"
+              : "var(--surface)",
           cursor: "pointer",
           display: "flex",
           alignItems: "center",
@@ -1378,7 +1499,9 @@ export function FilterButton({
           <path d="M1.5 1.5A.5.5 0 0 1 2 1h12a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.128.334L10 8.692V13.5a.5.5 0 0 1-.342.474l-3 1A.5.5 0 0 1 6 14.5V8.692L1.628 3.834A.5.5 0 0 1 1.5 3.5v-2zm1 .5v1.308l4.372 4.858A.5.5 0 0 1 7 8.5v5.306l2-.666V8.5a.5.5 0 0 1 .128-.334L13.5 3.308V2h-11z" />
         </svg>
         {rotulo && (
-          <span style={{ whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
+          <span
+            style={{ whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}
+          >
             {rotulo}
           </span>
         )}
@@ -1429,7 +1552,12 @@ export function FilterButton({
             painel ja se explica pelo que faz.
           */}
           {!onAplicar && (
-            <div style={{ padding: "8px 12px 6px", borderBottom: "1px solid var(--border)" }}>
+            <div
+              style={{
+                padding: "8px 12px 6px",
+                borderBottom: "1px solid var(--border)",
+              }}
+            >
               <span
                 style={{
                   fontSize: 10,
@@ -1444,7 +1572,14 @@ export function FilterButton({
             </div>
           )}
 
-          <div style={{ padding: 14, display: "flex", flexDirection: "column", gap: 14 }}>
+          <div
+            style={{
+              padding: 14,
+              display: "flex",
+              flexDirection: "column",
+              gap: 14,
+            }}
+          >
             {children}
           </div>
 
@@ -1498,10 +1633,14 @@ export function FilterButton({
               <span
                 style={{
                   fontSize: "var(--text-sm)",
-                  color: ativo ? "var(--text-tertiary)" : "var(--text-disabled)",
+                  color: ativo
+                    ? "var(--text-tertiary)"
+                    : "var(--text-disabled)",
                 }}
               >
-                {ativo ? `${activeCount} ativo${activeCount > 1 ? "s" : ""}` : "Nenhum ativo"}
+                {ativo
+                  ? `${activeCount} ativo${activeCount > 1 ? "s" : ""}`
+                  : "Nenhum ativo"}
               </span>
             )}
           </div>
@@ -1532,7 +1671,8 @@ export function ViewButton({
 
   useEffect(() => {
     const fora = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setAberto(false);
+      if (ref.current && !ref.current.contains(e.target as Node))
+        setAberto(false);
     };
     document.addEventListener("mousedown", fora);
     return () => document.removeEventListener("mousedown", fora);
@@ -1562,7 +1702,15 @@ export function ViewButton({
         }}
       >
         {atual.icone}
-        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+        <svg
+          width="10"
+          height="10"
+          viewBox="0 0 10 10"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+        >
           <path d="M2 3.5l3 3 3-3" />
         </svg>
       </button>
@@ -1592,7 +1740,9 @@ export function ViewButton({
                   setAberto(false);
                 }}
                 onMouseEnter={(e) => {
-                  if (!selecionada) e.currentTarget.style.backgroundColor = "var(--surface-hover)";
+                  if (!selecionada)
+                    e.currentTarget.style.backgroundColor =
+                      "var(--surface-hover)";
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.backgroundColor = selecionada
@@ -1607,7 +1757,9 @@ export function ViewButton({
                   padding: "7px 10px",
                   borderRadius: "var(--radius-sm)",
                   border: "none",
-                  background: selecionada ? "var(--primary-subtle)" : "transparent",
+                  background: selecionada
+                    ? "var(--primary-subtle)"
+                    : "transparent",
                   color: selecionada ? "var(--primary)" : "var(--text-primary)",
                   fontSize: "var(--text-base)",
                   fontWeight: selecionada ? "var(--fw-medium)" : 400,
@@ -1630,7 +1782,16 @@ export function ViewButton({
 /** Icones dos modos de exibicao. */
 export function IconeTabela() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <rect x="3" y="3" width="18" height="18" rx="2" />
       <path d="M3 9h18M9 21V9" />
     </svg>
@@ -1639,7 +1800,16 @@ export function IconeTabela() {
 
 export function IconeKanban() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <rect x="3" y="3" width="5" height="18" rx="1" />
       <rect x="10" y="3" width="5" height="12" rx="1" />
       <rect x="17" y="3" width="5" height="15" rx="1" />
@@ -1653,7 +1823,13 @@ export function IconeKanban() {
 
 export type Tom = "success" | "warning" | "danger" | "info" | "neutral";
 
-export function Badge({ tom = "neutral", children }: { tom?: Tom; children: React.ReactNode }) {
+export function Badge({
+  tom = "neutral",
+  children,
+}: {
+  tom?: Tom;
+  children: React.ReactNode;
+}) {
   return (
     <span
       style={{
@@ -1810,14 +1986,32 @@ export function CampoSecreto({
         }}
       >
         {visivel ? (
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.9"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <path d="M2 2l20 20" />
             <path d="M10.6 6.1A9.7 9.7 0 0 1 12 6c6.5 0 10.2 6 10.2 6a18 18 0 0 1-3.3 3.9" />
             <path d="M6.3 6.9A17.6 17.6 0 0 0 1.8 12S5.5 18 12 18a9.9 9.9 0 0 0 4-.8" />
             <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
           </svg>
         ) : (
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.9"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <path d="M1.8 12S5.5 5.5 12 5.5 22.2 12 22.2 12 18.5 18.5 12 18.5 1.8 12 1.8 12z" />
             <circle cx="12" cy="12" r="3" />
           </svg>
@@ -1827,10 +2021,18 @@ export function CampoSecreto({
   );
 }
 
-export function Section({ title, children }: { title: string; children: React.ReactNode }) {
+export function Section({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      <div style={{ paddingBottom: 8, borderBottom: "1px solid var(--border)" }}>
+      <div
+        style={{ paddingBottom: 8, borderBottom: "1px solid var(--border)" }}
+      >
         <span
           style={{
             fontSize: "var(--text-xl)",
@@ -1841,7 +2043,9 @@ export function Section({ title, children }: { title: string; children: React.Re
           {title}
         </span>
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{children}</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {children}
+      </div>
     </div>
   );
 }
@@ -1901,7 +2105,12 @@ export function Alert({
           </div>
         )}
         {children && (
-          <div style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>
+          <div
+            style={{
+              fontSize: "var(--text-sm)",
+              color: "var(--text-secondary)",
+            }}
+          >
             {children}
           </div>
         )}
@@ -1931,7 +2140,11 @@ function IconeDoAviso({ variant }: { variant: Tom }) {
 
   return (
     <span
-      style={{ flexShrink: 0, display: "inline-flex", color: `var(--${variant}-text)` }}
+      style={{
+        flexShrink: 0,
+        display: "inline-flex",
+        color: `var(--${variant}-text)`,
+      }}
       aria-hidden
     >
       {variant === "danger" ? (
@@ -1993,7 +2206,14 @@ export function Field({
   error?: string;
 }) {
   return (
-    <div style={{ display: "flex", alignItems: "flex-start", gap: 12, minHeight: 28 }}>
+    <div
+      style={{
+        display: "flex",
+        alignItems: "flex-start",
+        gap: 12,
+        minHeight: 28,
+      }}
+    >
       {label && (
         <label
           style={{
@@ -2014,16 +2234,36 @@ export function Field({
           <span>
             {label}:
             {required && (
-              <span style={{ color: "var(--danger-text)", fontWeight: 700, marginLeft: 2 }}>*</span>
+              <span
+                style={{
+                  color: "var(--danger-text)",
+                  fontWeight: 700,
+                  marginLeft: 2,
+                }}
+              >
+                *
+              </span>
             )}
           </span>
           {hint && !error && <Info texto={hint} />}
         </label>
       )}
-      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+      <div
+        style={{
+          flex: 1,
+          minWidth: 0,
+          display: "flex",
+          flexDirection: "column",
+          gap: 2,
+        }}
+      >
         {children}
         {error && (
-          <span style={{ fontSize: "var(--text-xs)", color: "var(--danger-text)" }}>{error}</span>
+          <span
+            style={{ fontSize: "var(--text-xs)", color: "var(--danger-text)" }}
+          >
+            {error}
+          </span>
         )}
       </div>
     </div>
@@ -2072,7 +2312,12 @@ export function GrupoDeCampos({
 }) {
   return (
     <section>
-      <div style={{ marginBottom: "var(--form-gap-titulo)", marginTop: primeiro ? 0 : 4 }}>
+      <div
+        style={{
+          marginBottom: "var(--form-gap-titulo)",
+          marginTop: primeiro ? 0 : 4,
+        }}
+      >
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span
             style={{
@@ -2085,7 +2330,9 @@ export function GrupoDeCampos({
             {titulo}
           </span>
 
-          {onIncluir && <BotaoMais rotulo={rotuloIncluir} onClick={onIncluir} />}
+          {onIncluir && (
+            <BotaoMais rotulo={rotuloIncluir} onClick={onIncluir} />
+          )}
         </div>
         <p
           style={{
@@ -2099,7 +2346,13 @@ export function GrupoDeCampos({
         </p>
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "var(--form-gap-campo)" }}>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: "var(--form-gap-campo)",
+        }}
+      >
         {children}
       </div>
     </section>
@@ -2169,7 +2422,9 @@ export function FormularioDaLista({
 
       {children}
 
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+      <div
+        style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}
+      >
         {/*
           Excluir na outra ponta da linha: e a unica acao daqui que nao da para
           desfazer, e ao lado de "Salvar" ela vira erro de mira.
@@ -2186,7 +2441,12 @@ export function FormularioDaLista({
           Cancelar
         </Button>
 
-        <Button size="sm" variant="primary" disabled={!podeSalvar || salvando} onClick={onSalvar}>
+        <Button
+          size="sm"
+          variant="primary"
+          disabled={!podeSalvar || salvando}
+          onClick={onSalvar}
+        >
           {salvando ? "Salvando…" : rotuloSalvar}
         </Button>
       </div>
@@ -2321,7 +2581,13 @@ export function MarcaDePrincipal({
       }}
     >
       {marcado ? (
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+        <svg
+          width="15"
+          height="15"
+          viewBox="0 0 24 24"
+          fill="currentColor"
+          aria-hidden
+        >
           <circle cx="12" cy="12" r="9" />
           <path
             d="M8 12.4l2.6 2.6L16 9.6"
@@ -2358,7 +2624,13 @@ export function MarcaDePrincipal({
  */
 export function Formulario({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "var(--form-gap-grupo)" }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: "var(--form-gap-grupo)",
+      }}
+    >
       {children}
     </div>
   );
@@ -2392,9 +2664,21 @@ function Info({ texto }: { texto: string }) {
   );
 }
 
-export function Row2({ children, cols }: { children: React.ReactNode; cols?: string }) {
+export function Row2({
+  children,
+  cols,
+}: {
+  children: React.ReactNode;
+  cols?: string;
+}) {
   return (
-    <div style={{ display: "grid", gridTemplateColumns: cols ?? "1fr 1fr", gap: 16 }}>
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: cols ?? "1fr 1fr",
+        gap: 16,
+      }}
+    >
       {children}
     </div>
   );
@@ -2410,7 +2694,13 @@ export const textareaStyle: React.CSSProperties = {
 };
 
 /** Alterna ativo/inativo. Mesmo desenho do SIC. */
-export function ActiveToggle({ active, onChange }: { active: boolean; onChange: () => void }) {
+export function ActiveToggle({
+  active,
+  onChange,
+}: {
+  active: boolean;
+  onChange: () => void;
+}) {
   return (
     /*
      * ⚠️ A caixa em volta e o que alinha.
@@ -2420,39 +2710,45 @@ export function ActiveToggle({ active, onChange }: { active: boolean; onChange: 
      * Ocupando a altura de um campo, ele passa a se alinhar em qualquer lugar
      * do sistema sem cada tela corrigir por conta.
      */
-    <span style={{ display: "inline-flex", alignItems: "center", height: "var(--h-input)" }}>
-    <button
-      type="button"
-      onClick={onChange}
-      title={active ? "Inativar" : "Ativar"}
-      aria-pressed={active}
+    <span
       style={{
-        width: 36,
-        height: 20,
-        borderRadius: "var(--radius-full)",
-        backgroundColor: active ? "var(--primary)" : "var(--text-disabled)",
-        border: "none",
-        cursor: "pointer",
-        position: "relative",
-        transition: "background-color var(--dur) var(--ease)",
-        flexShrink: 0,
-        padding: 0,
+        display: "inline-flex",
+        alignItems: "center",
+        height: "var(--h-input)",
       }}
     >
-      <span
+      <button
+        type="button"
+        onClick={onChange}
+        title={active ? "Inativar" : "Ativar"}
+        aria-pressed={active}
         style={{
-          position: "absolute",
-          top: 2,
-          left: active ? 18 : 2,
-          width: 16,
-          height: 16,
-          borderRadius: "50%",
-          backgroundColor: "#fff",
-          transition: "left var(--dur) var(--ease)",
-          boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+          width: 36,
+          height: 20,
+          borderRadius: "var(--radius-full)",
+          backgroundColor: active ? "var(--primary)" : "var(--text-disabled)",
+          border: "none",
+          cursor: "pointer",
+          position: "relative",
+          transition: "background-color var(--dur) var(--ease)",
+          flexShrink: 0,
+          padding: 0,
         }}
-      />
-    </button>
+      >
+        <span
+          style={{
+            position: "absolute",
+            top: 2,
+            left: active ? 18 : 2,
+            width: 16,
+            height: 16,
+            borderRadius: "50%",
+            backgroundColor: "#fff",
+            transition: "left var(--dur) var(--ease)",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+          }}
+        />
+      </button>
     </span>
   );
 }
@@ -2525,9 +2821,17 @@ export function CampoBloqueado({
           value={valor}
           readOnly
           title={titulo}
-          style={{ ...base, height: "auto", minHeight: 60, padding: "6px 28px 6px 8px", resize: "none" }}
+          style={{
+            ...base,
+            height: "auto",
+            minHeight: 60,
+            padding: "6px 28px 6px 8px",
+            resize: "none",
+          }}
         />
-        <span style={{ position: "absolute", right: 8, top: 8, display: "flex" }}>
+        <span
+          style={{ position: "absolute", right: 8, top: 8, display: "flex" }}
+        >
           <LockIcon />
         </span>
       </div>
@@ -2617,7 +2921,10 @@ export function CampoDeTexto({
   onMudar: (valor: string) => void;
   /** A frase do problema. Vazio ou ausente, o campo e um campo comum. */
   alerta?: string | null;
-} & Omit<React.InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "style">) {
+} & Omit<
+  React.InputHTMLAttributes<HTMLInputElement>,
+  "value" | "onChange" | "style"
+>) {
   const comAlerta = Boolean(alerta);
 
   return (
@@ -2705,7 +3012,11 @@ export function CampoPercentual({
           if (!Number.isFinite(n)) return;
           aoMudar(Math.min(100, Math.max(0, n)));
         }}
-        style={{ ...inputStyle, paddingRight: 30, fontVariantNumeric: "tabular-nums" }}
+        style={{
+          ...inputStyle,
+          paddingRight: 30,
+          fontVariantNumeric: "tabular-nums",
+        }}
       />
       {/* A unidade fica NO campo, e nao so no rotulo: quem digita 3,5 precisa ver
           que aquilo e por cento, e nao reais. */}
@@ -2782,7 +3093,7 @@ export function PanelTabs({
  * Progresso de recebimento.
  *
  * Total em cima, barra fina no meio, e embaixo o que entrou a esquerda contra o
- * que falta a direita. Vinha da tela do VPay FlutterFlow, e e a primeira coisa
+ * que falta a direita. Vinha da tela do Vope FlutterFlow, e e a primeira coisa
  * do drawer porque e a pergunta que abre a fatura: "quanto ainda tenho a
  * receber daqui?".
  */
@@ -2844,13 +3155,23 @@ export function ProgressoValor({
       >
         <span style={{ color: "var(--text-secondary)" }}>
           {rotuloEntrada}:{" "}
-          <strong style={{ color: "var(--credito)", fontVariantNumeric: "tabular-nums" }}>
+          <strong
+            style={{
+              color: "var(--credito)",
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
             {reais(pago)}
           </strong>
         </span>
         <span style={{ color: "var(--text-secondary)" }}>
           Em aberto:{" "}
-          <strong style={{ color: "var(--text-primary)", fontVariantNumeric: "tabular-nums" }}>
+          <strong
+            style={{
+              color: "var(--text-primary)",
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
             {reais(restante)}
           </strong>
         </span>
@@ -2860,9 +3181,10 @@ export function ProgressoValor({
 }
 
 function reais(centavos: number): string {
-  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(
-    centavos / 100,
-  );
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(centavos / 100);
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -2907,7 +3229,9 @@ export function CampoNumerico({
   style?: React.CSSProperties;
 }) {
   const paraTexto = (v: number) =>
-    casas === 0 ? String(Math.round(v / escala)) : (v / escala).toFixed(casas).replace(".", ",");
+    casas === 0
+      ? String(Math.round(v / escala))
+      : (v / escala).toFixed(casas).replace(".", ",");
 
   const [texto, setTexto] = useState(() => paraTexto(valor));
   const [focado, setFocado] = useState(false);
@@ -2961,10 +3285,19 @@ export function CampoNumerico({
   if (alinhar === "left") {
     return (
       <span style={{ display: "inline-flex", alignItems: "baseline", gap: 3 }}>
-        <span style={{ display: "inline-flex", width: `${Math.max(exibido.length, 1)}ch` }}>
+        <span
+          style={{
+            display: "inline-flex",
+            width: `${Math.max(exibido.length, 1)}ch`,
+          }}
+        >
           {campo}
         </span>
-        <span style={{ fontSize: "var(--text-xs)", color: "var(--text-tertiary)" }}>{sufixo}</span>
+        <span
+          style={{ fontSize: "var(--text-xs)", color: "var(--text-tertiary)" }}
+        >
+          {sufixo}
+        </span>
       </span>
     );
   }
@@ -3057,7 +3390,13 @@ export function CampoQuantidade({
   );
 }
 
-function SeletorUnidade({ emHoras, aoTrocar }: { emHoras: boolean; aoTrocar: () => void }) {
+function SeletorUnidade({
+  emHoras,
+  aoTrocar,
+}: {
+  emHoras: boolean;
+  aoTrocar: () => void;
+}) {
   return (
     <button
       type="button"
@@ -3097,6 +3436,19 @@ function SeletorUnidade({ emHoras, aoTrocar }: { emHoras: boolean; aoTrocar: () 
  * nome dentro convida a apagar sem querer; para trocar, o X limpa e devolve a
  * busca — um gesto explicito.
  */
+/** Respiro entre a lista e o campo, e a folga minima ate a borda da tela. */
+const RESPIRO_DA_LISTA = 4;
+const FOLGA_DA_LISTA = 8;
+
+/** Sobe pelo `bottom` e desce pelo `top`: um dos dois, nunca os dois. */
+type PosicaoDaLista = {
+  left: number;
+  largura: number;
+  alturaMax: number;
+  top?: number;
+  bottom?: number;
+};
+
 export function SeletorBuscavel({
   valor,
   rotulo,
@@ -3139,16 +3491,86 @@ export function SeletorBuscavel({
   const [aberto, setAberto] = useState(false);
   const [buscando, setBuscando] = useState(false);
   const caixa = useRef<HTMLDivElement>(null);
+  const lista = useRef<HTMLDivElement>(null);
+  const [onde, setOnde] = useState<PosicaoDaLista | null>(null);
 
   useEffect(() => {
     if (!aberto) return;
 
     const fora = (e: MouseEvent) => {
-      if (caixa.current && !caixa.current.contains(e.target as Node)) setAberto(false);
+      const alvo = e.target as Node;
+      // ⚠️ A lista mora no `body` por portal, entao ela NAO esta dentro da
+      // caixa: conferindo so a caixa, escolher uma opcao fechava o seletor no
+      // `mousedown` e o `click` nunca chegava no item.
+      if (caixa.current?.contains(alvo) || lista.current?.contains(alvo))
+        return;
+      setAberto(false);
+      setOnde(null);
     };
 
     document.addEventListener("mousedown", fora);
     return () => document.removeEventListener("mousedown", fora);
+  }, [aberto]);
+
+  /*
+   * ⚠️ A lista sai do fluxo por PORTAL, presa na tela, pela mesma razao do
+   * `MenuDeLinha`: ancorada no campo, ela era recortada por qualquer pai com
+   * `overflow` — e o seletor mora dentro de celula de tabela e de drawer, que
+   * rolam. No ultimo lancamento de uma conta a pagar a lista de centro de custo
+   * simplesmente nao aparecia.
+   *
+   * ⚠️ Subindo, a ancora e o `bottom`, e nao o `top`. Presa pelo topo, a lista
+   * precisaria da propria altura para saber onde comecar, e uma lista de dois
+   * itens abriria com um vao do tamanho do teto ate o campo.
+   */
+  useLayoutEffect(() => {
+    if (!aberto) return;
+
+    function medir() {
+      const c = caixa.current;
+      if (!c) return;
+
+      const r = c.getBoundingClientRect();
+      const abaixo =
+        window.innerHeight - r.bottom - RESPIRO_DA_LISTA - FOLGA_DA_LISTA;
+      const acima = r.top - RESPIRO_DA_LISTA - FOLGA_DA_LISTA;
+
+      // Sobe quando o que resta embaixo nao serve nem para tres linhas, e o de
+      // cima e maior. Subir por pouco afastaria a lista do campo sem ganho.
+      const paraCima = abaixo < 160 && acima > abaixo;
+      const alturaMax = Math.min(240, Math.max(paraCima ? acima : abaixo, 120));
+
+      const largura = Math.max(r.width, 200);
+      const left = Math.min(
+        Math.max(FOLGA_DA_LISTA, r.left),
+        Math.max(FOLGA_DA_LISTA, window.innerWidth - largura - FOLGA_DA_LISTA),
+      );
+
+      setOnde({
+        left,
+        largura,
+        alturaMax,
+        top: paraCima ? undefined : r.bottom + RESPIRO_DA_LISTA,
+        bottom: paraCima
+          ? window.innerHeight - r.top + RESPIRO_DA_LISTA
+          : undefined,
+      });
+    }
+
+    medir();
+
+    /*
+     * ⚠️ Reposiciona ao rolar, e nao fecha como o `MenuDeLinha` faz. Ali o gesto
+     * seguinte e um clique; aqui a pessoa esta digitando, e fechar a lista no
+     * meio da busca perderia o termo. `capture` porque quem rola e um pai com
+     * `overflow`, e evento de rolagem desses nao sobe ate a janela.
+     */
+    window.addEventListener("scroll", medir, true);
+    window.addEventListener("resize", medir);
+    return () => {
+      window.removeEventListener("scroll", medir, true);
+      window.removeEventListener("resize", medir);
+    };
   }, [aberto]);
 
   useEffect(() => {
@@ -3168,9 +3590,20 @@ export function SeletorBuscavel({
   if (valor != null && rotulo) {
     return (
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-        <div style={{ ...inputStyle, display: "flex", alignItems: "center", minWidth: 0 }}>
+        <div
+          style={{
+            ...inputStyle,
+            display: "flex",
+            alignItems: "center",
+            minWidth: 0,
+          }}
+        >
           <span
-            style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+            style={{
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
             title={rotulo}
           >
             {rotulo}
@@ -3199,7 +3632,15 @@ export function SeletorBuscavel({
               color: "var(--text-secondary)",
             }}
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.4"
+              strokeLinecap="round"
+            >
               <path d="M18 6L6 18M6 6l12 12" />
             </svg>
           </button>
@@ -3237,49 +3678,65 @@ export function SeletorBuscavel({
         }
       />
 
-      {aberto && (
-        <div
-          style={{
-            position: "absolute",
-            top: "calc(100% + 4px)",
-            left: 0,
-            right: 0,
-            zIndex: 20,
-            maxHeight: 240,
-            overflowY: "auto",
-            padding: 4,
-            border: "1px solid var(--border)",
-            borderRadius: "var(--radius-md)",
-            background: "var(--surface)",
-            boxShadow: "var(--shadow-md)",
-          }}
-        >
-          {buscando && opcoes.length === 0 ? (
-            <Recado>Buscando…</Recado>
-          ) : opcoes.length === 0 ? (
-            <Recado>{termo ? "Nada encontrado." : "Digite para buscar."}</Recado>
-          ) : (
-            opcoes.map((o) => (
-              <ItemDaBusca
-                key={o.id}
-                nome={o.nome}
-                onClick={() => {
-                  aoEscolher(o);
-                  setAberto(false);
-                  setTermo("");
-                }}
-              />
-            ))
-          )}
-        </div>
-      )}
+      {aberto &&
+        createPortal(
+          <div
+            ref={lista}
+            style={{
+              position: "fixed",
+              top: onde?.top,
+              bottom: onde?.bottom,
+              left: onde?.left ?? 0,
+              width: onde?.largura,
+              // Enquanto nao mediu, ocupa lugar nenhum na tela: a lista nunca
+              // pisca no canto antes de achar o campo.
+              visibility: onde ? "visible" : "hidden",
+              zIndex: 441,
+              maxHeight: onde?.alturaMax ?? 240,
+              overflowY: "auto",
+              padding: 4,
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius-md)",
+              background: "var(--surface)",
+              boxShadow: "var(--shadow-md)",
+            }}
+          >
+            {buscando && opcoes.length === 0 ? (
+              <Recado>Buscando…</Recado>
+            ) : opcoes.length === 0 ? (
+              <Recado>
+                {termo ? "Nada encontrado." : "Digite para buscar."}
+              </Recado>
+            ) : (
+              opcoes.map((o) => (
+                <ItemDaBusca
+                  key={o.id}
+                  nome={o.nome}
+                  onClick={() => {
+                    aoEscolher(o);
+                    setAberto(false);
+                    setOnde(null);
+                    setTermo("");
+                  }}
+                />
+              ))
+            )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
 
 function Recado({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ padding: "8px 10px", fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>
+    <div
+      style={{
+        padding: "8px 10px",
+        fontSize: "var(--text-sm)",
+        color: "var(--text-tertiary)",
+      }}
+    >
       {children}
     </div>
   );
@@ -3313,7 +3770,6 @@ function ItemDaBusca({ nome, onClick }: { nome: string; onClick: () => void }) {
   );
 }
 
-
 /**
  * Conferido no extrato, ou ainda esperando.
  *
@@ -3327,10 +3783,25 @@ function ItemDaBusca({ nome, onClick }: { nome: string; onClick: () => void }) {
  * fazem a mesma pergunta sobre o mesmo campo. Escrita duas vezes, ela ja teria
  * dois amarelos.
  */
-export function MarcaDeConciliacao({ conciliado }: { conciliado: boolean }) {
-  const rotulo = conciliado
-    ? "Conferido no extrato do banco"
-    : "Ainda não conferido no extrato. Conciliar é gesto humano: nada no sistema marca sozinho.";
+export function MarcaDeConciliacao({
+  conciliado,
+  cancelada,
+}: {
+  conciliado: boolean;
+  /**
+   * A parcela nao vai mais acontecer, entao nao ha o que conferir.
+   *
+   * ⚠️ Ela ganha marca PROPRIA, e nao o relogio de pendente. O relogio diz "o
+   * dinheiro ainda vem"; numa parcela cancelada isso e falso, e a coluna passaria
+   * a cobrar para sempre uma conferencia que nunca vai acontecer.
+   */
+  cancelada?: boolean;
+}) {
+  const rotulo = cancelada
+    ? "Parcela cancelada: não há o que conferir"
+    : conciliado
+      ? "Conferido no extrato do banco"
+      : "Ainda não conferido no extrato. Conciliar é gesto humano: nada no sistema marca sozinho.";
 
   return (
     <span
@@ -3338,12 +3809,39 @@ export function MarcaDeConciliacao({ conciliado }: { conciliado: boolean }) {
       aria-label={rotulo}
       style={{
         display: "inline-flex",
-        // O amarelo solido, e nao o `--warning`: aquele e ambar escuro,
-        // calibrado para ler como TEXTO, e some quando vira um traco de 15px.
-        color: conciliado ? "var(--success)" : "var(--warning-solido)",
+        /*
+          ⚠️ `--primary` no conferido, e nao `--success`.
+          O `--success` e o verde generico dos avisos; conferido e um ESTADO do
+          sistema, e a cor da marca o liga ao resto da interface em vez de a uma
+          mensagem. E a mesma marca do extrato, que ja era assim — as duas telas
+          divergiam na cor do mesmo fato.
+
+          O amarelo do pendente e o SOLIDO, e nao o `--warning`: aquele e ambar
+          escuro, calibrado para ler como texto, e some num traco de 15px.
+        */
+        color: cancelada
+          ? "var(--text-disabled)"
+          : conciliado
+            ? "var(--primary)"
+            : "var(--warning-solido)",
       }}
     >
-      {conciliado ? (
+      {cancelada ? (
+        <svg
+          width="15"
+          height="15"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+        >
+          {/* Circulo com corte: existe, e deixou de valer. Mesmo desenho do
+              item "Cancelar parcela" no menu da linha. */}
+          <circle cx="8" cy="8" r="6.4" />
+          <path d="M5.6 10.4l4.8-4.8" />
+        </svg>
+      ) : conciliado ? (
         <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
           {/* Preenchido, e nao contornado: cheio, o certo fecha a pergunta. */}
           <circle cx="8" cy="8" r="7" />

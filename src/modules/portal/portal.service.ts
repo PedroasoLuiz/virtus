@@ -1,6 +1,9 @@
 import { somar, ZERO, type Centavos } from "@/shared/utils/money";
 import * as repo from "@/modules/portal/portal.repository";
-import type { CarteiraDoCliente, Emitente } from "@/modules/portal/portal.types";
+import type {
+  CarteiraDoCliente,
+  Emitente,
+} from "@/modules/portal/portal.types";
 
 /**
  * Regra do portal.
@@ -17,7 +20,9 @@ import type { CarteiraDoCliente, Emitente } from "@/modules/portal/portal.types"
  * separados, com documento e conta bancaria proprios. Somadas num quadro so, o
  * total nao corresponde a nada que ele possa pagar de uma vez.
  */
-export async function carteira(emitenteEscolhido?: number): Promise<CarteiraDoCliente> {
+export async function carteira(
+  emitenteEscolhido?: number,
+): Promise<CarteiraDoCliente> {
   const clientes = await repo.meusClientes();
 
   const [parcelas, orcamentos] = await Promise.all([
@@ -37,7 +42,9 @@ export async function carteira(emitenteEscolhido?: number): Promise<CarteiraDoCl
     emitentes.find((e) => e.id === emitenteEscolhido) ?? emitentes[0] ?? null;
 
   const doEmitente = <T extends { emitente: Emitente }>(itens: T[]) =>
-    emitenteAtual ? itens.filter((i) => i.emitente.id === emitenteAtual.id) : [];
+    emitenteAtual
+      ? itens.filter((i) => i.emitente.id === emitenteAtual.id)
+      : [];
 
   const minhas = doEmitente(parcelas);
 

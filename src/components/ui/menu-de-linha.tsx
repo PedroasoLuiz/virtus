@@ -22,6 +22,10 @@ const MOLDURA_DE_ACAO: React.CSSProperties = {
   cursor: "pointer",
 };
 
+/** Respiro entre o cartao e o botao, e a folga minima ate a borda da tela. */
+const RESPIRO = 4;
+const FOLGA = 8;
+
 /**
  * O menu de acoes de uma linha da tabela do drawer.
  *
@@ -47,20 +51,66 @@ const MOLDURA_DE_ACAO: React.CSSProperties = {
 export function MenuDeLinha({ children }: { children: (fechar: () => void) => React.ReactNode }) {
   const [aberto, setAberto] = useState(false);
   const botao = useRef<HTMLButtonElement>(null);
-  const [onde, setOnde] = useState({ top: 0, right: 0 });
+  const cartao = useRef<HTMLDivElement>(null);
+  const [onde, setOnde] = useState<{ top: number; right: number; alturaMax: number } | null>(null);
 
   /*
    * ⚠️ Mede DEPOIS de abrir e antes de pintar (`useLayoutEffect`).
    *
    * Com `useEffect`, o cartao aparecia por um quadro no canto superior esquerdo
    * antes de pular para o lugar certo.
+   *
+   * ⚠️ Mede o CARTAO, e nao so o botao, porque a decisao depende da altura dele.
+   * Preso na tela, o cartao nao e recortado por nada — e por isso tambem nao ha
+   * nada que o empurre de volta quando ele passa da borda de baixo. Abrindo
+   * sempre para baixo, a linha 12 de um parcelamento perdia o menu inteiro fora
+   * da tela, sem barra e sem nada que explicasse. Enquanto nao mede, o cartao
+   * fica com `visibility: hidden`: medir e o primeiro quadro, nunca um pulo.
    */
   useLayoutEffect(() => {
-    if (!aberto || !botao.current) return;
+    if (!aberto || !botao.current || !cartao.current) return;
 
     const r = botao.current.getBoundingClientRect();
-    setOnde({ top: r.bottom + 4, right: window.innerWidth - r.right });
+    const alturaDoCartao = cartao.current.offsetHeight;
+    const larguraDoCartao = cartao.current.offsetWidth;
+
+    const abaixo = window.innerHeight - r.bottom - RESPIRO - FOLGA;
+    const acima = r.top - RESPIRO - FOLGA;
+
+    /*
+     * ⚠️ So sobe quando NAO cabe embaixo e o espaco de cima e maior. Subir por
+     * estar perto do fim empurraria o menu para cima da propria linha que ele
+     * pertence, e o gesto deixaria de apontar para o registro escolhido.
+     */
+    const paraCima = alturaDoCartao > abaixo && acima > abaixo;
+    const alturaMax = Math.max(paraCima ? acima : abaixo, 120);
+    const altura = Math.min(alturaDoCartao, alturaMax);
+
+    const top = paraCima
+      ? Math.max(FOLGA, r.top - RESPIRO - altura)
+      : Math.min(r.bottom + RESPIRO, window.innerHeight - FOLGA - altura);
+
+    /*
+     * O cartao alinha pela direita do botao. O limite existe para o botao que
+     * fica perto da borda esquerda: sem ele, o cartao sairia pelo outro lado.
+     */
+    const right = Math.min(
+      Math.max(FOLGA, window.innerWidth - r.right),
+      window.innerWidth - larguraDoCartao - FOLGA,
+    );
+
+    setOnde({ top, right, alturaMax });
   }, [aberto]);
+
+  /*
+   * ⚠️ Fechar tambem APAGA a medida. Guardada, a proxima abertura pintaria um
+   * quadro no lugar da linha anterior antes de medir a nova — que e exatamente
+   * o pulo que o `useLayoutEffect` existe para evitar.
+   */
+  function fechar() {
+    setAberto(false);
+    setOnde(null);
+  }
 
   return (
     <span style={{ display: "inline-flex" }}>
@@ -73,7 +123,8 @@ export function MenuDeLinha({ children }: { children: (fechar: () => void) => Re
         onClick={(e) => {
           // A linha pode ter clique proprio; a acao nao dispara os dois.
           e.stopPropagation();
-          setAberto((v) => !v);
+          if (aberto) fechar();
+          else setAberto(true);
         }}
         style={{ ...MOLDURA_DE_ACAO, color: "var(--text-secondary)" }}
       >
@@ -93,17 +144,21 @@ export function MenuDeLinha({ children }: { children: (fechar: () => void) => Re
               enquanto a linha dele some da area visivel.
             */}
             <div
-              onClick={() => setAberto(false)}
-              onWheel={() => setAberto(false)}
+              onClick={fechar}
+              onWheel={fechar}
               style={{ position: "fixed", inset: 0, zIndex: 440 }}
             />
 
             <div
+              ref={cartao}
               onClick={(e) => e.stopPropagation()}
               style={{
                 position: "fixed",
-                top: onde.top,
-                right: onde.right,
+                top: onde?.top ?? 0,
+                right: onde?.right ?? 0,
+                // Enquanto nao mediu, ocupa espaco e nao aparece: e assim que a
+                // altura fica conhecida antes do primeiro quadro pintado.
+                visibility: onde ? "visible" : "hidden",
                 zIndex: 441,
                 padding: 4,
                 borderRadius: "var(--radius-md)",
@@ -112,9 +167,13 @@ export function MenuDeLinha({ children }: { children: (fechar: () => void) => Re
                 boxShadow: "var(--shadow-md)",
                 display: "flex",
                 flexDirection: "column",
+                // Teto so quando nem em cima nem em baixo cabe inteiro. O menu
+                // rola dentro de si; cortado, a ultima acao seria invisivel.
+                maxHeight: onde?.alturaMax,
+                overflowY: "auto",
               }}
             >
-              {children(() => setAberto(false))}
+              {children(fechar)}
             </div>
           </>,
           document.body,

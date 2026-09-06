@@ -143,7 +143,17 @@ function pascoa(ano: number): DataISO {
   const m = Math.floor((a + 11 * h + 22 * l) / 451);
   const mes = Math.floor((h + l - 7 * m + 114) / 31);
   const dia = ((h + l - 7 * m + 114) % 31) + 1;
-  return `${ano}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+
+  /*
+   * ⚠️ O ANO tambem vai com quatro digitos, e nao so o mes e o dia.
+   *
+   * Sem isso, ano 2 virava a string "2-03-31", que `new Date` recusa — e o
+   * `somarDias` logo abaixo estourava com "Invalid time value", um RangeError
+   * sem relacao aparente com feriado. E ano 2 acontece: enquanto se DIGITA num
+   * `input type=date`, o navegador entrega "0002-04-22" a cada tecla.
+   */
+  const aaaa = String(ano).padStart(4, "0");
+  return `${aaaa}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
 }
 
 const cacheFeriados = new Map<number, Set<DataISO>>();

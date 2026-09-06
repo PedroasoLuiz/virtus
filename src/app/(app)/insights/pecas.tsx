@@ -98,7 +98,7 @@ export function compacto(n: number): string {
  * post se destaca sozinho. Aplicada também nos milhares, seis cartões ficariam
  * todos verdes e o destaque deixaria de destacar.
  *
- * ⚠️ É `--primary`, o verde da marca, e não `--success`. Aquele é cor de estado,
+ * ⚠️ É `--primary`, a cor da marca, e não `--success`. Aquele é cor de estado,
  * e um número grande não é um estado — é a mesma regra do verde de confirmação
  * registrada no kit.
  */

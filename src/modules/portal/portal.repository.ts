@@ -21,7 +21,9 @@ import type {
  */
 
 /** Empresa da casa que emite a cobranca, como o cliente a le. */
-function emitenteDe(e: { id: number; fantasia: string | null; razaosocial: string | null } | null) {
+function emitenteDe(
+  e: { id: number; fantasia: string | null; razaosocial: string | null } | null,
+) {
   return {
     id: e?.id ?? 0,
     nome: primeiroPreenchido(e?.fantasia, e?.razaosocial) ?? "Emitente",
@@ -61,7 +63,9 @@ export async function meusClientes(): Promise<ClienteDoPortal[]> {
  * Traz pagas e em aberto: o cliente quer o historico tanto quanto o que deve, e
  * e no que ja pagou que ele confere se a baixa entrou.
  */
-export async function minhasParcelas(clientes: ClienteDoPortal[]): Promise<ParcelaDoCliente[]> {
+export async function minhasParcelas(
+  clientes: ClienteDoPortal[],
+): Promise<ParcelaDoCliente[]> {
   const supabase = await serverClient();
 
   const { data, error } = await supabase
@@ -69,6 +73,15 @@ export async function minhasParcelas(clientes: ClienteDoPortal[]): Promise<Parce
     .select(
       "id, token, numeroparcela, vencimento, valor, total, pago, nfs, boleto, pagamentosxparcelas(valor), faturas!inner(id, parcelas, fkCliente, fkEmpresa, empresas(id, fantasia, razaosocial), faturasorigens(ordensservico(idtenant, id)))",
     )
+    /*
+     * ⚠️ A CANCELADA nao aparece para o cliente.
+     *
+     * Aqui o publico e quem PAGA: uma parcela que a empresa dispensou, listada
+     * na tela dele, e uma cobranca que nao existe mais — e ele pagaria, ou
+     * ligaria para perguntar. Do lado de dentro ela continua visivel, porque la
+     * ela e historico do contrato.
+     */
+    .eq("cancelada", false)
     .order("vencimento", { ascending: true });
 
   if (error) throw error;
@@ -81,8 +94,14 @@ export async function minhasParcelas(clientes: ClienteDoPortal[]): Promise<Parce
       parcelas: number | null;
       fkCliente: number | null;
       fkEmpresa: number | null;
-      empresas: { id: number; fantasia: string | null; razaosocial: string | null } | null;
-      faturasorigens: { ordensservico: { idtenant: number | null; id: number } | null }[] | null;
+      empresas: {
+        id: number;
+        fantasia: string | null;
+        razaosocial: string | null;
+      } | null;
+      faturasorigens:
+        | { ordensservico: { idtenant: number | null; id: number } | null }[]
+        | null;
     };
 
     // Espelha `public.devido_da_parcela`: `total` manda, `valor` e o antigo.
@@ -94,7 +113,9 @@ export async function minhasParcelas(clientes: ClienteDoPortal[]): Promise<Parce
       ),
     );
 
-    const vencimento = l.vencimento ? ((l.vencimento.slice(0, 10)) as DataISO) : null;
+    const vencimento = l.vencimento
+      ? (l.vencimento.slice(0, 10) as DataISO)
+      : null;
     const pago = l.pago ?? false;
     const emitente = emitenteDe(f.empresas);
 
@@ -140,12 +161,16 @@ export async function minhasParcelas(clientes: ClienteDoPortal[]): Promise<Parce
  * preciso?". Quando a primeira responde as duas, ampliar a permissao muda a
  * lista sem ninguem perceber.
  */
-export async function meusOrcamentos(clientes: ClienteDoPortal[]): Promise<OrcamentoDoCliente[]> {
+export async function meusOrcamentos(
+  clientes: ClienteDoPortal[],
+): Promise<OrcamentoDoCliente[]> {
   const supabase = await serverClient();
 
   const { data, error } = await supabase
     .from("ordensservico")
-    .select("id, idtenant, titulo, datainicio, fkCliente, fkEmpresa, empresas(id, fantasia, razaosocial), ordensservicoxservicos(total)")
+    .select(
+      "id, idtenant, titulo, datainicio, fkCliente, fkEmpresa, empresas(id, fantasia, razaosocial), ordensservicoxservicos(total)",
+    )
     .ilike("status", "ORCAMENTO")
     .order("datainicio", { ascending: true });
 
@@ -154,7 +179,9 @@ export async function meusOrcamentos(clientes: ClienteDoPortal[]): Promise<Orcam
   const porCliente = new Map(clientes.map((c) => [c.id, c]));
 
   return (data ?? []).map((t) => {
-    const itens = (t.ordensservicoxservicos ?? []) as unknown as { total: number | null }[];
+    const itens = (t.ordensservicoxservicos ?? []) as unknown as {
+      total: number | null;
+    }[];
 
     return {
       ticketId: t.id,
@@ -172,7 +199,7 @@ export async function meusOrcamentos(clientes: ClienteDoPortal[]): Promise<Orcam
           razaosocial: string | null;
         } | null,
       ),
-      emitidoEm: t.datainicio ? ((t.datainicio.slice(0, 10)) as DataISO) : null,
+      emitidoEm: t.datainicio ? (t.datainicio.slice(0, 10) as DataISO) : null,
       total: doBanco(itens.reduce((soma, i) => soma + (i.total ?? 0), 0)),
     };
   });

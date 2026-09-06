@@ -46,7 +46,7 @@ export function UrlDeCallback() {
         </span>
 
         {/*
-          A URL no verde da marca e o icone COLADO nela, e nao na outra ponta da
+          A URL na cor da marca e o icone COLADO nela, e nao na outra ponta da
           linha. Na extremidade, o copiar vira um botao solto que nao se liga ao
           que copia; ao lado do texto, ele le como parte dele.
         */}
@@ -62,7 +62,7 @@ export function UrlDeCallback() {
         </code>
 
         {/*
-          Icone sem moldura, no verde da marca: e uma acao de apoio ao lado do
+          Icone sem moldura, na cor da marca: e uma acao de apoio ao lado do
           dado, e nao um botao com peso proprio. A confirmacao troca o desenho
           por um certo, porque copiar nao tem retorno visivel nenhum.
         */}

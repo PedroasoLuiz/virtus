@@ -214,7 +214,7 @@ function Barra() {
  */
 function Veredito({ resultado }: { resultado: ResultadoDoTeste }) {
   /*
-   * ⚠️ O verde do acerto e o `--primary`, o verde da marca, e nao o
+   * ⚠️ A cor do acerto e o `--primary`, a da marca, e nao o
    * `--success-text`. Este e o mesmo lugar onde a URL de callback aparece em
    * verde logo acima: dois verdes diferentes na mesma tela leem como dois
    * significados diferentes, quando os dois querem dizer a mesma coisa.

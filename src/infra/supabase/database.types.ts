@@ -353,6 +353,14 @@ export type PagamentoRow = {
   fkUserModificacao: string | null;
   /** Conferido no extrato do banco. Gesto humano: nada marca sozinho. */
   conciliado: boolean | null;
+  /**
+   * As duas pontas de uma transferencia entre contas dividem este id.
+   *
+   * ⚠️ Nulo em lancamento comum. Ele existe para o estorno levar as duas juntas:
+   * uma FK de um lado so deixaria a outra ponta viva, e o saldo de uma das
+   * contas passaria a mentir sem nada acusar.
+   */
+  transferencia: string | null;
   /** Quando o dinheiro se moveu para o cliente: e ela que fecha a parcela. */
   data: string | null;
   /**
@@ -449,6 +457,16 @@ export type FaturaParcelaRow = Timestamps & {
   desconto: number | null;
   total: number | null;
   pago: boolean | null;
+  /**
+   * Combinada, mas nao vai mais ser cobrada (contrato encerrado antes dela).
+   *
+   * ⚠️ Espelho do lado que paga, e terceiro estado ao lado de aberta e recebida.
+   * Sem ele, tirar da cobranca so daria apagando (some o combinado) ou baixando
+   * com desconto total (mente: diz que houve perdao de divida, e isso muda a DRE).
+   */
+  cancelada: boolean | null;
+  cancelada_em: string | null;
+  cancelamento_motivo: string | null;
   fkPagamento: number | null;
   observacoes: string | null;
   nfs: string | null;
@@ -641,7 +659,7 @@ export type CartaoFaturaParcelaRow = {
  * A lista de bancos.
  *
  * ⚠️ `fkEmpresa` nulo = do sistema, e vale para todas. Mesmo desenho de
- * `documentostipos`: o VPay entrega a lista pronta e cada empresa acrescenta a
+ * `documentostipos`: o Vope entrega a lista pronta e cada empresa acrescenta a
  * sua instituicao, sem poder mexer na entregue.
  */
 /**
@@ -750,6 +768,16 @@ export type ContaPagarParcelaRow = Timestamps & {
   desconto: number | null;
   total: number | null;
   pago: boolean | null;
+  /**
+   * Combinada, mas nao vai mais acontecer: o contrato foi encerrado antes dela.
+   *
+   * ⚠️ Terceiro estado, ao lado de aberta e paga. Sem ele, tirar uma parcela da
+   * cobranca so daria apagando (some o combinado) ou dando baixa de zero (mente:
+   * diz que houve pagamento).
+   */
+  cancelada: boolean | null;
+  cancelada_em: string | null;
+  cancelamento_motivo: string | null;
   fkPagamento: number | null;
   nfs: string | null;
   boleto: string | null;
@@ -1267,6 +1295,17 @@ export type Database = {
       vw_origens_faturamento: { Row: OrigemFaturamentoRow; Relationships: [] };
     };
     Functions: {
+      /**
+       * A DRE do ano, por centro de custo, em regime de caixa.
+       *
+       * Devolve o JSON inteiro numa chamada: `Receitas`, `Despesas` e `Resumo`.
+       * A forma vem do banco e e conferida por Zod no repositorio — o `unknown`
+       * aqui e honesto, porque `jsonb` nao carrega tipo.
+       */
+      dre_por_ano: {
+        Args: { pano: number; pfkempresa: number };
+        Returns: unknown;
+      };
       /** Le o token de uma conexao, conferindo o tenant antes de decifrar. */
       meta_token_da_conexao: {
         Args: { p_conexao: number };
