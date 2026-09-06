@@ -15,9 +15,14 @@ import { useAvisos } from "@/components/ui/avisos";
 import { formatarSemSimbolo, type Centavos } from "@/shared/utils/money";
 import { paraFormatoBR } from "@/shared/utils/datas";
 import { lerOfx, textoDoOfx } from "@/shared/domain/ofx";
+import { ajusteDeData } from "@/shared/domain/conciliacao";
 import { LinhaDaConciliacao } from "./conciliacao-linha";
 import type { ContaBancaria } from "@/modules/contas/contas.types";
-import type { PainelDeConciliacao } from "@/modules/conciliacao/conciliacao.types";
+import type {
+  LinhaDoExtrato,
+  PainelDeConciliacao,
+} from "@/modules/conciliacao/conciliacao.types";
+import { NovaContaDrawer } from "@/app/(app)/contas-pagar/nova-conta-drawer";
 
 /**
  * Conciliar: dizer que a linha do banco e o lancamento do sistema sao o mesmo
@@ -55,7 +60,8 @@ type Etapa = null | "lendo" | "enviando" | "gravando";
 type Pilha = "aConciliar" | "conciliados";
 
 const VAZIO: Record<Pilha, string> = {
-  aConciliar: "Nada a conciliar neste período. Comece importando o arquivo do banco.",
+  aConciliar:
+    "Nada a conciliar neste período. Comece importando o arquivo do banco.",
   conciliados: "Nada conferido neste período ainda.",
 };
 
@@ -76,7 +82,7 @@ export function ConciliacaoDrawer({
   ate: string;
   aoFechar: (mudou: boolean) => void;
 }) {
-  const { avisar } = useAvisos();
+  const { avisar, confirmar } = useAvisos();
   const arquivo = useRef<HTMLInputElement>(null);
 
   const [painel, setPainel] = useState<PainelDeConciliacao | null>(null);
@@ -105,6 +111,8 @@ export function ConciliacaoDrawer({
   const ocupado = etapa !== null;
   /* Fechar precisa dizer se algo mudou, para o extrato atras recarregar. */
   const [mudou, setMudou] = useState(false);
+  /** A linha do banco que vai virar conta a pagar, com os dados dela. */
+  const [cadastrando, setCadastrando] = useState<LinhaDoExtrato | null>(null);
 
   /**
    * ⚠️ Busca DEVOLVE o painel, e nao grava o estado ela mesma.
@@ -119,7 +127,10 @@ export function ConciliacaoDrawer({
     );
     const corpo = await r.json().catch(() => null);
 
-    if (!r.ok) throw new Error(corpo?.error?.message ?? "Não foi possível carregar a conciliação");
+    if (!r.ok)
+      throw new Error(
+        corpo?.error?.message ?? "Não foi possível carregar a conciliação",
+      );
 
     return corpo.data as PainelDeConciliacao;
   }, [conta.id, periodo]);
@@ -128,7 +139,12 @@ export function ConciliacaoDrawer({
     try {
       setPainel(await buscar());
     } catch (e: unknown) {
-      avisar("atencao", e instanceof Error ? e.message : "Não foi possível carregar a conciliação");
+      avisar(
+        "atencao",
+        e instanceof Error
+          ? e.message
+          : "Não foi possível carregar a conciliação",
+      );
     }
   }, [buscar, avisar]);
 
@@ -174,7 +190,10 @@ export function ConciliacaoDrawer({
 
     if (!r.ok) {
       setEtapa(null);
-      avisar("atencao", corpo?.error?.message ?? "Não foi possível importar o extrato");
+      avisar(
+        "atencao",
+        corpo?.error?.message ?? "Não foi possível importar o extrato",
+      );
       return;
     }
 
@@ -208,13 +227,56 @@ export function ConciliacaoDrawer({
     setEtapa(null);
   }
 
+  /*
+   * ⚠️ A tela pergunta ANTES, com a MESMA regra que o servidor aplica.
+   *
+   * Conciliar puxa a data da baixa para o dia do extrato. Dentro do mes isso
+   * passa direto; cruzando a virada, o servidor recusa sem a confirmacao — e sem
+   * perguntar aqui, a pessoa receberia um erro no lugar de uma escolha.
+   */
+  function mudaDeMes(
+    pares: { linhaId: number; pagamentoId: number }[],
+  ): boolean {
+    return pares.some((par) => {
+      const linha = painel?.linhas.find((l) => l.id === par.linhaId);
+      const lancamento = painel?.lancamentos.find(
+        (l) => l.id === par.pagamentoId,
+      );
+      if (!linha || !lancamento) return false;
+
+      return ajusteDeData(lancamento.data, linha.data).mudaDeMes;
+    });
+  }
+
+  const AVISO_DE_MES =
+    "A data da baixa passa a ser a do extrato, e o lançamento muda de mês: " +
+    "o fechamento dos dois meses muda junto.";
+
   async function ligar(linhaId: number, pagamentoId: number) {
+    if (mudaDeMes([{ linhaId, pagamentoId }])) {
+      confirmar(
+        "Conciliar mesmo assim?",
+        "Conciliar",
+        () => void gravarVinculo(linhaId, pagamentoId),
+        AVISO_DE_MES,
+      );
+      return;
+    }
+
+    await gravarVinculo(linhaId, pagamentoId);
+  }
+
+  async function gravarVinculo(linhaId: number, pagamentoId: number) {
     setEtapa("gravando");
 
     const r = await fetch(`/api/v1/contas/${conta.id}/conciliacao`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ linhaId, pagamentoId }),
+      body: JSON.stringify({
+        linhaId,
+        pagamentoId,
+        confirmaMudancaDeMes: true,
+      }),
     });
 
     setEtapa(null);
@@ -246,12 +308,26 @@ export function ConciliacaoDrawer({
   }
 
   async function aceitarConferidos() {
+    if (mudaDeMes(conferidos)) {
+      confirmar(
+        `Conciliar ${conferidos.length} ${conferidos.length === 1 ? "linha" : "linhas"}?`,
+        "Conciliar",
+        () => void gravarLote(),
+        AVISO_DE_MES,
+      );
+      return;
+    }
+
+    await gravarLote();
+  }
+
+  async function gravarLote() {
     setEtapa("gravando");
 
     const r = await fetch(`/api/v1/contas/${conta.id}/conciliacao/exatas`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pares: conferidos }),
+      body: JSON.stringify({ pares: conferidos, confirmaMudancaDeMes: true }),
     });
     const corpo = await r.json().catch(() => null);
     setEtapa(null);
@@ -328,6 +404,56 @@ export function ConciliacaoDrawer({
   };
 
   const visiveis = pilhas[aba];
+
+  /*
+   * ⚠️ Os TRES casos de "a conciliar", em grupos DENTRO da mesma lista.
+   *
+   * Eles ja foram abas, e voltar a ser seria refazer o erro que a nota acima
+   * descreve: a varredura e uma so, de cima a baixo. Mas empilhados sem
+   * separacao eles tambem nao serviam — a linha que o sistema propos, a que
+   * precisa ser procurada e a que NAO TEM lancamento nenhum pedem gestos
+   * diferentes, e nada na tela dizia qual era qual.
+   *
+   * ⚠️ O terceiro grupo e o que o Pedro pediu: o extrato traz o que o banco
+   * cobrou e o sistema nunca soube. Ali nao ha o que procurar — ha o que
+   * cadastrar —, e sem separar isso a pessoa varria a lista de lancamentos
+   * procurando o que nunca existiu.
+   */
+  const temSugestao = (l: LinhaDoExtrato) =>
+    (painel?.sugestoes ?? []).some((s) => s.linhaId === l.id);
+
+  /* Mesmo valor COM SINAL: cobre valor e direcao de uma vez, como o casamento. */
+  const temCandidato = (l: LinhaDoExtrato) =>
+    livres.some((p) => p.valor === l.valor);
+
+  const grupos: {
+    chave: string;
+    titulo: string;
+    legenda: string;
+    linhas: LinhaDoExtrato[];
+  }[] =
+    aba === "conciliados"
+      ? [{ chave: "conferidos", titulo: "", legenda: "", linhas: visiveis }]
+      : [
+          {
+            chave: "sugeridos",
+            titulo: "O sistema achou o par",
+            legenda: "Confira e marque o que estiver certo.",
+            linhas: visiveis.filter(temSugestao),
+          },
+          {
+            chave: "resolver",
+            titulo: "Precisa de você",
+            legenda:
+              "Escolha o lançamento, ou cadastre quando não houver nenhum.",
+            /* A que NAO tem lancamento vem primeiro: e a que exige trabalho fora
+               desta tela, e deixada por ultimo ela era a que sobrava. */
+            linhas: [
+              ...visiveis.filter((l) => !temSugestao(l) && !temCandidato(l)),
+              ...visiveis.filter((l) => !temSugestao(l) && temCandidato(l)),
+            ],
+          },
+        ];
 
   /**
    * O que o botao do cabecalho vai gravar.
@@ -426,7 +552,9 @@ export function ConciliacaoDrawer({
             style={{ borderColor: "var(--border)" }}
             onClick={() => arquivo.current?.click()}
           >
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+            <span
+              style={{ display: "inline-flex", alignItems: "center", gap: 5 }}
+            >
               <svg
                 width="13"
                 height="13"
@@ -475,21 +603,35 @@ export function ConciliacaoDrawer({
             veria a tela vazia sem nada que explicasse — e concluiria que o
             arquivo nao entrou.
           */}
-          <Field label="Período" hint="Move sozinho para caber o arquivo que você importar.">
+          <Field
+            label="Período"
+            hint="Move sozinho para caber o arquivo que você importar."
+          >
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <input
                 type="date"
                 value={periodo.de}
                 max={periodo.ate}
-                onChange={(e) => setPeriodo((p) => ({ ...p, de: e.target.value }))}
+                onChange={(e) =>
+                  setPeriodo((p) => ({ ...p, de: e.target.value }))
+                }
                 style={{ ...inputStyle, width: 150 }}
               />
-              <span style={{ fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>até</span>
+              <span
+                style={{
+                  fontSize: "var(--text-sm)",
+                  color: "var(--text-tertiary)",
+                }}
+              >
+                até
+              </span>
               <input
                 type="date"
                 value={periodo.ate}
                 min={periodo.de}
-                onChange={(e) => setPeriodo((p) => ({ ...p, ate: e.target.value }))}
+                onChange={(e) =>
+                  setPeriodo((p) => ({ ...p, ate: e.target.value }))
+                }
                 style={{ ...inputStyle, width: 150 }}
               />
             </div>
@@ -510,7 +652,12 @@ export function ConciliacaoDrawer({
               margem dos rotulos e nao se alinhava com nada da tela.
             */
             <span
-              style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: 142 }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                marginLeft: 142,
+              }}
             >
               <span
                 aria-hidden
@@ -535,12 +682,16 @@ export function ConciliacaoDrawer({
                   }}
                 />
               </span>
-              <span style={{ fontSize: "var(--text-xs)", color: "var(--text-tertiary)" }}>
+              <span
+                style={{
+                  fontSize: "var(--text-xs)",
+                  color: "var(--text-tertiary)",
+                }}
+              >
                 {DIZERES[etapa]}
               </span>
             </span>
           )}
-
         </GrupoDeCampos>
 
         <GrupoDeCampos
@@ -562,7 +713,9 @@ export function ConciliacaoDrawer({
             tabs={[rotulos.aConciliar, rotulos.conciliados]}
             active={rotulos[aba]}
             onChange={(escolhida) =>
-              setAba(escolhida === rotulos.aConciliar ? "aConciliar" : "conciliados")
+              setAba(
+                escolhida === rotulos.aConciliar ? "aConciliar" : "conciliados",
+              )
             }
           />
 
@@ -590,25 +743,121 @@ export function ConciliacaoDrawer({
               </p>
             )}
 
-            {visiveis.map((l) => (
-              <LinhaDaConciliacao
-                key={l.id}
-                linha={l}
-                painel={painel}
-                pilha={aba}
-                marcado={marcados[l.id] ?? false}
-                trocando={trocando === l.id}
-                ocupado={ocupado}
-                aoMarcar={() => setMarcados((atual) => ({ ...atual, [l.id]: !atual[l.id] }))}
-                aoTrocar={(ligado) => setTrocando(ligado ? l.id : null)}
-                aoLigar={(pagamentoId) => void ligar(l.id, pagamentoId)}
-                aoDesfazer={() => void desfazer(l.id)}
-                procurar={procurar}
-              />
-            ))}
+            {grupos
+              .filter((g) => g.linhas.length > 0)
+              .map((g) => (
+                <div key={g.chave}>
+                  {g.titulo && (
+                    <TituloDoGrupo
+                      titulo={g.titulo}
+                      quantas={g.linhas.length}
+                      legenda={g.legenda}
+                    />
+                  )}
+
+                  {g.linhas.map((l) => (
+                    <LinhaDaConciliacao
+                      key={l.id}
+                      linha={l}
+                      painel={painel}
+                      pilha={aba}
+                      marcado={marcados[l.id] ?? false}
+                      trocando={trocando === l.id}
+                      ocupado={ocupado}
+                      aoMarcar={() =>
+                        setMarcados((atual) => ({
+                          ...atual,
+                          [l.id]: !atual[l.id],
+                        }))
+                      }
+                      aoTrocar={(ligado) => setTrocando(ligado ? l.id : null)}
+                      aoLigar={(pagamentoId) => void ligar(l.id, pagamentoId)}
+                      aoDesfazer={() => void desfazer(l.id)}
+                      procurar={procurar}
+                      /*
+                        ⚠️ Cadastrar dali so no grupo SEM LANCAMENTO, e so na
+                        SAIDA. Nos outros dois existe o que procurar, e um botao
+                        de cadastro ao lado convidaria a criar a segunda copia de
+                        um lancamento que ja esta na lista. E a entrada nao vem
+                        por aqui: conta a receber nasce de ticket ou contrato, e
+                        nao de uma linha de extrato.
+                      */
+                      aoCadastrar={
+                        !temSugestao(l) && !temCandidato(l) && l.valor < 0
+                          ? () => setCadastrando(l)
+                          : undefined
+                      }
+                    />
+                  ))}
+                </div>
+              ))}
           </div>
         </GrupoDeCampos>
       </Formulario>
+
+      {/*
+        ⚠️ Abre POR CIMA da conciliação, e ao fechar recarrega a lista.
+
+        O lançamento novo ainda não é a baixa — cadastrar a conta a pagar cria a
+        dívida, e o dinheiro só encontra a linha do banco quando ela for baixada.
+        Recarregar é o que faz a linha sair do grupo "sem lançamento" assim que
+        isso acontecer, sem obrigar a fechar e abrir a tela.
+      */}
+      {cadastrando && (
+        <NovaContaDrawer
+          inicial={{
+            valor: Math.abs(cadastrando.valor) as Centavos,
+            emissao: cadastrando.data,
+            descricao: cadastrando.nome,
+          }}
+          onClose={() => {
+            setCadastrando(null);
+            void carregar();
+          }}
+        />
+      )}
     </Drawer>
+  );
+}
+
+/**
+ * O cabeçalho de um grupo dentro da lista.
+ *
+ * ⚠️ Ele diz o que fazer, e não só o que a linha é. "Sem lançamento no sistema"
+ * sozinho descreve um estado; a legenda ao lado é o que transforma o estado em
+ * próximo passo, que é o que faltava na tela.
+ */
+function TituloDoGrupo({
+  titulo,
+  quantas,
+  legenda,
+}: {
+  titulo: string;
+  quantas: number;
+  legenda: string;
+}) {
+  return (
+    <div style={{ padding: "14px 0 6px" }}>
+      <span
+        style={{
+          fontSize: "var(--text-xs)",
+          fontWeight: 600,
+          textTransform: "uppercase",
+          letterSpacing: "0.04em",
+          color: "var(--text-secondary)",
+        }}
+      >
+        {`${titulo} (${quantas})`}
+      </span>
+      <p
+        style={{
+          margin: "2px 0 0",
+          fontSize: "var(--text-xs)",
+          color: "var(--text-tertiary)",
+        }}
+      >
+        {legenda}
+      </p>
+    </div>
   );
 }

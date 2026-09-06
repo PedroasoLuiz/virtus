@@ -1,4 +1,5 @@
 import { serverClient } from "@/infra/supabase/client";
+import { documentosDePagamentos } from "@/modules/documentos/documentos.repository";
 import { doBanco, paraBanco, somar, ZERO, type Centavos } from "@/shared/utils/money";
 import type { DataISO } from "@/shared/utils/datas";
 import { nomeDaConta } from "@/shared/domain/conta-bancaria";
@@ -211,6 +212,31 @@ export async function extrato(
   let entradas = ZERO;
   let saidas = ZERO;
 
+  /*
+   * ⚠️ De que titulo veio cada linha, numa consulta so para a lista inteira.
+   *
+   * Sem isso o extrato mostrava nome e valor e nada mais, e uma baixa de dois
+   * meses atras virava um enigma: "duas de CASA DO OLEO no dia 20, de onde
+   * vieram?". O rotulo responde antes da pergunta — e quando ele diz "MOV", a
+   * resposta e que titulo NENHUM existe por tras, que tambem e informacao.
+   */
+  const documentos = await documentosDePagamentos((lancamentos.data ?? []).map((m) => m.id));
+
+  /*
+   * O que falta conferir na conta INTEIRA, e nao no periodo.
+   *
+   * ⚠️ `head: true`: so o numero volta, sem trazer uma linha sequer. A conta tem
+   * centenas de lancamentos, e a tela precisa de um inteiro.
+   */
+  const { count: semConciliar, error: erroPendentes } = await supabase
+    .from("pagamentos")
+    .select("id", { count: "exact", head: true })
+    .eq("fkEmpresa", empresaId)
+    .eq("fkContaBancaria", contaId)
+    .eq("conciliado", false);
+
+  if (erroPendentes) throw erroPendentes;
+
   const movimentos: MovimentoDoExtrato[] = (lancamentos.data ?? [])
     // Natureza fora do par conhecido nao entra: `vwsaldo` a ignora no saldo, e
     // mostra-la no extrato produziria uma linha que nao mexe no acumulado.
@@ -235,6 +261,7 @@ export async function extrato(
         descricao: m.descricao,
         formaPagamento: m.tipo,
         conciliado: m.conciliado ?? false,
+        documento: documentos.get(m.id) ?? null,
         saldoApos: corrente,
       };
     });
@@ -248,6 +275,7 @@ export async function extrato(
     saldoFinal: corrente,
     // `buscarPorId` la em cima ja calculou: e a mesma leitura, aproveitada.
     saldoAtual: conta.saldo ?? ZERO,
+    semConciliar: semConciliar ?? 0,
     entradas,
     saidas,
     movimentos,

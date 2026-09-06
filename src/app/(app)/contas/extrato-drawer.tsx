@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { BotaoDeCabecalho, Drawer } from "@/components/ui/drawer";
 import { ExtratoTabela } from "./extrato-tabela";
+import { FaturaDrawer } from "@/app/(app)/faturas/fatura-drawer";
+import { ContaDrawer } from "@/app/(app)/contas-pagar/conta-drawer";
 import { ConciliacaoDrawer } from "./conciliacao-drawer";
 import {
   Alert,
@@ -14,7 +16,11 @@ import {
 } from "@/components/ui/kit";
 import { formatarSemSimbolo, type Centavos } from "@/shared/utils/money";
 import { ehDataISO, hoje, somarDias } from "@/shared/utils/datas";
-import type { ContaBancaria, Extrato, MovimentoDoExtrato } from "@/modules/contas/contas.types";
+import type {
+  ContaBancaria,
+  Extrato,
+  MovimentoDoExtrato,
+} from "@/modules/contas/contas.types";
 import type { EmpresaParaDocumento } from "@/modules/empresa/empresa.repository";
 
 /**
@@ -88,7 +94,11 @@ function porDia(movimentos: MovimentoDoExtrato[]): Dia[] {
 
   for (const m of movimentos) {
     const chave = m.data ?? "";
-    const dia = dias.get(chave) ?? { data: chave, movimentos: [], saldoDoDia: m.saldoApos };
+    const dia = dias.get(chave) ?? {
+      data: chave,
+      movimentos: [],
+      saldoDoDia: m.saldoApos,
+    };
 
     dia.movimentos.push(m);
     // O ultimo a passar por aqui e o ultimo do dia, porque a lista chega em
@@ -111,12 +121,22 @@ export function ExtratoDrawer({
   emitidoPor: string;
   onClose: () => void;
 }) {
-
   const [de, setDe] = useState(inicioDoMes());
   const [ate, setAte] = useState(hoje());
   const [extrato, setExtrato] = useState<Extrato | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [conciliando, setConciliando] = useState(false);
+  /**
+   * O titulo que a coluna "Registro" mandou abrir.
+   *
+   * ⚠️ Um estado so para os dois lados do caixa: a linha do extrato aponta para
+   * uma conta a receber OU uma a pagar, e nunca para as duas. Dois estados
+   * separados abririam a porta para os dois drawers no ar ao mesmo tempo.
+   */
+  const [tituloAberto, setTituloAberto] = useState<{
+    tipo: "CR" | "CP";
+    contaId: number;
+  } | null>(null);
 
   /**
    * Busca o extrato do periodo.
@@ -132,9 +152,13 @@ export function ExtratoDrawer({
       // "2026-0", o valor ja chega aqui e voltaria 422 a cada tecla.
       if (!ehDataISO(de) || !ehDataISO(ate)) return null;
 
-      const r = await fetch(`/api/v1/contas/${conta.id}/extrato?de=${de}&ate=${ate}`, { signal });
+      const r = await fetch(
+        `/api/v1/contas/${conta.id}/extrato?de=${de}&ate=${ate}`,
+        { signal },
+      );
       const corpo = await r.json();
-      if (!r.ok) throw new Error(corpo?.error?.message ?? "Falha ao carregar o extrato");
+      if (!r.ok)
+        throw new Error(corpo?.error?.message ?? "Falha ao carregar o extrato");
 
       return corpo.data as Extrato;
     },
@@ -175,7 +199,6 @@ export function ExtratoDrawer({
   }
 
   const dias = extrato ? porDia(extrato.movimentos) : [];
-  const pendentes = extrato?.movimentos.filter((m) => !m.conciliado).length ?? 0;
 
   return (
     <Drawer
@@ -192,42 +215,42 @@ export function ExtratoDrawer({
       */
       headerExtra={
         <>
-        {/*
+          {/*
           ⚠️ Conciliar vem ANTES de imprimir, indo da esquerda para a direita.
 
           A ordem e a do trabalho: primeiro se confere contra o banco, depois se
           imprime o que ficou conferido. Invertida, o botao de papel apareceria
           primeiro numa tela cuja razao de existir e a conferencia.
         */}
-        <BotaoDeCabecalho
-          rotulo={
-            extrato
-              ? "Conciliar este extrato com o arquivo do banco"
-              : "Escolha um período para poder conciliar"
-          }
-          desabilitado={!extrato}
-          onClick={() => setConciliando(true)}
-        >
-          {/* Duas setas que se encontram: as duas listas virando uma. */}
-          <path d="M4 8h13l-3-3" />
-          <path d="M20 16H7l3 3" />
-        </BotaoDeCabecalho>
+          <BotaoDeCabecalho
+            rotulo={
+              extrato
+                ? "Conciliar este extrato com o arquivo do banco"
+                : "Escolha um período para poder conciliar"
+            }
+            desabilitado={!extrato}
+            onClick={() => setConciliando(true)}
+          >
+            {/* Duas setas que se encontram: as duas listas virando uma. */}
+            <path d="M4 8h13l-3-3" />
+            <path d="M20 16H7l3 3" />
+          </BotaoDeCabecalho>
 
-        <BotaoDeCabecalho
-          rotulo={
-            extrato
-              ? "Imprimir este extrato em PDF"
-              : "Escolha um período para poder imprimir"
-          }
-          desabilitado={!extrato}
-          onClick={() => void imprimir()}
-        >
-          {/* Impressora: papel saindo por cima, corpo no meio, bandeja embaixo.
+          <BotaoDeCabecalho
+            rotulo={
+              extrato
+                ? "Imprimir este extrato em PDF"
+                : "Escolha um período para poder imprimir"
+            }
+            desabilitado={!extrato}
+            onClick={() => void imprimir()}
+          >
+            {/* Impressora: papel saindo por cima, corpo no meio, bandeja embaixo.
               Desenhada na grade de 24, que é o `viewBox` do botão de cabeçalho. */}
-          <path d="M7 8V4h10v4" />
-          <path d="M6 18H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-1" />
-          <path d="M7 14h10v6H7z" />
-        </BotaoDeCabecalho>
+            <path d="M7 8V4h10v4" />
+            <path d="M6 18H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-1" />
+            <path d="M7 14h10v6H7z" />
+          </BotaoDeCabecalho>
         </>
       }
     >
@@ -308,7 +331,12 @@ export function ExtratoDrawer({
                 onChange={(e) => setDe(e.target.value)}
                 style={{ ...inputStyle, width: 150 }}
               />
-              <span style={{ fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>
+              <span
+                style={{
+                  fontSize: "var(--text-sm)",
+                  color: "var(--text-tertiary)",
+                }}
+              >
                 até
               </span>
               <input
@@ -321,6 +349,34 @@ export function ExtratoDrawer({
               />
             </div>
           </Field>
+
+          {/*
+            ⚠️ Do EXTRATO INTEIRO, e não do período — e por isso ele mora aqui,
+            no bloco da conta, e não junto da tabela.
+
+            A pergunta é "quanto falta conferir nesta conta". Contado dentro da
+            janela, o número cairia ao estreitar o período e daria a impressão de
+            trabalho feito; quem estreita a janela não conferiu nada.
+
+            ⚠️ QUANTIDADE, e não soma de valor. Entrada e saída se anulam: mil
+            reais entrando e mil saindo, nenhum dos dois conferido, mostrariam
+            zero e diriam que não há nada a fazer.
+          */}
+          {extrato && (
+            <Field label="Sem conciliar">
+              <CampoBloqueado
+                valor={
+                  extrato.semConciliar === 0
+                    ? "Tudo conferido"
+                    : `${extrato.semConciliar} ${
+                        extrato.semConciliar === 1
+                          ? "lançamento"
+                          : "lançamentos"
+                      }`
+                }
+              />
+            </Field>
+          )}
         </GrupoDeCampos>
       </Formulario>
 
@@ -347,30 +403,22 @@ export function ExtratoDrawer({
 
       {extrato && (
         <>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "baseline",
-              gap: 8,
-              // O vao de GRUPO, e nao o de campo: os lancamentos sao outro
-              // assunto, e nao a continuacao do periodo consultado acima.
-              marginTop: "var(--form-gap-grupo)",
-              marginBottom: 8,
-              fontSize: "var(--text-sm)",
-              fontWeight: "var(--fw-medium)",
-              color: "var(--text-tertiary)",
-            }}
-          >
-            <span>Lançamentos</span>
-            <span style={{ flex: 1 }} />
-            {pendentes > 0 && (
-              <span style={{ fontSize: "var(--text-xs)" }}>
-                {pendentes} por conferir
-              </span>
-            )}
-          </div>
+          {/*
+            ⚠️ Aqui havia um título "Lançamentos" com "N por conferir" na ponta.
 
-          <ExtratoTabela dias={dias} saldoAnterior={extrato.saldoInicial} de={extrato.de} />
+            O título nomeava o óbvio — abaixo dele só existe a tabela — e o
+            contador falava só do período, que é a metade errada da pergunta:
+            estreitar a janela fazia o número cair sem ninguém ter conferido
+            nada. Os dois viraram o campo "Sem conciliar", junto da conta.
+          */}
+          <div style={{ marginTop: "var(--form-gap-grupo)" }} />
+
+          <ExtratoTabela
+            dias={dias}
+            saldoAnterior={extrato.saldoInicial}
+            de={extrato.de}
+            aoAbrirTitulo={setTituloAberto}
+          />
         </>
       )}
       {/*
@@ -387,8 +435,35 @@ export function ExtratoDrawer({
             setConciliando(false);
             // Mexeu na conciliacao: o extrato atras recarrega para as marcas de
             // conferido aparecerem sem a pessoa fechar e abrir de novo.
-            if (mudou) buscar().then((d) => d && setExtrato(d)).catch(() => {});
+            if (mudou)
+              buscar()
+                .then((d) => d && setExtrato(d))
+                .catch(() => {});
           }}
+        />
+      )}
+
+      {/*
+        ⚠️ O título abre NO ANDAR 2, por cima do extrato, e não navegando.
+
+        A pergunta que leva ao clique — "que conta é essa baixa?" — nasce no meio
+        de uma conferência linha a linha. Trocando de tela, a pessoa perde o
+        período, a rolagem e o lugar onde estava, e volta para recomeçar a
+        varredura. Por cima, ela fecha e continua de onde parou.
+      */}
+      {tituloAberto?.tipo === "CR" && (
+        <FaturaDrawer
+          faturaId={tituloAberto.contaId}
+          nivel={2}
+          onClose={() => setTituloAberto(null)}
+        />
+      )}
+
+      {tituloAberto?.tipo === "CP" && (
+        <ContaDrawer
+          contaId={tituloAberto.contaId}
+          nivel={2}
+          onClose={() => setTituloAberto(null)}
         />
       )}
     </Drawer>

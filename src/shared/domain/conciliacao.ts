@@ -240,3 +240,30 @@ function base64(texto: string): string {
 
   return btoa(binario);
 }
+
+/**
+ * O que muda na data do lancamento quando ele e conciliado.
+ *
+ * ⚠️ Quem manda na data e o BANCO. O extrato diz o dia em que o dinheiro se
+ * moveu de verdade; a data digitada na baixa e a intencao de quem lancou, e
+ * quase sempre e o dia do combinado, nao o da compensacao. Conciliar e afirmar
+ * que os dois sao o mesmo dinheiro — e a partir dali so um deles pode estar
+ * certo sobre quando ele andou.
+ *
+ * ⚠️ Mudar de MES nao passa calado. Dentro do mes, a correcao nao mexe em
+ * fechamento nenhum. Cruzando a virada, ela reescreve o resultado de dois meses
+ * que talvez ja tenham sido apresentados — e isso e decisao de quem concilia,
+ * nao efeito colateral de um clique.
+ */
+export function ajusteDeData(
+  doLancamento: DataISO,
+  doExtrato: DataISO,
+): { muda: boolean; mudaDeMes: boolean } {
+  const muda = doLancamento !== doExtrato;
+
+  return {
+    muda,
+    // `YYYY-MM`: comparar o texto basta, e nao acorda fuso nenhum.
+    mudaDeMes: muda && doLancamento.slice(0, 7) !== doExtrato.slice(0, 7),
+  };
+}

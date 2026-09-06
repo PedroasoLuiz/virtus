@@ -103,12 +103,20 @@ const DESENHOS: Desenho[] = [
    * Uma unidade e meia de folga em volta cabe o traco inteiro. O desenho nao
    * mudou: o que mudou foi a moldura parar de corta-lo.
    */
-  { chave: "pix", viewBox: "-1.5 -1.5 27 27", traco: 1.6, tamanho: 13, tracos: PIX },
+  {
+    chave: "pix",
+    viewBox: "-1.5 -1.5 27 27",
+    traco: 1.6,
+    tamanho: 13,
+    tracos: PIX,
+  },
   {
     chave: "boleto",
     viewBox: "0 0 16 16",
     // Código de barras: é o que se olha num boleto.
-    tracos: <path d="M3 3.4v9.2M5.4 3.4v9.2M7.6 3.4v9.2M10.2 3.4v9.2M13 3.4v9.2" />,
+    tracos: (
+      <path d="M3 3.4v9.2M5.4 3.4v9.2M7.6 3.4v9.2M10.2 3.4v9.2M13 3.4v9.2" />
+    ),
   },
   {
     chave: "cartão de débito",

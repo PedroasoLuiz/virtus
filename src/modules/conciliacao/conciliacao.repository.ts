@@ -1,4 +1,5 @@
 import { serverClient } from "@/infra/supabase/client";
+import { documentosDePagamentos } from "@/modules/documentos/documentos.repository";
 import { doBanco, paraBanco, type Centavos } from "@/shared/utils/money";
 import type { DataISO } from "@/shared/utils/datas";
 import { chaveDaLinha } from "@/shared/domain/conciliacao";
@@ -87,7 +88,9 @@ export async function lancamentosDaConta(
 
   const { data, error } = await supabase
     .from("pagamentos")
-    .select("id, data_caixa, valor, natureza, nome, descricao, tipo, conciliado")
+    .select(
+      "id, data_caixa, valor, natureza, nome, descricao, tipo, conciliado",
+    )
     .eq("fkEmpresa", empresaId)
     .eq("fkContaBancaria", contaId)
     .gte("data_caixa", de)
@@ -97,7 +100,9 @@ export async function lancamentosDaConta(
 
   if (error) throw error;
 
-  const documentos = await documentosDe((data ?? []).map((p) => p.id));
+  const documentos = await documentosDePagamentos(
+    (data ?? []).map((p) => p.id),
+  );
 
   return (data ?? [])
     .filter((p) => p.data_caixa != null)
@@ -112,101 +117,9 @@ export async function lancamentosDaConta(
         nome: p.nome?.trim() || p.descricao?.trim() || "",
         tipo: p.tipo,
         conciliado: p.conciliado ?? false,
-        documento: documentos.get(p.id) ?? null,
+        documento: documentos.get(p.id)?.rotulo ?? null,
       };
     });
-}
-
-/**
- * De que documento veio cada pagamento: conta a receber, a pagar, ou nenhuma.
- *
- * ⚠️ DUAS consultas em paralelo, e nao um join. Os dois lados do dinheiro moram
- * em tabelas diferentes — `pagamentosxparcelas` para o que entra e
- * `contaspagarparcelas` para o que sai — e nao ha caminho unico do pagamento ate
- * o documento. Uma consulta por pagamento seria N idas ao banco numa lista que
- * costuma ter dezenas.
- *
- * ⚠️ A PARCELA entra junto quando ha uma so. "CR 214" nao basta numa conta
- * parcelada em seis: o valor do extrato bate com uma das seis, e e a parcela que
- * diz qual. Com mais de uma, o rotulo volta a falar so da conta e acrescenta
- * quantas — a linha tem largura para um numero, e nao para uma lista.
- *
- * ⚠️ Sem conta nenhuma, o rotulo e "MOV" mais o id do lancamento. Tarifa,
- * rendimento e transferencia entre contas existem sem documento, e deixa-los sem
- * marca faria parecer que falta dado — quando o que falta e o documento, que
- * nunca existiu.
- */
-async function documentosDe(pagamentoIds: number[]): Promise<Map<number, string>> {
-  const mapa = new Map<number, string>();
-  if (pagamentoIds.length === 0) return mapa;
-
-  const supabase = await serverClient();
-
-  const [receber, pagar] = await Promise.all([
-    supabase
-      .from("pagamentosxparcelas")
-      .select("fkPagamento, faturasparcelas!inner(fkFatura, numeroparcela)")
-      .in("fkPagamento", pagamentoIds),
-    supabase
-      .from("contaspagarparcelas")
-      .select("fkPagamento, fkContaPagar, numeroparcela")
-      .in("fkPagamento", pagamentoIds),
-  ]);
-
-  if (receber.error) throw receber.error;
-  if (pagar.error) throw pagar.error;
-
-  type Origem = { sigla: string; contas: Set<number>; parcelas: Set<number> };
-  const origens = new Map<number, Origem>();
-
-  const juntar = (
-    pagamentoId: number | null,
-    sigla: string,
-    contaId: number | null,
-    parcela: number | null,
-  ) => {
-    if (pagamentoId == null || contaId == null) return;
-
-    const atual = origens.get(pagamentoId) ?? {
-      sigla,
-      contas: new Set<number>(),
-      parcelas: new Set<number>(),
-    };
-    atual.contas.add(contaId);
-    if (parcela != null) atual.parcelas.add(parcela);
-    origens.set(pagamentoId, atual);
-  };
-
-  for (const l of receber.data ?? []) {
-    const p = l.faturasparcelas as unknown as {
-      fkFatura: number | null;
-      numeroparcela: number | null;
-    } | null;
-    juntar(l.fkPagamento, "CR", p?.fkFatura ?? null, p?.numeroparcela ?? null);
-  }
-  for (const l of pagar.data ?? []) {
-    juntar(l.fkPagamento, "CP", l.fkContaPagar, l.numeroparcela);
-  }
-
-  for (const id of pagamentoIds) {
-    const origem = origens.get(id);
-
-    if (!origem) {
-      mapa.set(id, `MOV ${id}`);
-      continue;
-    }
-
-    const contas = [...origem.contas].sort((a, b) => a - b);
-    const sobra = contas.length - 1;
-    const parcelas = [...origem.parcelas];
-
-    const base = `${origem.sigla} ${contas[0]}`;
-    const comParcela = sobra === 0 && parcelas.length === 1 ? `${base} P ${parcelas[0]}` : base;
-
-    mapa.set(id, sobra > 0 ? `${comParcela} +${sobra}` : comParcela);
-  }
-
-  return mapa;
 }
 
 /**
@@ -253,24 +166,114 @@ export async function gravarLinhas(
     };
   });
 
+  /*
+   * ⚠️ UMA consulta, pela JANELA DE DATAS — e nao um `in` com as chaves.
+   *
+   * Antes eram duas: um `in("hash", ...)` com uma chave por linha do arquivo, e
+   * outro `in("data", ...)` com um dia por linha. A chave e base64 de mais de
+   * cem caracteres, e o cliente do Supabase manda tudo isso na URL: com as 99
+   * linhas do primeiro extrato ja dava quatorze mil caracteres, e com as 302 do
+   * arquivo de um ano a URL passou do limite do servidor e a IMPORTACAO FALHOU
+   * inteira. A janela pede o mesmo dado em duas datas.
+   */
+  const dias = candidatas.map((c) => c.data).sort();
+  const primeiro = dias[0];
+  const ultimo = dias[dias.length - 1];
+
   const { data: existentes, error: erroLeitura } = await supabase
     .from("extratobancario")
-    .select("hash")
+    .select("id, data, valor, nome, descricao, hash")
     .eq("fkEmpresa", empresaId)
     .eq("fkContaBancaria", contaId)
-    .in("hash", candidatas.map((c) => c.hash));
+    .gte("data", primeiro)
+    .lte("data", ultimo);
 
   if (erroLeitura) throw erroLeitura;
 
   const jaGravadas = new Set((existentes ?? []).map((e) => e.hash));
-  const novas = candidatas.filter((c) => !jaGravadas.has(c.hash));
+
+  /*
+   * ⚠️ A segunda peneira, por CONTEUDO, existe porque a chave nao basta.
+   *
+   * A chave e exata: `conta|data|valor|tipo|nome|indice`. Ela so reconhece uma
+   * linha gravada com o MESMO texto — e o legado gravava outro. Ele guardava o
+   * nome curto da contraparte ("CAMILA TEODORO MARTINS"); o OFX traz o historico
+   * inteiro ("Transf Pix enviada - CAMILA TEODORO MARTINS - 148..."). Reimportar
+   * um mes ja carregado pelo legado duplicaria o mes inteiro, e cada linha
+   * duplicada e uma conciliacao a mais para alguem fazer contra dinheiro que ja
+   * foi conferido.
+   *
+   * A comparacao e por DIA, VALOR ABSOLUTO e nome que se contem — e cada linha
+   * ja gravada e consumida uma vez so, senao dois lancamentos iguais no mesmo
+   * dia casariam os dois com a mesma linha antiga e o segundo sumiria.
+   */
+  const disponiveis = new Map<string, { id: number; textos: string[] }[]>();
+  for (const linha of existentes ?? []) {
+    const chave = `${linha.data?.slice(0, 10)}|${Math.abs(doBanco(linha.valor))}`;
+    const lista = disponiveis.get(chave) ?? [];
+
+    /*
+     * ⚠️ `nome` e `descricao` entram SEPARADOS, e nao juntos num texto so.
+     *
+     * Ha DUAS geracoes de linha antiga no banco, e elas guardam o historico em
+     * campos diferentes. A primeira importacao do legado gravou `nome` NULO e o
+     * historico em `descricao` ("Transf Pix enviada"); a segunda gravou o nome
+     * curto da contraparte em `nome` e "DEBIT"/"CREDIT" em `descricao`.
+     *
+     * Juntando os dois num texto, nenhuma das duas casa: "CAMILA TEODORO
+     * MARTINS DEBIT" nao esta contido no historico do arquivo. Testados um a um,
+     * os dois casam — e foi a geracao de `nome` nulo que escapou e duplicou onze
+     * linhas de novembro na importacao do Pedro.
+     */
+    lista.push({
+      id: linha.id,
+      textos: [linha.nome ?? "", linha.descricao ?? ""].filter(Boolean),
+    });
+    disponiveis.set(chave, lista);
+  }
+
+  const usadas = new Set<number>();
+
+  function jaExisteNoBanco(
+    c: (typeof candidatas)[number],
+    valor: Centavos,
+  ): boolean {
+    const lista = disponiveis.get(`${c.data}|${Math.abs(valor)}`);
+    if (!lista) return false;
+
+    const nova = normalizarHistorico(c.nome);
+    if (!nova) return false;
+
+    const igual = lista.find((l) => {
+      if (usadas.has(l.id)) return false;
+
+      return l.textos.some((texto) => {
+        const antiga = normalizarHistorico(texto);
+        return Boolean(antiga) && (nova.includes(antiga) || antiga.includes(nova));
+      });
+    });
+
+    if (!igual) return false;
+
+    usadas.add(igual.id);
+    return true;
+  }
+
+  const novas = candidatas.filter((c, i) => {
+    if (jaGravadas.has(c.hash)) return false;
+    return !jaExisteNoBanco(c, linhas[i].valor);
+  });
 
   if (novas.length > 0) {
     const { error } = await supabase.from("extratobancario").insert(novas);
     if (error) throw error;
   }
 
-  return { lidas: linhas.length, gravadas: novas.length, repetidas: linhas.length - novas.length };
+  return {
+    lidas: linhas.length,
+    gravadas: novas.length,
+    repetidas: linhas.length - novas.length,
+  };
 }
 
 /**
@@ -306,7 +309,10 @@ export async function vincular(
 }
 
 /** Desfaz o vinculo, nas duas pontas. */
-export async function desvincular(empresaId: number, linhaId: number): Promise<void> {
+export async function desvincular(
+  empresaId: number,
+  linhaId: number,
+): Promise<void> {
   const supabase = await serverClient();
 
   const { data, error } = await supabase
@@ -415,7 +421,10 @@ export async function apontarLinha(
  * mao gravaria extrato da propria empresa apontando para conta alheia — dado que
  * a RLS aceita, porque o tenant da linha esta certo, e que ninguem acha depois.
  */
-export async function contaPertence(empresaId: number, contaId: number): Promise<boolean> {
+export async function contaPertence(
+  empresaId: number,
+  contaId: number,
+): Promise<boolean> {
   const supabase = await serverClient();
 
   const { data, error } = await supabase
@@ -450,3 +459,112 @@ export async function lancamentoPertence(
 }
 
 export { RECEITA };
+
+/**
+ * As datas de um lancamento, e as datas das linhas do extrato que serao casadas.
+ *
+ * ⚠️ Uma consulta para os dois lados, e nao uma por par. Conciliar em lote pode
+ * levar dezenas de pares, e o alinhamento de data precisa das duas pontas de
+ * cada um antes de gravar qualquer coisa.
+ */
+export async function datasDosLancamentos(
+  empresaId: number,
+  pagamentoIds: number[],
+): Promise<
+  Map<number, { data: string; dataCredito: string | null; dataCaixa: string }>
+> {
+  const mapa = new Map<
+    number,
+    { data: string; dataCredito: string | null; dataCaixa: string }
+  >();
+  if (pagamentoIds.length === 0) return mapa;
+
+  const supabase = await serverClient();
+  const { data, error } = await supabase
+    .from("pagamentos")
+    .select("id, data, data_credito, data_caixa")
+    .eq("fkEmpresa", empresaId)
+    .in("id", pagamentoIds);
+
+  if (error) throw error;
+
+  for (const p of data ?? []) {
+    if (!p.data_caixa || !p.data) continue;
+    mapa.set(p.id, {
+      data: p.data.slice(0, 10),
+      dataCredito: p.data_credito?.slice(0, 10) ?? null,
+      dataCaixa: p.data_caixa.slice(0, 10),
+    });
+  }
+
+  return mapa;
+}
+
+export async function datasDasLinhas(
+  empresaId: number,
+  linhaIds: number[],
+): Promise<Map<number, string>> {
+  const mapa = new Map<number, string>();
+  if (linhaIds.length === 0) return mapa;
+
+  const supabase = await serverClient();
+  const { data, error } = await supabase
+    .from("extratobancario")
+    .select("id, data")
+    .eq("fkEmpresa", empresaId)
+    .in("id", linhaIds);
+
+  if (error) throw error;
+
+  for (const l of data ?? []) if (l.data) mapa.set(l.id, l.data.slice(0, 10));
+  return mapa;
+}
+
+/**
+ * Puxa a data do lancamento para o dia em que o banco diz que o dinheiro andou.
+ *
+ * ⚠️ Escreve na coluna que MANDA no caixa, que nem sempre e `data`. `data_caixa`
+ * e `coalesce(data_credito, data)`: com credito preenchido — venda no cartao, em
+ * que a adquirente segura o dinheiro —, e ele que representa o dia no banco, e a
+ * `data` continua sendo o dia da venda. Escrevendo sempre em `data`, a correcao
+ * nao chegaria ao caixa e ainda mentiria sobre quando a venda aconteceu.
+ */
+export async function alinharDataComExtrato(
+  empresaId: number,
+  pagamentoId: number,
+  usuarioId: string,
+  data: string,
+  temCredito: boolean,
+): Promise<void> {
+  const supabase = await serverClient();
+
+  const { error } = await supabase
+    .from("pagamentos")
+    .update({
+      ...(temCredito ? { data_credito: data } : { data }),
+      updated_at: new Date().toISOString(),
+      fkUserModificacao: usuarioId,
+    })
+    .eq("fkEmpresa", empresaId)
+    .eq("id", pagamentoId);
+
+  if (error) throw error;
+}
+
+/**
+ * O historico reduzido ao que da para comparar entre duas geracoes de linha.
+ *
+ * ⚠️ Sem acento, sem pontuacao e em caixa alta, porque os dois lados escrevem
+ * diferente: o legado gravou "CAMILA TEODORO MARTINS" e o OFX manda "Transf Pix
+ * enviada - CAMILA TEODORO MARTINS - 148.236.136-00". O que sobra depois da
+ * limpeza e o que os dois tem em comum.
+ */
+function normalizarHistorico(texto: string): string {
+  return texto
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9 ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}

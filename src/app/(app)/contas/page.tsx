@@ -20,5 +20,11 @@ export default async function ContasPage() {
     dadosDaEmpresa(ctx.empresaId),
   ]);
 
-  return <ContasTabela contas={contas} empresa={empresa} emitidoPor={usuarioNome ?? ""} />;
+  return (
+    <ContasTabela
+      contas={contas}
+      empresa={empresa}
+      emitidoPor={usuarioNome ?? ""}
+    />
+  );
 }

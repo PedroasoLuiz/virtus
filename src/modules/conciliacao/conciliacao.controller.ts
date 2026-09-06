@@ -33,7 +33,14 @@ export async function importar({ body, params, ctx }: Entrada<ImportarBody, unde
 
 export async function conciliar({ body, params, ctx }: Entrada<ConciliarBody, undefined, ContaParam>) {
   const empresaId = empresaObrigatoria(ctx);
-  await service.conciliar(empresaId, params.id, body.linhaId, body.pagamentoId);
+  await service.conciliar(
+    empresaId,
+    ctx.usuarioId,
+    params.id,
+    body.linhaId,
+    body.pagamentoId,
+    body.confirmaMudancaDeMes,
+  );
   return noContent();
 }
 
@@ -48,5 +55,13 @@ export async function conciliarVarios({
   ctx,
 }: Entrada<LoteBody, undefined, ContaParam>) {
   const empresaId = empresaObrigatoria(ctx);
-  return ok({ conciliadas: await service.conciliarVarios(empresaId, params.id, body.pares) });
+  return ok({
+    conciliadas: await service.conciliarVarios(
+      empresaId,
+      ctx.usuarioId,
+      params.id,
+      body.pares,
+      body.confirmaMudancaDeMes,
+    ),
+  });
 }

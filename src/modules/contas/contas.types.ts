@@ -1,4 +1,5 @@
 import type { Centavos } from "@/shared/utils/money";
+import type { DocumentoDoPagamento } from "@/modules/documentos/documentos.repository";
 import type { DataISO } from "@/shared/utils/datas";
 
 /**
@@ -97,6 +98,18 @@ export type MovimentoDoExtrato = {
    */
   conciliado: boolean;
   /**
+   * A que titulo esta linha pertence, com o que a tela precisa para ABRI-LO.
+   *
+   * ⚠️ Objeto e nao texto: o numero na tela e um link, e ele precisa do tipo e
+   * do id. Mandando "CR 180 P 2", a tela teria de desmontar a string — e o
+   * formato do rotulo passaria a ser contrato de duas telas sem ninguem dizer.
+   *
+   * ⚠️ `MOV` nao e falta de dado: e a resposta de que nao existe titulo por
+   * tras. Tarifa e rendimento nunca terao um; a baixa do legado tambem nao,
+   * porque ela gravava o dinheiro sem gravar o vinculo com a parcela.
+   */
+  documento: DocumentoDoPagamento | null;
+  /**
    * Saldo depois deste movimento.
    *
    * Calculado na leitura, acumulando a partir do saldo de abertura. Nao aparece
@@ -125,5 +138,18 @@ export type Extrato = {
    * conta que ela entrega chega com o campo nulo.
    */
   saldoAtual: Centavos;
+  /**
+   * Quantos lancamentos da conta ainda nao foram conferidos no extrato do banco.
+   *
+   * ⚠️ Do EXTRATO INTEIRO, e nao do periodo consultado. A pergunta que ele
+   * responde e "quanto falta conferir nesta conta", e ela nao muda quando
+   * alguem estreita a janela da tela — estreitada, o numero cairia e daria a
+   * impressao de trabalho feito.
+   *
+   * ⚠️ QUANTIDADE, e nao soma de valor. Entrada e saida se anulam: uma conta com
+   * mil reais entrando e mil saindo, nenhum dos dois conferido, mostraria zero e
+   * diria que nao ha nada a fazer.
+   */
+  semConciliar: number;
   movimentos: MovimentoDoExtrato[];
 };

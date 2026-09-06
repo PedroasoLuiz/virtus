@@ -1,6 +1,11 @@
 "use client";
 
-import { Badge, Button, MarcaDeUso, SeletorBuscavel } from "@/components/ui/kit";
+import {
+  Badge,
+  Button,
+  MarcaDeUso,
+  SeletorBuscavel,
+} from "@/components/ui/kit";
 import { formatarSemSimbolo, type Centavos } from "@/shared/utils/money";
 import { paraFormatoBR } from "@/shared/utils/datas";
 import type {
@@ -27,6 +32,7 @@ export function LinhaDaConciliacao({
   aoLigar,
   aoDesfazer,
   procurar,
+  aoCadastrar,
 }: {
   linha: LinhaDoExtrato;
   painel: PainelDeConciliacao | null;
@@ -39,14 +45,24 @@ export function LinhaDaConciliacao({
   aoTrocar: (trocando: boolean) => void;
   aoLigar: (pagamentoId: number) => void;
   aoDesfazer: () => void;
-  procurar: (valorDaLinha: number, termo: string) => Promise<{ id: number; nome: string }[]>;
+  procurar: (
+    valorDaLinha: number,
+    termo: string,
+  ) => Promise<{ id: number; nome: string }[]>;
+  /**
+   * Cadastrar a conta a pagar que esta linha cobra.
+   *
+   * ⚠️ Só vem preenchido quando não há nada no sistema com aquele valor. Nas
+   * outras linhas existe o que procurar, e um botão de cadastro ao lado
+   * convidaria a criar a segunda cópia de um lançamento que já está na lista.
+   */
+  aoCadastrar?: () => void;
 }) {
   const sugestao = painel?.sugestoes.find((s) => s.linhaId === l.id);
   const par = painel?.lancamentos.find((p) => p.id === l.pagamentoId);
   const aba = pilha;
 
   return (
-
     <div
       key={l.id}
       style={{
@@ -63,7 +79,8 @@ export function LinhaDaConciliacao({
           divisoria, o proprio vao entre blocos separa — e ali ele
           pode, porque cada bloco tem duas alturas de conteudo.
         */
-        borderBottom: aba === "conciliados" ? "1px solid var(--border)" : "none",
+        borderBottom:
+          aba === "conciliados" ? "1px solid var(--border)" : "none",
         /*
           ⚠️ O corpo de texto vem daqui.
 
@@ -145,7 +162,9 @@ export function LinhaDaConciliacao({
             */}
             <MarcaDeUso
               marcado={marcado}
-              rotulo={marcado ? "Tirar esta da conciliação" : "Conferi: é este mesmo"}
+              rotulo={
+                marcado ? "Tirar esta da conciliação" : "Conferi: é este mesmo"
+              }
               onClick={aoMarcar}
             />
             {(() => {
@@ -221,8 +240,28 @@ export function LinhaDaConciliacao({
               />
             </span>
             {sugestao && (
-              <Button size="xs" disabled={ocupado} onClick={() => aoTrocar(false)}>
+              <Button
+                size="xs"
+                disabled={ocupado}
+                onClick={() => aoTrocar(false)}
+              >
                 Voltar
+              </Button>
+            )}
+            {aoCadastrar && (
+              /*
+                ⚠️ A busca CONTINUA aqui do lado, e o cadastro não a substitui.
+                "Nada com esse valor" é o que o sistema conclui do período
+                carregado; a conta pode existir com outro valor, ou fora da
+                janela. Trocando a busca pelo botão, o palpite viraria veredito.
+              */
+              <Button
+                size="xs"
+                disabled={ocupado}
+                onClick={aoCadastrar}
+                title="Cria a conta a pagar já com a data, o valor e o histórico do banco"
+              >
+                Cadastrar
               </Button>
             )}
           </>
@@ -232,7 +271,10 @@ export function LinhaDaConciliacao({
   );
 }
 
-function nomeDoLancamento(painel: PainelDeConciliacao | null, id: number): string {
+function nomeDoLancamento(
+  painel: PainelDeConciliacao | null,
+  id: number,
+): string {
   const achado = painel?.lancamentos.find((l) => l.id === id);
   if (!achado) return `Lançamento ${id}`;
 
@@ -248,7 +290,10 @@ function nomeDoLancamento(painel: PainelDeConciliacao | null, id: number): strin
  */
 function SetaDoPar() {
   return (
-    <span aria-hidden style={{ display: "inline-flex", color: "var(--text-disabled)" }}>
+    <span
+      aria-hidden
+      style={{ display: "inline-flex", color: "var(--text-disabled)" }}
+    >
       <svg
         width="13"
         height="13"
@@ -310,7 +355,10 @@ function Documento({ texto }: { texto: string }) {
  * mesmo peso, o bloco lia como dois lancamentos empilhados, e a lista parecia ter
  * o dobro do tamanho que tem.
  */
-const TEXTO_DO_PAR: React.CSSProperties = { ...TEXTO_QUE_CORTA, color: "var(--text-tertiary)" };
+const TEXTO_DO_PAR: React.CSSProperties = {
+  ...TEXTO_QUE_CORTA,
+  color: "var(--text-tertiary)",
+};
 
 /** Numero em coluna: tabular e sem quebra, para o digito alinhar com o de cima. */
 const NUM: React.CSSProperties = {

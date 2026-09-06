@@ -36,9 +36,18 @@ export const importarBodySchema = z.object({
   linhas: z.array(linhaSchema).min(1).max(5000),
 });
 
+/**
+ * ⚠️ `confirmaMudancaDeMes` e o "sim, eu sei" da tela.
+ *
+ * Conciliar puxa a data da baixa para o dia do extrato. Dentro do mes isso nao
+ * mexe em fechamento nenhum e passa direto; cruzando a virada, o servico recusa
+ * ate a tela dizer que perguntou. O padrao e FALSO: sem a bandeira, a operacao
+ * que mudaria de mes nao acontece.
+ */
 export const conciliarBodySchema = z.object({
   linhaId: idSchema,
   pagamentoId: idSchema,
+  confirmaMudancaDeMes: z.boolean().default(false),
 });
 
 export const desfazerBodySchema = z.object({ linhaId: idSchema });
@@ -46,6 +55,7 @@ export const desfazerBodySchema = z.object({ linhaId: idSchema });
 /** Os pares que a pessoa conferiu na tela e mandou de uma vez. */
 export const loteBodySchema = z.object({
   pares: z.array(z.object({ linhaId: idSchema, pagamentoId: idSchema })).min(1).max(500),
+  confirmaMudancaDeMes: z.boolean().default(false),
 });
 
 export type PeriodoQuery = z.infer<typeof periodoQuerySchema>;

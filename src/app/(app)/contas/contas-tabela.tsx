@@ -67,7 +67,10 @@ export function ContasTabela({
 
     if (!r.ok) {
       const dados = await r.json().catch(() => null);
-      avisar("atencao", dados?.error?.message ?? "Não foi possível excluir a conta");
+      avisar(
+        "atencao",
+        dados?.error?.message ?? "Não foi possível excluir a conta",
+      );
       return;
     }
 
@@ -130,11 +133,15 @@ export function ContasTabela({
                       {c.apelido?.trim() || c.nome}
                     </span>
                   </Td>
-                  <Td style={{ color: "var(--text-secondary)" }}>{c.banco ?? "—"}</Td>
+                  <Td style={{ color: "var(--text-secondary)" }}>
+                    {c.banco ?? "—"}
+                  </Td>
                   <Td style={{ color: "var(--text-secondary)" }}>
                     {[c.agencia, c.conta].filter(Boolean).join(" / ") || "—"}
                   </Td>
-                  <Td style={{ color: "var(--text-secondary)" }}>{c.tipo ?? "—"}</Td>
+                  <Td style={{ color: "var(--text-secondary)" }}>
+                    {c.tipo ?? "—"}
+                  </Td>
                   <Td style={{ textAlign: "center" }}>
                     <Badge tom={c.ativo ? "success" : "neutral"}>
                       {c.ativo ? "Ativa" : "Inativa"}
@@ -142,7 +149,10 @@ export function ContasTabela({
                   </Td>
                   <Td>
                     <AcoesDaLinha>
-                      <BotaoDeAcao rotulo="Ver extrato" onClick={() => setExtrato(c)}>
+                      <BotaoDeAcao
+                        rotulo="Ver extrato"
+                        onClick={() => setExtrato(c)}
+                      >
                         {/* Folha com linhas e um valor destacado: o papel do
                             extrato, e nao um cifrao, que significaria dinheiro
                             em vez do documento. */}
@@ -150,7 +160,10 @@ export function ContasTabela({
                         <path d="M5.6 5.2h4.8M5.6 7.6h4.8M5.6 10h2.8" />
                       </BotaoDeAcao>
 
-                      <BotaoDeAcao rotulo="Editar conta" onClick={() => setEditando(c)}>
+                      <BotaoDeAcao
+                        rotulo="Editar conta"
+                        onClick={() => setEditando(c)}
+                      >
                         <path d="M11.2 2.6l2.2 2.2-7.4 7.4-2.8.6.6-2.8z" />
                       </BotaoDeAcao>
 

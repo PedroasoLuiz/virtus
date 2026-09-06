@@ -61,11 +61,18 @@ const dinheiro = (v: Centavos) => formatarSemSimbolo(v);
 function porDia(
   movimentos: MovimentoDoExtrato[],
 ): { data: string; movimentos: MovimentoDoExtrato[]; saldoDoDia: Centavos }[] {
-  const dias = new Map<string, { data: string; movimentos: MovimentoDoExtrato[]; saldoDoDia: Centavos }>();
+  const dias = new Map<
+    string,
+    { data: string; movimentos: MovimentoDoExtrato[]; saldoDoDia: Centavos }
+  >();
 
   for (const m of movimentos) {
     const chave = m.data ?? "";
-    const dia = dias.get(chave) ?? { data: chave, movimentos: [], saldoDoDia: m.saldoApos };
+    const dia = dias.get(chave) ?? {
+      data: chave,
+      movimentos: [],
+      saldoDoDia: m.saldoApos,
+    };
 
     dia.movimentos.push(m);
     dia.saldoDoDia = m.saldoApos;
@@ -114,7 +121,10 @@ async function cabecalho(
 
   const y = MARGEM;
 
-  doc.setFont("helvetica", "bold").setFontSize(20).setTextColor(...AZUL);
+  doc
+    .setFont("helvetica", "bold")
+    .setFontSize(20)
+    .setTextColor(...AZUL);
   doc.text("EXTRATO", MARGEM, y + 14);
 
   /*
@@ -128,7 +138,14 @@ async function cabecalho(
   if (logo) {
     const altura = 26;
     const larguraLogo = altura * (logo.largura / logo.altura);
-    doc.addImage(logo.dados, "PNG", direita - larguraLogo, y - 4, larguraLogo, altura);
+    doc.addImage(
+      logo.dados,
+      "PNG",
+      direita - larguraLogo,
+      y - 4,
+      larguraLogo,
+      altura,
+    );
   }
 
   return y + 34;
@@ -160,7 +177,10 @@ function identificacao(
 
   let linha = y;
   for (const [rotulo, valor] of pares) {
-    doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(...CINZA);
+    doc
+      .setFont("helvetica", "normal")
+      .setFontSize(8.5)
+      .setTextColor(...CINZA);
     doc.text(`${rotulo}:`, MARGEM, linha);
 
     doc.setFont("helvetica", "bold").setTextColor(...TINTA);
@@ -204,9 +224,19 @@ function partes(
     .filter(Boolean)
     .join(" · ");
 
-  const bancaria = [conta.apelido?.trim() || conta.nome, identificacaoBancaria].filter(Boolean);
+  const bancaria = [
+    conta.apelido?.trim() || conta.nome,
+    identificacaoBancaria,
+  ].filter(Boolean);
 
-  const altura = coluna(doc, "CONTA", bancaria, MARGEM, y, largura - MARGEM * 2);
+  const altura = coluna(
+    doc,
+    "CONTA",
+    bancaria,
+    MARGEM,
+    y,
+    largura - MARGEM * 2,
+  );
 
   return y + altura + 26;
 }
@@ -219,12 +249,17 @@ function coluna(
   y: number,
   largura: number,
 ): number {
-  doc.setFont("helvetica", "bold").setFontSize(7).setTextColor(...CINZA);
+  doc
+    .setFont("helvetica", "bold")
+    .setFontSize(7)
+    .setTextColor(...CINZA);
   doc.text(rotulo, x, y);
 
   let altura = 14;
   linhas.forEach((linha, i) => {
-    doc.setFont("helvetica", i === 0 ? "bold" : "normal").setFontSize(i === 0 ? 10 : 8.5);
+    doc
+      .setFont("helvetica", i === 0 ? "bold" : "normal")
+      .setFontSize(i === 0 ? 10 : 8.5);
     doc.setTextColor(...(i === 0 ? TINTA : CINZA));
 
     // Quebra pela largura da coluna: razão social longa não pode invadir a
@@ -254,10 +289,18 @@ function coluna(
  * de cada um; imprimir de outro jeito faria a conferencia mudar de forma entre
  * a tela e o papel.
  */
-function movimentos(doc: jsPDF, extrato: Extrato, y: number, largura: number): number {
+function movimentos(
+  doc: jsPDF,
+  extrato: Extrato,
+  y: number,
+  largura: number,
+): number {
   /* Caixa normal, tinta cheia e corpo maior: e o titulo do bloco principal do
      documento, e nao mais um rotulo de coluna como o "CONTA" ali em cima. */
-  doc.setFont("helvetica", "bold").setFontSize(11).setTextColor(...TINTA);
+  doc
+    .setFont("helvetica", "bold")
+    .setFontSize(11)
+    .setTextColor(...TINTA);
   doc.text("Lançamentos", MARGEM, y);
 
   const linhas: RowInput[] = [];
@@ -304,7 +347,8 @@ function movimentos(doc: jsPDF, extrato: Extrato, y: number, largura: number): n
     ]);
   }
 
-  if (linhas.length === 0) linhas.push(["—", "Nenhum lançamento no período", "", "", ""]);
+  if (linhas.length === 0)
+    linhas.push(["—", "Nenhum lançamento no período", "", "", ""]);
 
   autoTable(doc, {
     startY: y + 10,
@@ -336,7 +380,10 @@ function movimentos(doc: jsPDF, extrato: Extrato, y: number, largura: number): n
        * chegava na borda. A quebra de linha ja existia — o que faltava era o
        * espaco antes dela decidir quebrar.
        */
-      1: { overflow: "linebreak", cellPadding: { top: 7, bottom: 7, left: 0, right: 12 } },
+      1: {
+        overflow: "linebreak",
+        cellPadding: { top: 7, bottom: 7, left: 0, right: 12 },
+      },
       2: { cellWidth: 78 },
       3: { cellWidth: 38, halign: "center" },
       4: { cellWidth: COL_NUM, halign: "right" },
@@ -344,7 +391,8 @@ function movimentos(doc: jsPDF, extrato: Extrato, y: number, largura: number): n
     head: [["Data", "Histórico", "Forma", "Conf.", "Valor"]],
     body: linhas,
     didParseCell: (d) => {
-      if (d.section === "head" && d.column.index >= 3) d.cell.styles.halign = "right";
+      if (d.section === "head" && d.column.index >= 3)
+        d.cell.styles.halign = "right";
       if (d.section !== "body") return;
 
       if (fechos.has(d.row.index)) {
@@ -383,7 +431,12 @@ function movimentos(doc: jsPDF, extrato: Extrato, y: number, largura: number): n
  * a conta do periodo poder ser refeita de cabeca — abertura mais entradas menos
  * saidas e o fecho.
  */
-function fechamento(doc: jsPDF, extrato: Extrato, y: number, direita: number): number {
+function fechamento(
+  doc: jsPDF,
+  extrato: Extrato,
+  y: number,
+  direita: number,
+): number {
   /* ⚠️ Cor so em entradas e saidas. A abertura e o fecho sao posicao, e nao
      direcao: pintados, o documento viraria quatro numeros coloridos e a cor
      deixaria de distinguir o que entrou do que saiu. */
@@ -413,7 +466,10 @@ function fechamento(doc: jsPDF, extrato: Extrato, y: number, direita: number): n
   }
 
   for (const [rotulo, valor, cor] of pares) {
-    doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(...CINZA);
+    doc
+      .setFont("helvetica", "normal")
+      .setFontSize(8.5)
+      .setTextColor(...CINZA);
     doc.text(rotulo, xRotulo, linha);
     doc.setTextColor(...cor);
     doc.text(dinheiro(valor), direita, linha, { align: "right" });
@@ -422,7 +478,10 @@ function fechamento(doc: jsPDF, extrato: Extrato, y: number, direita: number): n
 
   // Mesmo corpo de texto dos demais; só o negrito o separa. O fecho é
   // conclusão, não manchete.
-  doc.setFont("helvetica", "bold").setFontSize(8.5).setTextColor(...TINTA);
+  doc
+    .setFont("helvetica", "bold")
+    .setFontSize(8.5)
+    .setTextColor(...TINTA);
   doc.text("Saldo do período", xRotulo, linha);
   doc.text(dinheiro(extrato.saldoFinal), direita, linha, { align: "right" });
 
@@ -432,18 +491,26 @@ function fechamento(doc: jsPDF, extrato: Extrato, y: number, direita: number): n
 function rodape(doc: jsPDF, emitidoPor: string, largura: number): void {
   const total = doc.getNumberOfPages();
   const altura = doc.internal.pageSize.getHeight();
-  const emissao = paraFormatoBR(new Date().toISOString().slice(0, 10) as DataISO);
+  const emissao = paraFormatoBR(
+    new Date().toISOString().slice(0, 10) as DataISO,
+  );
 
   for (let pagina = 1; pagina <= total; pagina++) {
     doc.setPage(pagina);
     // Sem régua acima: a página já termina ali, e mais uma linha só empilha
     // divisória sobre divisória.
-    doc.setFont("helvetica", "normal").setFontSize(7.5).setTextColor(...CINZA);
+    doc
+      .setFont("helvetica", "normal")
+      .setFontSize(7.5)
+      .setTextColor(...CINZA);
     doc.text(`Emitido em ${emissao} por ${emitidoPor}`, MARGEM, altura - 22);
-    doc.text(`${pagina} / ${total}`, largura - MARGEM, altura - 22, { align: "right" });
+    doc.text(`${pagina} / ${total}`, largura - MARGEM, altura - 22, {
+      align: "right",
+    });
   }
 }
 
 function tabelaTerminaEm(doc: jsPDF): number {
-  return (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
+  return (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable
+    .finalY;
 }

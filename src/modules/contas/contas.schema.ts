@@ -74,6 +74,8 @@ export const extratoSchema = z.object({
   entradas: z.number(),
   saidas: z.number(),
   saldoAtual: z.number(),
+  /* Quantos lancamentos da conta inteira ainda esperam conferencia. */
+  semConciliar: z.number(),
   movimentos: z.array(
     z.object({
       id: z.number(),
@@ -85,6 +87,15 @@ export const extratoSchema = z.object({
       descricao: z.string().nullable(),
       formaPagamento: z.string().nullable(),
       conciliado: z.boolean(),
+      /* A que titulo a linha pertence, e o que a tela precisa para abri-lo. */
+      documento: z
+        .object({
+          rotulo: z.string(),
+          tipo: z.enum(["CR", "CP", "MOV"]),
+          contaId: z.number().nullable(),
+          parcela: z.number().nullable(),
+        })
+        .nullable(),
       saldoApos: z.number(),
     }),
   ),

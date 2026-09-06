@@ -81,7 +81,8 @@ export function VistoDeConferencia({
      * ⚠️ `--primary` no conferido, e não `--success`.
      *
      * O `--success` é o verde genérico dos avisos; este é um estado do sistema,
-     * e o verde da casa o liga ao resto da interface em vez de a uma mensagem.
+     * e a cor da marca o liga ao resto da interface em vez de a uma mensagem.
+     * (Escrito quando a marca era verde; hoje é o azul, e o que vale é o token.)
      *
      * ⚠️ E o amarelo SÓLIDO no pendente: o `--warning` é âmbar escuro calibrado
      * para ler como texto, e some quando vira um traço de 14px.

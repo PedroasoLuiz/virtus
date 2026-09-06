@@ -154,7 +154,20 @@ export function lerOfx(conteudo: string): ExtratoOfx {
  */
 export function textoDoOfx(bytes: ArrayBuffer): string {
   const inicio = new TextDecoder("ascii").decode(bytes.slice(0, 512));
-  const utf8 = /CHARSET:\s*(UTF-8|UNICODE)/i.test(inicio) || /encoding="UTF-8"/i.test(inicio);
+
+  /*
+   * ⚠️ `ENCODING` conta tanto quanto `CHARSET`, e ha arquivo que so tem um.
+   *
+   * O cabecalho do OFX 1.x tem os dois campos, e cada banco preenche o que
+   * quer: o extrato da Cora declara `ENCODING:UTF-8` e NAO traz `CHARSET`
+   * nenhum. Olhando so o `CHARSET`, a leitura caia no cp1252 e "Compra no
+   * débito" entrava no banco como "Compra no dÃ©bito" — em 236 linhas, de uma
+   * vez, e o nome sujo ainda atrapalha o casamento por nome depois.
+   */
+  const utf8 =
+    /CHARSET:\s*(UTF-8|UNICODE)/i.test(inicio) ||
+    /ENCODING:\s*(UTF-8|UNICODE)/i.test(inicio) ||
+    /encoding="UTF-8"/i.test(inicio);
 
   return new TextDecoder(utf8 ? "utf-8" : "windows-1252").decode(bytes);
 }
