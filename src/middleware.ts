@@ -17,13 +17,13 @@ import { createServerClient } from "@supabase/ssr";
 /*
  * `/p` e a pagina que o CLIENTE abre pelo link da cobranca.
  *
- * Ele nao tem conta no VPay — cobrar nao pode exigir que ele entre num sistema
+ * Ele nao tem conta no Vope — cobrar nao pode exigir que ele entre num sistema
  * que nao e dele. Quem autoriza ali e o token do link, conferido pelo banco, e
  * nao a sessao. Sem esta linha o middleware manda o cliente para o login, e o
  * link inteiro deixa de servir para o que existe.
  */
 const ROTAS_PUBLICAS = ["/login", "/recuperar-senha", "/auth", "/p/"];
-const COOKIE_EMPRESA = "vpay_empresa";
+const COOKIE_EMPRESA = "vope_empresa";
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

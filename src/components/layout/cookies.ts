@@ -6,7 +6,7 @@
  * funciona — o Next substitui o modulo por uma referencia de cliente e a
  * constante chega indefinida no servidor.
  */
-export const COOKIE_SIDEBAR = "vpay_sidebar";
+export const COOKIE_SIDEBAR = "vope_sidebar";
 
 /*
  * ⚠️ `cookieDaVisao` SAIU daqui, e nao deve voltar.

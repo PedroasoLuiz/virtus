@@ -76,7 +76,7 @@ export function RenovarAcessoDrawer({
           legenda="Vale para todas as contas de anúncio ligadas a este acesso."
         >
           <Alert variant="info" title="O token curto vira um de 60 dias">
-            Cole o token gerado no Graph API Explorer. Ele dura cerca de uma hora, e o Vpay o
+            Cole o token gerado no Graph API Explorer. Ele dura cerca de uma hora, e o Vope o
             troca por um de 60 dias antes de guardar. Depois disso, a renovação passa a
             acontecer sozinha.
           </Alert>

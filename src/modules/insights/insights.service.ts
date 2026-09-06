@@ -79,7 +79,7 @@ async function tokenDaOrigem(
  * O que este acesso enxerga na Meta, e o que dele ja esta ligado aqui.
  *
  * ⚠️ Se uma conta do cliente NAO aparecer, o problema e acesso no Business
- * Manager dele, e nao no Vpay. Saber disso pela propria tela evita procurar bug
+ * Manager dele, e nao no Vope. Saber disso pela propria tela evita procurar bug
  * onde nao ha.
  */
 export async function contasDisponiveis(

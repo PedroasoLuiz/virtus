@@ -8,7 +8,7 @@ import { redirect } from "next/navigation";
  *
  * Cookie e nao parametro de URL porque a escolha atravessa a navegação: quando o
  * portal tiver a tela de chamados, ela precisa continuar valendo lá. É o mesmo
- * papel do `vpay_empresa` do sistema, com outro nome — o do sistema é o tenant
+ * papel do `vope_empresa` do sistema, com outro nome — o do sistema é o tenant
  * que se administra, este é de quem se recebe a cobrança, e misturar os dois num
  * cookie só faria um sobrescrever o outro.
  *
@@ -18,7 +18,7 @@ import { redirect } from "next/navigation";
  * O nome fica local, sem `export`: arquivo `"use server"` só pode exportar
  * função async — tudo que ele expõe vira endpoint, e uma string não é chamável.
  */
-const COOKIE_EMITENTE = "vpay_portal_emitente";
+const COOKIE_EMITENTE = "vope_portal_emitente";
 
 export async function emitenteEscolhido(): Promise<number | undefined> {
   const bruto = (await cookies()).get(COOKIE_EMITENTE)?.value;

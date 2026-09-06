@@ -10,7 +10,7 @@ import type { Entitlements, Modulo, Plano } from "@/modules/plataforma/plataform
  * ⚠️ DECISAO A CONFIRMAR: a tabela `assinaturas` esta vazia — nenhuma empresa
  * tem plano. Se falharmos fechado, o sistema inteiro fica inacessivel para
  * todos. Por isso, sem assinatura a empresa cai no plano de menor ordem (hoje
- * "Free", que habilita `financeiro` — exatamente o escopo do VPay), e o
+ * "Free", que habilita `financeiro` — exatamente o escopo do Vope), e o
  * resultado vem marcado com `usandoPadrao`, que a UI exibe.
  *
  * Assim que as assinaturas forem cadastradas, trocar este fallback por

@@ -282,7 +282,7 @@ export const FINALIDADES: Finalidade[] = [
         chave: "empresa",
         rotulo: "Nome da sua empresa",
         descricao: "Quem está mandando os parabéns.",
-        exemplo: "Vpay Serviços",
+        exemplo: "Vope Serviços",
       },
     ],
     botao: null,

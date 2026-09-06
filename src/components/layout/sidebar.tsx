@@ -16,6 +16,7 @@ import { useFavoritos } from "@/components/layout/favoritos";
 import { ArvoreNav, Chevron, GrupoFlutuante, ItemNav, ehAtivo } from "@/components/layout/nav";
 import { Icon } from "@/components/layout/icones";
 import { MenuUsuario } from "@/components/layout/menu-usuario";
+import { Marca } from "@/components/layout/marca";
 import { BotaoLateralDoWhatsapp } from "@/components/whatsapp/botao-lateral";
 import { COOKIE_SIDEBAR } from "@/components/layout/cookies";
 
@@ -122,17 +123,8 @@ export function Sidebar({
         }}
       >
         {!recolhida && (
-          <Link
-            href={inicio}
-            style={{
-              fontSize: "var(--text-xl)",
-              fontWeight: "var(--fw-bold)",
-              letterSpacing: "var(--tracking-tight)",
-              color: "var(--text-primary)",
-              whiteSpace: "nowrap",
-            }}
-          >
-            <span style={{ color: "var(--primary)" }}>V</span>Pay
+          <Link href={inicio}>
+            <Marca />
           </Link>
         )}
 

@@ -5,7 +5,7 @@ import { carteira } from "@/modules/portal/portal.service";
 import { usuarioLogado } from "@/modules/sessao/sessao.service";
 import { emitenteEscolhido, escolherEmitente } from "@/app/portal/emitente";
 
-export const metadata: Metadata = { title: "Escolher empresa — VPay" };
+export const metadata: Metadata = { title: "Escolher empresa — Vope" };
 
 /**
  * De qual empresa o cliente quer ver a cobrança.

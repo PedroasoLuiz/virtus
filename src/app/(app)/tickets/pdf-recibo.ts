@@ -104,7 +104,7 @@ async function cabecalho(doc: jsPDF, t: TicketParaPDF, direita: number): Promise
     doc.addImage(logo.dados, "PNG", direita - larguraLogo, y - 4, larguraLogo, altura);
   } else {
     doc.setFont("helvetica", "bold").setFontSize(13).setTextColor(...TINTA);
-    doc.text(t.empresa.razaoSocial ?? "VPAY", direita, y + 13, { align: "right" });
+    doc.text(t.empresa.razaoSocial ?? "VOPE", direita, y + 13, { align: "right" });
   }
 
   return y + 34;

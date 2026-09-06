@@ -41,8 +41,12 @@ function PainelMarca() {
       }}
     >
       {/*
-        Luz verde difusa no canto — o "glow" da identidade Virtus, adaptado
-        para o verde do VPay. Puro CSS: sem imagem, sem custo de rede.
+        Luz difusa no canto — o "glow" da identidade Virtus, no azul do Vope.
+        Puro CSS: sem imagem, sem custo de rede.
+
+        ⚠️ Os valores sao literais, e nao `var(--primary)`. O painel tem fundo
+        preto proprio, fora do tema: puxar o token faria a luz clarear junto com
+        o modo claro do sistema e sumir contra o preto que fica.
       */}
       <div
         aria-hidden
@@ -50,8 +54,8 @@ function PainelMarca() {
           position: "absolute",
           inset: 0,
           background:
-            "radial-gradient(60% 50% at 75% 15%, rgba(0,187,71,0.28), transparent 70%)," +
-            "radial-gradient(45% 40% at 25% 85%, rgba(0,106,40,0.22), transparent 75%)",
+            "radial-gradient(60% 50% at 75% 15%, rgba(56,141,255,0.28), transparent 70%)," +
+            "radial-gradient(45% 40% at 25% 85%, rgba(10,82,185,0.22), transparent 75%)",
           pointerEvents: "none",
         }}
       />

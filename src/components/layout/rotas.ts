@@ -189,7 +189,7 @@ export const GRUPOS_POR_MODULO: Partial<Record<Modulo, Grupo[]>> = {
          *
          * O que se liga aqui e conta de fora que pertence a EMPRESA e se associa
          * a um CLIENTE dela — mesma natureza de pessoa, servico e centro de
-         * custo. Plataforma guarda o que a Vpay vende (plano, modulos), que e
+         * custo. Plataforma guarda o que a Vope vende (plano, modulos), que e
          * outro assunto e outro dono.
          */
         { label: "Integrações", href: "/configuracoes" },

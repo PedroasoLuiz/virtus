@@ -11,7 +11,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "VPay — Gestao financeira",
+  title: "Vope — Gestao financeira",
   description: "Faturamento, contas a pagar e tesouraria.",
 };
 

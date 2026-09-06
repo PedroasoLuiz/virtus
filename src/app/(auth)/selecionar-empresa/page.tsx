@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { empresasDisponiveis, usuarioLogado } from "@/modules/sessao/sessao.service";
 import { SeletorEmpresa } from "./seletor-empresa";
 
-export const metadata: Metadata = { title: "Escolher empresa — VPay" };
+export const metadata: Metadata = { title: "Escolher empresa — Vope" };
 
 export default async function SelecionarEmpresaPage() {
   const usuario = await usuarioLogado();

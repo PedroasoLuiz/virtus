@@ -7,7 +7,7 @@
  *     empresas  ->  assinaturas  ->  planos  ->  modulo_*
  *
  * `planos` tem Free / Starter / Pro / Enterprise, cada um habilitando um
- * conjunto de modulos. O VPay ocupa o modulo `financeiro`; SIC ocupa `os`,
+ * conjunto de modulos. O Vope ocupa o modulo `financeiro`; SIC ocupa `os`,
  * `estoque` e `manutencao`. Uma empresa "assina varios produtos" subindo de
  * plano, nao acumulando assinaturas.
  *

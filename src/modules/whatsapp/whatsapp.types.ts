@@ -545,7 +545,7 @@ export function versaoDaApiValida(texto: string): boolean {
  */
 export function novoVerifyToken(): string {
   const sorteio = () => Math.random().toString(36).slice(2, 10);
-  return `vpay-${sorteio()}${sorteio()}`.slice(0, 24);
+  return `vope-${sorteio()}${sorteio()}`.slice(0, 24);
 }
 
 /**

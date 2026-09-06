@@ -51,7 +51,7 @@ function proximoMes(ano: number, mes: number): { ano: number; mes: number } {
  *
  * ⚠️ O CICLO manda, e não o mês da compra. Comprando no dia seguinte ao
  * fechamento, a despesa é do ciclo seguinte — é isso que a fatura do cartão faz,
- * e o sistema tem de dizer o mesmo, senão o total do VPay nunca bate com o papel
+ * e o sistema tem de dizer o mesmo, senão o total do Vope nunca bate com o papel
  * que chega do banco.
  *
  * ⚠️ Compra NO dia do fechamento entra na fatura que fecha naquele dia. É a

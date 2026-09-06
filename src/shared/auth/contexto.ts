@@ -16,7 +16,7 @@ import type { Modulo } from "@/modules/plataforma/plataforma.types";
  * repositorio de acesso — a regra continua sendo uma so implementacao.
  */
 
-export const COOKIE_EMPRESA = "vpay_empresa";
+export const COOKIE_EMPRESA = "vope_empresa";
 
 export type Contexto = {
   usuarioId: string;

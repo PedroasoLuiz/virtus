@@ -1,21 +1,15 @@
 import type { Metadata } from "next";
+import { Marca } from "@/components/layout/marca";
 import { LoginForm } from "./login-form";
 
-export const metadata: Metadata = { title: "Entrar — VPay" };
+export const metadata: Metadata = { title: "Entrar — Vope" };
 
 export default function LoginPage() {
   return (
     <>
       <div style={{ marginBottom: 28 }}>
-        <div
-          style={{
-            fontSize: "var(--text-2xl)",
-            fontWeight: "var(--fw-bold)",
-            letterSpacing: "var(--tracking-tight)",
-            marginBottom: 20,
-          }}
-        >
-          <span style={{ color: "var(--primary)" }}>V</span>Pay
+        <div style={{ marginBottom: 20 }}>
+          <Marca tamanho="var(--text-2xl)" />
         </div>
         <h1
           style={{

@@ -33,7 +33,7 @@ const POR_PAGINA = 10;
 /*
  * Duas sub-abas, na ordem em que se pensa.
  *
- * "Sistema" e o que o VPAY envia e por qual modelo; "Externo" e o catalogo que a
+ * "Sistema" e o que o VOPE envia e por qual modelo; "Externo" e o catalogo que a
  * Meta aprovou para aquele numero. Empilhadas numa tela so, o inventario abria a
  * pagina e a pessoa lia um catalogo antes de saber para que ele serve.
  */

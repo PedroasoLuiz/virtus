@@ -184,7 +184,7 @@ const MAXIMO_DE_SEGMENTOS = 255;
 
 function escreverOgg(fluxo: FluxoOpus): Uint8Array {
   // Serial fixo: o arquivo tem um fluxo so, e nada aqui depende de sorteio.
-  const serial = 0x5650_4159; // "VPAY"
+  const serial = 0x564f_5045; // "VOPE"
   const paginas: Uint8Array[] = [];
   let sequencia = 0;
 
@@ -228,7 +228,7 @@ function escreverOgg(fluxo: FluxoOpus): Uint8Array {
 }
 
 function opusTags(): Uint8Array {
-  const fornecedor = new TextEncoder().encode("vpay");
+  const fornecedor = new TextEncoder().encode("vope");
   const saida = new Uint8Array(8 + 4 + fornecedor.length + 4);
 
   saida.set(new TextEncoder().encode("OpusTags"), 0);

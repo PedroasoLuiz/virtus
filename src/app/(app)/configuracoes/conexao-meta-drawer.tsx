@@ -100,7 +100,7 @@ export function ConexaoMetaDrawer({
           </Field>
         </GrupoDeCampos>
 
-        <GrupoDeCampos titulo="No Vpay" legenda="De quem são estas métricas.">
+        <GrupoDeCampos titulo="No Vope" legenda="De quem são estas métricas.">
           <Field label="Cliente">
             <SeletorBuscavel
               valor={clienteId}

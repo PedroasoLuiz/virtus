@@ -9,7 +9,7 @@ import type { CobrancaCompartilhada } from "@/modules/publico/publico.types";
 /**
  * A parte do sistema que o CLIENTE ve, sem login.
  *
- * Cliente nao tem conta no VPay — cobrar nao pode exigir que ele entre num
+ * Cliente nao tem conta no Vope — cobrar nao pode exigir que ele entre num
  * sistema que nao e dele. O que substitui a sessao e o TOKEN do link: 128 bits
  * aleatorios, revogaveis zerando uma coluna.
  *

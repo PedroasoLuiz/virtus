@@ -181,7 +181,7 @@ function janela(periodo: Periodo): string {
  * As contas de anúncio que este token alcança.
  *
  * ⚠️ É o que o token vê, e não o que a Meta tem. Se uma conta do cliente não
- * aparecer aqui, o problema é acesso no Business Manager dele, e não no Vpay —
+ * aparecer aqui, o problema é acesso no Business Manager dele, e não no Vope —
  * saber disso antes evita procurar bug onde não há.
  */
 export async function contasDoToken(token: string): Promise<ContaDisponivel[]> {

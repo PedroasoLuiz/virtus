@@ -16,7 +16,7 @@ export type ErrorCode =
   /**
    * Um servico de fora recusou ou falhou.
    *
-   * ⚠️ Distinto de INTERNAL: aqui o VPay esta certo e quem falhou foi o outro
+   * ⚠️ Distinto de INTERNAL: aqui o Vope esta certo e quem falhou foi o outro
    * lado (Meta, provedor de boleto, SEFAZ). A diferenca importa para quem le o
    * log — INTERNAL pede correcao no codigo, este pede olhar a integracao — e
    * para a tela, que pode sugerir tentar de novo.
