@@ -640,11 +640,15 @@ export async function enviarParcelaPorEmail(
      * parte que o cliente le antes de decidir abrir: "cobranca" sem cedilha
      * parece disparo automatico mal feito, e a palavra em si soa a aviso de
      * inadimplencia — quando aqui e so o documento do periodo chegando.
+     *
+     * ⚠️ E SEM o nome da empresa. Ele passou a assinar o remetente, e a caixa
+     * de entrada mostra os dois lado a lado: repetido, comia a largura do
+     * assunto no celular para dizer de novo o que a linha de cima ja dizia.
      */
     assunto:
       tickets.length > 0
-        ? `Sua fatura do ${referencia} | ${destino.empresaNome}`
-        : `Sua fatura | ${destino.empresaNome}`,
+        ? `Sua fatura do ${referencia}`
+        : "Sua fatura",
     html: htmlDaFatura({
       empresaNome: destino.empresaNome,
       empresaRazaoSocial: destino.empresaRazaoSocial,
@@ -677,6 +681,9 @@ export async function enviarParcelaPorEmail(
      * empresa, o convite continua verdadeiro qualquer que seja o `RESEND_FROM`.
      */
     responderPara: destino.empresaEmail ?? undefined,
+    /* O apelido curto, que e como o cliente conhece a empresa. A razao social
+       fica para a assinatura, no pe do e-mail. */
+    nomeDoRemetente: destino.empresaNome,
   });
 
   return { para };

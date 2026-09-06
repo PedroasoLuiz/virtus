@@ -21,12 +21,37 @@ export type Anexo = {
   conteudo: ArrayBuffer;
 };
 
+/**
+ * O remetente, com o nome de quem esta mandando.
+ *
+ * ⚠️ O nome vem da EMPRESA, e o endereco do ambiente. O sistema e multiempresa
+ * e o dominio de envio e um so: o cliente da Virtus tem de ver "VIRTUS
+ * TECNOLOGIAS" na caixa de entrada, e o cliente da proxima empresa o nome dela,
+ * saindo os dois do mesmo `nao-responda@`. Um nome fixo no ambiente faria toda
+ * cobranca do sistema chegar assinada igual, seja de quem for.
+ *
+ * ⚠️ Aspas e `<` sao removidos do nome. Eles sao a sintaxe do proprio cabecalho
+ * `From`: uma razao social com aspas montaria um endereco invalido e o Resend
+ * recusaria o envio inteiro.
+ */
+function remetenteCom(nome: string | undefined, endereco: string): string {
+  const limpo = (nome ?? "").replace(/["<>\r\n]/g, "").trim();
+  if (!limpo) return endereco;
+
+  // Ja veio no formato "Nome <endereco>": o nome do ambiente perde para o de
+  // quem esta cobrando, mas o endereco de dentro e o que vale.
+  const dentro = endereco.match(/<([^>]+)>/);
+  return `${limpo} <${dentro ? dentro[1] : endereco}>`;
+}
+
 export async function enviarEmail(entrada: {
   para: string[];
   assunto: string;
   html: string;
   anexos?: Anexo[];
   responderPara?: string;
+  /** Nome exibido no "de". Sem ele, vale o que estiver em `RESEND_FROM`. */
+  nomeDoRemetente?: string;
 }): Promise<string> {
   const chave = process.env.RESEND_API_KEY;
   const remetente = process.env.RESEND_FROM;
@@ -60,7 +85,7 @@ export async function enviarEmail(entrada: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      from: remetente,
+      from: remetenteCom(entrada.nomeDoRemetente, remetente),
       to: entrada.para,
       subject: entrada.assunto,
       html: entrada.html,
