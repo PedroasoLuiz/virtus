@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Marca } from "@/components/layout/marca";
 import { LoginForm } from "./login-form";
 
-export const metadata: Metadata = { title: "Entrar — Vope" };
+export const metadata: Metadata = { title: "Entrar · Vope" };
 
 export default function LoginPage() {
   return (

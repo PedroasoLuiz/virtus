@@ -11,7 +11,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Vope — Gestao financeira",
+  title: "Vope · Gestão financeira",
   description: "Faturamento, contas a pagar e tesouraria.",
 };
 
