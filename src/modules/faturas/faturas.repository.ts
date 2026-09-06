@@ -845,26 +845,88 @@ export async function destinatarioDaFatura(
   email: string | null;
   telefone: string | null;
   clienteNome: string | null;
+  /**
+   * A PESSOA que cuida disso no cliente, para o cumprimento do e-mail.
+   *
+   * ⚠️ Vem de `clientescontatos.responsavel`, e nao do cadastro do cliente:
+   * quem abre a cobranca e o financeiro de la, nao a razao social. "Ola,
+   * ALFALAGOS LTDA" nao cumprimenta ninguem, e era o que saia antes.
+   */
+  clienteResponsavel: string | null;
+  /**
+   * A razao social de quem foi faturado, e o documento dele.
+   *
+   * ⚠️ `clienteNome` prefere o fantasia, porque e com ele que se cumprimenta
+   * ("Ola, Pedro"). Aqui e o contrario: o quadro da cobranca diz em qual CNPJ
+   * a nota foi emitida, e nisso quem manda e o nome registrado.
+   */
+  clienteRazaoSocial: string | null;
+  clienteCnpj: string | null;
   empresaNome: string;
+  /**
+   * A razao social por extenso, para a assinatura do e-mail.
+   *
+   * ⚠️ Diferente de `empresaNome` de proposito. Aquele e o apelido curto, que
+   * cabe no assunto e o cliente reconhece de relance; este e o nome que consta
+   * no CNPJ, e assinatura de cobranca se faz com o nome registrado.
+   */
+  empresaRazaoSocial: string | null;
+  /**
+   * Para onde a duvida do cliente vai, ja que o remetente e um nao-responda.
+   *
+   * ⚠️ Vira `reply-to` E texto visivel no rodape. So o cabecalho nao basta:
+   * quem le no celular nao inspeciona cabecalho, le o que esta escrito.
+   */
+  empresaEmail: string | null;
+  empresaTelefone: string | null;
+  /**
+   * A identidade de quem cobra, para o rodape do e-mail.
+   *
+   * ⚠️ Vem na MESMA consulta que ja buscava o nome. Sao colunas da linha que o
+   * Postgres ja leu; pedi-las depois seria uma segunda ida ao banco por envio,
+   * para dados que nunca chegam sem o nome junto.
+   *
+   * ⚠️ E nao e enfeite: cobranca sem CNPJ e endereco de quem emite parece
+   * golpe, e filtro de spam trata assim tambem.
+   */
+  empresaLogo: string | null;
+  empresaCnpj: string | null;
+  empresaEndereco: string | null;
 }> {
   const supabase = await serverClient();
 
-  const [cliente, empresa] = await Promise.all([
+  const [cliente, empresa, contatos] = await Promise.all([
     clienteId == null
       ? Promise.resolve(null)
       : supabase
           .from("clientes")
-          .select("email, contato, razao, nomefantasia")
+          .select("email, contato, razao, nomefantasia, cnpj")
           .eq("id", clienteId)
           .maybeSingle(),
     supabase
       .from("empresas")
-      .select("nome, fantasia, razaosocial")
+      .select("nome, fantasia, razaosocial, logo, cnpj, email, contato, logradouro, bairro, cidade, cep")
       .eq("id", empresaId)
       .maybeSingle(),
+    /*
+     * ⚠️ Contato de E-MAIL primeiro, quando ha.
+     *
+     * O mesmo cliente costuma ter um responsavel no telefone e outro no
+     * e-mail: quem atende a ligacao nem sempre e quem recebe a nota. Como esta
+     * mensagem vai por e-mail, o nome certo e o de quem responde por ele.
+     */
+    clienteId == null
+      ? Promise.resolve(null)
+      : supabase
+          .from("clientescontatos")
+          .select("tipo, responsavel")
+          .eq("fkCliente", clienteId)
+          .not("responsavel", "is", null)
+          .order("tipo", { ascending: true }),
   ]);
 
   if (cliente?.error) throw cliente.error;
+  if (contatos?.error) throw contatos.error;
   if (empresa.error) throw empresa.error;
 
   return {
@@ -876,6 +938,15 @@ export async function destinatarioDaFatura(
       cliente?.data?.nomefantasia,
       cliente?.data?.razao,
     ),
+    clienteResponsavel: primeiroPreenchido(
+      (contatos?.data ?? []).find((c) => c.tipo === "email")?.responsavel,
+      (contatos?.data ?? [])[0]?.responsavel,
+    ),
+    clienteRazaoSocial: primeiroPreenchido(
+      cliente?.data?.razao,
+      cliente?.data?.nomefantasia,
+    ),
+    clienteCnpj: primeiroPreenchido(cliente?.data?.cnpj),
     // `nome` primeiro: e o apelido curto que a empresa usa no dia a dia, e o
     // que o cliente reconhece no assunto do e-mail.
     empresaNome:
@@ -884,6 +955,25 @@ export async function destinatarioDaFatura(
         empresa.data?.fantasia,
         empresa.data?.razaosocial,
       ) ?? "",
+    empresaRazaoSocial: primeiroPreenchido(
+      empresa.data?.razaosocial,
+      empresa.data?.fantasia,
+      empresa.data?.nome,
+    ),
+    empresaEmail: primeiroPreenchido(empresa.data?.email),
+    empresaTelefone: primeiroPreenchido(empresa.data?.contato),
+    empresaLogo: primeiroPreenchido(empresa.data?.logo),
+    empresaCnpj: primeiroPreenchido(empresa.data?.cnpj),
+    empresaEndereco: primeiroPreenchido(
+      [
+        empresa.data?.logradouro,
+        empresa.data?.bairro,
+        empresa.data?.cidade,
+        empresa.data?.cep,
+      ]
+        .filter(Boolean)
+        .join(", "),
+    ),
   };
 }
 

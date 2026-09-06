@@ -823,6 +823,20 @@ export type EmpresaRow = {
   cnpj: string | null;
   logo: string | null;
   ativo: boolean | null;
+  /* Contato do emitente. O e-mail vira `reply-to` quando a cobranca sai de um
+     endereco de nao-responda. */
+  email: string | null;
+  contato: string | null;
+  /* Endereco do emitente. Sai no cabecalho dos PDFs e no rodape do e-mail de
+     cobranca, onde a identificacao de quem cobra e o que separa uma fatura de
+     um golpe — para o cliente e para o filtro de spam. */
+  logradouro: string | null;
+  numero: string | null;
+  complemento: string | null;
+  bairro: string | null;
+  cidade: string | null;
+  estado: string | null;
+  cep: string | null;
 };
 
 /** Perfil do usuario. PK e `fkUser` (uuid de auth.users), nao ha `id`. */

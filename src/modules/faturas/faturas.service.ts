@@ -632,16 +632,32 @@ export async function enviarParcelaPorEmail(
 
   await enviarEmail({
     para: [para],
-    // Sem travessao, e dizendo o que e: "Ticket 154" sozinho no assunto nao
-    // diz se e cobranca, aviso ou confirmacao.
+    /*
+     * Sem travessao, e dizendo o que e: "Ticket 154" sozinho no assunto nao
+     * diz se e cobranca, aviso ou confirmacao.
+     *
+     * ⚠️ COM acento, e "fatura" no lugar de "cobranca". O assunto e a unica
+     * parte que o cliente le antes de decidir abrir: "cobranca" sem cedilha
+     * parece disparo automatico mal feito, e a palavra em si soa a aviso de
+     * inadimplencia — quando aqui e so o documento do periodo chegando.
+     */
     assunto:
       tickets.length > 0
-        ? `Sua cobranca do ${referencia} | ${destino.empresaNome}`
-        : `Sua cobranca | ${destino.empresaNome}`,
+        ? `Sua fatura do ${referencia} | ${destino.empresaNome}`
+        : `Sua fatura | ${destino.empresaNome}`,
     html: htmlDaFatura({
       empresaNome: destino.empresaNome,
+      empresaRazaoSocial: destino.empresaRazaoSocial,
+      empresaLogo: destino.empresaLogo,
+      empresaCnpj: destino.empresaCnpj,
+      empresaEndereco: destino.empresaEndereco,
+      empresaEmail: destino.empresaEmail,
+      empresaTelefone: destino.empresaTelefone,
       tickets,
       clienteNome: destino.clienteNome,
+      clienteResponsavel: destino.clienteResponsavel,
+      clienteRazaoSocial: destino.clienteRazaoSocial,
+      clienteCnpj: destino.clienteCnpj,
       competencia:
         periodoEmMeses(fatura.apuracaoInicio, fatura.apuracaoFim) ?? "—",
       vencimento: parcela.vencimento ? paraFormatoBR(parcela.vencimento) : "—",
@@ -653,6 +669,14 @@ export async function enviarParcelaPorEmail(
           : null,
       urlDoPortal: link,
     }),
+    /*
+     * ⚠️ O rodape convida a responder, e o remetente pode ser um nao-responda.
+     *
+     * Sem isto as duas coisas se contradizem: o cliente responde uma cobranca e
+     * a resposta volta como falha de entrega. Com o `reply-to` no e-mail da
+     * empresa, o convite continua verdadeiro qualquer que seja o `RESEND_FROM`.
+     */
+    responderPara: destino.empresaEmail ?? undefined,
   });
 
   return { para };
