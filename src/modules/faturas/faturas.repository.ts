@@ -1,3 +1,5 @@
+import { SEM_COBRANCA } from "@/shared/domain/cobranca";
+import { parametrosDeCobranca } from "@/modules/recebimentos/recebimentos.repository";
 import { serverClient } from "@/infra/supabase/client";
 import { doBanco, paraBanco, type Centavos } from "@/shared/utils/money";
 import type { DataISO } from "@/shared/utils/datas";
@@ -11,6 +13,7 @@ import {
   STATUS_FATURA,
   type AnexoDaFatura,
   type ContaBancaria,
+  type EnderecoDoCliente,
   type Fatura,
   type FaturaResumo,
   type FiltroFaturas,
@@ -72,8 +75,9 @@ export async function listar(
 
   const linhas = data ?? [];
   const ids = linhas.map((l) => l.id);
-  const [vencimentos, tickets, dinheiro] = await Promise.all([
+  const [vencimentos, recebimentos, tickets, dinheiro] = await Promise.all([
     proximosVencimentos(ids),
+    ultimosRecebimentos(ids),
     contarTickets(ids),
     somarRecebido(ids),
   ]);
@@ -85,6 +89,7 @@ export async function listar(
         vencimentos.get(l.id) ?? null,
         tickets.get(l.id) ?? 0,
         dinheiro.get(l.id) ?? { recebido: 0, saldo: 0 },
+        recebimentos.get(l.id) ?? null,
       ),
     ),
     total: count ?? 0,
@@ -120,6 +125,46 @@ async function proximosVencimentos(
       mapa.set(linha.fkFatura, linha.vencimento.slice(0, 10) as DataISO);
     }
   }
+  return mapa;
+}
+
+/**
+ * A data do ultimo recebimento de cada conta, numa consulta so.
+ *
+ * ⚠️ Sai do PAGAMENTO, e nao do `updated_at` da parcela. A parcela e tocada por
+ * qualquer edicao — anexar um boleto, corrigir uma observacao —, e a data dela
+ * viraria "quando alguem mexeu", que nao e o que o cartao promete.
+ *
+ * ⚠️ E percorre o RATEIO. Um pagamento pode quitar varias parcelas da mesma
+ * conta, e uma parcela pode receber varios pagamentos; so `pagamentosxparcelas`
+ * conhece os dois lados. A coluna `fkPagamento` da parcela guarda apenas o
+ * ultimo, e perderia a conta que teve duas baixas em parcelas diferentes.
+ */
+async function ultimosRecebimentos(
+  faturaIds: number[],
+): Promise<Map<number, DataISO>> {
+  const mapa = new Map<number, DataISO>();
+  if (faturaIds.length === 0) return mapa;
+
+  const supabase = await serverClient();
+  const { data, error } = await supabase
+    .from("pagamentosxparcelas")
+    .select("faturasparcelas!inner(fkFatura), pagamentos!inner(data)")
+    .in("faturasparcelas.fkFatura", faturaIds);
+
+  if (error) throw error;
+
+  for (const linha of data ?? []) {
+    const parcela = linha.faturasparcelas as unknown as { fkFatura: number | null } | null;
+    const pagamento = linha.pagamentos as unknown as { data: string | null } | null;
+    const fatura = parcela?.fkFatura;
+    const quando = pagamento?.data?.slice(0, 10) as DataISO | undefined;
+    if (fatura == null || !quando) continue;
+
+    const atual = mapa.get(fatura);
+    if (!atual || quando > atual) mapa.set(fatura, quando);
+  }
+
   return mapa;
 }
 
@@ -295,6 +340,15 @@ export async function buscarPorId(
   const proximo =
     parcelas.find((p) => !p.pago && !p.cancelada)?.vencimento ?? null;
 
+  const pessoa = data.clientes as { cnpj?: string | null } | null;
+
+  const [ondeFica, cobranca] = await Promise.all([
+    enderecoDoCliente(data.fkCliente),
+    data.fkCliente == null
+      ? Promise.resolve(SEM_COBRANCA)
+      : parametrosDeCobranca(empresaId, data.fkCliente),
+  ]);
+
   return {
     // A contagem vem da lista que ja foi buscada, e nao de outra consulta.
     ...paraDominioResumo(data, proximo, tickets.length, {
@@ -308,8 +362,55 @@ export async function buscarPorId(
     historico,
     emitente,
     anexos,
-    clienteDoc:
-      (data.clientes as { cnpj?: string | null } | null)?.cnpj ?? null,
+    clienteDoc: pessoa?.cnpj ?? null,
+    cobranca,
+    clienteEndereco: ondeFica,
+  };
+}
+
+/**
+ * Onde o cliente fica.
+ *
+ * ⚠️ So no DETALHE da conta, e nunca na listagem. E uma consulta por conta
+ * aberta; na lista de vinte e cinco linhas seriam vinte e cinco idas ao banco
+ * para preencher um endereco que a listagem nem mostra.
+ *
+ * ⚠️ O endereco e o PRINCIPAL, com o primeiro cadastrado como reserva. Uma
+ * empresa tem a sede e o galpao, e um documento de cobranca que escolhe o
+ * errado chega no lugar errado.
+ *
+ * ⚠️ O centro de custo do cliente SAIU daqui. Ele e a categoria padrao dos
+ * lancamentos dele — "Geral", na pratica — e nao diz nada a quem recebe a
+ * cobranca. Quem identifica o trabalho e a OBRA, que vem do ticket.
+ */
+async function enderecoDoCliente(
+  clienteId: number | null,
+): Promise<EnderecoDoCliente | null> {
+  if (clienteId == null) return null;
+
+  const supabase = await serverClient();
+
+  const enderecos = await supabase
+    .from("clientesenderecos")
+    .select("logradouro, numero, complemento, bairro, cidade, uf, cep, principal")
+    .eq("fkCliente", clienteId)
+    .order("principal", { ascending: false })
+    .order("id", { ascending: true })
+    .limit(1);
+
+  if (enderecos.error) throw enderecos.error;
+
+  const e = (enderecos.data ?? [])[0] ?? null;
+  if (!e) return null;
+
+  return {
+    logradouro: e.logradouro,
+    numero: e.numero,
+    complemento: e.complemento,
+    bairro: e.bairro,
+    cidade: e.cidade,
+    uf: e.uf,
+    cep: e.cep,
   };
 }
 
@@ -368,7 +469,7 @@ export async function listarTickets(
   const { data, error } = await supabase
     .from("faturasorigens")
     .select(
-      "valor, fkOrdem, ordensservico!inner(id, idtenant, titulo, status, datafim, clientes(razao, nomefantasia))",
+      "valor, fkOrdem, ordensservico!inner(id, idtenant, titulo, status, datafim, clientes(razao, nomefantasia), projetosordens(projetos(id, nome)))",
     )
     .eq("fkFatura", faturaId)
     .eq("origem", "TICKET")
@@ -384,6 +485,9 @@ export async function listarTickets(
       status: string | null;
       datafim: string | null;
       clientes: { razao: string | null; nomefantasia: string | null } | null;
+      /* Vem como ARRAY porque o PostgREST nao sabe que ha `unique` do outro
+         lado. E no maximo um: `projetosordens` tem UNIQUE (fkOrdem). */
+      projetosordens: { projetos: { id: number; nome: string } | null }[] | null;
     };
 
     return {
@@ -397,6 +501,8 @@ export async function listarTickets(
         t.clientes?.razao,
       ),
       encerradoEm: t.datafim ? (t.datafim.slice(0, 10) as DataISO) : null,
+      projetoId: t.projetosordens?.[0]?.projetos?.id ?? null,
+      projetoNome: t.projetosordens?.[0]?.projetos?.nome ?? null,
     };
   });
 }
@@ -740,6 +846,7 @@ function paraDominioResumo(
   proximoVencimento: DataISO | null,
   qtdTickets = 0,
   dinheiro: { recebido: number; saldo: number } = { recebido: 0, saldo: 0 },
+  ultimoRecebimento: DataISO | null = null,
 ): FaturaResumo {
   const cliente = linha.clientes as {
     razao: string | null;
@@ -758,6 +865,7 @@ function paraDominioResumo(
       : null,
     apuracaoFim: linha.dataFim ? (linha.dataFim.slice(0, 10) as DataISO) : null,
     proximoVencimento,
+    ultimoRecebimento,
     status,
     cancelada,
     // `cancelada` e coluna separada do status no banco. Na tela vira uma

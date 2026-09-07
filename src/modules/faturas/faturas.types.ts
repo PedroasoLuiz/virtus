@@ -1,3 +1,4 @@
+import type { ParametrosDeCobranca } from "@/shared/domain/cobranca";
 import type { Centavos } from "@/shared/utils/money";
 import type { DataISO } from "@/shared/utils/datas";
 
@@ -99,6 +100,15 @@ export type FaturaResumo = {
   apuracaoFim: DataISO | null;
   /** Vencimento da proxima parcela em aberto. */
   proximoVencimento: DataISO | null;
+  /**
+   * Quando o dinheiro entrou pela ultima vez.
+   *
+   * ⚠️ A ULTIMA, e nao a primeira. Numa conta parcelada em seis, a pergunta que
+   * o cartao responde e "ate quando ela andou", e nao "quando comecou".
+   *
+   * Nulo enquanto nao ha baixa nenhuma — e ai o cartao mostra o vencimento.
+   */
+  ultimoRecebimento: DataISO | null;
   status: StatusFatura;
   cancelada: boolean;
   situacao: SituacaoFatura;
@@ -143,6 +153,22 @@ export type TicketDaFatura = {
   status: string;
   clienteNome: string | null;
   encerradoEm: DataISO | null;
+  /**
+   * A obra a que este ticket pertence.
+   *
+   * ⚠️ UM projeto por ticket, garantido no banco por `UNIQUE (fkOrdem)` em
+   * `projetosordens`. E o que mantem as camadas em pe: projeto tem varios
+   * tickets, ticket tem varios servicos, e a conta a receber atravessa tudo
+   * juntando tickets. Um ticket em duas obras acrescentaria uma camada que
+   * ninguem consegue ler.
+   *
+   * ⚠️ E por isso a conta a receber NAO tem projeto proprio: ela pode juntar
+   * quatro tickets de quatro obras, e o valor de cada pedaco ja esta em
+   * `faturasorigens.valor`. Guardar um projeto na conta obrigaria a escolher um
+   * dos quatro.
+   */
+  projetoId: number | null;
+  projetoNome: string | null;
 };
 
 export type Fatura = FaturaResumo & {
@@ -161,6 +187,31 @@ export type Fatura = FaturaResumo & {
   };
   /** CNPJ/CPF de quem paga. Recibo sem documento nao identifica ninguem. */
   clienteDoc: string | null;
+  /**
+   * A politica de multa e juros que vale para este cliente.
+   *
+   * ⚠️ Vem de `parametroscobranca`, que ja existia: ela guarda a regra da
+   * EMPRESA e a excecao por CLIENTE na mesma tabela, com carencia e periodo de
+   * juros. Chegou a existir um par de colunas em `clientes` fazendo o mesmo, e
+   * foi removido — duas fontes para o mesmo percentual divergem no primeiro
+   * ajuste, e o cliente recebe dois valores para a mesma divida.
+   *
+   * Viaja junto da conta so para o documento nao precisar de outra consulta.
+   */
+  cobranca: ParametrosDeCobranca;
+  /** Onde o cliente fica. So no detalhe: a listagem nao imprime documento. */
+  clienteEndereco: EnderecoDoCliente | null;
+};
+
+/** O endereco como o documento precisa dele: campos crus, montagem na tela. */
+export type EnderecoDoCliente = {
+  logradouro: string | null;
+  numero: string | null;
+  complemento: string | null;
+  bairro: string | null;
+  cidade: string | null;
+  uf: string | null;
+  cep: string | null;
 };
 
 /**

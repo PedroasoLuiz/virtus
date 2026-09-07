@@ -39,6 +39,9 @@ export type TicketDaFatura = {
   status: string;
   clienteNome: string | null;
   encerradoEm: string | null;
+  /** A obra do ticket. Um por ticket — ver o tipo do dominio. */
+  projetoId: number | null;
+  projetoNome: string | null;
 };
 
 export type Fatura = {
@@ -57,6 +60,36 @@ export type Fatura = {
   parcelas: Parcela[];
   tickets: TicketDaFatura[];
   clienteDoc: string | null;
+  /**
+   * A regra de mora do cliente, que vem junto da conta.
+   *
+   * ⚠️ Do CADASTRO do cliente, e nao da conta: o encargo e clausula do contrato
+   * com aquela empresa e vale para tudo que se cobra dela. Nulo quer dizer que
+   * nao ha clausula, e ai nenhum documento fala em mora.
+   */
+  /**
+   * A politica de multa e juros deste cliente.
+   *
+   * ⚠️ Vem de `parametroscobranca`, que ja existia e guarda a regra da empresa
+   * e a excecao por cliente. Zerada quer dizer que nao ha clausula — e ai
+   * nenhum documento fala em mora.
+   */
+  cobranca: {
+    multaPercentual: number;
+    jurosPercentual: number;
+    jurosPeriodo: "MES" | "DIA";
+    carenciaDias: number;
+  };
+  /** Onde o cliente fica, e em que centro de custo ele entra. Para os documentos. */
+  clienteEndereco: {
+    logradouro: string | null;
+    numero: string | null;
+    complemento: string | null;
+    bairro: string | null;
+    cidade: string | null;
+    uf: string | null;
+    cep: string | null;
+  } | null;
   emitente: {
     razaoSocial: string | null;
     endereco: string | null;

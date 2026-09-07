@@ -36,7 +36,8 @@ import {
 import { ehPessoaFisica } from "@/shared/domain/cadastro-pessoa";
 import { formatarDocumento } from "@/shared/domain/documento";
 import { formatarSemSimbolo, type Centavos } from "@/shared/utils/money";
-import { paraFormatoBR, type DataISO } from "@/shared/utils/datas";
+import { hoje, paraFormatoBR, type DataISO } from "@/shared/utils/datas";
+import { acrescimoPorAtraso } from "@/shared/domain/cobranca";
 import type { Fatura, Parcela } from "./fatura-tipos";
 import { curto, periodo, vencida } from "./fatura-datas";
 import { AnexarDocumento, Documentos } from "./fatura-documentos";
@@ -102,6 +103,15 @@ function Conteudo({
   nivel?: 1 | 2 | 3;
 }) {
   const [fatura, setFatura] = useState<Fatura | null>(null);
+
+  /*
+   * A politica de mora deste cliente, de `parametroscobranca`.
+   *
+   * ⚠️ Zerada quer dizer que nao ha clausula, e ai nenhuma linha fala em multa
+   * ou juros: `acrescimoPorAtraso` devolve zero e a linha some sozinha. Cobrar
+   * mora sem clausula e cobrar a mais sem base.
+   */
+  const cobranca = fatura?.cobranca ?? null;
   const [erro, setErro] = useState<string | null>(null);
   const [aba, setAba] = useState<"tickets" | "produtos" | "parcelas">(
     "tickets",
@@ -165,6 +175,17 @@ function Conteudo({
         competencia: periodo(fatura.apuracaoInicio, fatura.apuracaoFim),
         clienteNome: fatura.clienteNome,
         clienteDoc: fatura.clienteDoc,
+        clienteEndereco: fatura.clienteEndereco,
+        /* As obras vem dos TICKETS, e nao do cadastro do cliente: cada ticket
+           pertence a uma, e a conta junta varios. Sem repetidas, porque dois
+           tickets da mesma obra nao a tornam duas. */
+        clienteProjetos: [
+          ...new Set(
+            fatura.tickets
+              .map((t) => t.projetoNome)
+              .filter((n): n is string => Boolean(n)),
+          ),
+        ],
         total: fatura.total,
         pago,
         desconto: fatura.parcelas.reduce((soma, p) => soma + p.desconto, 0),
@@ -180,7 +201,12 @@ function Conteudo({
           total: p.total,
           desconto: p.desconto,
           pago: p.pago,
+          recebido: p.recebido,
+          pagoEm: p.pagoEm,
         })),
+        /* A politica de mora vem de `parametroscobranca` e chega junto da
+           conta. Zerada, o documento nao fala em mora. */
+        cobranca: fatura.cobranca,
         emitente: fatura.emitente,
       },
       emitidoPor,
@@ -822,7 +848,75 @@ function Conteudo({
                       </Td>
 
                       <Td style={tdNum}>
+                        {/*
+                          ⚠️ O que entrou fica ANTES do combinado, na mesma
+                          linha, e nao numa linha propria.
+
+                          Empilhado, cada parcela parcial crescia tres alturas e
+                          a tabela virava uma lista de blocos. Lado a lado, a
+                          leitura e a subtracao que a pessoa faria de cabeca:
+                          "entrou 2.000 dos 2.500".
+                        */}
+                        {p.recebido > 0 && !p.pago && (
+                          <span
+                            title={`Recebido${p.pagoEm ? ` em ${curto(p.pagoEm)}` : ""}`}
+                            style={{
+                              marginRight: 6,
+                              fontSize: "var(--text-xs)",
+                              color: "var(--credito)",
+                            }}
+                          >
+                            {formatarSemSimbolo(p.recebido as Centavos)}
+                          </span>
+                        )}
                         {formatarSemSimbolo(p.total as Centavos)}
+
+                        {(() => {
+                          /*
+                            A mora sai da MESMA funcao do PDF e do e-mail. Tres
+                            contas para o mesmo encargo dariam ao cliente tres
+                            valores para a mesma divida — e num contrato em
+                            disputa, e o tipo de divergencia que vira argumento
+                            da outra parte.
+
+                            ⚠️ VERMELHO: ela nao e detalhe do valor, e divida
+                            que nasceu do atraso e cresce por dia. E aparece
+                            somada, porque multa e juros se cobram juntos; a
+                            reparticao fica no titulo e no PDF, para quem for
+                            conferir.
+
+                            ⚠️ O "falta" saiu daqui. Ele repetia por linha o que
+                            o "Em aberto" ja soma no rodape da conta, e quem
+                            precisa do numero por parcela tira o PDF.
+                          */
+                          if (p.cancelada || !p.vencimento) return null;
+                          if (!cobranca) return null;
+
+                          const saldo = (p.total - p.recebido) as Centavos;
+                          if (saldo <= 0) return null;
+
+                          const e = acrescimoPorAtraso(
+                            saldo,
+                            p.vencimento,
+                            hoje(),
+                            cobranca,
+                          );
+                          const mora = e.multa + e.juros;
+                          if (mora <= 0) return null;
+
+                          return (
+                            <div
+                              title={`Multa ${formatarSemSimbolo(e.multa as Centavos)} e juros ${formatarSemSimbolo(e.juros as Centavos)}, ${e.dias} dias de atraso`}
+                              style={{
+                                marginTop: 1,
+                                fontSize: "var(--text-xs)",
+                                color: "var(--danger-text)",
+                              }}
+                            >
+                              mora de +{formatarSemSimbolo(mora as Centavos)}
+                            </div>
+                          );
+                        })()}
 
                         {/* Mesma anatomia do desconto logo abaixo: o valor em
                           cima, e o que aconteceu com ele numa segunda linha. */}
@@ -1031,7 +1125,13 @@ function MarcaDeConciliado({ parcela }: { parcela: Parcela }) {
   if (parcela.cancelada)
     return <MarcaDeConciliacao conciliado={false} cancelada />;
 
-  if (!parcela.pago) {
+  /*
+   * ⚠️ O traco e so de quem NAO recebeu nada. Antes ele valia para tudo que nao
+   * estivesse quitado, e a parcela que recebeu 2.000 de 2.500 aparecia sem
+   * marca nenhuma — como se nada tivesse entrado e nada houvesse a conferir.
+   * Entrou dinheiro, ha o que conciliar.
+   */
+  if (!parcela.pago && parcela.recebido === 0) {
     return <span style={{ color: "var(--text-disabled)" }}>—</span>;
   }
 
@@ -1115,6 +1215,17 @@ function AcoesDaParcela({
         pagoEm: parcela.pagoEm,
         clienteNome: fatura.clienteNome,
         clienteDoc: fatura.clienteDoc,
+        clienteEndereco: fatura.clienteEndereco,
+        /* As obras vem dos TICKETS, e nao do cadastro do cliente: cada ticket
+           pertence a uma, e a conta junta varios. Sem repetidas, porque dois
+           tickets da mesma obra nao a tornam duas. */
+        clienteProjetos: [
+          ...new Set(
+            fatura.tickets
+              .map((t) => t.projetoNome)
+              .filter((n): n is string => Boolean(n)),
+          ),
+        ],
         tickets: fatura.tickets.map((t) => ({
           numero: t.numero,
           titulo: t.titulo,
@@ -1399,22 +1510,36 @@ function Bolinha({
     cancelada?: boolean;
     vencimento: string | null;
     pagamentoId: number | null;
+    recebido: number;
+    total: number;
   };
 }) {
   /*
    * Conciliada e diferente de paga: paga e "o cliente pagou", conciliada e
    * "bateu com o extrato" — `fkPagamento` preenchido. So a conciliada trava a
    * edicao, porque ela ja entrou na contabilidade.
+   *
+   * ⚠️ E parcial nao e nenhuma das duas, ainda que tenha `pagamentoId`.
+   *
+   * O gatilho grava o ultimo pagamento na parcela mesmo quando ele nao a quita,
+   * e a bolinha lia isso como "Conciliada": uma parcela de 2.500 que recebeu
+   * 2.000 aparecia azul e fechada, escondendo os 500 que ainda se cobra. A
+   * parcialidade tem de vir ANTES na cadeia, porque e ela que descreve a linha.
    */
-  const estado = parcela.pagamentoId
-    ? "Conciliada"
-    : parcela.pago
-      ? "Paga"
-      : parcela.cancelada
-        ? "Cancelada"
-        : vencida(parcela)
-          ? "Vencida"
-          : "Em aberto";
+  const parcial = !parcela.pago && parcela.recebido > 0;
+  const falta = parcela.total - parcela.recebido;
+
+  const estado = parcela.cancelada
+    ? "Cancelada"
+    : parcial
+      ? `Recebida em parte: faltam ${formatarSemSimbolo(falta as Centavos)}`
+      : parcela.pagamentoId
+        ? "Conciliada"
+        : parcela.pago
+          ? "Paga"
+          : vencida(parcela)
+            ? "Vencida"
+            : "Em aberto";
 
   return (
     <span
@@ -1426,16 +1551,22 @@ function Bolinha({
         borderRadius: "50%",
         flexShrink: 0,
         display: "inline-block",
-        background: parcela.pagamentoId
-          ? "var(--primary)"
-          : parcela.pago
-            ? "var(--success)"
-            : vencida(parcela)
-              ? "var(--danger)"
-              : "var(--text-disabled)",
+        /* Ambar para a parcial: ela e o unico estado desta coluna que pede
+           acao de cobranca, e e o que quem fecha o mes vai procurar. */
+        background: parcela.cancelada
+          ? "var(--text-disabled)"
+          : parcial
+            ? "var(--warning)"
+            : parcela.pagamentoId
+              ? "var(--primary)"
+              : parcela.pago
+                ? "var(--success)"
+                : vencida(parcela)
+                  ? "var(--danger)"
+                  : "var(--text-disabled)",
         // Conciliada ganha anel: a cor sozinha ja distingue de "paga", mas o
         // anel diz que aquela linha esta FECHADA, e nao so quitada.
-        boxShadow: parcela.pagamentoId
+        boxShadow: parcela.pagamentoId && !parcial
           ? "0 0 0 2px var(--primary-subtle)"
           : undefined,
       }}

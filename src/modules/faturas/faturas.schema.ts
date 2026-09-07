@@ -159,6 +159,7 @@ export const faturaResumoSchema = z.object({
   apuracaoInicio: z.string().nullable(),
   apuracaoFim: z.string().nullable(),
   proximoVencimento: z.string().nullable(),
+  ultimoRecebimento: z.string().nullable(),
   status: statusFaturaSchema,
   cancelada: z.boolean(),
   situacao: z.string(),
@@ -211,6 +212,10 @@ export const faturaSchema = faturaResumoSchema.extend({
       status: z.string(),
       clienteNome: z.string().nullable(),
       encerradoEm: z.string().nullable(),
+      /* A obra do ticket. Um por ticket, garantido por UNIQUE no banco — e por
+         isso a CONTA nao tem projeto proprio: ela junta varios tickets. */
+      projetoId: z.number().nullable(),
+      projetoNome: z.string().nullable(),
     }),
   ),
   anexos: z.array(
@@ -222,6 +227,26 @@ export const faturaSchema = faturaResumoSchema.extend({
     }),
   ),
   clienteDoc: z.string().nullable(),
+  /* ⚠️ Declarados aqui porque o schema de saida ESTRIPA o que nao conhece: sem
+     estas linhas os campos chegariam `undefined` na tela, e o documento sairia
+     sem endereco sem ninguem ver erro nenhum. */
+  cobranca: z.object({
+    multaPercentual: z.number(),
+    jurosPercentual: z.number(),
+    jurosPeriodo: z.enum(["MES", "DIA"]),
+    carenciaDias: z.number(),
+  }),
+  clienteEndereco: z
+    .object({
+      logradouro: z.string().nullable(),
+      numero: z.string().nullable(),
+      complemento: z.string().nullable(),
+      bairro: z.string().nullable(),
+      cidade: z.string().nullable(),
+      uf: z.string().nullable(),
+      cep: z.string().nullable(),
+    })
+    .nullable(),
   emitente: z.object({
     razaoSocial: z.string().nullable(),
     endereco: z.string().nullable(),

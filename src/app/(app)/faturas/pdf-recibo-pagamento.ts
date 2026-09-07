@@ -1,6 +1,11 @@
+import { formatarDocumento } from "@/shared/domain/documento";
 import jsPDF from "jspdf";
 import { formatarSemSimbolo, type Centavos } from "@/shared/utils/money";
-import { paraFormatoBR, type DataISO } from "@/shared/utils/datas";
+import { hoje, paraFormatoBR, type DataISO } from "@/shared/utils/datas";
+import {
+  acrescimoPorAtraso,
+  type ParametrosDeCobranca,
+} from "@/shared/domain/cobranca";
 import { valorPorExtenso } from "@/shared/utils/extenso";
 import { carregarLogo } from "../tickets/pdf-base";
 
@@ -35,6 +40,34 @@ export type ReciboParaPDF = {
   pagoEm: string | null;
   clienteNome: string | null;
   clienteDoc: string | null;
+  /**
+   * Onde o cliente fica, e em que centro de custo ele entra.
+   *
+   * ⚠️ Cobranca identifica QUEM deve, e nome sozinho nao identifica: duas
+   * empresas do mesmo grupo tem razoes sociais parecidas, e o documento com o
+   * endereco e o que separa uma da outra.
+   */
+  clienteEndereco: {
+    logradouro: string | null;
+    numero: string | null;
+    complemento: string | null;
+    bairro: string | null;
+    cidade: string | null;
+    uf: string | null;
+    cep: string | null;
+  } | null;
+  /**
+   * As obras que esta conta cobre.
+   *
+   * ⚠️ PROJETO, e nao centro de custo. O centro de custo e categoria contabil —
+   * "Salarios", "Arte impressa" —, e nao diz nada a quem recebe a cobranca. A
+   * obra diz: e por ela que o cliente reconhece o que esta pagando.
+   *
+   * ⚠️ E sao VARIOS, no plural. A conta junta tickets, e cada ticket pertence a
+   * uma obra: quatro tickets da mesma empresa podem ser quatro obras na mesma
+   * cobranca. Um campo unico obrigaria a escolher uma delas.
+   */
+  clienteProjetos: string[];
   /** Os tickets que a conta cobre. E a referencia que o cliente reconhece. */
   tickets: {
     numero: number;
@@ -120,15 +153,7 @@ export async function imprimirReciboDePagamento(
     .setTextColor(...TINTA);
   doc.text(r.clienteNome ?? "—", MARGEM, y);
 
-  if (r.clienteDoc) {
-    doc
-      .setFont("helvetica", "normal")
-      .setFontSize(8.5)
-      .setTextColor(...CINZA);
-    doc.text(r.clienteDoc, MARGEM, y + 13);
-  }
-
-  y += 34;
+  y = identificacaoDoCliente(doc, r, y);
 
   // ── A quantia, por extenso do jeito que se lê num recibo ─────────────────
   //
@@ -312,6 +337,8 @@ export type ResumoParaPDF = {
   competencia: string | null;
   clienteNome: string | null;
   clienteDoc: string | null;
+  clienteEndereco: ReciboParaPDF["clienteEndereco"];
+  clienteProjetos: string[];
   total: number;
   pago: number;
   /** Somado das parcelas. Sem ele os numeros nao fecham e parece erro de conta. */
@@ -328,7 +355,19 @@ export type ResumoParaPDF = {
     total: number;
     desconto: number;
     pago: boolean;
+    /** Quanto ja entrou nesta parcela. E o que sobra que rende mora. */
+    recebido: number;
+    /** Quando entrou a ultima vez. Nulo enquanto nao entrou nada. */
+    pagoEm: string | null;
   }[];
+  /**
+   * A regra de mora do cliente, quando ha uma.
+   *
+   * ⚠️ NULA quer dizer que o contrato nao previu encargo, e ai a coluna some do
+   * documento inteiro. Imprimir "0,00" em cobranca sugere que houve calculo e
+   * deu zero; a ausencia diz a verdade, que e que nao se cobra.
+   */
+  cobranca: ParametrosDeCobranca | null;
   emitente: ReciboParaPDF["emitente"];
 };
 
@@ -371,7 +410,10 @@ export async function imprimirResumoDaConta(
   doc.text(r.situacao, MARGEM + 56, y + 13);
   if (r.competencia) doc.text(r.competencia, MARGEM + 56, y + 26);
 
-  y += r.competencia ? 50 : 37;
+  /* ⚠️ Respiro maior antes do nome de quem paga. Colado na linha de apuracao,
+     ele lia como se fosse mais um campo do cabecalho, e nao a abertura de outro
+     assunto — a folha passa de "que conta e esta" para "de quem e". */
+  y += r.competencia ? 68 : 55;
 
   // ── Para quem ─────────────────────────────────────────────────────────────
   //
@@ -382,16 +424,7 @@ export async function imprimirResumoDaConta(
     .setFontSize(12)
     .setTextColor(...TINTA);
   doc.text(r.clienteNome ?? "—", MARGEM, y);
-
-  if (r.clienteDoc) {
-    doc
-      .setFont("helvetica", "normal")
-      .setFontSize(8.5)
-      .setTextColor(...CINZA);
-    doc.text(r.clienteDoc, MARGEM, y + 13);
-  }
-
-  y += 34;
+  y = identificacaoDoCliente(doc, r, y);
 
   // ── De onde vem ───────────────────────────────────────────────────────────
   if (r.tickets.length > 0) {
@@ -400,36 +433,215 @@ export async function imprimirResumoDaConta(
     y += 34;
   }
 
+  /*
+   * A mora de cada parcela, apurada ANTES de desenhar.
+   *
+   * ⚠️ Cada uma conta do PROPRIO vencimento, e sobre o proprio saldo. A parcela
+   * que recebeu 2.250 de 2.500 deve mora sobre os 250 que faltam, contados
+   * desde o dia em que ela venceu — e nao desde a data em que se emitiu o
+   * documento, nem sobre o valor cheio.
+   */
+  const ate = hoje();
+  const mora = r.parcelas.map((p) => {
+    const saldo = (p.total - p.recebido) as Centavos;
+    if (!r.cobranca || saldo <= 0) return { dias: 0, multa: 0, juros: 0 };
+
+    const a = acrescimoPorAtraso(saldo, p.vencimento, ate, r.cobranca);
+    return { dias: a.dias, multa: a.multa, juros: a.juros };
+  });
+
+  /* A coluna so existe quando ha o que mostrar nela. Ver o comentario do tipo. */
+  const temMora = mora.some((m) => m.multa + m.juros > 0);
+
+  /*
+   * ⚠️ A tabela MUDA de largura conforme haja mora ou nao.
+   *
+   * Com encargo, ela vira a planilha de cobranca inteira: contrato, pago, data,
+   * dias de atraso, saldo, multa, juros e total — que e o que se leva a uma
+   * discussao de divida. Sem encargo, essas colunas seriam sete tracos por
+   * linha, e uma tabela cheia de tracos esconde a que tem numero.
+   */
   // ── Como se paga ──────────────────────────────────────────────────────────
   y = secao(doc, "PARCELAS", y, MARGEM, direita);
-  y = colunas(doc, y, direita, [
-    { texto: "PARCELA", x: MARGEM },
-    { texto: "VENCIMENTO", x: MARGEM + 62 },
-    { texto: "SITUAÇÃO", x: MARGEM + 160 },
-    { texto: "VALOR", x: direita, direita: true },
-  ]);
 
-  for (const p of r.parcelas) {
-    y += 16;
+  /* Posicoes fixas em pontos, e nao proporcionais: a tabela precisa caber em
+     A4 retrato com dez colunas, e o unico jeito de garantir isso e medir. */
+  const X = temMora
+    ? {
+        parcela: MARGEM,
+        vencimento: MARGEM + 26,
+        valor: MARGEM + 145,
+        pago: MARGEM + 205,
+        data: MARGEM + 268,
+        dias: MARGEM + 296,
+        saldo: MARGEM + 355,
+        multa: MARGEM + 405,
+        juros: MARGEM + 455,
+        encargos: direita,
+      }
+    : {
+        parcela: MARGEM,
+        vencimento: MARGEM + 26,
+        valor: direita - 240,
+        pago: direita - 150,
+        data: direita - 80,
+        dias: 0,
+        saldo: direita,
+        multa: 0,
+        juros: 0,
+        encargos: 0,
+      };
+
+  y = colunas(
+    doc,
+    y,
+    direita,
+    temMora
+      ? [
+          { texto: "#", x: X.parcela },
+          { texto: "VENCTO.", x: X.vencimento },
+          { texto: "CONTRATO", x: X.valor, direita: true },
+          { texto: "PAGO", x: X.pago, direita: true },
+          { texto: "DATA PGTO.", x: X.data, direita: true },
+          { texto: "DIAS", x: X.dias, direita: true },
+          { texto: "SALDO", x: X.saldo, direita: true },
+          /* ⚠️ O percentual desce para a SEGUNDA linha. Em coluna de 50 pontos,
+             "MULTA (2%)" numa linha so encosta no vizinho — foi o que fez os
+             dois cabecalhos se sobreporem. */
+          {
+            texto: "MULTA",
+            abaixo: `(${porcento(r.cobranca!.multaPercentual)})`,
+            x: X.multa,
+            direita: true,
+          },
+          {
+            texto: "JUROS",
+            abaixo: `(${porcento(r.cobranca!.jurosPercentual)} a.m.)`,
+            x: X.juros,
+            direita: true,
+          },
+          { texto: "ENCARGOS", x: X.encargos, direita: true },
+        ]
+      : [
+          { texto: "#", x: X.parcela },
+          { texto: "VENCTO.", x: X.vencimento },
+          { texto: "CONTRATO", x: X.valor, direita: true },
+          { texto: "PAGO", x: X.pago, direita: true },
+          { texto: "DATA PGTO.", x: X.data, direita: true },
+          { texto: "SALDO", x: X.saldo, direita: true },
+        ],
+  );
+
+  const traco = "—";
+
+  for (const [i, p] of r.parcelas.entries()) {
+    const m = mora[i];
+    const saldo = p.total - p.recebido;
+    y += 15;
+
     doc
       .setFont("helvetica", "normal")
-      .setFontSize(8.5)
+      .setFontSize(temMora ? 7.5 : 8.5)
       .setTextColor(...TINTA);
-    doc.text(String(p.numero), MARGEM, y);
+
+    doc.text(String(p.numero), X.parcela, y);
     doc.text(
-      p.vencimento ? paraFormatoBR(p.vencimento.slice(0, 10) as DataISO) : "—",
-      MARGEM + 62,
+      p.vencimento ? paraFormatoBR(p.vencimento.slice(0, 10) as DataISO) : traco,
+      X.vencimento,
       y,
     );
+    doc.text(formatarSemSimbolo(p.total as Centavos), X.valor, y, { align: "right" });
 
-    doc.setTextColor(...(p.pago ? AZUL : CINZA));
-    doc.text(p.pago ? "Paga" : "Em aberto", MARGEM + 160, y);
+    doc.setTextColor(...(p.recebido > 0 ? AZUL : CINZA));
+    doc.text(
+      p.recebido > 0 ? formatarSemSimbolo(p.recebido as Centavos) : traco,
+      X.pago,
+      y,
+      { align: "right" },
+    );
 
-    doc.setTextColor(...TINTA);
-    doc.text(formatarSemSimbolo(p.total as Centavos), direita, y, {
+    /* A data ao lado do valor: em cobranca, "quanto" sem "quando" nao prova
+       nada — e e a data que separa pagamento no prazo de pagamento em atraso. */
+    doc.setTextColor(...CINZA);
+    doc.text(
+      p.pagoEm ? paraFormatoBR(p.pagoEm.slice(0, 10) as DataISO) : traco,
+      X.data,
+      y,
+      { align: "right" },
+    );
+
+    if (temMora) {
+      doc.setTextColor(...CINZA);
+      doc.text(m.dias > 0 ? String(m.dias) : traco, X.dias, y, {
+        align: "right",
+      });
+    }
+
+    /* O saldo em tinta cheia: e o numero que se cobra, e o unico da linha que
+       ainda espera acao. */
+    doc.setTextColor(...(saldo > 0 ? TINTA : CINZA));
+    doc.text(saldo > 0 ? formatarSemSimbolo(saldo as Centavos) : traco, X.saldo, y, {
       align: "right",
     });
-    doc.setDrawColor(...REGUA).line(MARGEM, y + 5, direita, y + 5);
+
+    if (temMora) {
+      doc.setTextColor(...(m.multa + m.juros > 0 ? TINTA : CINZA));
+      doc.text(
+        m.multa > 0 ? formatarSemSimbolo(m.multa as Centavos) : traco,
+        X.multa,
+        y,
+        { align: "right" },
+      );
+      doc.text(
+        m.juros > 0 ? formatarSemSimbolo(m.juros as Centavos) : traco,
+        X.juros,
+        y,
+        { align: "right" },
+      );
+      doc.text(
+        m.multa + m.juros > 0 ? formatarSemSimbolo((m.multa + m.juros) as Centavos) : traco,
+        X.encargos,
+        y,
+        { align: "right" },
+      );
+    }
+
+    doc.setDrawColor(...REGUA).line(MARGEM, y + 4, direita, y + 4);
+  }
+
+  /*
+   * ⚠️ A linha de TOTAIS fecha a tabela, e nao so o quadro de fechamento.
+   *
+   * Quem confere uma planilha de cobranca soma a coluna com o dedo e compara
+   * com o rodape dela. Obrigar a procurar o total em outro bloco da folha e
+   * convidar a conferencia a parar no meio.
+   */
+  const somaPago = r.parcelas.reduce((a, p) => a + p.recebido, 0);
+  const somaSaldo = r.parcelas.reduce((a, p) => a + (p.total - p.recebido), 0);
+  const somaMulta = mora.reduce((a, m) => a + m.multa, 0);
+  const somaJuros = mora.reduce((a, m) => a + m.juros, 0);
+  const somaEncargos = mora.reduce((a, m) => a + m.multa + m.juros, 0);
+
+  y += 16;
+  doc
+    .setFont("helvetica", "bold")
+    .setFontSize(temMora ? 7.5 : 8.5)
+    .setTextColor(...TINTA);
+  /* ⚠️ O sinal aparece SO aqui. Dentro da tabela ele repetia em cada linha um
+     fato que a coluna ja diz — e transformava uma planilha de conferencia num
+     extrato. Na somatoria ele e util: e onde o leitor soma de cabeca e precisa
+     saber o que abate e o que acrescenta. */
+  doc.text("TOTAIS", X.parcela, y);
+  doc.text(formatarSemSimbolo(r.total as Centavos), X.valor, y, { align: "right" });
+  doc.text(`-${formatarSemSimbolo(somaPago as Centavos)}`, X.pago, y, { align: "right" });
+  doc.text(formatarSemSimbolo(somaSaldo as Centavos), X.saldo, y, { align: "right" });
+
+  if (temMora) {
+    doc.text(`+${formatarSemSimbolo(somaMulta as Centavos)}`, X.multa, y, { align: "right" });
+    doc.text(`+${formatarSemSimbolo(somaJuros as Centavos)}`, X.juros, y, { align: "right" });
+    doc.text(`+${formatarSemSimbolo(somaEncargos as Centavos)}`, X.encargos, y, {
+      align: "right",
+    });
   }
 
   // ── Fechamento ────────────────────────────────────────────────────────────
@@ -438,19 +650,10 @@ export async function imprimirResumoDaConta(
     total: r.total,
     pago: r.pago,
     desconto: r.desconto,
+    encargos: mora.reduce((s, m) => s + m.multa + m.juros, 0),
   });
 
-  doc
-    .setFont("helvetica", "normal")
-    .setFontSize(7.5)
-    .setTextColor(...CINZA);
-  doc.text(
-    `Emitido em ${paraFormatoBR(new Date().toISOString().slice(0, 10) as DataISO)}${emitidoPor ? ` por ${emitidoPor}` : ""}`,
-    MARGEM,
-    altura - MARGEM,
-  );
-  doc.text("1 / 1", direita, altura - MARGEM, { align: "right" });
-
+  rodape(doc, altura, direita, emitidoPor);
   doc.save(`conta-${r.numeroConta}.pdf`);
 }
 
@@ -517,7 +720,7 @@ function fechamento(
   doc: jsPDF,
   y: number,
   direita: number,
-  v: { total: number; pago: number; desconto: number },
+  v: { total: number; pago: number; desconto: number; encargos?: number },
 ): number {
   const rotulo = direita - 160;
   const linhas: {
@@ -530,6 +733,11 @@ function fechamento(
   ];
   if (v.desconto > 0)
     linhas.push({ texto: "Desconto", valor: v.desconto, cor: CINZA });
+  /* Multa e juros somam ao que se deve, e por isso ficam FORA do "Em aberto"
+     do principal e aparecem em linha propria: quem confere precisa ver quanto
+     e divida e quanto e mora, para discutir uma sem tocar na outra. */
+  if ((v.encargos ?? 0) > 0)
+    linhas.push({ texto: "Multa e juros", valor: v.encargos ?? 0, cor: TINTA });
 
   let atual = y;
   doc.setFont("helvetica", "normal").setFontSize(9);
@@ -546,7 +754,9 @@ function fechamento(
   doc.setFont("helvetica", "bold").setTextColor(...TINTA);
   doc.text("Em aberto", rotulo, atual);
   doc.text(
-    formatarSemSimbolo((v.total - v.pago - v.desconto) as Centavos),
+    formatarSemSimbolo(
+      (v.total - v.pago - v.desconto + (v.encargos ?? 0)) as Centavos,
+    ),
     direita,
     atual,
     {
@@ -557,25 +767,115 @@ function fechamento(
   return atual;
 }
 
+/** "2%" a partir de 2, e "1,5%" a partir de 1.5. */
+function porcento(v: number): string {
+  return `${v.toFixed(2).replace(/\.?0+$/, "").replace(".", ",")}%`;
+}
+
+/**
+ * O bloco de quem paga: documento, endereco e centro de custo, embaixo do nome.
+ *
+ * ⚠️ Cobranca identifica QUEM deve, e nome sozinho nao identifica: duas empresas
+ * do mesmo grupo tem razoes sociais parecidas, e o documento com o endereco e o
+ * que separa uma da outra. O centro de custo entra porque e por ele que o
+ * cliente acha a despesa no proprio controle.
+ *
+ * ⚠️ Linha que nao existe nao vira traco. Uma sequencia de tracos ocupa o mesmo
+ * espaco de um endereco de verdade e nao diz nada; o bloco simplesmente encolhe,
+ * e por isso ele devolve o `y` em vez de somar uma altura fixa.
+ *
+ * Os dois documentos usam este mesmo bloco: o recibo de uma parcela e o resumo
+ * da conta identificam o mesmo pagador, e escritos duas vezes ja teriam
+ * divergido no primeiro ajuste.
+ */
+function identificacaoDoCliente(
+  doc: jsPDF,
+  r: Pick<ReciboParaPDF, "clienteDoc" | "clienteEndereco" | "clienteProjetos">,
+  y: number,
+): number {
+  const e = r.clienteEndereco;
+  const linhas = [
+    /* ⚠️ Com mascara, e a mesma funcao para os dois: o cadastro guarda ora
+       "38276247000108" ora "55.133.311/0001-10", e num documento de cobranca os
+       dois precisam ler igual. `formatarDocumento` decide pelo tamanho se e CPF
+       ou CNPJ e devolve o que veio quando nao reconhece. */
+    r.clienteDoc ? formatarDocumento(r.clienteDoc) : "",
+    [e?.logradouro, e?.numero, e?.complemento].filter(Boolean).join(", "),
+    [e?.bairro, [e?.cidade, e?.uf].filter(Boolean).join("/"), e?.cep]
+      .filter(Boolean)
+      .join(" · "),
+    /* Uma linha so, com as obras separadas por virgula: em documento de
+       cobranca, "Projetos: A, B" se le de uma vez; uma linha por obra faria o
+       bloco de identificacao crescer mais que o proprio nome do cliente. */
+    r.clienteProjetos.length > 0
+      ? `${r.clienteProjetos.length > 1 ? "Projetos" : "Projeto"}: ${r.clienteProjetos.join(", ")}`
+      : "",
+  ].filter((l): l is string => Boolean(l) && l!.length > 0);
+
+  doc
+    .setFont("helvetica", "normal")
+    .setFontSize(8.5)
+    .setTextColor(...CINZA);
+  for (const [i, linha] of linhas.entries()) {
+    doc.text(linha, MARGEM, y + 13 + i * 11);
+  }
+
+  return y + 26 + linhas.length * 11;
+}
+
+/**
+ * O rodape da folha: quem emitiu, quando, e a paginacao.
+ *
+ * ⚠️ SEM fio em cima. Uma regua ali cortava a folha em duas e dava ao rodape o
+ * peso de uma secao; o vao branco ja separa o suficiente.
+ */
+function rodape(
+  doc: jsPDF,
+  altura: number,
+  direita: number,
+  emitidoPor: string,
+): void {
+  const linha = altura - 30;
+
+  doc
+    .setFont("helvetica", "normal")
+    .setFontSize(7.5)
+    .setTextColor(...CINZA);
+  doc.text(
+    `Emitido em ${paraFormatoBR(new Date().toISOString().slice(0, 10) as DataISO)}${emitidoPor ? ` por ${emitidoPor}` : ""}`,
+    MARGEM,
+    linha,
+  );
+  doc.text("1 / 1", direita, linha, { align: "right" });
+}
+
 /** A linha de cabecalho de uma tabela, com a regua embaixo. */
 function colunas(
   doc: jsPDF,
   y: number,
   direita: number,
-  cols: { texto: string; x: number; direita?: boolean }[],
+  cols: { texto: string; abaixo?: string; x: number; direita?: boolean }[],
 ): number {
   doc
     .setFont("helvetica", "bold")
     .setFontSize(7)
     .setTextColor(...CINZA);
   for (const c of cols) {
-    doc.text(c.texto, c.x, y + 14, c.direita ? { align: "right" } : undefined);
+    const alinha = c.direita ? ({ align: "right" } as const) : undefined;
+    doc.text(c.texto, c.x, y + 14, alinha);
+    if (c.abaixo) doc.text(c.abaixo, c.x, y + 22, alinha);
   }
+
+  /* ⚠️ A regua DESCE quando ha segunda linha, senao ela corta o percentual ao
+     meio — foi o que aconteceu com "(2%)" embaixo de "MULTA". A altura do
+     cabecalho e o que muda, e nao a posicao do texto. */
+  const base = cols.some((c) => c.abaixo) ? y + 27 : y + 19;
+
   doc
     .setDrawColor(...REGUA)
     .setLineWidth(0.6)
-    .line(MARGEM, y + 19, direita, y + 19);
-  return y + 19;
+    .line(MARGEM, base, direita, base);
+  return base;
 }
 
 /** Titulo de secao com a regua embaixo. Repetido tres vezes; vale a funcao. */
@@ -586,10 +886,13 @@ function secao(
   esquerda: number,
   direita: number,
 ): number {
+  /* ⚠️ Preto, e nao cinza. O titulo abre uma secao do documento; em cinza ele
+     tinha o mesmo peso dos rotulos de coluna logo abaixo, e a folha virava uma
+     lista de cinzas sem hierarquia. */
   doc
     .setFont("helvetica", "bold")
     .setFontSize(7)
-    .setTextColor(...CINZA);
+    .setTextColor(...TINTA);
   doc.text(titulo, esquerda, y);
   doc
     .setDrawColor(...REGUA)

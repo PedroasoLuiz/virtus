@@ -1,3 +1,4 @@
+import type { ParametrosDeCobranca } from "@/shared/domain/cobranca";
 /**
  * O que os documentos em PDF do sistema compartilham.
  *
@@ -31,6 +32,10 @@ type Parcela = {
   vencimento: string | null;
   valor: number;
   pago: boolean;
+  /** Quanto ja entrou. E o que sobra que rende mora. Zero quando nao entrou nada. */
+  recebido?: number;
+  /** Data do ultimo recebimento. Em cobranca, "quanto" sem "quando" nao prova. */
+  pagoEm?: string | null;
 };
 
 type Conta = { faturaId: number; pago: number; parcelas: Parcela[] };
@@ -46,6 +51,8 @@ type Endereco = {
 };
 
 /** O ticket como o documento precisa dele: montado no servidor, lido pelo PDF. */
+export type { ParametrosDeCobranca };
+
 export type TicketParaPDF = {
   id: number;
   numero: number;
@@ -61,6 +68,13 @@ export type TicketParaPDF = {
   faturado: number;
   itens: Item[];
   faturas: Conta[];
+  /**
+   * A politica de multa e juros deste cliente, de `parametroscobranca`.
+   *
+   * ⚠️ Opcional: ticket de quem nao tem clausula nao fala em mora, e as colunas
+   * somem do documento. Imprimir "0,00" sugeriria que houve calculo e deu zero.
+   */
+  cobranca?: ParametrosDeCobranca | null;
   empresa: {
     razaoSocial: string | null;
     endereco: string | null;
