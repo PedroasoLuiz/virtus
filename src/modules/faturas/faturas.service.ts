@@ -662,8 +662,13 @@ export async function enviarParcelaPorEmail(
      * ⚠️ E SEM o nome da empresa. Ele passou a assinar o remetente, e a caixa
      * de entrada mostra os dois lado a lado: repetido, comia a largura do
      * assunto no celular para dizer de novo o que a linha de cima ja dizia.
+     *
+     * ⚠️ E diz o que ACONTECEU, e nao so o que e. "Sua fatura 14" e um rotulo:
+     * nao explica por que chegou agora nem o que se espera de quem abrir. "Ja
+     * esta disponivel" avisa que o documento do periodo saiu — que e o fato, e
+     * o tom certo para quem esta em dia.
      */
-    assunto: `Sua fatura ${fatura.numero}`,
+    assunto: `Sua fatura ${fatura.numero} já está disponível`,
     html: htmlDaFatura({
       empresaNome: destino.empresaNome,
       empresaRazaoSocial: destino.empresaRazaoSocial,
