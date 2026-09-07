@@ -4,10 +4,16 @@ import { formatarDocumento } from "@/shared/domain/documento";
 /**
  * O e-mail da cobranca.
  *
- * ⚠️ A referencia e o TICKET, nao a fatura. A fatura e controle interno:
- * numero de conta a receber, parcelamento, baixa. Mandar esse numero ao cliente
- * o obriga a decorar uma referencia que so existe do nosso lado; o ticket ele
- * conhece, porque e o servico que contratou.
+ * ⚠️ A referencia e a FATURA, e nao mais o ticket.
+ *
+ * Era o ticket, pelo argumento de que o cliente conhece o servico que
+ * contratou. Mas uma fatura reune VARIOS tickets, e ai o assunto virava "Sua
+ * fatura dos tickets 160, 161" — uma lista para identificar um documento so.
+ * Pior: o que o cliente abre, paga e guarda e a fatura; se ele responder
+ * citando o ticket, ninguem sabe de qual cobranca ele esta falando.
+ *
+ * O numero da fatura e o de `faturas.idtenant`, que e o que a empresa ve na
+ * tela — e nao a chave interna do banco.
  *
  * Quem assina e a EMPRESA que cobra, e agora com a marca dela no topo: e o
  * logotipo que o cliente reconhece antes de ler qualquer palavra, e um nome de
@@ -54,8 +60,13 @@ export function htmlDaFatura(dados: {
   /** Para onde mandar quem tiver duvida. O remetente e um nao-responda. */
   empresaEmail: string | null;
   empresaTelefone: string | null;
-  /** Os tickets desta cobranca. E a referencia que o cliente reconhece. */
-  tickets: number[];
+  /**
+   * O numero da fatura — a referencia do documento.
+   *
+   * ⚠️ `faturas.idtenant`, e nao `faturas.id`. O primeiro e o numero que a
+   * empresa ve e diz ao telefone; o segundo e chave de banco.
+   */
+  fatura: number;
   clienteNome: string | null;
   /** A pessoa que cuida disso no cliente. E quem o e-mail cumprimenta. */
   clienteResponsavel: string | null;
@@ -65,15 +76,18 @@ export function htmlDaFatura(dados: {
   competencia: string;
   vencimento: string;
   valor: string;
-  parcela: string | null;
+  /**
+   * Qual parcela e esta, sempre — "1 de 1" inclusive.
+   *
+   * ⚠️ Era omitida quando havia so uma, para nao virar ruido. Mas quem recebe
+   * o e-mail nao sabe quantas existem: sem a linha, uma cobranca unica e a
+   * primeira de doze chegam com a mesma cara, e a duvida ("isso e tudo ou vem
+   * mais?") volta como pergunta ao financeiro. "1 de 1" responde de graca.
+   */
+  parcela: string;
   urlDoPortal: string;
 }): string {
-  const referencia =
-    dados.tickets.length === 0
-      ? null
-      : dados.tickets.length === 1
-        ? `Ticket ${dados.tickets[0]}`
-        : `Tickets ${dados.tickets.join(", ")}`;
+  const referencia = `Fatura ${dados.fatura}`;
 
   /*
    * ⚠️ So o RESPONSAVEL cumprimenta. Sem ele, cumprimenta-se sem nome.
@@ -145,7 +159,7 @@ export function htmlDaFatura(dados: {
        assinatura chega azul e sublinhada. Ver semDetectar, para os demais
        clientes. Crase nao entra aqui: fecharia o template literal. -->
   <meta name="format-detection" content="telephone=no,date=no,address=no,email=no,url=no" />
-  <title>${escapar(referencia ?? "Fatura")}</title>
+  <title>${escapar(referencia)}</title>
 </head>
 <body style="margin:0;padding:0;width:100%;background-color:${FUNDO};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:${TINTA};-webkit-font-smoothing:antialiased;">
 
@@ -205,8 +219,8 @@ export function htmlDaFatura(dados: {
                   <td style="padding:18px 22px 20px;">
                     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                       ${linha("Vencimento", dados.vencimento, false, true)}
-                      ${referencia ? linha("Referência", referencia) : ""}
-                      ${dados.parcela ? linha("Parcela", dados.parcela) : ""}
+                      ${linha("Referência", referencia)}
+                      ${linha("Parcela", dados.parcela)}
                       ${faturadoNome ? linha("Faturado para", faturadoNome) : ""}
                       ${dados.clienteCnpj ? linha("CNPJ", formatarDocumento(dados.clienteCnpj), true) : ""}
                     </table>

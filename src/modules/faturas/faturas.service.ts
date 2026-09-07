@@ -636,18 +636,17 @@ export async function enviarParcelaPorEmail(
   const link = `${portal}/p/${token}`;
 
   /*
-   * O assunto e o corpo falam em TICKET, nao em fatura.
+   * ⚠️ O assunto e o corpo falam em FATURA, e nao mais em ticket.
    *
-   * A fatura e controle interno — numero de conta a receber, parcelamento,
-   * baixa. Mandar esse numero ao cliente o obriga a decorar uma referencia que
-   * so existe do nosso lado; o ticket ele conhece, porque e o servico que
-   * contratou.
+   * Falavam em ticket pelo argumento de que o cliente reconhece o servico que
+   * contratou. So que uma fatura reune varios: o assunto virava "Sua fatura dos
+   * tickets 160, 161", uma lista para identificar um documento unico. E o que o
+   * cliente paga, guarda e cita ao ligar e a fatura — pelo ticket, ninguem sabe
+   * de qual cobranca ele esta falando.
+   *
+   * O numero e o `numero` da conta (`faturas.idtenant`), que e o que a empresa
+   * ve na tela; a chave do banco nao sai daqui.
    */
-  const tickets = fatura.tickets.map((t) => t.numero);
-  const referencia =
-    tickets.length === 1
-      ? `ticket ${tickets[0]}`
-      : `tickets ${tickets.join(", ")}`;
 
   await enviarEmail({
     para: [para],
@@ -664,10 +663,7 @@ export async function enviarParcelaPorEmail(
      * de entrada mostra os dois lado a lado: repetido, comia a largura do
      * assunto no celular para dizer de novo o que a linha de cima ja dizia.
      */
-    assunto:
-      tickets.length > 0
-        ? `Sua fatura do ${referencia}`
-        : "Sua fatura",
+    assunto: `Sua fatura ${fatura.numero}`,
     html: htmlDaFatura({
       empresaNome: destino.empresaNome,
       empresaRazaoSocial: destino.empresaRazaoSocial,
@@ -676,7 +672,7 @@ export async function enviarParcelaPorEmail(
       empresaEndereco: destino.empresaEndereco,
       empresaEmail: destino.empresaEmail,
       empresaTelefone: destino.empresaTelefone,
-      tickets,
+      fatura: fatura.numero,
       clienteNome: destino.clienteNome,
       clienteResponsavel: destino.clienteResponsavel,
       clienteRazaoSocial: destino.clienteRazaoSocial,
@@ -685,11 +681,10 @@ export async function enviarParcelaPorEmail(
         periodoEmMeses(fatura.apuracaoInicio, fatura.apuracaoFim) ?? "—",
       vencimento: parcela.vencimento ? paraFormatoBR(parcela.vencimento) : "—",
       valor: formatarSemSimbolo(parcela.total),
-      // So aparece quando ha mais de uma: "Parcela 1 de 1" e ruido.
-      parcela:
-        fatura.parcelas.length > 1
-          ? `${parcela.numero} de ${fatura.parcelas.length}`
-          : null,
+      /* ⚠️ SEMPRE, "1 de 1" inclusive. Quem recebe nao sabe quantas parcelas a
+         fatura tem: sem esta linha, uma cobranca unica e a primeira de doze
+         chegam iguais, e a duvida volta como ligacao para o financeiro. */
+      parcela: `${parcela.numero} de ${fatura.parcelas.length}`,
       urlDoPortal: link,
     }),
     /*

@@ -44,7 +44,7 @@ import { dadosDaEmpresa } from "@/modules/empresa/empresa.repository";
  */
 
 const COLUNAS_FATURA =
-  "id, fkCliente, dataInicio, dataFim, status, cancelada, total, observacoes, rodape, parcelas";
+  "id, idtenant, fkCliente, dataInicio, dataFim, status, cancelada, total, observacoes, rodape, parcelas";
 
 // ── Leitura ─────────────────────────────────────────────────────────────────
 
@@ -891,6 +891,7 @@ export async function aplicarParcelamento(
 
 type LinhaFatura = {
   id: number;
+  idtenant: number | null;
   fkCliente: number | null;
   dataInicio: string | null;
   dataFim: string | null;
@@ -919,7 +920,22 @@ function paraDominioResumo(
 
   return {
     id: linha.id,
-    numero: linha.id,
+    /*
+     * ⚠️ O numero e `idtenant`, e nao `id`.
+     *
+     * `id` e a sequencia GLOBAL da tabela, compartilhada por todas as empresas:
+     * numa base multiempresa ela pula — a empresa cadastra a decima fatura dela
+     * e ve "244", porque as outras 234 sao de outra gente. `idtenant` conta por
+     * empresa, que e o que faz sentido para quem numera as proprias cobrancas.
+     *
+     * Estava saindo `id` aqui, e o portal ja usava `idtenant`: em 73 das 127
+     * faturas os dois numeros diferem, entao a tela dizia uma coisa e o
+     * documento que chegava ao cliente dizia outra.
+     *
+     * `id` continua sendo a chave: e por ele que se abre a conta e se chamam as
+     * rotas. O que mudou e so o que se MOSTRA.
+     */
+    numero: linha.idtenant ?? linha.id,
     clienteId: linha.fkCliente,
     clienteNome: primeiroPreenchido(cliente?.nomefantasia, cliente?.razao),
     apuracaoInicio: linha.dataInicio
