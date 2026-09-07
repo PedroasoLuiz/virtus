@@ -1,12 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { BotaoDeCabecalho, Drawer } from "@/components/ui/drawer";
 import {
   Alert,
-  Badge,
   Button,
   CampoBloqueado,
   CampoNumerico,
@@ -15,12 +13,10 @@ import {
   PanelTabs,
   inputStyle,
   selectStyle,
-  type Tom,
 } from "@/components/ui/kit";
-import { Icon } from "@/components/layout/icones";
 import { Historico } from "@/components/ui/historico";
 import { formatarSemSimbolo, type Centavos } from "@/shared/utils/money";
-import { paraFormatoBR, periodoEmMeses, type DataISO } from "@/shared/utils/datas";
+import { periodoEmMeses, type DataISO } from "@/shared/utils/datas";
 
 
 /**
@@ -46,10 +42,6 @@ async function imprimir(ticket: unknown, emitidoPor: string) {
   await imprimirRecibo(ticket as Parameters<typeof imprimirRecibo>[0], emitidoPor);
 }
 
-const FaturaDrawer = dynamic(
-  () => import("../faturas/fatura-drawer").then((m) => m.FaturaDrawer),
-  { ssr: false },
-);
 
 /**
  * Detalhe do ticket, em tres modos: ver, editar e incluir.
@@ -82,6 +74,8 @@ type Item = {
 
 type FaturaDoTicket = {
   faturaId: number;
+  /** O numero que a empresa ve (`faturas.idtenant`), e nao a chave do banco. */
+  numero: number;
   valor: number;
   totalFatura: number;
   situacao: string;
@@ -144,17 +138,8 @@ export type OpcaoCliente = {
 };
 export type OpcaoServico = { id: number; descricao: string; valor: number };
 
-const TOM_FATURA: Record<string, Tom> = {
-  "ORÇAMENTO": "neutral",
-  ABERTA: "info",
-  FATURADA: "info",
-  "PARC. PAGA": "warning",
-  PAGA: "success",
-  CANCELADA: "danger",
-};
 
 const ABA_SERVICOS = "Serviços";
-const SUB_HISTORICO = "Histórico";
 const ABA_FINANCEIRO = "Financeiro";
 
 export function TicketDrawer({
@@ -703,6 +688,28 @@ function Conteudo({
               />
             </Field>
 
+            {/*
+              ⚠️ Um CAMPO, e não a tabela de contas que ficava na aba Financeiro.
+
+              Aquela tabela trazia para dentro do ticket o pago e o a receber da
+              CONTA — e a conta reúne vários tickets, então os números que ela
+              mostrava não eram deste ticket. Quem responde "quanto entrou e
+              quanto falta" é a tela de contas a receber; aqui basta saber em
+              qual conta este ticket entrou.
+
+              O NÚMERO, e não o id: `faturas.idtenant` é o que a empresa vê.
+            */}
+            <Field label="Conta a receber">
+              <CampoBloqueado
+                valor={
+                  (ticket?.faturas ?? []).length === 0
+                    ? "—"
+                    : (ticket?.faturas ?? []).map((f) => f.numero).join(", ")
+                }
+                titulo="A conta a receber que consumiu valor deste ticket"
+              />
+            </Field>
+
             {/* Sempre editavel, mesmo fora do modo de edicao. */}
             <Field label="Descrição" hint={salvandoNota ? "Salvando…" : undefined}>
               {encerrado ? (
@@ -754,7 +761,6 @@ function Conteudo({
               itens={form.itens}
               totalEmTela={editando ? totalEmTela : (ticket?.total ?? 0)}
               faturado={ticket?.faturado ?? 0}
-              faturas={ticket?.faturas ?? []}
             />
           )}
         </>
@@ -833,30 +839,24 @@ function Financeiro({
   itens,
   totalEmTela,
   faturado,
-  faturas,
 }: {
   itens: Item[];
   totalEmTela: number;
   faturado: number;
-  faturas: FaturaDoTicket[];
 }) {
-  const [faturaAberta, setFaturaAberta] = useState<number | null>(null);
-
-  return (
-    <>
-      <Resumo itens={itens} total={totalEmTela} faturado={faturado} />
-
-      {/* Uma aba so, sem contador: aqui ela nao escolhe entre conteudos — e o
-          rotulo da tabela, no mesmo desenho das outras listas do drawer. */}
-      <div style={{ marginTop: 18 }}>
-        <PanelTabs tabs={[SUB_HISTORICO]} active={SUB_HISTORICO} onChange={() => {}} />
-      </div>
-
-      <TabelaFaturas faturas={faturas} aoAbrir={setFaturaAberta} />
-
-      <FaturaDrawer faturaId={faturaAberta} onClose={() => setFaturaAberta(null)} />
-    </>
-  );
+  /*
+   * ⚠️ Sem a guia "Histórico" e sem a tabela de contas.
+   *
+   * Ela listava, por conta, "Deste ticket", "Pago" e "A receber" — e só a
+   * primeira era deste ticket. Pago e a receber eram da CONTA inteira, porque
+   * ratear a baixa entre as origens de uma conta composta exigiria decidir qual
+   * ticket foi pago primeiro, que é invenção e não dado. Três colunas lado a
+   * lado, duas delas de outro universo, leem como se somassem.
+   *
+   * Em que conta este ticket entrou virou um campo lá em cima, ao lado da
+   * situação. O resto é da tela de contas a receber, que é a dona da cobrança.
+   */
+  return <Resumo itens={itens} total={totalEmTela} faturado={faturado} />;
 }
 
 /**
@@ -1487,203 +1487,13 @@ function CampoValor({ valor, aoMudar }: { valor: number; aoMudar: (v: number) =>
 }
 
 
-/**
- * Historico de cobranca do ticket.
- *
- * Cada linha e uma conta a receber que consumiu valor daqui. "Deste ticket" e o
- * que saiu DAQUI; pago e a receber sao da CONTA inteira, porque ratear a baixa
- * entre origens exigiria decidir qual ticket foi pago primeiro numa conta
- * composta — invencao, nao dado.
- *
- * Atrasado e a vencer nao sao duas colunas: os dois sao dinheiro que ainda nao
- * entrou, e somam em "A receber". Quem diz se passou do prazo e a SITUACAO.
- */
-function TabelaFaturas({
-  faturas,
-  aoAbrir,
-}: {
-  faturas: FaturaDoTicket[];
-  aoAbrir: (id: number) => void;
-}) {
-  return (
-    <Moldura>
-      <thead>
-        <tr style={{ background: "var(--surface-2)" }}>
-          <Cabecalho align="left">Título</Cabecalho>
-          <Cabecalho align="center">Situação</Cabecalho>
-          <Cabecalho align="right">Deste ticket</Cabecalho>
-          <Cabecalho align="right">Pago</Cabecalho>
-          <Cabecalho align="right">A receber</Cabecalho>
-        </tr>
-      </thead>
-      <tbody>
-        {faturas.length === 0 && (
-          <Vazia colSpan={5}>Este ticket ainda não gerou conta a receber.</Vazia>
-        )}
-        {faturas.map((f, i) => (
-          <tr
-            key={f.faturaId}
-            onClick={() => aoAbrir(f.faturaId)}
-            style={{
-              borderTop: i === 0 ? undefined : "1px solid var(--border)",
-              cursor: "pointer",
-            }}
-          >
-            <Celula>
-              {/* Icone do modulo financeiro na frente: no mesmo drawer convivem
-                  numero de ticket e numero de conta, e so o "#" nao separa os
-                  dois. */}
-              <span
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 5,
-                  fontVariantNumeric: "tabular-nums",
-                }}
-              >
-                <Icon name="faturas" size={13} color="var(--text-tertiary)" />
-                {f.faturaId}
-              </span>
-            </Celula>
 
-            <Celula align="center">
-              <Badge tom={f.atrasado > 0 ? "danger" : (TOM_FATURA[f.situacao] ?? "neutral")}>
-                {f.atrasado > 0 ? "ATRASADA" : f.situacao}
-              </Badge>
-            </Celula>
-
-            <Celula align="right" forte>
-              {formatarSemSimbolo(f.valor as Centavos)}
-            </Celula>
-
-            <Valor v={f.pago} cor="var(--credito)" />
-
-            <Celula align="right">
-              {/* Vermelho so quando parte disso ja venceu — o valor e o mesmo,
-                  o que muda e a urgencia. */}
-              <div
-                style={{
-                  color:
-                    f.atrasado > 0
-                      ? "var(--debito)"
-                      : f.aVencer > 0
-                        ? "var(--text-primary)"
-                        : "var(--text-tertiary)",
-                }}
-              >
-                {formatarSemSimbolo((f.atrasado + f.aVencer) as Centavos)}
-              </div>
-              {/* O vencimento so aparece se ha o que vencer — data solta numa
-                  conta quitada leria como cobranca pendente. */}
-              {f.aVencer > 0 && f.proximoVencimento && (
-                <div style={{ fontSize: "var(--text-xs)", color: "var(--text-tertiary)" }}>
-                  {paraFormatoBR(f.proximoVencimento as DataISO)}
-                </div>
-              )}
-            </Celula>
-          </tr>
-        ))}
-      </tbody>
-    </Moldura>
-  );
-}
-
-/** Valor que so ganha cor quando existe: zero colorido vira ruido. */
-function Valor({ v, cor }: { v: number; cor: string }) {
-  return (
-    <Celula align="right">
-      <span style={{ color: v > 0 ? cor : "var(--text-tertiary)" }}>
-        {formatarSemSimbolo(v as Centavos)}
-      </span>
-    </Celula>
-  );
-}
 
 // ── Peças de tabela ─────────────────────────────────────────────────────────
 
-function Moldura({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        border: "1px solid var(--border)",
-        borderRadius: "var(--radius-lg)",
-        overflow: "hidden",
-      }}
-    >
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "var(--text-sm)" }}>
-        {children}
-      </table>
-    </div>
-  );
-}
 
-function Cabecalho({
-  children,
-  align,
-}: {
-  children: React.ReactNode;
-  align: "left" | "center" | "right";
-}) {
-  return (
-    <th
-      className="rotulo"
-      style={{
-        height: 32,
-        padding: "0 12px",
-        textAlign: align,
-        borderBottom: "1px solid var(--border)",
-        whiteSpace: "nowrap",
-      }}
-    >
-      {children}
-    </th>
-  );
-}
 
-/**
- * Celula com respiro por PADDING, nao por altura fixa.
- *
- * Com `height: 34` o texto que quebrava em duas linhas encostava nas bordas de
- * cima e de baixo: altura fixa nao cresce, ela so espreme. `minHeight` mantem a
- * linha de uma linha com a mesma altura de antes e deixa a de duas respirar.
- */
-function Celula({
-  children,
-  align = "left",
-  forte,
-}: {
-  children: React.ReactNode;
-  align?: "left" | "center" | "right";
-  forte?: boolean;
-}) {
-  return (
-    <td
-      style={{
-        padding: "9px 12px",
-        lineHeight: 1.4,
-        textAlign: align,
-        verticalAlign: "middle",
-        fontVariantNumeric: align === "right" ? "tabular-nums" : undefined,
-        fontWeight: forte ? "var(--fw-medium)" : undefined,
-      }}
-    >
-      {children}
-    </td>
-  );
-}
 
-function Vazia({ colSpan, children }: { colSpan: number; children: React.ReactNode }) {
-  return (
-    <tr>
-      <td
-        colSpan={colSpan}
-        style={{ padding: "20px 12px", textAlign: "center", color: "var(--text-tertiary)" }}
-      >
-        {children}
-      </td>
-    </tr>
-  );
-}
 
 /**
  * Despesa do serviço como etiqueta.
