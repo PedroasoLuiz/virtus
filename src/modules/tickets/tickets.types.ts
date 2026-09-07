@@ -148,6 +148,14 @@ export type TicketResumo = {
 /** Uma conta a receber que consumiu valor deste ticket. */
 export type FaturaDoTicket = {
   faturaId: number;
+  /**
+   * O numero que a empresa ve, de `faturas.idtenant`.
+   *
+   * ⚠️ Diferente de `faturaId`, que e a chave do banco e nao significa nada
+   * para quem le a tela. O id continua aqui porque e por ele que se abre a
+   * conta; o numero e o que se mostra.
+   */
+  numero: number;
   /** Quanto DESTE ticket entrou naquela fatura — nao o total da fatura. */
   valor: Centavos;
   totalFatura: Centavos;
@@ -166,8 +174,6 @@ export type FaturaDoTicket = {
   aVencer: Centavos;
   /** Vencimento em aberto mais proximo. Nulo se nao ha parcela a vencer. */
   proximoVencimento: DataISO | null;
-  /** Detalhe das parcelas — usado pelo PDF, nao pela tela. */
-  parcelas: ParcelaDaConta[];
 };
 
 export type EnderecoCliente = {
@@ -241,12 +247,18 @@ export type EmpresaDoDocumento = {
   logo: string | null;
 };
 
-export type ParcelaDaConta = {
-  numero: number | null;
-  vencimento: DataISO | null;
-  valor: Centavos;
-  pago: boolean;
-};
+/*
+ * Nao existe mais `ParcelaDaConta`.
+ *
+ * ⚠️ Ela existia SO para o PDF do ticket imprimir a tabela de parcelas, e essa
+ * tabela saiu. O motivo e do modelo: `faturasorigens` liga N tickets a UMA
+ * conta, entao as parcelas que o ticket carregava eram da conta inteira — e um
+ * ticket nao consegue mostra-las sem falar do dinheiro dos outros.
+ *
+ * Parcela, vencimento, baixa e mora vivem no modulo de faturas, que e o dono da
+ * cobranca. O ticket continua sabendo em QUE contas entrou e quanto delas e
+ * dele (`FaturaDoTicket`), que e o quanto lhe cabe saber.
+ */
 
 export type Ticket = TicketResumo & {
   autoria: Autoria;

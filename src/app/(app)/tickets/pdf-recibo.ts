@@ -24,6 +24,22 @@ import { carregarLogo, type TicketParaPDF } from "./pdf-base";
  * - **Verde da marca em dois pontos** — número e total —, dentro da regra dos
  *   ~10% de sotaque. Réguas coloridas e divisórias de rodapé saíram: o espaço
  *   já separa, e linha sobre linha só empilha divisória.
+ *
+ * ⚠️ **Este documento não fala de cobrança.** Ele responde "o que foi feito e
+ * quanto vale": serviços, ajustes e total. Parcelas, vencimentos, pagamentos e
+ * mora são da CONTA A RECEBER, e saem no documento dela.
+ *
+ * A tabela de parcelas viveu aqui e foi removida. O motivo é do modelo, não de
+ * layout: uma conta reúne VÁRIOS tickets (`faturasorigens` é N para 1). O PDF
+ * do ticket 116 imprimia as parcelas que também cobrem o 117 — e o rodapé
+ * misturava base, somando "pago" da conta inteira com o total de um ticket só.
+ * Numa conta composta essa subtração não é o saldo de nada.
+ *
+ * Não doía ainda porque todas as 118 contas de hoje têm um ticket só. Doeria na
+ * primeira que tivesse dois, e aí já com o documento na mão do cliente.
+ *
+ * Dois documentos que respondem a mesma pergunta acabam discordando; o que
+ * cobra é o da conta.
  */
 
 const MARGEM = 40;
@@ -42,6 +58,34 @@ const AZUL: [number, number, number] = [10, 82, 185];
 const TINTA: [number, number, number] = [16, 16, 18];
 const CINZA: [number, number, number] = [134, 134, 139];
 const REGUA: [number, number, number] = [226, 226, 228];
+
+/**
+ * Faixa de baixo que o conteudo nao invade.
+ *
+ * ⚠️ O rodape e desenhado DEPOIS de tudo, por cima. Sem reservar esta altura,
+ * um bloco que chegasse ao fim da folha era impresso e o "Emitido em … 1 / 1"
+ * caia em cima dele — foi o que aconteceu com Faturado/Valor pago/Saldo
+ * devedor. As tabelas recebem a mesma reserva em `margin.bottom`, e os blocos
+ * desenhados a mao passam por `garantirEspaco`.
+ */
+const RESERVA_RODAPE = 56;
+
+/** O que ainda cabe nesta pagina a partir de `y`. */
+function espacoLivre(doc: jsPDF, y: number): number {
+  return doc.internal.pageSize.getHeight() - RESERVA_RODAPE - y;
+}
+
+/**
+ * Devolve o `y` onde o bloco cabe — virando a pagina se preciso.
+ *
+ * ⚠️ Vale para o que e desenhado a MAO. O autotable ja quebra sozinho; o que
+ * ele nao sabe e da existencia dos blocos que vem depois dele.
+ */
+function garantirEspaco(doc: jsPDF, y: number, precisa: number): number {
+  if (espacoLivre(doc, y) >= precisa) return y;
+  doc.addPage();
+  return MARGEM;
+}
 
 const dinheiro = (v: number) => formatarSemSimbolo(v as Centavos);
 
@@ -84,11 +128,10 @@ export async function imprimirRecibo(
   const direita = largura - MARGEM;
 
   let y = await cabecalho(doc, t, direita);
-  y = identificacao(doc, t, y);
+  y = identificacao(doc, t, y, largura);
   y = partes(doc, t, y, largura);
   y = servicos(doc, t, y, largura);
   y = fechamento(doc, t, y, direita);
-  y = parcelas(doc, t, y);
 
   observacoes(doc, t, y, largura);
   rodape(doc, emitidoPor, largura);
@@ -142,27 +185,43 @@ async function cabecalho(doc: jsPDF, t: TicketParaPDF, direita: number): Promise
  * sem rótulo que só quem conhece o sistema sabia ler. Com rótulo e alinhadas
  * numa coluna, quem recebe o documento entende sem contexto.
  */
-function identificacao(doc: jsPDF, t: TicketParaPDF, y: number): number {
+function identificacao(doc: jsPDF, t: TicketParaPDF, y: number, largura: number): number {
   const periodo = periodoEmMeses(
     (t.inicio ?? null) as DataISO | null,
     (t.fim ?? null) as DataISO | null,
   );
 
+  /*
+   * ⚠️ O projeto vem para CA, e nao mais para baixo do endereco do cliente.
+   *
+   * La ele lia como parte do endereco — mais uma linha cinza no bloco "PARA",
+   * do mesmo tamanho do bairro e do CEP. Projeto nao e onde o cliente fica: e
+   * a obra a que este ticket pertence, que e informacao de identificacao do
+   * documento, igual a numero, situacao e apuracao. Aqui ele ganha rotulo
+   * proprio e o nome sai em negrito, na mesma formatacao dos outros tres.
+   */
   const pares: [string, string][] = [
     ["Número", String(t.numero)],
     ["Situação", t.cancelada ? "CANCELADO" : t.status],
     ["Apuração", periodo ?? "—"],
   ];
+  if (t.projetoNome) pares.push(["Projeto", t.projetoNome]);
 
+  const ROTULO = 52;
   let linha = y;
+
   for (const [rotulo, valor] of pares) {
     doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(...CINZA);
     doc.text(`${rotulo}:`, MARGEM, linha);
 
     doc.setFont("helvetica", "bold").setTextColor(...TINTA);
-    doc.text(valor, MARGEM + 52, linha);
 
-    linha += 13;
+    /* Nome de obra e texto livre e pode ser longo. Sem quebrar, ele atravessava
+       a margem direita e sumia na borda da folha. */
+    for (const parte of doc.splitTextToSize(valor, largura - MARGEM * 2 - ROTULO)) {
+      doc.text(parte, MARGEM + ROTULO, linha);
+      linha += 13;
+    }
   }
 
   return linha + 14;
@@ -185,7 +244,8 @@ function partes(doc: jsPDF, t: TicketParaPDF, y: number, largura: number): numbe
     t.clienteDoc ? formatarDoc(t.clienteDoc) : "",
     [e?.logradouro, e?.numero, e?.complemento].filter(Boolean).join(", "),
     [e?.bairro, [e?.cidade, e?.uf].filter(Boolean).join("/"), e?.cep].filter(Boolean).join(" · "),
-    t.projetoNome ? `Projeto: ${t.projetoNome}` : "",
+    /* ⚠️ O projeto NAO entra aqui. Subiu para a identificacao do documento —
+       ver o comentario em `identificacao`. */
   ].filter(Boolean);
 
   coluna(doc, "DE", emitente, MARGEM, y, meio - MARGEM - 20);
@@ -285,7 +345,10 @@ function servicos(doc: jsPDF, t: TicketParaPDF, y: number, largura: number): num
 
   autoTable(doc, {
     startY: y,
-    margin: { left: MARGEM, right: MARGEM },
+    /* ⚠️ `bottom` e o que faz a tabela QUEBRAR antes do rodape em vez de passar
+       por baixo dele. Vale tambem para a de cobranca: qualquer uma das duas
+       cresce com o ticket, e nenhuma sabia onde a folha acabava. */
+    margin: { left: MARGEM, right: MARGEM, bottom: RESERVA_RODAPE },
     tableWidth: util,
     theme: "plain",
     styles: {
@@ -360,7 +423,12 @@ function fechamento(doc: jsPDF, t: TicketParaPDF, y: number, direita: number): n
   ];
 
   const xRotulo = direita - COL_NUM * 2;
-  let linha = y + 16;
+
+  /* O bloco inteiro cabe na mesma pagina ou vai todo para a proxima: subtotal
+     numa folha e total na outra e a unica forma de o leitor nao conseguir
+     conferir a conta. */
+  const quantas = pares.filter(([, , mostra]) => mostra).length + 1;
+  let linha = garantirEspaco(doc, y + 16, quantas * 14 + 8);
 
   for (const [rotulo, valor, mostra] of pares) {
     if (!mostra) continue;
@@ -380,78 +448,34 @@ function fechamento(doc: jsPDF, t: TicketParaPDF, y: number, direita: number): n
   return linha + 22;
 }
 
-// ── Parcelas ────────────────────────────────────────────────────────────────
-
-function parcelas(doc: jsPDF, t: TicketParaPDF, y: number): number {
-  const linhas = t.faturas.flatMap((f) =>
-    f.parcelas.map((p) => [
-      String(f.faturaId),
-      p.numero != null ? String(p.numero) : "—",
-      p.vencimento ? paraFormatoBR(p.vencimento as DataISO) : "—",
-      dinheiro(p.valor),
-      p.pago ? "Pago" : "Em aberto",
-    ]),
-  );
-
-  if (linhas.length === 0) return y;
-
-  doc.setFont("helvetica", "bold").setFontSize(7).setTextColor(...CINZA);
-  doc.text("COBRANÇA", MARGEM, y + 10);
-
-  autoTable(doc, {
-    startY: y + 16,
-    margin: { left: MARGEM, right: MARGEM },
-    theme: "plain",
-    styles: { fontSize: 8.5, cellPadding: { top: 6, bottom: 6, left: 0, right: 0 }, textColor: TINTA },
-    headStyles: { fontSize: 7, fontStyle: "bold", textColor: CINZA, lineWidth: { bottom: 0.8 }, lineColor: REGUA },
-    bodyStyles: { lineWidth: { bottom: 0.5 }, lineColor: REGUA },
-    columnStyles: {
-      1: { cellWidth: COL_NUM, halign: "right" },
-      2: { cellWidth: COL_NUM, halign: "right" },
-      3: { cellWidth: COL_NUM, halign: "right" },
-      4: { cellWidth: COL_NUM, halign: "right" },
-    },
-    head: [["Fatura", "Parcela", "Vencimento", "Valor", "Situação"]],
-    body: linhas,
-    didParseCell: (d) => {
-      if (d.column.index > 0) d.cell.styles.halign = "right";
-    },
-  });
-
-  const fim = tabelaTerminaEm(doc);
-  if (t.faturado <= 0) return fim;
-
-  const pago = t.faturas.reduce((s, f) => s + f.pago, 0);
-  const total = t.itens.reduce((s, i) => s + totalDoItem(i), 0);
-  const direita = doc.internal.pageSize.getWidth() - MARGEM;
-
-  let linha = fim + 16;
-  for (const [rotulo, valor] of [
-    ["Faturado", t.faturado],
-    ["Valor pago", pago],
-    ["Saldo devedor", Math.max(0, total - pago)],
-  ] as [string, number][]) {
-    doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(...CINZA);
-    doc.text(rotulo, direita - COL_NUM * 2, linha);
-    doc.setFont("helvetica", "bold").setTextColor(...TINTA);
-    doc.text(dinheiro(valor), direita, linha, { align: "right" });
-    linha += 14;
-  }
-
-  return linha + 6;
-}
-
 // ── Observações e rodapé ────────────────────────────────────────────────────
 
 function observacoes(doc: jsPDF, t: TicketParaPDF, y: number, largura: number): void {
   const texto = (t.descricao ?? "").trim();
   if (!texto) return;
 
+  const partes: string[] = doc.splitTextToSize(texto, largura - MARGEM * 2);
+
+  /*
+   * ⚠️ Observação longa era impressa por cima do rodapé e do fim da folha.
+   *
+   * `doc.text` com um array de linhas desce sem olhar a altura da página: ele
+   * escreve fora do papel, e o texto simplesmente some. Aqui o bloco pede o
+   * espaço antes — e, se o texto for maior que uma folha inteira, quebra
+   * sozinho enquanto escreve.
+   */
+  let linha = garantirEspaco(doc, y + 18, 14 + Math.min(partes.length, 4) * 12);
+
   doc.setFont("helvetica", "bold").setFontSize(7).setTextColor(...CINZA);
-  doc.text("OBSERVAÇÕES", MARGEM, y + 18);
+  doc.text("OBSERVAÇÕES", MARGEM, linha);
+  linha += 14;
 
   doc.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(...TINTA);
-  doc.text(doc.splitTextToSize(texto, largura - MARGEM * 2), MARGEM, y + 32);
+  for (const parte of partes) {
+    linha = garantirEspaco(doc, linha, 12);
+    doc.text(parte, MARGEM, linha);
+    linha += 12;
+  }
 }
 
 function rodape(doc: jsPDF, emitidoPor: string, largura: number): void {

@@ -1,4 +1,3 @@
-import type { ParametrosDeCobranca } from "@/shared/domain/cobranca";
 /**
  * O que os documentos em PDF do sistema compartilham.
  *
@@ -27,18 +26,14 @@ type Item = {
   despesas: Despesa[];
 };
 
-type Parcela = {
-  numero: number | null;
-  vencimento: string | null;
-  valor: number;
-  pago: boolean;
-  /** Quanto ja entrou. E o que sobra que rende mora. Zero quando nao entrou nada. */
-  recebido?: number;
-  /** Data do ultimo recebimento. Em cobranca, "quanto" sem "quando" nao prova. */
-  pagoEm?: string | null;
-};
-
-type Conta = { faturaId: number; pago: number; parcelas: Parcela[] };
+/*
+ * Nao existe mais `Parcela` nem `Conta` aqui.
+ *
+ * ⚠️ O documento do ticket deixou de falar de cobranca — ver o comentario de
+ * `pdf-recibo`. Parcela, vencimento, baixa e mora sao da CONTA A RECEBER, que
+ * pode reunir varios tickets, e por isso nenhum deles consegue imprimi-las sem
+ * falar tambem do dinheiro dos outros.
+ */
 
 type Endereco = {
   logradouro: string | null;
@@ -51,8 +46,6 @@ type Endereco = {
 };
 
 /** O ticket como o documento precisa dele: montado no servidor, lido pelo PDF. */
-export type { ParametrosDeCobranca };
-
 export type TicketParaPDF = {
   id: number;
   numero: number;
@@ -72,16 +65,7 @@ export type TicketParaPDF = {
   inicio: string | null;
   fim: string | null;
   descricao: string | null;
-  faturado: number;
   itens: Item[];
-  faturas: Conta[];
-  /**
-   * A politica de multa e juros deste cliente, de `parametroscobranca`.
-   *
-   * ⚠️ Opcional: ticket de quem nao tem clausula nao fala em mora, e as colunas
-   * somem do documento. Imprimir "0,00" sugeriria que houve calculo e deu zero.
-   */
-  cobranca?: ParametrosDeCobranca | null;
   empresa: {
     razaoSocial: string | null;
     endereco: string | null;

@@ -229,7 +229,10 @@ export async function listarFaturas(ticketId: number): Promise<FaturaDoTicket[]>
   const { data, error } = await supabase
     .from("faturasorigens")
     .select(
-      'valor, observacoes, fkFatura, faturas!inner(id, total, status, cancelada, "dataInicio", faturasparcelas(numeroparcela, total, vencimento, pago))',
+      /* As parcelas entram so para `repartirRecebimento` somar pago, atrasado e
+         a vencer. O DETALHE delas nao sai daqui: quem imprime parcela e o
+         documento da conta a receber, que e a dona da cobranca. */
+      'valor, observacoes, fkFatura, faturas!inner(id, idtenant, total, status, cancelada, "dataInicio", faturasparcelas(numeroparcela, total, vencimento, pago))',
     )
     .eq("origem", "TICKET")
     .eq("fkOrdem", ticketId)
@@ -242,6 +245,7 @@ export async function listarFaturas(ticketId: number): Promise<FaturaDoTicket[]>
   return (data ?? []).map((l) => {
     const f = l.faturas as unknown as {
       id: number;
+      idtenant: number | null;
       total: number | null;
       status: string | null;
       cancelada: boolean | null;
@@ -260,6 +264,7 @@ export async function listarFaturas(ticketId: number): Promise<FaturaDoTicket[]>
 
     return {
       faturaId: f.id,
+      numero: f.idtenant ?? f.id,
       valor: doBanco(l.valor),
       totalFatura: doBanco(f.total),
       // Cancelada vence o status, como no resto do sistema.
@@ -270,14 +275,6 @@ export async function listarFaturas(ticketId: number): Promise<FaturaDoTicket[]>
       atrasado: doBanco(r.atrasado),
       aVencer: doBanco(r.aVencer),
       proximoVencimento: r.proximoVencimento,
-      parcelas: (f.faturasparcelas ?? [])
-        .map((x) => ({
-          numero: x.numeroparcela,
-          vencimento: x.vencimento ? ((x.vencimento.slice(0, 10)) as DataISO) : null,
-          valor: doBanco(x.total),
-          pago: x.pago ?? false,
-        }))
-        .sort((a, b) => (a.vencimento ?? "").localeCompare(b.vencimento ?? "")),
     };
   });
 }
