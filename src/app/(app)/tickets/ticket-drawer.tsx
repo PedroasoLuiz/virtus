@@ -265,6 +265,7 @@ function Conteudo({
   const [form, setForm] = useState<Form>(vazio);
   const [salvando, setSalvando] = useState(false);
   const [salvandoNota, setSalvandoNota] = useState(false);
+  const [salvandoProjeto, setSalvandoProjeto] = useState(false);
 
   useEffect(() => {
     if (ticketId == null) return;
@@ -403,6 +404,46 @@ function Conteudo({
    * So ela vai no PATCH: mandar o resto arriscaria gravar campo que o usuario
    * nem abriu para editar.
    */
+  /**
+   * A obra grava sozinha, sem passar pelo modo de edicao.
+   *
+   * ⚠️ Vale ate em ticket ENCERRADO, e por isso tem rota propria. O PATCH do
+   * ticket recusa encerrado — valor e servicos ja viraram cobranca paga. A obra
+   * nao e dinheiro: e classificacao, e sao justamente os tickets antigos, ja
+   * recebidos, que ficaram sem obra porque projeto nem existia quando foram
+   * fechados. Sem isto eles nunca entrariam num relatorio por obra.
+   */
+  async function salvarProjeto(valor: string) {
+    if (criando || ticket == null) return;
+
+    const anterior = form.projetoId;
+    set("projetoId", valor);
+    setSalvandoProjeto(true);
+
+    try {
+      const r = await fetch(`/api/v1/tickets/${ticketId}/projeto`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projetoId: valor ? Number(valor) : null }),
+      });
+      const dados = await r.json().catch(() => null);
+
+      if (!r.ok) {
+        setErro(dados?.error?.message ?? "Não foi possível salvar o projeto.");
+        set("projetoId", anterior);
+        return;
+      }
+
+      setTicket(dados.data);
+      router.refresh();
+    } catch {
+      setErro("Falha de conexão ao salvar o projeto.");
+      set("projetoId", anterior);
+    } finally {
+      setSalvandoProjeto(false);
+    }
+  }
+
   async function salvarDescricao() {
     if (criando || ticket == null) return;
     const texto = form.descricao.trim();
@@ -587,30 +628,36 @@ function Conteudo({
 
               ⚠️ E NAO e obrigatorio, ao contrario do centro que estava aqui.
             */}
-            <Field label="Projeto" hint="A que projeto este ticket pertence. Um ticket pertence a um só.">
-              {editando ? (
-                <select
-                  value={form.projetoId}
-                  onChange={(e) => set("projetoId", e.target.value)}
-                  disabled={!form.clienteId}
-                  style={selectStyle}
-                >
-                  <option value="">
-                    {form.clienteId
-                      ? projetosDoCliente.length > 0
-                        ? "Sem projeto"
-                        : "Este cliente não tem projeto"
-                      : "Escolha o cliente primeiro"}
+            {/* Sempre editavel, mesmo fora do modo de edicao e mesmo encerrado. */}
+            <Field
+              label="Projeto"
+              hint={
+                salvandoProjeto
+                  ? "Salvando…"
+                  : "A que projeto este ticket pertence. Um ticket pertence a um só."
+              }
+            >
+              <select
+                value={form.projetoId}
+                onChange={(e) =>
+                  editando ? set("projetoId", e.target.value) : salvarProjeto(e.target.value)
+                }
+                disabled={!form.clienteId || salvandoProjeto}
+                style={selectStyle}
+              >
+                <option value="">
+                  {form.clienteId
+                    ? projetosDoCliente.length > 0
+                      ? "Sem projeto"
+                      : "Este cliente não tem projeto"
+                    : "Escolha o cliente primeiro"}
+                </option>
+                {projetosDoCliente.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nome}
                   </option>
-                  {projetosDoCliente.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.nome}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <CampoBloqueado valor={ticket?.projetoNome ?? "—"} />
-              )}
+                ))}
+              </select>
             </Field>
 
             <Field label="Local">

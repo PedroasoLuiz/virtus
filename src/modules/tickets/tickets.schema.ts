@@ -10,6 +10,20 @@ import { CHAVES_STATUS, UNIDADES_ITEM } from "@/modules/tickets/tickets.types";
 
 /** Contratos de entrada e saida do quadro de tickets. */
 
+/**
+ * A obra do ticket, sozinha.
+ *
+ * ⚠️ Corpo PROPRIO, e nao um campo do update geral. O update geral trava em
+ * ticket encerrado, e com razao: valor, cliente e servicos ja viraram cobranca
+ * paga. Mas a obra nao e dinheiro — e classificacao, e justamente o ticket
+ * antigo, ja recebido, e o que precisa ser classificado depois do fato.
+ */
+export const projetoDoTicketBodySchema = z.object({
+  projetoId: idSchema.nullish(),
+});
+
+export type ProjetoDoTicketBody = z.infer<typeof projetoDoTicketBodySchema>;
+
 export const idParamSchema = z.object({ id: idSchema });
 
 // ── Ticket ──────────────────────────────────────────────────────────────────

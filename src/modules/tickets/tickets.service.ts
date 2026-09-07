@@ -169,6 +169,47 @@ function reais(centavos: number): string {
   );
 }
 
+/**
+ * Liga o ticket a uma obra — e so isso.
+ *
+ * ⚠️ Passa por cima da trava de ticket ENCERRADO, de proposito. `atualizarTicket`
+ * congela tudo depois que o ticket foi faturado e recebido, porque qualquer
+ * mudanca ali diverge do que o cliente ja pagou. A obra nao entra nessa conta:
+ * ela nao muda valor, cliente nem servico, nao aparece em documento emitido e
+ * nao vai para a DRE — ela diz a que trabalho aquele lancamento pertence.
+ *
+ * E e exatamente o ticket velho que precisa disso. Tickets fechados antes de
+ * existirem projetos ficariam sem obra para sempre, e o relatorio por obra
+ * nasceria com um buraco que ninguem poderia tapar.
+ *
+ * ⚠️ A obra tem que ser do MESMO cliente do ticket. A RLS barra a obra de outra
+ * empresa, mas nao sabe nada sobre cliente: sem esta checagem daria para pendurar
+ * o ticket da OCB numa obra da Federal e o relatorio de cada uma mentiria.
+ */
+export async function definirProjetoDoTicket(
+  empresaId: number,
+  id: number,
+  projetoId: number | null,
+): Promise<Ticket> {
+  const ticket = await obterTicket(empresaId, id);
+
+  if (projetoId != null) {
+    const dono = await repo.clienteDoProjeto(empresaId, projetoId);
+
+    if (dono == null) {
+      throw new NotFoundError(`Projeto ${projetoId} nao encontrado.`);
+    }
+    if (ticket.clienteId != null && dono !== ticket.clienteId) {
+      throw new BusinessRuleError(
+        "Este projeto e de outro cliente. O ticket so pode ser ligado a um projeto do proprio cliente.",
+      );
+    }
+  }
+
+  await repo.definirProjetoDoTicket(id, projetoId);
+  return obterTicket(empresaId, id);
+}
+
 // ── Colunas do quadro ───────────────────────────────────────────────────────
 
 /**

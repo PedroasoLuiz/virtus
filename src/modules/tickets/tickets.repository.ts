@@ -580,7 +580,30 @@ async function obrasDosTickets(
  * outras chamadas mandam campos soltos — e um ticket editado so no titulo nao
  * pode perder a obra por omissao.
  */
-async function definirProjetoDoTicket(
+/**
+ * De quem e o projeto — ou `null` se ele nao existe nesta empresa.
+ *
+ * Serve para o servico recusar ligar um ticket a obra de outro cliente. A RLS
+ * ja barra a obra de outra empresa; o cliente errado ela nao tem como saber.
+ */
+export async function clienteDoProjeto(
+  empresaId: number,
+  projetoId: number,
+): Promise<number | null> {
+  const supabase = await serverClient();
+
+  const { data, error } = await supabase
+    .from("projetos")
+    .select('"fkCliente"')
+    .eq("fkEmpresa", empresaId)
+    .eq("id", projetoId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data?.fkCliente ?? null;
+}
+
+export async function definirProjetoDoTicket(
   ticketId: number,
   projetoId: number | null | undefined,
 ): Promise<void> {

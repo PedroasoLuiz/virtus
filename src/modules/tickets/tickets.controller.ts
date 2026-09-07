@@ -11,6 +11,7 @@ import {
   type FaturaveisQuery,
   type IdParam,
   type MoverTicketBody,
+  type ProjetoDoTicketBody,
 } from "@/modules/tickets/tickets.schema";
 
 /** Traduz HTTP <-> servico de tickets. */
@@ -30,6 +31,20 @@ export async function atualizarTicket({
 }: Entrada<AtualizarTicketBody, undefined, IdParam>) {
   return ok(
     await service.atualizarTicket(empresaObrigatoria(ctx), ctx.usuarioId, params.id, body),
+  );
+}
+
+export async function definirProjetoDoTicket({
+  body,
+  params,
+  ctx,
+}: Entrada<ProjetoDoTicketBody, undefined, IdParam>) {
+  return ok(
+    await service.definirProjetoDoTicket(
+      empresaObrigatoria(ctx),
+      params.id,
+      body.projetoId ?? null,
+    ),
   );
 }
 
