@@ -16,6 +16,7 @@ import {
   type EnviarParcelaWhatsappBody,
   type DividirParcelaBody,
   type IdParam,
+  type ObservacoesBody,
   type RedefinirParcelasBody,
   type ListarQuery,
   type ParcelaParam,
@@ -321,6 +322,22 @@ export async function abrirAnexo({
     ),
     302,
   );
+}
+
+export async function definirObservacoes({
+  body,
+  params,
+  ctx,
+}: Entrada<ObservacoesBody, undefined, IdParam>) {
+  const saida: z.input<typeof faturaSchema> =
+    await service.definirObservacoesDaFatura(
+      empresaObrigatoria(ctx),
+      ctx.usuarioId,
+      params.id,
+      body.observacoes?.trim() || null,
+    );
+
+  return ok(faturaSchema.parse(saida));
 }
 
 export async function cancelar({

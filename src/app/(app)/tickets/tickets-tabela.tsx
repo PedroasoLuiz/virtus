@@ -916,7 +916,7 @@ function CardTicket({
           {ticket.clienteNome ?? "—"}
         </div>
 
-        {ticket.centroCustoNome && (
+        {ticket.projetoNome && (
           <div
             style={{
               marginTop: 4,
@@ -928,7 +928,7 @@ function CardTicket({
               whiteSpace: "nowrap",
             }}
           >
-            {ticket.centroCustoNome}
+            {ticket.projetoNome}
           </div>
         )}
 

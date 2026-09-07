@@ -349,22 +349,36 @@ export async function atualizar(
  * Se um dia isso crescer a ponto de pesar, o corte natural e buscar os centros
  * sob demanda — o formato ja e o mesmo.
  */
-export type CentroDoCliente = {
-  id: number;
-  descricao: string;
-  enderecos: { id: number; resumo: string }[];
-};
+export type EnderecoDoCliente = { id: number; resumo: string };
+export type ProjetoDoCliente = { id: number; nome: string };
 
+/**
+ * O que o formulario precisa saber de cada cliente: onde ele fica e que obras
+ * ele tem.
+ *
+ * ⚠️ O CENTRO DE CUSTO saiu daqui, e com ele a cascata de tres niveis.
+ *
+ * O endereco vinha pendurado no centro de custo (`clientesenderecos
+ * .fkCentroCusto`), e havia ate uma tabela `clientesxcentrocusto` ligando os
+ * dois. O efeito na tela era ter de escolher uma CATEGORIA CONTABIL — "Geral",
+ * "Consultoria" — so para chegar ao endereco. Centro de custo e plano de contas
+ * e responde "quanto gastei com salarios"; nao tem o que dizer sobre onde o
+ * cliente fica nem sobre que obra e aquela.
+ *
+ * Agora sao dois ramos irmaos, cada um respondendo o que sabe: enderecos e
+ * projetos, os dois direto do cliente.
+ */
 export type ClienteComCentros = {
   id: number;
   nome: string;
-  centros: CentroDoCliente[];
+  enderecos: EnderecoDoCliente[];
+  projetos: ProjetoDoCliente[];
 };
 
 export async function arvoreDeClientes(empresaId: number): Promise<ClienteComCentros[]> {
   const supabase = await serverClient();
 
-  const [pessoas, vinculos, enderecos] = await Promise.all([
+  const [pessoas, enderecos, projetos] = await Promise.all([
     supabase
       .from("clientes")
       .select("id, razao, nomefantasia")
@@ -373,44 +387,41 @@ export async function arvoreDeClientes(empresaId: number): Promise<ClienteComCen
       .eq("ativo", true)
       .order("razao"),
     supabase
-      .from("clientesxcentrocusto")
-      .select('"fkCliente", "fkCentroCusto", centrodecusto(descricao)'),
-    supabase
       .from("clientesenderecos")
-      .select('id, "fkCliente", "fkCentroCusto", logradouro, numero, bairro, cidade, uf'),
+      .select('id, "fkCliente", logradouro, numero, bairro, cidade, uf'),
+    /* So obra viva: projeto cancelado ou encerrado nao recebe ticket novo, e
+       oferece-lo num select e convidar ao erro que so aparece no salvar. */
+    supabase
+      .from("projetos")
+      .select('id, nome, "fkCliente"')
+      .eq("fkEmpresa", empresaId)
+      .eq("ativo", true)
+      .eq("cancelado", false)
+      .order("nome"),
   ]);
 
   if (pessoas.error) throw pessoas.error;
-  if (vinculos.error) throw vinculos.error;
   if (enderecos.error) throw enderecos.error;
+  if (projetos.error) throw projetos.error;
 
-  return (pessoas.data ?? []).map((c) => {
-    const centros = (vinculos.data ?? []).filter((v) => v.fkCliente === c.id);
-
-    return {
-      id: c.id,
-      nome: primeiroPreenchido(c.nomefantasia, c.razao) ?? `Cliente ${c.id}`,
-      centros: centros.map((v) => {
-        const nome = (v.centrodecusto as unknown as { descricao: string | null } | null)?.descricao;
-
-        return {
-          id: v.fkCentroCusto,
-          descricao: (nome ?? "").trim() || "Sem nome",
-          enderecos: (enderecos.data ?? [])
-            .filter((e) => e.fkCliente === c.id && e.fkCentroCusto === v.fkCentroCusto)
-            .map((e) => ({
-              id: e.id,
-              resumo:
-                [
-                  [e.logradouro, e.numero].filter(Boolean).join(", "),
-                  e.bairro,
-                  [e.cidade, e.uf].filter(Boolean).join("/"),
-                ]
-                  .filter(Boolean)
-                  .join(" · ") || `Endereço ${e.id}`,
-            })),
-        };
-      }),
-    };
-  });
+  return (pessoas.data ?? []).map((c) => ({
+    id: c.id,
+    nome: primeiroPreenchido(c.nomefantasia, c.razao) ?? `Cliente ${c.id}`,
+    enderecos: (enderecos.data ?? [])
+      .filter((e) => e.fkCliente === c.id)
+      .map((e) => ({
+        id: e.id,
+        resumo:
+          [
+            [e.logradouro, e.numero].filter(Boolean).join(", "),
+            e.bairro,
+            [e.cidade, e.uf].filter(Boolean).join("/"),
+          ]
+            .filter(Boolean)
+            .join(" · ") || `Endereço ${e.id}`,
+      })),
+    projetos: (projetos.data ?? [])
+      .filter((p) => p.fkCliente === c.id)
+      .map((p) => ({ id: p.id, nome: p.nome })),
+  }));
 }

@@ -61,7 +61,14 @@ export type TicketParaPDF = {
   clienteNome: string | null;
   clienteDoc: string | null;
   clienteEndereco: Endereco | null;
-  centroCustoNome: string | null;
+  /**
+   * A obra do ticket.
+   *
+   * ⚠️ Substituiu o centro de custo, que e categoria contabil e nao diz nada a
+   * quem recebe o documento. A obra diz: e por ela que o cliente reconhece o
+   * trabalho.
+   */
+  projetoNome: string | null;
   inicio: string | null;
   fim: string | null;
   descricao: string | null;

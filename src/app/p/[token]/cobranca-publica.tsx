@@ -61,7 +61,10 @@ export function CobrancaPublicaView({
           clienteNome: t.cliente.nome,
           clienteDoc: t.cliente.doc,
           clienteEndereco: null,
-          centroCustoNome: t.cliente.centroDeCusto,
+          /* ⚠️ Nulo por ora: a RPC publica `tickets_compartilhados` ainda
+             devolve o centro de custo e nao o projeto. Preferi a linha ausente
+             a imprimir uma categoria contabil no documento do cliente. */
+          projetoNome: null,
           inicio: t.inicio,
           fim: t.fim,
           descricao: t.descricao,

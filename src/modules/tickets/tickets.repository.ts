@@ -80,10 +80,20 @@ export async function listar(
 
   const linhas = data ?? [];
   const ids = linhas.map((l) => l.id);
-  const [totais, servicos] = await Promise.all([faturamentoDe(ids), qtdServicosDe(ids)]);
+  const [totais, servicos, obras] = await Promise.all([
+    faturamentoDe(ids),
+    qtdServicosDe(ids),
+    obrasDosTickets(ids),
+  ]);
 
   return {
-    itens: linhas.map((l) => paraDominio(l, totais.get(l.id), servicos.get(l.id))),
+    itens: linhas.map((l) =>
+      paraDominio(
+        { ...l, obra: obras.get(l.id) ?? null },
+        totais.get(l.id),
+        servicos.get(l.id),
+      ),
+    ),
     total: count ?? 0,
   };
 }
@@ -152,11 +162,12 @@ export async function buscarPorId(empresaId: number, id: number): Promise<Ticket
   if (error) throw error;
   if (!data) return null;
 
-  const [itens, totais, faturas, empresa] = await Promise.all([
+  const [itens, totais, faturas, empresa, obras] = await Promise.all([
     listarItens(id),
     faturamentoDe([id]),
     listarFaturas(id),
     dadosDaEmpresa(empresaId),
+    obrasDosTickets([id]),
   ]);
 
   const cliente = data.clientes as {
@@ -166,7 +177,11 @@ export async function buscarPorId(empresaId: number, id: number): Promise<Ticket
   const enderecos = cliente?.clientesenderecos ?? [];
 
   return {
-    ...paraDominio(data, totais.get(id), itens.length),
+    ...paraDominio(
+      { ...data, obra: obras.get(id) ?? null },
+      totais.get(id),
+      itens.length,
+    ),
     autoria: {
       criadoPor: await nomeDoUsuario(data.fkUserCriacao),
       criadoEm: data.created_at,
@@ -376,6 +391,9 @@ type Linha = {
   fkStatus: number | null;
   clientes?: unknown;
   coluna?: unknown;
+  /* Preenchido DEPOIS da consulta, por `obrasDosTickets` — nao vem do select.
+     Ver o comentario daquela funcao. */
+  obra?: { id: number; nome: string } | null;
 };
 
 function paraDominio(linha: Linha, f?: Faturamento, qtdServicos = 0): TicketResumo {
@@ -386,6 +404,8 @@ function paraDominio(linha: Linha, f?: Faturamento, qtdServicos = 0): TicketResu
   } | null;
   const status = linha.coluna as { descricao: string | null; chave: string | null } | null;
 
+  const obra = linha.obra ?? null;
+
   return {
     id: linha.id,
     // Ticket anterior a numeracao cai no proprio id — melhor um numero
@@ -394,8 +414,19 @@ function paraDominio(linha: Linha, f?: Faturamento, qtdServicos = 0): TicketResu
     titulo: linha.titulo ?? "",
     clienteId: linha.fkCliente,
     clienteNome: primeiroPreenchido(cliente?.nomefantasia, cliente?.razao),
-    centroCustoId: linha.fkCentroCusto,
-    centroCustoNome: cliente?.centrodecusto?.descricao ?? null,
+    /*
+     * ⚠️ A obra vem de `projetosordens`, e nao mais um centro de custo.
+     *
+     * O ticket pedia uma CATEGORIA CONTABIL — "Geral", "Consultoria" — so para
+     * chegar ao endereco, que estava pendurado nela. Categoria descreve
+     * lancamento; obra descreve trabalho, e e a obra que diz o que este ticket
+     * e.
+     *
+     * ⚠️ `fkCentroCusto` continua na coluna e nao se apaga: 154 tickets tem
+     * valor la, e e historico do que foi lancado. So deixou de ser pedido.
+     */
+    projetoId: obra?.id ?? null,
+    projetoNome: obra?.nome ?? null,
     enderecoId: linha.fkEndereco,
     statusId: linha.fkStatus,
     status: (status?.descricao ?? "").trim() || "—",
@@ -422,7 +453,14 @@ function paraDominio(linha: Linha, f?: Faturamento, qtdServicos = 0): TicketResu
  */
 export type CamposTicket = {
   clienteId?: number | null;
-  centroCustoId?: number | null;
+  /**
+   * A obra deste ticket.
+   *
+   * ⚠️ NAO e coluna de `ordensservico`: mora em `projetosordens`, e por isso
+   * `paraLinha` a ignora e quem grava e `definirProjetoDoTicket`. Um ticket tem
+   * no maximo uma obra, garantido por `UNIQUE (fkOrdem)`.
+   */
+  projetoId?: number | null;
   enderecoId?: number | null;
   titulo?: string | null;
   descricao?: string | null;
@@ -468,6 +506,11 @@ export async function criar(
     .single();
 
   if (error) throw error;
+
+  /* A obra e gravada DEPOIS, porque ela nao e coluna do ticket: precisa do id
+     que o insert acabou de devolver. */
+  await definirProjetoDoTicket(data.id, campos.projetoId);
+
   return data.id;
 }
 
@@ -490,13 +533,83 @@ export async function atualizar(
     .eq("id", id);
 
   if (error) throw error;
+
+  await definirProjetoDoTicket(id, campos.projetoId);
+}
+
+/**
+ * A obra de cada ticket, numa consulta so.
+ *
+ * ⚠️ Consulta PROPRIA, e nao um `projetosordens(projetos(...))` embutido no
+ * select. O embed depende de o PostgREST enxergar a relacao pelo cache de
+ * esquema, e aqui ele voltava vazio sem erro nenhum: o ticket chegava na tela
+ * com a obra em branco, e nao havia o que depurar porque nada falhava. Uma
+ * consulta explicita ou traz a linha ou estoura.
+ *
+ * Uma ida ao banco para a pagina inteira, e nao uma por ticket.
+ */
+async function obrasDosTickets(
+  ticketIds: number[],
+): Promise<Map<number, { id: number; nome: string }>> {
+  const mapa = new Map<number, { id: number; nome: string }>();
+  if (ticketIds.length === 0) return mapa;
+
+  const supabase = await serverClient();
+  const { data, error } = await supabase
+    .from("projetosordens")
+    .select('"fkOrdem", projetos!inner(id, nome)')
+    .in("fkOrdem", ticketIds);
+
+  if (error) throw error;
+
+  for (const l of data ?? []) {
+    const p = l.projetos as unknown as { id: number; nome: string } | null;
+    if (l.fkOrdem != null && p) mapa.set(l.fkOrdem, { id: p.id, nome: p.nome });
+  }
+  return mapa;
+}
+
+/**
+ * Liga o ticket a uma obra, ou solta ele de todas.
+ *
+ * ⚠️ Apaga e insere, e nao faz `upsert`. A tabela guarda a relacao, nao um
+ * atributo: "sem projeto" e a ausencia da linha, e nao uma linha com nulo. Um
+ * `upsert` deixaria orfa a linha antiga quando a obra muda.
+ *
+ * ⚠️ `undefined` nao mexe em nada. O drawer manda o formulario inteiro, mas
+ * outras chamadas mandam campos soltos — e um ticket editado so no titulo nao
+ * pode perder a obra por omissao.
+ */
+async function definirProjetoDoTicket(
+  ticketId: number,
+  projetoId: number | null | undefined,
+): Promise<void> {
+  if (projetoId === undefined) return;
+
+  const supabase = await serverClient();
+
+  const { error: erroAoSoltar } = await supabase
+    .from("projetosordens")
+    .delete()
+    .eq("fkOrdem", ticketId);
+
+  if (erroAoSoltar) throw erroAoSoltar;
+  if (projetoId == null) return;
+
+  const { error } = await supabase
+    .from("projetosordens")
+    .insert({ fkOrdem: ticketId, fkProjeto: projetoId });
+
+  if (error) throw error;
 }
 
 /** Monta so o que veio: enviar `undefined` apagaria coluna nao editada. */
 function paraLinha(c: CamposTicket): Record<string, unknown> {
   const linha: Record<string, unknown> = {};
   if (c.clienteId !== undefined) linha.fkCliente = c.clienteId;
-  if (c.centroCustoId !== undefined) linha.fkCentroCusto = c.centroCustoId;
+  /* `projetoId` NAO entra aqui: a obra mora em `projetosordens`, e quem a grava
+     e `definirProjetoDoTicket`. `fkCentroCusto` deixou de ser escrito — a
+     coluna fica, com o historico dos 154 tickets que a preencheram. */
   if (c.enderecoId !== undefined) linha.fkEndereco = c.enderecoId;
   if (c.titulo !== undefined) linha.titulo = c.titulo;
   if (c.descricao !== undefined) linha.descricao = c.descricao;

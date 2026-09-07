@@ -101,6 +101,20 @@ export const redefinirParcelasBodySchema = z.object({
     .max(360),
 });
 
+/**
+ * As observacoes da conta, sozinhas.
+ *
+ * ⚠️ Corpo PROPRIO, e nao um update geral da conta. Observacao e texto que se
+ * corrige a qualquer momento; competencia, tickets e parcelamento nao — eles ja
+ * geraram parcela, baixa e documento. Um endpoint que aceitasse tudo deixaria
+ * um erro de digitacao no texto a um campo de distancia de reescrever o acordo.
+ */
+export const observacoesBodySchema = z.object({
+  observacoes: textoLongoSchema.nullish(),
+});
+
+export type ObservacoesBody = z.infer<typeof observacoesBodySchema>;
+
 export const idParamSchema = z.object({ id: idSchema });
 
 export const ticketParamSchema = z.object({ id: idSchema, ticketId: idSchema });

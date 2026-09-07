@@ -24,6 +24,7 @@ import {
   tdNum,
   Th,
   Tr,
+  textareaStyle,
 } from "@/components/ui/kit";
 import { EditorDeParcelamento } from "@/components/financeiro/editor-de-parcelamento";
 import { TicketDrawer } from "../tickets/ticket-drawer";
@@ -194,6 +195,7 @@ function Conteudo({
           titulo: t.titulo,
           valor: t.valor,
           data: t.encerradoEm,
+          projetoNome: t.projetoNome,
         })),
         parcelas: fatura.parcelas.map((p) => ({
           numero: p.numero,
@@ -572,11 +574,21 @@ function Conteudo({
               />
             </Field>
 
-            {fatura.observacoes && (
-              <Field label="Observações">
-                <CampoBloqueado valor={fatura.observacoes} multilinha />
-              </Field>
-            )}
+            {/*
+              ⚠️ EDITÁVEL, inclusive em conta cancelada ou baixada.
+
+              Era `CampoBloqueado`, e o texto só podia ser escrito na criação —
+              justamente a hora em que menos se sabe o que houve com a conta.
+              Conta encerrada é a que mais precisa de explicação para quem for
+              ler depois: o dinheiro está fechado, a memória não.
+            */}
+            <Field label="Observações">
+              <Observacoes
+                faturaId={fatura.id}
+                inicial={fatura.observacoes}
+                aoSalvar={setFatura}
+              />
+            </Field>
           </div>
 
           {/*
@@ -627,6 +639,14 @@ function Conteudo({
               <TableArea minWidth={0}>
                 <TableHead>
                   <Th minWidth={70}>Código</Th>
+                  {/*
+                    ⚠️ Coluna própria, e não uma linha sob o código.
+
+                    A conta é de um cliente só, mas junta tickets de obras
+                    diferentes — e aqui é onde se confere qual valor é de qual.
+                    Como segunda linha ela se perderia no meio da tabela.
+                  */}
+                  <Th minWidth={140}>Projeto</Th>
                   <Th minWidth={110}>Encerrado</Th>
                   <Th align="right" minWidth={110}>
                     Valor
@@ -637,7 +657,7 @@ function Conteudo({
                 <tbody>
                   {fatura.tickets.length === 0 && (
                     <EmptyRow
-                      colSpan={4}
+                      colSpan={5}
                       message="Nenhum ticket vinculado a esta conta."
                     />
                   )}
@@ -646,6 +666,12 @@ function Conteudo({
                     <Tr key={t.ticketId}>
                       <Td style={{ fontVariantNumeric: "tabular-nums" }}>
                         {t.numero}
+                      </Td>
+
+                      <Td>
+                        {t.projetoNome ?? (
+                          <span style={{ color: "var(--text-disabled)" }}>—</span>
+                        )}
                       </Td>
 
                       <Td>
@@ -1100,6 +1126,73 @@ function Conteudo({
  */
 
 /**
+ * O campo de observações da conta.
+ *
+ * ⚠️ Salva ao SAIR do campo, e só quando o texto mudou. Botão próprio pediria
+ * um clique a mais para o gesto mais banal da tela, e salvar a cada tecla
+ * mandaria uma requisição por letra.
+ *
+ * ⚠️ O estado é local enquanto se digita e volta a vir do servidor ao salvar.
+ * Sem a cópia local, cada tecla dependeria da resposta da rede e o cursor
+ * pularia; sem a volta do servidor, um texto recusado continuaria na tela como
+ * se tivesse sido gravado.
+ */
+function Observacoes({
+  faturaId,
+  inicial,
+  aoSalvar,
+}: {
+  faturaId: number;
+  inicial: string | null;
+  aoSalvar: (f: Fatura) => void;
+}) {
+  const [texto, setTexto] = useState(inicial ?? "");
+  const [salvando, setSalvando] = useState(false);
+  const { avisar } = useAvisos();
+
+  async function salvar() {
+    const limpo = texto.trim();
+    if (limpo === (inicial ?? "").trim()) return;
+
+    setSalvando(true);
+    try {
+      const r = await fetch(`/api/v1/faturas/${faturaId}/observacoes`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ observacoes: limpo || null }),
+      });
+      const dados = await r.json().catch(() => null);
+
+      if (!r.ok) {
+        avisar(
+          "atencao",
+          dados?.error?.message ?? "Não foi possível salvar a observação",
+        );
+        /* Volta ao que estava: o campo não pode ficar mostrando um texto que o
+           servidor recusou. */
+        setTexto(inicial ?? "");
+        return;
+      }
+
+      aoSalvar(dados.data);
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <textarea
+      value={texto}
+      onChange={(e) => setTexto(e.target.value)}
+      onBlur={() => void salvar()}
+      disabled={salvando}
+      placeholder="O que alguém precisa saber ao reler esta conta"
+      style={{ ...textareaStyle, minHeight: 64 }}
+    />
+  );
+}
+
+/**
  * A marca de conciliado de uma parcela.
  *
  * ⚠️ Três estados, e não dois. "Ainda não recebida" não é o mesmo que "recebida e
@@ -1231,6 +1324,7 @@ function AcoesDaParcela({
           titulo: t.titulo,
           valor: t.valor,
           data: t.encerradoEm,
+          projetoNome: t.projetoNome,
         })),
         // As que sobram depois desta. Quem assina quer saber o que falta.
         emAberto: fatura.parcelas

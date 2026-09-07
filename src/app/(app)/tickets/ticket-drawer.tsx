@@ -103,14 +103,14 @@ type Autoria = {
 type Ticket = {
   id: number;
   numero: number;
-  centroCustoId: number | null;
+  projetoId: number | null;
   enderecoId: number | null;
   titulo: string;
   statusChave: string | null;
   autoria: Autoria;
   clienteId: number | null;
   clienteNome: string | null;
-  centroCustoNome: string | null;
+  projetoNome: string | null;
   status: string;
   cancelada: boolean;
   origem: string;
@@ -127,8 +127,21 @@ type Ticket = {
 };
 
 export type OpcaoEndereco = { id: number; resumo: string };
-export type OpcaoCentro = { id: number; descricao: string; enderecos: OpcaoEndereco[] };
-export type OpcaoCliente = { id: number; nome: string; centros: OpcaoCentro[] };
+export type OpcaoProjeto = { id: number; nome: string };
+
+/**
+ * ⚠️ Sem centro de custo, e sem cascata de tres niveis.
+ *
+ * O endereco vinha pendurado no centro de custo, e escolher onde o cliente fica
+ * exigia antes escolher uma CATEGORIA CONTABIL. Agora enderecos e projetos sao
+ * ramos irmaos do cliente, e cada um responde o que sabe.
+ */
+export type OpcaoCliente = {
+  id: number;
+  nome: string;
+  enderecos: OpcaoEndereco[];
+  projetos: OpcaoProjeto[];
+};
 export type OpcaoServico = { id: number; descricao: string; valor: number };
 
 const TOM_FATURA: Record<string, Tom> = {
@@ -200,20 +213,20 @@ export function TicketDrawer({
 /** Estado editavel. Espelha o corpo da API, nao a linha do banco. */
 type Form = {
   clienteId: string;
-  centroCustoId: string;
+  projetoId: string;
   enderecoId: string;
   descricao: string;
   itens: Item[];
 };
 
 function vazio(): Form {
-  return { clienteId: "", centroCustoId: "", enderecoId: "", descricao: "", itens: [] };
+  return { clienteId: "", projetoId: "", enderecoId: "", descricao: "", itens: [] };
 }
 
 function doTicket(t: Ticket): Form {
   return {
     clienteId: t.clienteId ? String(t.clienteId) : "",
-    centroCustoId: t.centroCustoId ? String(t.centroCustoId) : "",
+    projetoId: t.projetoId ? String(t.projetoId) : "",
     enderecoId: t.enderecoId ? String(t.enderecoId) : "",
     descricao: t.descricao ?? "",
     itens: t.itens,
@@ -275,45 +288,37 @@ function Conteudo({
   const set = <K extends keyof Form>(campo: K, valor: Form[K]) =>
     setForm((f) => ({ ...f, [campo]: valor }));
 
-  const centrosDoCliente = useMemo(
-    () => clientes.find((c) => String(c.id) === form.clienteId)?.centros ?? [],
+  const doCliente = useMemo(
+    () => clientes.find((c) => String(c.id) === form.clienteId) ?? null,
     [clientes, form.clienteId],
   );
 
-  const enderecosDoCentro = useMemo(
-    () => centrosDoCliente.find((c) => String(c.id) === form.centroCustoId)?.enderecos ?? [],
-    [centrosDoCliente, form.centroCustoId],
-  );
+  const enderecosDoCliente = doCliente?.enderecos ?? [];
+  const projetosDoCliente = doCliente?.projetos ?? [];
 
   /**
-   * Trocar de cliente limpa centro e endereço.
+   * Trocar de cliente limpa projeto e endereço.
    *
-   * Mantê-los seria deixar no formulário um centro que não pertence ao cliente
-   * novo — o banco recusaria só no Salvar, depois de tudo preenchido.
+   * Mantê-los seria deixar no formulário uma obra e um endereço que não são do
+   * cliente novo — o banco recusaria só no Salvar, depois de tudo preenchido.
+   *
+   * Com uma opção só, ela já vem escolhida: obrigar a abrir um select de item
+   * único é clique que não decide nada.
    */
   function escolherCliente(id: string) {
-    const centros = clientes.find((c) => String(c.id) === id)?.centros ?? [];
-    const unico = centros.length === 1 ? centros[0] : null;
-    const enderecoUnico = unico?.enderecos.length === 1 ? unico.enderecos[0] : null;
+    const escolhido = clientes.find((c) => String(c.id) === id) ?? null;
+    const enderecos = escolhido?.enderecos ?? [];
+    const projetos = escolhido?.projetos ?? [];
 
     setForm((f) => ({
       ...f,
       clienteId: id,
-      centroCustoId: unico ? String(unico.id) : "",
-      enderecoId: enderecoUnico ? String(enderecoUnico.id) : "",
+      enderecoId: enderecos.length === 1 ? String(enderecos[0].id) : "",
+      projetoId: projetos.length === 1 ? String(projetos[0].id) : "",
     }));
   }
 
-  function escolherCentro(id: string) {
-    const enderecos = centrosDoCliente.find((c) => String(c.id) === id)?.enderecos ?? [];
-    const unico = enderecos.length === 1 ? enderecos[0] : null;
 
-    setForm((f) => ({
-      ...f,
-      centroCustoId: id,
-      enderecoId: unico ? String(unico.id) : "",
-    }));
-  }
 
   // Enquanto edita, o total vem dos itens em tela — nao do que o servidor
   // devolveu. Senao o rodape mostraria o valor anterior ate salvar.
@@ -334,7 +339,10 @@ function Conteudo({
 
     const corpo = {
       clienteId: Number(form.clienteId),
-      centroCustoId: form.centroCustoId ? Number(form.centroCustoId) : null,
+      /* ⚠️ A obra e OPCIONAL. Ticket de manutencao avulsa nao pertence a obra
+         nenhuma, e exigir uma faria alguem criar um "Geral" — que e como o
+         centro de custo virou o que virou. */
+      projetoId: form.projetoId ? Number(form.projetoId) : null,
       enderecoId: form.enderecoId ? Number(form.enderecoId) : null,
       descricao: form.descricao.trim() || null,
       itens: form.itens.map((i) => ({
@@ -453,7 +461,6 @@ function Conteudo({
   const carregandoDetalhe = !criando && !completo && !erro;
   const podeSalvar =
     form.clienteId !== "" &&
-    form.centroCustoId !== "" &&
     form.itens.every((i) => i.quantidade > 0);
 
   return (
@@ -570,29 +577,39 @@ function Conteudo({
               )}
             </Field>
 
-            {/* Cascata: o centro pertence ao cliente, o endereço ao centro.
-                Cada nível só oferece o que existe no nível de cima — e quando
-                há uma opção só, ela já vem escolhida: obrigar a abrir um select
-                de item único é clique que não decide nada. */}
-            <Field label="Centro de custo" required={editando}>
+            {/*
+              ⚠️ Projeto, e nao centro de custo.
+
+              Aqui se escolhia uma categoria contabil para so entao chegar ao
+              endereco. A obra e o que descreve um ticket; a categoria descreve
+              um lancamento, e as duas nao se substituem — a mesma obra tem
+              despesa de salario e receita de servico.
+
+              ⚠️ E NAO e obrigatorio, ao contrario do centro que estava aqui.
+            */}
+            <Field label="Projeto" hint="A que projeto este ticket pertence. Um ticket pertence a um só.">
               {editando ? (
                 <select
-                  value={form.centroCustoId}
-                  onChange={(e) => escolherCentro(e.target.value)}
+                  value={form.projetoId}
+                  onChange={(e) => set("projetoId", e.target.value)}
                   disabled={!form.clienteId}
                   style={selectStyle}
                 >
                   <option value="">
-                    {form.clienteId ? "Selecione…" : "Escolha o cliente primeiro"}
+                    {form.clienteId
+                      ? projetosDoCliente.length > 0
+                        ? "Sem projeto"
+                        : "Este cliente não tem projeto"
+                      : "Escolha o cliente primeiro"}
                   </option>
-                  {centrosDoCliente.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.descricao}
+                  {projetosDoCliente.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.nome}
                     </option>
                   ))}
                 </select>
               ) : (
-                <CampoBloqueado valor={ticket?.centroCustoNome ?? "—"} />
+                <CampoBloqueado valor={ticket?.projetoNome ?? "—"} />
               )}
             </Field>
 
@@ -601,17 +618,17 @@ function Conteudo({
                 <select
                   value={form.enderecoId}
                   onChange={(e) => set("enderecoId", e.target.value)}
-                  disabled={!form.centroCustoId}
+                  disabled={!form.clienteId}
                   style={selectStyle}
                 >
                   <option value="">
-                    {form.centroCustoId
-                      ? enderecosDoCentro.length === 0
-                        ? "Nenhum endereço neste centro de custo"
+                    {form.clienteId
+                      ? enderecosDoCliente.length === 0
+                        ? "Este cliente não tem endereço cadastrado"
                         : "Selecione…"
-                      : "Escolha o centro de custo primeiro"}
+                      : "Escolha o cliente primeiro"}
                   </option>
-                  {enderecosDoCentro.map((e) => (
+                  {enderecosDoCliente.map((e) => (
                     <option key={e.id} value={e.id}>
                       {e.resumo}
                     </option>

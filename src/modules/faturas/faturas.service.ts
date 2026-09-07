@@ -248,6 +248,25 @@ export async function alterarStatus(
  * Cancelamento e coluna propria no banco, nao um status — por isso operacao
  * separada da transicao de status.
  */
+/**
+ * Corrige as observacoes da conta.
+ *
+ * ⚠️ Vale mesmo em conta CANCELADA ou BAIXADA. Observacao e o que explica o
+ * registro a quem for ler depois — e conta encerrada e justamente a que mais
+ * precisa de explicacao. Travar o texto junto com os valores confundia as duas
+ * coisas: o dinheiro esta fechado, a memoria nao.
+ */
+export async function definirObservacoesDaFatura(
+  empresaId: number,
+  usuarioId: string | null,
+  faturaId: number,
+  observacoes: string | null,
+): Promise<Fatura> {
+  await obterFatura(empresaId, faturaId);
+  await repo.definirObservacoes(empresaId, faturaId, usuarioId, observacoes);
+  return obterFatura(empresaId, faturaId);
+}
+
 export async function cancelarFatura(
   empresaId: number,
   usuarioId: string,

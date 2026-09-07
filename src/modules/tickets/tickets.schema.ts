@@ -41,6 +41,20 @@ export const itemTicketBodySchema = z.object({
 
 export const criarTicketBodySchema = z.object({
   clienteId: idSchema,
+  /**
+   * A obra a que o ticket pertence, e onde o trabalho aconteceu.
+   *
+   * ⚠️ Declarados aqui porque o Zod DESCARTA o que nao conhece. `enderecoId` ja
+   * era enviado pela tela e nunca chegava ao banco — sumia calado neste `parse`,
+   * e o ticket salvava sem endereco sem ninguem ver erro. E a quarta vez que
+   * esta armadilha aparece no projeto.
+   *
+   * ⚠️ Os dois sao OPCIONAIS. Ticket de manutencao avulsa nao pertence a obra
+   * nenhuma, e exigir uma faria alguem criar um "Geral" — que e exatamente como
+   * o centro de custo virou o que virou.
+   */
+  projetoId: idSchema.nullish(),
+  enderecoId: idSchema.nullish(),
   titulo: textoCurtoSchema.max(120).nullish(),
   descricao: textoLongoSchema.nullish(),
   // Sem `local`: vem do endereco do cliente.

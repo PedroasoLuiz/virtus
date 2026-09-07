@@ -118,8 +118,8 @@ export type TicketResumo = {
   clienteId: number | null;
   clienteNome: string | null;
   /** Centro de custo escolhido no ticket, entre os do cliente. */
-  centroCustoId: number | null;
-  centroCustoNome: string | null;
+  projetoId: number | null;
+  projetoNome: string | null;
   /** Endereco de execucao, entre os do centro escolhido. */
   enderecoId: number | null;
   /** Coluna do quadro. Nulo em ticket antigo que nunca passou pelo fluxo novo. */

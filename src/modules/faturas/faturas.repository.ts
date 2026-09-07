@@ -369,6 +369,61 @@ export async function buscarPorId(
 }
 
 /**
+ * Reescreve so as observacoes da conta.
+ *
+ * ⚠️ `update` com UM campo. O cadastro inteiro nao passa por aqui: quem corrige
+ * um texto nao pode, pelo mesmo caminho, mexer em competencia ou parcelamento.
+ */
+export async function definirObservacoes(
+  empresaId: number,
+  id: number,
+  usuarioId: string | null,
+  observacoes: string | null,
+): Promise<void> {
+  const supabase = await serverClient();
+
+  const { error } = await supabase
+    .from("faturas")
+    .update({
+      observacoes,
+      fkUserModificacao: usuarioId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("fkEmpresa", empresaId)
+    .eq("id", id);
+
+  if (error) throw error;
+}
+
+/**
+ * A obra de cada ticket, numa consulta so.
+ *
+ * ⚠️ Uma ida ao banco para a conta inteira. Uma conta junta varios tickets, e
+ * cada um pode ser de uma obra diferente — e por isso que a CONTA nao tem obra
+ * propria: escolher uma delas seria escolher errado.
+ */
+async function obrasDosTickets(
+  ticketIds: number[],
+): Promise<Map<number, { id: number; nome: string }>> {
+  const mapa = new Map<number, { id: number; nome: string }>();
+  if (ticketIds.length === 0) return mapa;
+
+  const supabase = await serverClient();
+  const { data, error } = await supabase
+    .from("projetosordens")
+    .select('"fkOrdem", projetos!inner(id, nome)')
+    .in("fkOrdem", ticketIds);
+
+  if (error) throw error;
+
+  for (const l of data ?? []) {
+    const p = l.projetos as unknown as { id: number; nome: string } | null;
+    if (l.fkOrdem != null && p) mapa.set(l.fkOrdem, { id: p.id, nome: p.nome });
+  }
+  return mapa;
+}
+
+/**
  * Onde o cliente fica.
  *
  * ⚠️ So no DETALHE da conta, e nunca na listagem. E uma consulta por conta
@@ -469,13 +524,23 @@ export async function listarTickets(
   const { data, error } = await supabase
     .from("faturasorigens")
     .select(
-      "valor, fkOrdem, ordensservico!inner(id, idtenant, titulo, status, datafim, clientes(razao, nomefantasia), projetosordens(projetos(id, nome)))",
+      "valor, fkOrdem, ordensservico!inner(id, idtenant, titulo, status, datafim, clientes(razao, nomefantasia))",
     )
     .eq("fkFatura", faturaId)
     .eq("origem", "TICKET")
     .order("fkOrdem", { ascending: true });
 
   if (error) throw error;
+
+  /*
+   * ⚠️ A obra vem de consulta PROPRIA, e nao de um `projetosordens(...)`
+   * embutido no select acima. O embed depende de o PostgREST enxergar a relacao
+   * pelo cache de esquema, e aqui ele voltava vazio SEM ERRO: o documento saia
+   * sem a obra e nao havia o que depurar, porque nada falhava.
+   */
+  const obras = await obrasDosTickets(
+    (data ?? []).map((l) => l.fkOrdem).filter((id): id is number => id != null),
+  );
 
   return (data ?? []).map((l) => {
     const t = l.ordensservico as unknown as {
@@ -485,9 +550,6 @@ export async function listarTickets(
       status: string | null;
       datafim: string | null;
       clientes: { razao: string | null; nomefantasia: string | null } | null;
-      /* Vem como ARRAY porque o PostgREST nao sabe que ha `unique` do outro
-         lado. E no maximo um: `projetosordens` tem UNIQUE (fkOrdem). */
-      projetosordens: { projetos: { id: number; nome: string } | null }[] | null;
     };
 
     return {
@@ -501,8 +563,8 @@ export async function listarTickets(
         t.clientes?.razao,
       ),
       encerradoEm: t.datafim ? (t.datafim.slice(0, 10) as DataISO) : null,
-      projetoId: t.projetosordens?.[0]?.projetos?.id ?? null,
-      projetoNome: t.projetosordens?.[0]?.projetos?.nome ?? null,
+      projetoId: obras.get(t.id)?.id ?? null,
+      projetoNome: obras.get(t.id)?.nome ?? null,
     };
   });
 }

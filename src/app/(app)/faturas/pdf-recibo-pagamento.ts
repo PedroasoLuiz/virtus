@@ -74,6 +74,8 @@ export type ReciboParaPDF = {
     titulo: string;
     valor: number;
     data: string | null;
+    /** A obra daquele ticket. Uma conta junta varios, de obras diferentes. */
+    projetoNome: string | null;
   }[];
   /** As que ainda faltam. Quem assina o recibo quer saber o que sobra. */
   emAberto: { numero: number; vencimento: string | null; total: number }[];
@@ -321,7 +323,7 @@ export async function imprimirReciboDePagamento(
   );
   doc.text("1 / 1", direita, altura - MARGEM, { align: "right" });
 
-  doc.save(`recibo-${r.numeroConta}-${r.parcela}.pdf`);
+  abrirParaImprimir(doc);
 }
 
 /**
@@ -348,6 +350,8 @@ export type ResumoParaPDF = {
     titulo: string;
     valor: number;
     data: string | null;
+    /** A obra daquele ticket. Uma conta junta varios, de obras diferentes. */
+    projetoNome: string | null;
   }[];
   parcelas: {
     numero: number;
@@ -654,7 +658,7 @@ export async function imprimirResumoDaConta(
   });
 
   rodape(doc, altura, direita, emitidoPor);
-  doc.save(`conta-${r.numeroConta}.pdf`);
+  abrirParaImprimir(doc);
 }
 
 /**
@@ -670,15 +674,25 @@ function composicao(
     titulo: string;
     valor: number;
     data: string | null;
+    projetoNome: string | null;
   }[],
   y: number,
   direita: number,
 ): number {
   let atual = secao(doc, "COMPOSIÇÃO", y, MARGEM, direita);
 
+  /*
+   * ⚠️ A obra fica AQUI, na linha do ticket, e nao so no cabecalho.
+   *
+   * Uma conta junta varios tickets, e cada um pode ser de uma obra diferente —
+   * o cliente e um so, as obras nao. Listada no topo, a informacao diz "esta
+   * cobranca toca estas obras"; na linha, ela diz qual valor e de qual, que e o
+   * que se confere.
+   */
   atual = colunas(doc, atual, direita, [
     { texto: "TICKET", x: MARGEM },
-    { texto: "DATA", x: MARGEM + 62 },
+    { texto: "PROJETO", x: MARGEM + 52 },
+    { texto: "DATA", x: direita - 90, direita: true },
     { texto: "VALOR", x: direita, direita: true },
   ]);
 
@@ -690,11 +704,15 @@ function composicao(
       .setTextColor(...TINTA);
     doc.text(String(t.numero), MARGEM, atual);
 
+    /* O projeto em tinta cheia: e nome proprio, e nao metadado da linha. */
+    doc.text(t.projetoNome ?? "—", MARGEM + 52, atual, { maxWidth: 200 });
+
     doc.setTextColor(...CINZA);
     doc.text(
       t.data ? paraFormatoBR(t.data.slice(0, 10) as DataISO) : "—",
-      MARGEM + 62,
+      direita - 90,
       atual,
+      { align: "right" },
     );
 
     doc.setTextColor(...TINTA);
@@ -821,6 +839,19 @@ function identificacaoDoCliente(
   }
 
   return y + 26 + linhas.length * 11;
+}
+
+/**
+ * Abre o PDF numa aba, com a caixa de impressao ja chamada.
+ *
+ * ⚠️ Abrir, e nao salvar. E o mesmo gesto do PDF do ticket, e os dois sao
+ * documentos que se olham antes de decidir o que fazer com eles — conferir na
+ * tela, imprimir, ou mandar. Salvar obrigava a sair do sistema, achar o arquivo
+ * e abrir para so entao ver se estava certo.
+ */
+function abrirParaImprimir(doc: jsPDF): void {
+  doc.autoPrint();
+  window.open(doc.output("bloburl"), "_blank");
 }
 
 /**

@@ -185,7 +185,7 @@ function partes(doc: jsPDF, t: TicketParaPDF, y: number, largura: number): numbe
     t.clienteDoc ? formatarDoc(t.clienteDoc) : "",
     [e?.logradouro, e?.numero, e?.complemento].filter(Boolean).join(", "),
     [e?.bairro, [e?.cidade, e?.uf].filter(Boolean).join("/"), e?.cep].filter(Boolean).join(" · "),
-    t.centroCustoNome ? `Centro de custo: ${t.centroCustoNome}` : "",
+    t.projetoNome ? `Projeto: ${t.projetoNome}` : "",
   ].filter(Boolean);
 
   coluna(doc, "DE", emitente, MARGEM, y, meio - MARGEM - 20);
