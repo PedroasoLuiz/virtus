@@ -375,9 +375,21 @@ export type ResumoParaPDF = {
   emitente: ReciboParaPDF["emitente"];
 };
 
+/**
+ * O que fazer com o PDF depois de montado.
+ *
+ * ⚠️ Sao duas intencoes DIFERENTES. "imprimir" abre numa aba com a caixa de
+ * impressao chamada — e o botao de dentro do sistema, onde a pessoa quer papel
+ * na hora. "baixar" salva o arquivo, e e o que a pagina publica precisa: o
+ * cliente clicou em "Baixar a conta em PDF", e receber uma aba com um blob no
+ * lugar de um arquivo na pasta e o contrario do que o botao prometeu.
+ */
+export type DestinoDoPdf = "imprimir" | "baixar";
+
 export async function imprimirResumoDaConta(
   r: ResumoParaPDF,
   emitidoPor: string,
+  destino: DestinoDoPdf = "imprimir",
 ): Promise<void> {
   const doc = new jsPDF({ unit: "pt", format: "a4" });
   const largura = doc.internal.pageSize.getWidth();
@@ -398,7 +410,10 @@ export async function imprimirResumoDaConta(
     .setFont("helvetica", "bold")
     .setFontSize(20)
     .setTextColor(...AZUL);
-  doc.text("CONTA A RECEBER", MARGEM, y);
+  /* ⚠️ "FATURA", e nao "CONTA A RECEBER". O segundo e o nome do modulo aqui
+     dentro — quem recebe o documento nao tem conta a receber nenhuma, tem uma
+     fatura para pagar. Dentro do sistema o nome continua o de sempre. */
+  doc.text("FATURA", MARGEM, y);
 
   y += 20;
   doc
@@ -658,6 +673,14 @@ export async function imprimirResumoDaConta(
   });
 
   rodape(doc, altura, direita, emitidoPor);
+
+  if (destino === "baixar") {
+    // `save` escreve direto na pasta de downloads, com nome de gente. Sem ele o
+    // arquivo chegaria como um identificador aleatorio de blob.
+    doc.save(`conta-${r.numeroConta}.pdf`);
+    return;
+  }
+
   abrirParaImprimir(doc);
 }
 

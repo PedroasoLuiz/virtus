@@ -83,8 +83,18 @@ function emCentavos(c: CobrancaCompartilhada): CobrancaCompartilhada {
         total: doBanco(i.total),
         despesas: i.despesas.map((d) => ({ ...d, valor: doBanco(d.valor) })),
       })),
-      cobranca: t.cobranca.map((p) => ({ ...p, valor: doBanco(p.valor) })),
     })),
+    conta: {
+      ...c.conta,
+      total: doBanco(c.conta.total),
+      tickets: c.conta.tickets.map((t) => ({ ...t, valor: doBanco(t.valor) })),
+      parcelas: c.conta.parcelas.map((p) => ({
+        ...p,
+        total: doBanco(p.total),
+        desconto: doBanco(p.desconto),
+        recebido: doBanco(p.recebido),
+      })),
+    },
   };
 }
 
