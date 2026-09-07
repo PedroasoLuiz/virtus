@@ -325,6 +325,77 @@ function Vencimento({
   );
 }
 
+/**
+ * A data do cartao do quadro, com o rotulo dizendo o que ela e.
+ *
+ * ⚠️ Uma data sozinha nao diz nada. "12/09" num cartao de conta a receber tanto
+ * pode ser quando ela vence quanto quando ela foi paga, e as duas pedem coisas
+ * opostas de quem le. O rotulo troca junto com a situacao: enquanto ha o que
+ * receber e "Vence em", e depois da baixa vira "Pago em".
+ *
+ * ⚠️ Fonte MENOR que o resto do cartao. Ela e referencia, e nao o assunto — o
+ * assunto e o cliente, logo abaixo, e no mesmo corpo as duas competiam.
+ *
+ * ⚠️ Quitada sem data de pagamento, mostra o vencimento e continua dizendo
+ * "Vence em". E o caso das baixas antigas sem rateio: inventar "Pago em" com a
+ * data de vencimento seria afirmar um dia em que o dinheiro pode nao ter
+ * entrado.
+ *
+ * ⚠️ E o rotulo conjuga no PASSADO quando a data ja passou: "Venceu em". Dizer
+ * "vence" sobre um dia que ficou para tras faz a linha ler como previsao, e
+ * quem passa o olho no quadro nao registra que aquilo ja e atraso. O vermelho
+ * sozinho nao dava conta — ele grita, mas nao explica.
+ *
+ * ⚠️ Parcialmente paga atrasada e AMARELA, e nao vermelha. O atraso continua
+ * existindo — antes ele sumia aqui, sob a ideia de que baixa parcial encerrava
+ * o assunto —, mas nao e o mesmo atraso de quem nao pagou nada: alguem ja
+ * pagou parte e a conversa esta em andamento. E a mesma escala da etiqueta de
+ * situacao ao lado, e as duas leem juntas em vez de se contradizer.
+ */
+function DataDoCartao({
+  vencimento,
+  recebimento,
+  situacao,
+}: {
+  vencimento: DataISO | null;
+  recebimento: DataISO | null;
+  situacao: SituacaoFatura;
+}) {
+  const quitada = situacao === "PAGA" || situacao === "BAIXADA";
+  const mostraPagamento = quitada && recebimento != null;
+  const data = mostraPagamento ? recebimento : vencimento;
+
+  if (!data) return <span style={{ color: "var(--text-tertiary)" }}>—</span>;
+
+  const atrasado = !quitada && data < hoje();
+  const corDoAtraso =
+    situacao === "PARC. PAGA" ? "var(--warning)" : "var(--danger-text)";
+
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "baseline",
+        gap: 4,
+        fontSize: "var(--text-xs)",
+        fontVariantNumeric: "tabular-nums",
+      }}
+    >
+      <span style={{ color: atrasado ? corDoAtraso : "var(--text-tertiary)" }}>
+        {mostraPagamento ? "Pago em:" : atrasado ? "Venceu em:" : "Vence em:"}
+      </span>
+      <span
+        style={{
+          color: atrasado ? corDoAtraso : "var(--text-secondary)",
+          fontWeight: atrasado ? "var(--fw-medium)" : 400,
+        }}
+      >
+        {paraFormatoBR(data)}
+      </span>
+    </span>
+  );
+}
+
 function periodo(de: DataISO | null, ate: DataISO | null): string {
   if (!de) return "—";
   return ate && ate !== de
@@ -441,7 +512,11 @@ function QuadroDeContas({
             {/* Vencimento no topo, onde antes ficava o periodo: o que decide o
                 que fazer com a conta hoje e a data em que ela vence, nao a
                 competencia que ela apura. */}
-            <Vencimento data={f.proximoVencimento} situacao={f.situacao} />
+            <DataDoCartao
+              vencimento={f.proximoVencimento}
+              recebimento={f.ultimoRecebimento}
+              situacao={f.situacao}
+            />
           </div>
 
           <div

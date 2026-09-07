@@ -246,7 +246,9 @@
      Ela envolve o cartao branco por 2px e da lugar a faixa de rodape, que fica
      FORA do branco. Tingida de azul ela virava um segundo bloco de cor em
      cima do fundo que ja e azul — dois tons proximos brigando. */
-  --kanban-card-moldura: rgba(248, 248, 247, 0.75);
+  /* Frio, e nao morno: em #f8f8f7 o azul era o canal mais baixo, e a moldura
+     puxava para o sepia ao lado da marca. Agora o azul lidera por tres pontos. */
+  --kanban-card-moldura: rgba(244, 246, 250, 0.78);
   --kanban-coluna-w: 274px;
   --kanban-gap: 12px;
 
