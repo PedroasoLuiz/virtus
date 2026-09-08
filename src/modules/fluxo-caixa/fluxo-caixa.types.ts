@@ -23,7 +23,19 @@ export type ContaNaProjecao = {
 export type MesProjetado = {
   /** Primeiro dia do mes, para a tela formatar como quiser. */
   mes: DataISO;
+  /** O que falta receber, com multa e juros do que ja venceu. */
   entrada: Centavos;
+  /**
+   * Quanto de `entrada` e multa e juros por atraso.
+   *
+   * ⚠️ Esta DENTRO de `entrada`, e nao ao lado. E um recorte para a observacao
+   * embaixo da tabela poder dize-lo; somar os dois contaria o acrescimo duas
+   * vezes.
+   *
+   * ⚠️ Vem da politica de cobranca do cliente, e nao de uma taxa fixa. Quem nao
+   * tem politica cadastrada nao ganha acrescimo nenhum.
+   */
+  entradaAcrescimo: Centavos;
   /** Titulos mais cartao: o que sai no mes, somado. */
   saida: Centavos;
   /** A parte que vem de conta a pagar — inclui fatura de cartao ja fechada. */

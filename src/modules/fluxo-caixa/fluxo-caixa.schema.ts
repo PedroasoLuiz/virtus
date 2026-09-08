@@ -60,6 +60,7 @@ const contaSchema = z.object({
 const mesSchema = z.object({
   mes: z.string(),
   entrada: z.number().int(),
+  entradaAcrescimo: z.number().int(),
   saida: z.number().int(),
   saidaTitulo: z.number().int(),
   saidaCartao: z.number().int(),

@@ -13,9 +13,9 @@ import type { ProjecaoDeCaixa } from "@/modules/fluxo-caixa/fluxo-caixa.types";
  * titulo a esquerda e logo a direita, identificacao em pares rotulo/valor, regua
  * fina no lugar de linha pintada, rodape com quem emitiu e a paginacao.
  *
- * ⚠️ DEITADO (`landscape`), como a DRE. Sao sete colunas, e a do mes leva nome
- * por extenso: em retrato, "Setembro · vencido" nao cabia sem encolher a fonte a
- * ponto de o resto da grade ficar ilegivel junto.
+ * ⚠️ DEITADO (`landscape`), como a DRE. A coluna do mes leva nome por extenso, e
+ * em retrato "Setembro · vencido" nao cabia sem encolher a fonte a ponto de o
+ * resto da grade ficar ilegivel junto.
  *
  * ⚠️ A ORDEM DE EXIBICAO e a do legado, por pedido do Pedro: primeiro as contas
  * com o saldo de cada uma e o total, depois a previsao mes a mes com o mes por
@@ -149,13 +149,14 @@ async function cabecalho(
 }
 
 /**
- * Empresa, horizonte e o ponto de partida.
+ * Quem emitiu e sobre que periodo.
  *
- * ⚠️ O SALDO DE HOJE entra aqui, e nao so no fim da tabela de contas.
+ * ⚠️ O SALDO DE HOJE saiu daqui: ele ja e o total da tabela de contas, logo
+ * abaixo. Repetido, virava o mesmo numero duas vezes na mesma dobra — e o de
+ * baixo e o util, porque vem acompanhado das contas que o formam.
  *
- * Ele e o que faz a coluna de acumulado significar alguma coisa: sem saber de
- * onde a soma parte, "saldo acumulado" e um numero sem origem. Repetido no total
- * das contas logo abaixo, ele confere — e conferir e a razao deste papel.
+ * ⚠️ O CNPJ entra porque isto e documento: sai da empresa e pode ir para o
+ * contador ou para o banco, e a razao social sozinha nao identifica quem emitiu.
  */
 function identificacao(
   doc: jsPDF,
@@ -168,13 +169,13 @@ function identificacao(
 
   const pares: [string, string][] = [
     ["Empresa", empresa.razaoSocial ?? "—"],
+    ["CNPJ", empresa.cnpj ?? "—"],
     [
       "Período",
       primeiro && ultimo
         ? `${mesEAno(primeiro)} a ${mesEAno(ultimo)}`
         : "Nada em aberto",
     ],
-    ["Saldo hoje", formatarSemSimbolo(projecao.saldoHoje)],
   ];
 
   /*
@@ -340,18 +341,11 @@ function previsao(
     m.mes.slice(0, 4),
     celula(m.entrada),
     celula(m.saida),
-    /*
-      ⚠️ O cartao e um RECORTE de "Saidas", e nao uma parcela a mais. Ele ja esta
-      dentro do numero da coluna anterior; esta so diz quanto dele veio de fatura
-      ainda aberta. Somar as duas seria contar o cartao duas vezes — e era
-      justamente por nao dar para conferir isso que a coluna nasceu.
-    */
-    celula(m.saidaCartao),
     celula(m.resultado),
     formatarSemSimbolo(m.saldo),
   ]);
 
-  const COL_MES = larguraUtil - COL_ANO - COL_NUM * 5;
+  const COL_MES = larguraUtil - COL_ANO - COL_NUM * 4;
 
   autoTable(doc, {
     startY: y + 8,
@@ -364,7 +358,6 @@ function previsao(
         { content: "Ano", styles: { halign: "left" as const } },
         "Entradas",
         "Saídas",
-        "do qual cartão",
         "Diferença",
         "Saldo acumulado",
       ],
@@ -395,11 +388,8 @@ function previsao(
       1: { cellWidth: COL_ANO, halign: "left" },
       2: { cellWidth: COL_NUM },
       3: { cellWidth: COL_NUM },
-      /* Cinza e sem peso: e um recorte da coluna ao lado, e nao um valor que se
-         soma na linha. Com o mesmo peso, o olho o incluiria na conta. */
-      4: { cellWidth: COL_NUM, textColor: CINZA },
-      5: { cellWidth: COL_NUM },
-      6: { cellWidth: COL_NUM, fontStyle: "bold" },
+      4: { cellWidth: COL_NUM },
+      5: { cellWidth: COL_NUM, fontStyle: "bold" },
     },
     /*
      * ⚠️ A cor sai do SINAL da propria celula, e so nas duas colunas que medem
@@ -415,17 +405,76 @@ function previsao(
          previsao — e a linha precisa dizer isso antes do numero. */
       if (rotulo.endsWith("· vencido")) cell.styles.textColor = CINZA;
 
-      /* A coluna do cartao nunca ganha cor: ela nao mede resultado, e verde ou
-         vermelho ali sugeririam um sinal que ela nao tem. */
-      if (column.index !== 5 && column.index !== 6) return;
+      if (column.index !== 4 && column.index !== 5) return;
 
       const texto = conteudo(cell.raw);
       if (texto === "—") return;
 
       if (texto.startsWith("-")) cell.styles.textColor = VERMELHO;
-      else if (column.index === 5) cell.styles.textColor = CREDITO;
+      else if (column.index === 4) cell.styles.textColor = CREDITO;
     },
   });
+
+  observacoes(doc, projecao);
+}
+
+/**
+ * O que a grade nao consegue dizer sozinha, embaixo dela.
+ *
+ * ⚠️ O CARTAO virou uma frase, e nao uma coluna.
+ *
+ * Ele chegou a ter uma coluna "do qual cartao", para poder ser conferido, e ela
+ * produziu justamente o erro de leitura que devia evitar: ao lado de "Saidas", o
+ * numero lia como uma segunda saida, e a conta da diferenca parava de fechar aos
+ * olhos de quem conferia. Ele esta DENTRO de Saidas, e uma frase diz isso melhor
+ * do que qualquer coluna.
+ *
+ * ⚠️ Depois da tabela, e nao antes. Quem le o papel vem para os numeros; a
+ * ressalva e o que se procura quando um deles nao fecha.
+ */
+function observacoes(doc: jsPDF, projecao: ProjecaoDeCaixa): void {
+  const fim = (doc as unknown as { lastAutoTable: { finalY: number } })
+    .lastAutoTable.finalY;
+
+  const linhas = [
+    "As saídas já consideram as faturas de cartão de crédito ainda abertas, cada uma no mês em que vence. A fatura já fechada entra como conta a pagar.",
+  ];
+
+  /* Quanto do previsto e acrescimo por atraso. Esta DENTRO das entradas: a
+     projecao soma o que falta receber mais o que o atraso cobra. */
+  const acrescimo = projecao.meses.reduce((t, m) => t + m.entradaAcrescimo, 0);
+
+  if (acrescimo > 0) {
+    linhas.push(
+      "As entradas dos meses vencidos incluem " +
+        formatarSemSimbolo(acrescimo as Centavos) +
+        " de multa e juros calculados até a data de emissão, pela política de cobrança de cada cliente. As parcelas entram pelo saldo que falta receber, e não pelo valor combinado.",
+    );
+  }
+
+  if (projecao.meses.some((m) => m.vencido)) {
+    linhas.push(
+      "Os meses marcados como vencidos reúnem parcelas com vencimento passado e ainda em aberto. Nessas linhas o saldo acumulado parte do saldo de hoje, e por isso não representa o saldo daquele mês.",
+    );
+  }
+
+  const largura = doc.internal.pageSize.getWidth() - MARGEM * 2;
+  let y = fim + 16;
+
+  doc
+    .setFont("helvetica", "normal")
+    .setFontSize(7.5)
+    .setTextColor(...CINZA);
+
+  for (const texto of linhas) {
+    /* Quebra pela largura util: sem isso a frase sai da folha pela direita e o
+       fim dela simplesmente nao existe no papel. */
+    for (const linha of doc.splitTextToSize(texto, largura) as string[]) {
+      doc.text(linha, MARGEM, y);
+      y += 10;
+    }
+    y += 3;
+  }
 }
 
 // ── Peças ───────────────────────────────────────────────────────────────────

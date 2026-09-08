@@ -126,6 +126,16 @@ export function FluxoTela({
     lista.reduce((t, m) => t + m[campo], 0) as Centavos;
 
   const entradaPrevista = soma(aVencer, "entrada");
+  /*
+   * Quanto do previsto e multa e juros de atraso.
+   *
+   * ⚠️ Esta DENTRO das entradas, e nao ao lado. Somar os dois contaria o
+   * acrescimo duas vezes — foi o que a coluna do cartao ensinou.
+   */
+  const acrescimoTotal = meses.reduce(
+    (t, m) => t + m.entradaAcrescimo,
+    0,
+  ) as Centavos;
   const saidaPrevista = soma(aVencer, "saida");
   const saldoFinal = (meses.at(-1)?.saldo ?? projecao.saldoHoje) as Centavos;
 
@@ -326,18 +336,6 @@ export function FluxoTela({
               <Th align="right" minWidth={120}>
                 Saídas
               </Th>
-              {/*
-                ⚠️ O cartão ganha COLUNA PRÓPRIA, e sai de dentro de "Saídas".
-
-                Ele sempre esteve no total e era invisível: não havia como olhar
-                a tabela e saber se a fatura do mês tinha entrado. Numa projeção,
-                o que não se confere não se confia. A coluna é um recorte de
-                "Saídas", e não uma parcela a mais — por isso vem em cinza, e
-                depois dela.
-              */}
-              <Th align="right" minWidth={110}>
-                do qual cartão
-              </Th>
               <Th align="right" minWidth={120}>
                 Resultado
               </Th>
@@ -348,7 +346,7 @@ export function FluxoTela({
 
             <tbody>
               {vazia && (
-                <EmptyRow colSpan={6} message="Nada em aberto para projetar." />
+                <EmptyRow colSpan={5} message="Nada em aberto para projetar." />
               )}
 
               {meses.map((m) => (
@@ -388,25 +386,6 @@ export function FluxoTela({
                   <Td
                     style={{
                       textAlign: "right",
-                      color: "var(--text-tertiary)",
-                      ...NUM,
-                    }}
-                  >
-                    {/* `Td` não aceita `title`; a dica mora no texto, que é
-                        quem o mouse encontra de qualquer forma. */}
-                    <span
-                      title={
-                        m.saidaCartao > 0
-                          ? "Fatura de cartão ainda aberta, no mês do vencimento dela. A fatura já fechada virou conta a pagar e conta em Saídas."
-                          : undefined
-                      }
-                    >
-                      {celula(m.saidaCartao)}
-                    </span>
-                  </Td>
-                  <Td
-                    style={{
-                      textAlign: "right",
                       color: corDoResultado(m.resultado),
                       ...NUM,
                     }}
@@ -432,6 +411,51 @@ export function FluxoTela({
           </TableArea>
         </TableFrame>
 
+        {/*
+          ⚠️ O cartão vira OBSERVAÇÃO, e não coluna.
+
+          Ele tinha ganhado uma coluna "do qual cartão" para poder ser conferido,
+          e ela produziu justamente o erro de leitura que devia evitar: ao lado de
+          "Saídas", o número lia como uma segunda saída, e a conta da diferença
+          parava de fechar aos olhos de quem olhava. O cartão está dentro de
+          Saídas, e uma frase diz isso melhor que uma coluna.
+        */}
+        <p
+          style={{
+            fontSize: "var(--text-xs)",
+            color: "var(--text-tertiary)",
+            lineHeight: "var(--lh-normal)",
+          }}
+        >
+          As saídas já consideram as faturas de cartão de crédito ainda abertas,
+          cada uma no mês em que vence. A fatura já fechada entra como conta a
+          pagar.
+        </p>
+
+        {/*
+          ⚠️ As parcelas entram pelo que FALTA, e não pelo valor de face.
+
+          A parcela paga pela metade continua aberta pela outra metade, e era o
+          face que a projeção somava: a Federal aparecia com 13.500 quando a
+          própria conta a receber dizia 7.550,66. É esta linha que explica a
+          diferença entre o valor combinado e o que ainda entra.
+        */}
+        {acrescimoTotal > 0 && (
+          <p
+            style={{
+              fontSize: "var(--text-xs)",
+              color: "var(--text-tertiary)",
+              lineHeight: "var(--lh-normal)",
+            }}
+          >
+            As entradas dos meses vencidos incluem{" "}
+            <strong>{formatarSemSimbolo(acrescimoTotal)}</strong> de multa e
+            juros calculados até hoje, pela política de cobrança de cada cliente.
+            As parcelas entram pelo saldo que falta receber, e não pelo valor
+            combinado.
+          </p>
+        )}
+
         {vencidos.length > 0 && (
           <p
             style={{
@@ -444,8 +468,9 @@ export function FluxoTela({
             <strong>{formatarSemSimbolo(soma(vencidos, "entrada"))}</strong> a
             receber e{" "}
             <strong>{formatarSemSimbolo(soma(vencidos, "saida"))}</strong> a
-            pagar, tudo com vencimento passado e ainda em aberto. Eles não entram
-            nos cartões acima.
+            pagar, tudo com vencimento passado e ainda em aberto. Neles o saldo
+            projetado parte do saldo de hoje, e por isso não é o saldo daquele
+            mês. Eles não entram nos cartões acima.
           </p>
         )}
       </div>

@@ -44,6 +44,7 @@ const respostaSchema = z.object({
     z.object({
       mes: z.string(),
       entrada: z.coerce.number(),
+      entrada_acrescimo: z.coerce.number(),
       saida: z.coerce.number(),
       saida_titulo: z.coerce.number(),
       saida_cartao: z.coerce.number(),
@@ -90,6 +91,7 @@ export async function projecao(
     meses: bruto.meses.map((m) => ({
       mes: m.mes.slice(0, 10) as DataISO,
       entrada: deReais(m.entrada),
+      entradaAcrescimo: deReais(m.entrada_acrescimo),
       saida: deReais(m.saida),
       saidaTitulo: deReais(m.saida_titulo),
       saidaCartao: deReais(m.saida_cartao),
