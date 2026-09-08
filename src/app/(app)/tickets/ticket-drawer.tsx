@@ -10,13 +10,28 @@ import {
   CampoNumerico,
   CampoQuantidade,
   Field,
+  AcoesDaLinha,
+  BotaoDeAcao,
+  EmptyRow,
+  GrupoDeCampos,
   PanelTabs,
+  SkeletonRows,
+  TableArea,
+  TableHead,
+  Td,
+  Th,
+  Tr,
+  inputDeCelula,
   inputStyle,
   selectStyle,
+  tdNum,
 } from "@/components/ui/kit";
-import { Historico } from "@/components/ui/historico";
+import { Icon } from "@/components/layout/icones";
+import { ItemDoMenu, MenuDeLinha } from "@/components/ui/menu-de-linha";
+import { ItemDeHistorico, MenuDoCabecalho } from "@/components/ui/menu-de-cabecalho";
+import { useAvisos } from "@/components/ui/avisos";
 import { formatarSemSimbolo, type Centavos } from "@/shared/utils/money";
-import { periodoEmMeses, type DataISO } from "@/shared/utils/datas";
+import { paraFormatoBR, periodoEmMeses, type DataISO } from "@/shared/utils/datas";
 
 
 /**
@@ -237,6 +252,7 @@ function Conteudo({
   onClose: () => void;
 }) {
   const router = useRouter();
+  const { avisar, confirmar } = useAvisos();
   const criando = ticketId == null;
 
   // Comeca com o que a listagem sabe; o fetch substitui pelo completo.
@@ -246,10 +262,9 @@ function Conteudo({
   const [completo, setCompleto] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [aba, setAba] = useState(ABA_SERVICOS);
-  const [editando, setEditando] = useState(criando);
+
   const [form, setForm] = useState<Form>(vazio);
   const [salvando, setSalvando] = useState(false);
-  const [salvandoNota, setSalvandoNota] = useState(false);
   const [salvandoProjeto, setSalvandoProjeto] = useState(false);
 
   useEffect(() => {
@@ -296,12 +311,25 @@ function Conteudo({
     const enderecos = escolhido?.enderecos ?? [];
     const projetos = escolhido?.projetos ?? [];
 
-    setForm((f) => ({
-      ...f,
-      clienteId: id,
-      enderecoId: enderecos.length === 1 ? String(enderecos[0].id) : "",
-      projetoId: projetos.length === 1 ? String(projetos[0].id) : "",
-    }));
+    const enderecoId = enderecos.length === 1 ? String(enderecos[0].id) : "";
+    const projetoId = projetos.length === 1 ? String(projetos[0].id) : "";
+    const anterior = form;
+
+    setForm((f) => ({ ...f, clienteId: id, enderecoId, projetoId }));
+
+    /* Os três num PATCH só: trocar de cliente sem soltar endereço e obra
+       deixaria o ticket apontando para o endereço de outra empresa, e o banco
+       recusaria — mas só na próxima gravação, longe do gesto que causou. */
+    if (!criando && id) {
+      void salvarParcial(
+        {
+          clienteId: Number(id),
+          enderecoId: enderecoId ? Number(enderecoId) : null,
+          projetoId: projetoId ? Number(projetoId) : null,
+        },
+        () => setForm(anterior),
+      );
+    }
   }
 
 
@@ -356,24 +384,30 @@ function Conteudo({
         // `details` traz o campo que o Zod recusou; so "Dados invalidos"
         // obrigaria o usuario a adivinhar qual.
         const detalhe = dados?.error?.details?.[0];
-        setErro(
+        avisar(
+          "erro",
+          criando ? "Não foi possível criar o ticket" : "Não foi possível salvar",
           detalhe
             ? `${detalhe.campo}: ${detalhe.mensagem}`
-            : (dados?.error?.message ?? "Não foi possível salvar."),
+            : (dados?.error?.message ?? undefined),
         );
         return;
       }
 
       router.refresh();
+
       if (criando) {
+        /* ⚠️ O aviso sai DEPOIS de fechar, e sobrevive a isso: ele vive no
+           provider, e nao no drawer. Dentro dele, sumiria junto. */
         onClose();
+        avisar("sucesso", `Ticket ${dados.data.numero} criado`, dados.data.clienteNome ?? undefined);
         return;
       }
+
       setTicket(dados.data);
       setForm(doTicket(dados.data));
-      setEditando(false);
     } catch {
-      setErro("Falha de conexão. Tente novamente.");
+      avisar("erro", "Falha de conexão", "Tente novamente.");
     } finally {
       setSalvando(false);
     }
@@ -414,7 +448,7 @@ function Conteudo({
       const dados = await r.json().catch(() => null);
 
       if (!r.ok) {
-        setErro(dados?.error?.message ?? "Não foi possível salvar o projeto.");
+        avisar("erro", "Não foi possível salvar o projeto", dados?.error?.message);
         set("projetoId", anterior);
         return;
       }
@@ -422,41 +456,128 @@ function Conteudo({
       setTicket(dados.data);
       router.refresh();
     } catch {
-      setErro("Falha de conexão ao salvar o projeto.");
+      avisar("erro", "Falha de conexão", "O projeto não foi salvo.");
       set("projetoId", anterior);
     } finally {
       setSalvandoProjeto(false);
     }
   }
 
-  async function salvarDescricao() {
-    if (criando || ticket == null) return;
-    const texto = form.descricao.trim();
-    if (texto === (ticket.descricao ?? "").trim()) return;
+  /**
+   * Grava um punhado de campos, sem passar por modo de edicao nenhum.
+   *
+   * ⚠️ O drawer deixou de ter "Editar". Ele existia para juntar as alteracoes e
+   * mandar tudo de uma vez, mas os campos que mais se mexem — descricao e obra —
+   * ja gravavam sozinhos, e o serviço passou a se editar num drawer proprio. O
+   * que sobrava era um botao que trancava a tela para depois destrancar.
+   *
+   * ⚠️ Manda SO o que mudou. O PATCH aceita o cadastro inteiro; enviar o resto
+   * junto gravaria campo que o usuario nem abriu.
+   *
+   * ⚠️ E devolve o estado anterior quando o servidor recusa. Sem isso a tela
+   * ficaria mostrando uma escolha que o banco nao aceitou, e so um F5 revelaria.
+   */
+  async function salvarParcial(
+    patch: Record<string, unknown>,
+    aoFalhar: () => void,
+  ): Promise<boolean> {
+    if (criando || ticket == null) return false;
 
-    setSalvandoNota(true);
+    setSalvando(true);
+    setErro(null);
+
     try {
       const r = await fetch(`/api/v1/tickets/${ticketId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ descricao: texto || null }),
+        body: JSON.stringify(patch),
       });
       const dados = await r.json().catch(() => null);
 
       if (!r.ok) {
-        setErro(dados?.error?.message ?? "Não foi possível salvar a descrição.");
-        setForm((f) => ({ ...f, descricao: ticket.descricao ?? "" }));
-        return;
+        const detalhe = dados?.error?.details?.[0];
+        avisar(
+          "erro",
+          "Não foi possível salvar",
+          detalhe
+            ? `${detalhe.campo}: ${detalhe.mensagem}`
+            : (dados?.error?.message ?? undefined),
+        );
+        aoFalhar();
+        return false;
       }
 
       setTicket(dados.data);
       router.refresh();
+      return true;
     } catch {
-      setErro("Falha de conexão ao salvar a descrição.");
+      avisar("erro", "Falha de conexão", "A alteração não foi salva.");
+      aoFalhar();
+      return false;
     } finally {
-      setSalvandoNota(false);
+      setSalvando(false);
     }
   }
+
+  /**
+   * Os serviços ficam PENDENTES, e só gravam no "Salvar alterações".
+   *
+   * ⚠️ Eles são a exceção ao resto do drawer, que grava sozinho — e a diferença
+   * é o que o campo significa. Cliente, local, obra e descrição são
+   * classificação e texto: errar e corrigir custa outro clique. Serviço é
+   * dinheiro, e é ele que forma o total que vira cobrança.
+   *
+   * Gravando na hora, abrir um serviço só para ver como ficaria já alterava o
+   * ticket — e não havia nada a desfazer, porque o gesto de olhar e o de gravar
+   * eram o mesmo. Agora a tabela mostra o resultado e a gravação espera um sim.
+   */
+  const [pendente, setPendente] = useState(false);
+
+  /** Tudo que espera o check: serviços e descrição. */
+  function mexerNoRascunho<K extends keyof Form>(campo: K, valor: Form[K]) {
+    set(campo, valor);
+    if (!criando) setPendente(true);
+  }
+
+  function salvarPendentes() {
+    void salvarParcial(
+      {
+        descricao: form.descricao.trim() || null,
+        itens: form.itens.map((i) => ({
+          servicoId: i.servicoId,
+          descricao: i.descricao,
+          data: i.data,
+          quantidade: i.quantidade,
+          unidade: i.unidade,
+          valorUnitario: i.valorUnitario,
+          desconto: i.desconto,
+          acrescimo: i.acrescimo,
+          despesas: i.despesas.map((d) => ({ descricao: d.descricao, valor: d.valor })),
+        })),
+      },
+      // Sem rollback: falhando, o que o usuario digitou continua na tela para
+      // ele corrigir. Descartar e o botao ao lado.
+      () => {},
+    ).then((gravou) => {
+      if (!gravou) return;
+      setPendente(false);
+      avisar("sucesso", "Alterações salvas");
+    });
+  }
+
+  /** Volta serviços e descrição ao que está gravado. */
+  function descartarPendentes() {
+    if (ticket) {
+      const gravado = doTicket(ticket);
+      setForm((f) => ({ ...f, itens: gravado.itens, descricao: gravado.descricao }));
+    }
+    setPendente(false);
+    setErro(null);
+  }
+
+  /** Ha rascunho por gravar: o cabecalho vira as duas acoes e esconde o resto. */
+  const emEdicao = criando || pendente;
+
 
   /**
    * Ter faturamento NAO tranca a edicao.
@@ -476,12 +597,70 @@ function Conteudo({
   /**
    * Encerrado e ponto final: faturado por inteiro e recebido por inteiro.
    *
-   * O drawer nem oferece "Editar" — barrar so no Salvar faria o usuario
-   * preencher para depois descobrir que nao podia. A descricao tambem trava:
-   * ela grava sozinha no blur, e sem isso um clique acidental no campo viraria
-   * erro de API.
+   * Nada aqui aceita gesto: nem os campos, nem o menu do serviço. Barrar so no
+   * Salvar faria o usuario preencher para depois descobrir que nao podia.
+   *
+   * A obra e a excecao, e tem rota propria — ver `salvarProjeto`.
    */
   const encerrado = ticket?.statusChave === "ENCERRADA";
+
+  /**
+   * Onde os campos aceitam gesto.
+   *
+   * ⚠️ Nao existe mais modo de edicao. Havia um "Editar" que trancava a tela
+   * para depois destrancar: ele existia para juntar alteracoes e mandar tudo de
+   * uma vez, mas descricao e obra ja gravavam sozinhas, e o serviço passou a se
+   * editar num drawer proprio. O que sobrava era um clique antes de todo gesto.
+   *
+   * Cada campo grava no proprio `onChange`. O unico rascunho que ainda existe e
+   * o da CRIACAO, que ainda nao tem registro no banco para gravar em cima — e e
+   * so ele que tem rodape com Criar e Cancelar.
+   */
+  const podeMexer = !somenteLeitura && !encerrado;
+
+  /*
+   * As duas travas das ações destrutivas, e elas são DIFERENTES.
+   *
+   * `temConta` barra a exclusão: a conta guarda o valor que saiu daqui, e sem o
+   * ticket a composição dela aponta para um registro que não existe.
+   *
+   * `temBaixa` barra o cancelamento, que é mais permissivo de propósito: conta
+   * gerada e não recebida ainda pode ser desfeita, e é justamente aí que
+   * cancelar serve. O que não volta atrás é dinheiro que entrou.
+   */
+  const temConta = (ticket?.faturas.length ?? 0) > 0;
+  const temBaixa = (ticket?.faturas ?? []).some((f) => f.pago > 0);
+
+  async function cancelarTicket() {
+    const r = await fetch(`/api/v1/tickets/${ticketId}/cancelar`, { method: "POST" });
+    const dados = await r.json().catch(() => null);
+
+    if (!r.ok) {
+      avisar("erro", dados?.error?.message ?? "Não foi possível cancelar o ticket");
+      return;
+    }
+
+    setTicket(dados.data);
+    router.refresh();
+    avisar("sucesso", `Ticket ${ticket?.numero ?? ""} cancelado`.trim(), "Ele saiu das listagens do dia a dia e as origens foram liberadas.");
+  }
+
+  async function excluirTicket() {
+    const r = await fetch(`/api/v1/tickets/${ticketId}`, { method: "DELETE" });
+
+    if (!r.ok) {
+      const dados = await r.json().catch(() => null);
+      avisar("erro", dados?.error?.message ?? "Não foi possível excluir o ticket");
+      return;
+    }
+
+    // Fecha antes de atualizar: o drawer aponta para um ticket que não existe
+    // mais, e recarregar com ele aberto daria 404 na tela.
+    const numero = ticket?.numero;
+    onClose();
+    router.refresh();
+    avisar("sucesso", `Ticket ${numero ?? ""} excluído`.trim());
+  }
 
   const carregando = !criando && !ticket && !erro;
   const carregandoDetalhe = !criando && !completo && !erro;
@@ -495,10 +674,19 @@ function Conteudo({
       onClose={onClose}
       title={criando ? "Novo ticket" : ticket ? `Ticket ${ticket.numero}` : "Ticket"}
       headerExtra={
-        // `completo`, nao `ticket`: o drawer nasce com o resumo da listagem, e
-        // ele nao traz emitente, endereco nem autoria. Imprimir nesse momento
-        // estourava em `t.empresa.logo` — o botao existia antes do dado.
-        completo && ticket && (
+        /*
+         * `completo`, nao `ticket`: o drawer nasce com o resumo da listagem, e
+         * ele nao traz emitente, endereco nem autoria. Imprimir nesse momento
+         * estourava em `t.empresa.logo` — o botao existia antes do dado.
+         *
+         * ⚠️ E TUDO some em edicao. Imprimir, cancelar, excluir e o historico
+         * falam do ticket como ele esta gravado; com alteracoes por salvar na
+         * tela, imprimir sairia com o valor antigo e excluir levaria junto o que
+         * estava sendo escrito. Editando, as unicas saidas sao salvar e desistir.
+         */
+        /* ⚠️ Some com alteracao pendente. Ver `Rodape`: naquele momento o
+           cabecalho tem duas acoes e nao pode ter mais nada. */
+        completo && ticket && !emEdicao && (
           <div style={{ display: "flex", gap: 6 }}>
             <BotaoDeCabecalho
               rotulo="Imprimir"
@@ -508,50 +696,150 @@ function Conteudo({
               <path d="M6 18H4a1 1 0 01-1-1v-5a2 2 0 012-2h14a2 2 0 012 2v5a1 1 0 01-1 1h-2" />
               <rect x="6" y="14" width="12" height="7" rx="1" />
             </BotaoDeCabecalho>
-            {/* A ficha e a mesma da tarefa do projeto — ver components/ui/historico. */}
-            <Historico
-              marcos={[
-                {
-                  rotulo: "Criado",
-                  quem: ticket.autoria.criadoPor,
-                  quando: ticket.autoria.criadoEm,
-                },
-                {
-                  rotulo: "Última alteração",
-                  quem: ticket.autoria.editadoPor,
-                  quando: ticket.autoria.editadoEm,
-                },
-              ]}
-            />
+
+            {/*
+              ⚠️ Cancelar, excluir e historico num MENU, e nao tres botoes.
+
+              O cabecalho tinha cinco alvos de 28 pixels lado a lado — imprimir,
+              cancelar, excluir, historico e fechar —, e dois deles destrutivos
+              encostados no X. Numa barra assim o gesto de fechar fica a um
+              pixel do gesto de apagar.
+
+              Ficam de fora os dois que se usam sem pensar: imprimir, que e o
+              motivo mais comum de abrir o ticket, e fechar, que precisa estar
+              sempre no mesmo lugar.
+
+              ⚠️ O historico entra como CONTEUDO do menu, e nao como item que
+              abre outro popover. Ele ja era um cartao flutuante proprio; dentro
+              do menu viraria popover sobre popover, e o de dentro morreria junto
+              com o de fora ao clicar.
+            */}
+            <MenuDoCabecalho>
+              {(fechar) => (
+                <>
+                  <ItemDeHistorico autoria={ticket.autoria} />
+
+                  {!ticket.cancelada && !somenteLeitura && (
+                    <ItemDoMenu
+                      rotulo="Cancelar ticket"
+                      desabilitado={temBaixa}
+                      motivo={
+                        temBaixa
+                          ? "Ticket com recebimento na conta não é cancelado; estorne a baixa antes"
+                          : undefined
+                      }
+                      icone={
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                        >
+                          {/* Circulo cortado: proibido, e nao um X, que aqui
+                              significaria fechar o drawer. */}
+                          <circle cx="12" cy="12" r="9" />
+                          <path d="M5.6 5.6l12.8 12.8" />
+                        </svg>
+                      }
+                      onClick={() => {
+                        fechar();
+                        confirmar(
+                          `Cancelar o ticket ${ticket.numero}?`,
+                          "Cancelar ticket",
+                          cancelarTicket,
+                          "Ele para de ser cobrável e sai das listagens do dia a dia. As tarefas voltam a poder ser faturadas e o vínculo com o projeto sai. O histórico fica.",
+                        );
+                      }}
+                    />
+                  )}
+
+                  {!somenteLeitura && (
+                    <ItemDoMenu
+                      rotulo="Excluir ticket"
+                      perigo
+                      desabilitado={temConta}
+                      motivo={
+                        temConta
+                          ? "Ticket que já gerou conta a receber não é excluído, é cancelado"
+                          : undefined
+                      }
+                      icone={
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M3 6h18" />
+                          <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
+                          <path d="M19 6l-1 14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1L5 6" />
+                          <path d="M10 11v6M14 11v6" />
+                        </svg>
+                      }
+                      onClick={() => {
+                        fechar();
+                        confirmar(
+                          `Excluir o ticket ${ticket.numero}?`,
+                          "Excluir",
+                          excluirTicket,
+                          "Serviços, despesas e o vínculo com o projeto vão junto. As tarefas que viraram itens voltam a poder ser faturadas.",
+                        );
+                      }}
+                    />
+                  )}
+                </>
+              )}
+            </MenuDoCabecalho>
           </div>
         )
       }
       acoes={
         <Rodape
-          editando={editando}
           criando={criando}
+          pendente={pendente}
           salvando={salvando}
           podeSalvar={podeSalvar}
-          podeEditar={!somenteLeitura && completo && !encerrado}
-          onEditar={() => setEditando(true)}
-          onCancelar={() => {
-            if (criando) return onClose();
-            if (ticket) setForm(doTicket(ticket));
-            setEditando(false);
-            setErro(null);
-          }}
-          onSalvar={salvar}
+          onSalvar={criando ? salvar : salvarPendentes}
         />
       }
+      /*
+       * ⚠️ Com alteracao pendente o X DESCARTA, em vez de fechar.
+       *
+       * Fechando, o que foi mexido e nao gravado sumiria sem aviso — e o X e o
+       * botao que a mao acerta sem olhar. Ele fica no mesmo pixel e troca de
+       * significado: as duas saidas daquele momento sao gravar e descartar, e
+       * sao as duas unicas coisas no cabecalho.
+       */
+      fecharPersonalizado={
+        emEdicao
+          ? {
+              rotulo: criando ? "Descartar e fechar" : "Descartar alterações",
+              onClick: criando ? onClose : descartarPendentes,
+            }
+          : undefined
+      }
     >
-      {erro && (
-        /*
-          O `Alert` do kit, e nao uma caixa escrita aqui. A que existia
-          pintava o TEXTO de `--danger-text` sobre `--danger-bg`, e o
-          proprio kit avisa que essa combinacao tem menos contraste que o
-          preto do resto da pagina. La quem carrega a gravidade e o icone
-          e o cartao.
-        */
+      {/*
+        ⚠️ Falha de gravacao NAO vira faixa aqui dentro.
+
+        Ela virava um `Alert` no topo do drawer, e isso tem dois problemas: em
+        formulario rolado a faixa nasce fora da vista, e ela empurra o conteudo
+        para baixo — quem estava lendo um campo perde o lugar no exato momento em
+        que precisa de atencao.
+
+        Vai para a notificacao do sistema, que e onde todo o resto do sistema
+        avisa. O `erro` de CARREGAMENTO continua aqui embaixo: aquele nao e um
+        recado passageiro, e a tela nao tem o que mostrar sem ele.
+      */}
+
+      {erro && !ticket && !criando && (
         <div style={{ marginBottom: 12 }}>
           <Alert variant="danger" title={erro} />
         </div>
@@ -577,8 +865,10 @@ function Conteudo({
       {(ticket || criando) && (
         <>
           <div style={{ display: "flex", flexDirection: "column", gap: 3, marginBottom: 18 }}>
-            <Field label="Cliente" required={editando && !faturado}>
-              {editando && !faturado ? (
+            {/* Faturado trava o cliente: ja existe conta a receber emitida no
+                nome dele, e trocar aqui deixaria a cobranca no nome errado. */}
+            <Field label="Cliente" required={criando}>
+              {podeMexer && !faturado ? (
                 <select
                   value={form.clienteId}
                   onChange={(e) => escolherCliente(e.target.value)}
@@ -600,6 +890,41 @@ function Conteudo({
                       : undefined
                   }
                 />
+              )}
+            </Field>
+
+            <Field label="Local">
+              {podeMexer ? (
+                <select
+                  value={form.enderecoId}
+                  onChange={(e) => {
+                    const anterior = form.enderecoId;
+                    set("enderecoId", e.target.value);
+                    if (!criando) {
+                      void salvarParcial(
+                        { enderecoId: e.target.value ? Number(e.target.value) : null },
+                        () => set("enderecoId", anterior),
+                      );
+                    }
+                  }}
+                  disabled={!form.clienteId}
+                  style={selectStyle}
+                >
+                  <option value="">
+                    {form.clienteId
+                      ? enderecosDoCliente.length === 0
+                        ? "Este cliente não tem endereço cadastrado"
+                        : "Selecione…"
+                      : "Escolha o cliente primeiro"}
+                  </option>
+                  {enderecosDoCliente.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.resumo}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <CampoBloqueado valor={ticket?.local || "—"} />
               )}
             </Field>
 
@@ -625,7 +950,7 @@ function Conteudo({
               <select
                 value={form.projetoId}
                 onChange={(e) =>
-                  editando ? set("projetoId", e.target.value) : salvarProjeto(e.target.value)
+                  criando ? set("projetoId", e.target.value) : salvarProjeto(e.target.value)
                 }
                 disabled={!form.clienteId || salvandoProjeto}
                 style={selectStyle}
@@ -645,37 +970,11 @@ function Conteudo({
               </select>
             </Field>
 
-            <Field label="Local">
-              {editando ? (
-                <select
-                  value={form.enderecoId}
-                  onChange={(e) => set("enderecoId", e.target.value)}
-                  disabled={!form.clienteId}
-                  style={selectStyle}
-                >
-                  <option value="">
-                    {form.clienteId
-                      ? enderecosDoCliente.length === 0
-                        ? "Este cliente não tem endereço cadastrado"
-                        : "Selecione…"
-                      : "Escolha o cliente primeiro"}
-                  </option>
-                  {enderecosDoCliente.map((e) => (
-                    <option key={e.id} value={e.id}>
-                      {e.resumo}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <CampoBloqueado valor={ticket?.local || "—"} />
-              )}
-            </Field>
-
             <Field label="Período">
               <CampoBloqueado
                 titulo="Vem das datas dos serviços"
                 valor={
-                  (editando ? periodoEmTela : periodoEmMeses(ticket?.inicio ?? null, ticket?.fim ?? null)) ??
+                  (criando ? periodoEmTela : periodoEmMeses(ticket?.inicio ?? null, ticket?.fim ?? null)) ??
                   "—"
                 }
               />
@@ -710,8 +1009,26 @@ function Conteudo({
               />
             </Field>
 
+            {/*
+              ⚠️ O total sobe para os campos, ao lado da conta.
+
+              Ele e a resposta mais procurada do ticket — quanto isto vale — e
+              estava atras de um clique na aba Financeiro. La ele continua, como
+              ULTIMA linha de uma conta que se le de cima para baixo (serviços,
+              desconto, acrescimo, despesas, total): ali ele fecha a aritmetica,
+              aqui ele e o numero em si.
+            */}
+            <Field label="Total do ticket">
+              <CampoBloqueado
+                valor={formatarSemSimbolo(
+                  (criando ? totalEmTela : (ticket?.total ?? 0)) as Centavos,
+                )}
+                titulo="Soma dos serviços, com ajustes e despesas"
+              />
+            </Field>
+
             {/* Sempre editavel, mesmo fora do modo de edicao. */}
-            <Field label="Descrição" hint={salvandoNota ? "Salvando…" : undefined}>
+            <Field label="Descrição">
               {encerrado ? (
                 <CampoBloqueado
                   valor={ticket?.descricao || "—"}
@@ -721,8 +1038,11 @@ function Conteudo({
               ) : (
                 <textarea
                   value={form.descricao}
-                  onChange={(e) => set("descricao", e.target.value)}
-                  onBlur={editando ? undefined : salvarDescricao}
+                  /* ⚠️ Cai no check, e nao mais no blur. Gravando ao sair do
+                     campo, clicar fora sem querer ja tinha gravado — e o texto
+                     e o unico campo que se edita junto com os serviços, entao
+                     eles esperam o mesmo sim. */
+                  onChange={(e) => mexerNoRascunho("descricao", e.target.value)}
                   rows={3}
                   placeholder="Anotações sobre este ticket"
                   style={{
@@ -745,23 +1065,19 @@ function Conteudo({
             onChange={(t) => setAba(t.startsWith(ABA_SERVICOS) ? ABA_SERVICOS : ABA_FINANCEIRO)}
           />
 
-          {aba === ABA_SERVICOS && carregandoDetalhe && <EsqueletoLista />}
-          {aba === ABA_SERVICOS && !carregandoDetalhe && (
+          {aba === ABA_SERVICOS && (
             <ListaServicos
               itens={form.itens}
-              editando={editando}
-              avisoFaturado={editando && faturado ? (ticket?.faturado ?? 0) : 0}
+              carregando={carregandoDetalhe}
+              editando={podeMexer}
+              faturado={ticket?.faturado ?? 0}
               servicos={servicos}
-              aoMudar={(itens) => set("itens", itens)}
+              aoMudar={(itens) => mexerNoRascunho("itens", itens)}
             />
           )}
 
           {aba === ABA_FINANCEIRO && (
-            <Financeiro
-              itens={form.itens}
-              totalEmTela={editando ? totalEmTela : (ticket?.total ?? 0)}
-              faturado={ticket?.faturado ?? 0}
-            />
+            <Financeiro itens={form.itens} />
           )}
         </>
       )}
@@ -777,49 +1093,84 @@ function Conteudo({
  * estavam. O X do cabecalho fecharia o drawer inteiro, que e outra coisa.
  */
 function Rodape({
-  editando,
   criando,
+  pendente,
   salvando,
   podeSalvar,
-  podeEditar,
-  onEditar,
-  onCancelar,
   onSalvar,
 }: {
-  editando: boolean;
   criando: boolean;
+  /** Ha serviço mexido e ainda nao gravado. */
+  pendente: boolean;
   salvando: boolean;
   podeSalvar: boolean;
-  podeEditar: boolean;
-  onEditar: () => void;
-  onCancelar: () => void;
   onSalvar: () => void;
 }) {
-  if (!editando) {
-    return (
-      // Sem "Gerar conta a receber": a cobranca nasce na tela de contas a
-      // receber, que e onde se escolhe QUAIS tickets entram nela. Um botao aqui
-      // sugeriria a conta 1:1 com o ticket, que e justamente o que o modelo
-      // desfez.
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8 }}>
-        {podeEditar && (
-          <Button size="xs" onClick={onEditar}>
-            Editar
-          </Button>
-        )}
-      </div>
-    );
-  }
+  /*
+   * ⚠️ O rodape aparece em DOIS casos, e some no resto.
+   *
+   *   criando  -> os campos formam um rascunho que ainda nao existe no banco.
+   *   pendente -> algum serviço foi mexido, e serviço e dinheiro: ele espera um
+   *               sim antes de virar o total que forma a cobranca.
+   *
+   * Fora disso nao ha o que confirmar — cliente, local, obra e descricao gravam
+   * sozinhos, e um "Salvar" permanente prometeria juntar o que ja foi.
+   *
+   * Sem "Gerar conta a receber" tambem: a cobranca nasce na tela de contas a
+   * receber, que e onde se escolhe QUAIS tickets entram nela. Um botao aqui
+   * sugeriria a conta 1:1 com o ticket, que e justamente o que o modelo desfez.
+   */
+  if (!criando && !pendente) return null;
 
+  /*
+   * ⚠️ Um CHECK, e nao "Salvar alterações" escrito.
+   *
+   * Ele divide a linha com o X que descarta, e os dois vivem entre botoes de
+   * icone de 28 pixels: um botao de texto no meio deles quebrava o ritmo do
+   * cabecalho e empurrava o titulo do ticket para fora em drawer estreito.
+   *
+   * O par le sozinho — check grava, X descarta —, e o `title` diz o resto para
+   * quem parar em cima.
+   */
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8 }}>
-      <Button size="xs" onClick={onCancelar} disabled={salvando}>
-        Cancelar
-      </Button>
-      <Button size="xs" variant="primary" onClick={onSalvar} disabled={salvando || !podeSalvar}>
-        {salvando ? "Salvando…" : criando ? "Criar" : "Salvar"}
-      </Button>
-    </div>
+    <button
+      type="button"
+      onClick={onSalvar}
+      disabled={salvando || !podeSalvar}
+      title={salvando ? "Salvando…" : criando ? "Criar ticket" : "Salvar alterações"}
+      style={{
+        height: 28,
+        padding: "0 10px",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        fontSize: "var(--text-sm)",
+        fontWeight: "var(--fw-medium)",
+        whiteSpace: "nowrap",
+        border: "1px solid var(--primary)",
+        background: "var(--primary)",
+        borderRadius: "var(--radius-sm)",
+        cursor: salvando || !podeSalvar ? "not-allowed" : "pointer",
+        opacity: salvando || !podeSalvar ? 0.5 : 1,
+        color: "var(--primary-fg)",
+      }}
+    >
+      {salvando ? (
+        <span className="girando" style={{ display: "grid", placeItems: "center" }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+            <path d="M12 3a9 9 0 1 1-6.4 2.6" />
+          </svg>
+        </span>
+      ) : (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M4.5 12.5l5 5 10-11" />
+        </svg>
+      )}
+      {/* ⚠️ Este e o UNICO com palavra. O X ao lado descarta, e um par de
+          icones iguais em peso deixaria o gesto que grava com a mesma cara do
+          que joga fora. Escrito, ele e o caminho obvio; o X e a saida. */}
+      {salvando ? "Salvando…" : criando ? "Criar" : "Salvar"}
+    </button>
   );
 }
 
@@ -835,15 +1186,7 @@ function Rodape({
  * Mede FATURAMENTO, nao recebimento: o dinheiro so entra quando a conta a
  * receber for baixada.
  */
-function Financeiro({
-  itens,
-  totalEmTela,
-  faturado,
-}: {
-  itens: Item[];
-  totalEmTela: number;
-  faturado: number;
-}) {
+function Financeiro({ itens }: { itens: Item[] }) {
   /*
    * ⚠️ Sem a guia "Histórico" e sem a tabela de contas.
    *
@@ -856,7 +1199,7 @@ function Financeiro({
    * Em que conta este ticket entrou virou um campo lá em cima, ao lado da
    * situação. O resto é da tela de contas a receber, que é a dona da cobrança.
    */
-  return <Resumo itens={itens} total={totalEmTela} faturado={faturado} />;
+  return <Resumo itens={itens} />;
 }
 
 /**
@@ -867,20 +1210,11 @@ function Financeiro({
  * dar o mesmo desconto — com resultados diferentes dependendo de onde foi
  * digitado.
  */
-function Resumo({
-  itens,
-  total,
-  faturado,
-}: {
-  itens: Item[];
-  total: number;
-  faturado: number;
-}) {
+function Resumo({ itens }: { itens: Item[] }) {
   const bruto = itens.reduce((s, i) => s + Math.round(i.quantidade * i.valorUnitario), 0);
   const desconto = itens.reduce((s, i) => s + i.desconto, 0);
   const acrescimo = itens.reduce((s, i) => s + i.acrescimo, 0);
   const despesas = itens.reduce((s, i) => s + i.despesas.reduce((t, d) => t + d.valor, 0), 0);
-  const saldo = Math.max(0, total - faturado);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
@@ -901,24 +1235,26 @@ function Resumo({
         <CampoBloqueado valor={formatarSemSimbolo(despesas as Centavos)} />
       </Field>
 
-      <Separador />
+      {/*
+        ⚠️ Sem "Faturado", sem "Saldo a faturar" e sem "Total do ticket".
 
-      <Field label="Total do ticket">
-        <CampoBloqueado valor={formatarSemSimbolo(total as Centavos)} />
-      </Field>
-      <Field label="Faturado">
-        <CampoBloqueado valor={formatarSemSimbolo(faturado as Centavos)} />
-      </Field>
-      <Field label="Saldo a faturar">
-        <CampoBloqueado valor={formatarSemSimbolo(saldo as Centavos)} />
-      </Field>
+        Eles descreviam um faturamento PARCIAL que o modelo deixou de permitir: a
+        composição congela quando o ticket vira conta a receber — nenhum serviço
+        entra, nenhum sai, nenhum valor muda —, então o total passa a ser
+        exatamente o que foi faturado, e o saldo, sempre zero. Três campos para
+        dizer o mesmo número, dois deles prometendo uma folga que não existe.
+
+        Em que conta ele entrou é o campo lá em cima, ao lado da situação. Quanto
+        entrou e quanto falta receber é da tela de contas a receber.
+
+        E o TOTAL subiu para os campos, junto da conta. Repetido aqui embaixo de
+        uma soma que ele fecha, ele seria o mesmo número em duas telas — e a
+        aba passou a ser só a composição: de onde o total veio.
+      */}
     </div>
   );
 }
 
-function Separador() {
-  return <div style={{ height: 1, background: "var(--border)", margin: "7px 0" }} />;
-}
 
 // ── Aba Serviços ────────────────────────────────────────────────────────────
 
@@ -951,26 +1287,37 @@ let proximoIdLocal = -1;
  */
 function ListaServicos({
   itens,
+  carregando,
   editando,
-  avisoFaturado = 0,
+  faturado,
   servicos,
   aoMudar,
 }: {
   itens: Item[];
+  carregando: boolean;
   editando: boolean;
-  /** Quanto ja virou cobranca. Zero nao mostra aviso. */
-  avisoFaturado?: number;
+  /**
+   * Quanto deste ticket ja virou conta a receber.
+   *
+   * ⚠️ Acima de zero, a COMPOSICAO congela: nao entra serviço novo, nenhum sai,
+   * e valores e seletor travam no drawer. So a descricao continua livre. Sem
+   * isso dava para trocar o serviço de um ticket ja cobrado por outro, de outro
+   * centro de custo, mantendo o mesmo total — a conta fechava e o rateio
+   * contabil passava a apontar para uma categoria que nunca foi cobrada.
+   *
+   * A mesma regra vive em `atualizarTicket`: a tela evita o gesto, o servico
+   * garante.
+   */
+  faturado: number;
   servicos: OpcaoServico[];
   aoMudar: (itens: Item[]) => void;
 }) {
-  function mudar(id: number, campos: Partial<Item>) {
-    aoMudar(itens.map((i) => (i.id === id ? { ...i, ...campos } : i)));
-  }
+  /* O item aberto no drawer de cima. Um id negativo distingue o que ainda nao
+     existe no banco — ver `proximoIdLocal`. */
+  const [emEdicao, setEmEdicao] = useState<Item | null>(null);
 
   function adicionar() {
-    aoMudar([
-      ...itens,
-      {
+    setEmEdicao({
         id: proximoIdLocal--,
         servicoId: null,
         servicoNome: null,
@@ -983,17 +1330,478 @@ function ListaServicos({
         valorUnitario: 0,
         desconto: 0,
         acrescimo: 0,
-        despesas: [],
-        total: 0,
-      },
-    ]);
+      despesas: [],
+      total: 0,
+    });
   }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      {avisoFaturado > 0 && (
+      {/*
+        ⚠️ TABELA sempre, inclusive editando.
+
+        Editar abria cards no lugar das linhas: a tabela se desmontava para
+        virar formulário e voltava a montar ao salvar, e no meio disso o
+        alinhamento das colunas — que é o que deixa comparar valores — sumia.
+
+        O serviço agora se edita num drawer POR CIMA deste. A tabela fica de pé
+        atrás dele, e ao fechar a linha alterada já está no lugar, na mesma
+        grade. É o mesmo gesto do resto do sistema: a lista mostra, a ação de
+        linha abre o detalhe.
+      */}
+      {/*
+        ⚠️ O incluir e o "+" COLADO no titulo, e nao um botao no fim da lista —
+        o mesmo `GrupoDeCampos` de "adicionar ticket" na conta a receber.
+
+        No rodape de uma tabela que rola, ele descia junto com a ultima linha:
+        num ticket de dez serviços era preciso rolar ate o fim para achar como
+        lancar o decimo primeiro. E a legenda entra ANTES da tabela, que e onde
+        ela ainda pode explicar o que vem — depois dela, ja nao explica nada.
+      */}
+      <GrupoDeCampos
+        primeiro
+        /* ⚠️ O titulo COMPLEMENTA o nome da aba, nao o repete. A aba ja se
+           chama "Serviços"; um titulo igual seria a mesma palavra duas vezes,
+           uma embaixo da outra, e nenhuma das duas informa. */
+        titulo="O que foi executado"
+        legenda="O valor do ticket é a soma deles. Cada linha abre no menu ao lado, com data, quantidade, ajustes e despesas."
+        onIncluir={editando && faturado === 0 ? adicionar : undefined}
+        rotuloIncluir="Adicionar serviço"
+      >
+        <TabelaServicos
+          itens={itens}
+          carregando={carregando}
+          editando={editando}
+          faturado={faturado}
+          aoEditar={setEmEdicao}
+          aoRemover={(id) => aoMudar(itens.filter((x) => x.id !== id))}
+        />
+      </GrupoDeCampos>
+
+      {emEdicao && (
+        <ServicoDrawer
+          item={emEdicao}
+          servicos={servicos}
+          faturado={faturado}
+          somenteLeitura={!editando}
+          onClose={() => setEmEdicao(null)}
+          aoSalvar={(salvo) => {
+            aoMudar(
+              itens.some((x) => x.id === salvo.id)
+                ? itens.map((x) => (x.id === salvo.id ? salvo : x))
+                : [...itens, salvo],
+            );
+            setEmEdicao(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+
+
+/**
+ * Os serviços do ticket, na tabela padrão do sistema.
+ *
+ * Mesmas peças da lista de tickets da conta a receber (`TableArea`, `Th`, `Tr`,
+ * `Td`, `EmptyRow`): duas listas do mesmo assunto, em drawers vizinhos, não
+ * podem ter desenhos diferentes.
+ *
+ * ⚠️ `minWidth={0}`: a tabela cabe na largura do drawer e não rola de lado. O
+ * padrão de 760 é das telas de listagem, que têm a página inteira.
+ */
+function TabelaServicos({
+  itens,
+  carregando,
+  editando,
+  faturado,
+  aoEditar,
+  aoRemover,
+}: {
+  itens: Item[];
+  carregando: boolean;
+  editando: boolean;
+  faturado: number;
+  aoEditar: (item: Item) => void;
+  aoRemover: (id: number) => void;
+}) {
+  /* Remover so enquanto nada foi cobrado. Depois disso o serviço ja saiu numa
+     conta a receber, e tira-lo daqui deixaria a conta apontando para o vazio. */
+  const podeRemover = editando && faturado === 0;
+  return (
+    <TableArea minWidth={0}>
+      <TableHead>
+        <Th>Serviço</Th>
+        <Th minWidth={90}>Data</Th>
+        {/*
+          ⚠️ UMA coluna de valor, e não três.
+
+          Quantidade, unitário e total são a mesma conta lida em três pedaços, e
+          separadas gastavam metade da largura do drawer para dizer "1 un" e
+          "1.000,00" — dois números que só existem para explicar o terceiro. Na
+          mesma coluna a composição fica em cima, apagada, e o que vale fica
+          embaixo, em negrito: o olho pega o total e a conta está do lado quando
+          se quer conferir.
+        */}
+        <Th align="right" minWidth={130}>
+          Valor
+        </Th>
+        {/* ⚠️ SEMPRE. A coluna sumia fora do modo de edição, e como não há mais
+            modo de edição ela seria a única porta para o serviço — escondida
+            justamente quando se quer abrir. Sem cabeçalho: é a coluna de ações
+            do sistema inteiro, e ela não se anuncia. */}
+        <Th> </Th>
+      </TableHead>
+
+      <tbody>
+        {/* O esqueleto e da TABELA agora: como lista de cards ele prometia um
+            desenho que nao era o que chegava depois. */}
+        {carregando && (
+          <SkeletonRows cols={4} rows={3} labels={["Serviço", "Data", "Valor", ""]} />
+        )}
+
+        {!carregando && itens.length === 0 && (
+          <EmptyRow
+            colSpan={4}
+            message="Nenhum serviço lançado. O valor do ticket é a soma deles."
+          />
+        )}
+
+        {!carregando &&
+          itens.map((item) => (
+          <Tr key={item.id}>
+            {/* ⚠️ Respiro em cima e embaixo, e so na vertical.
+
+                A celula tem duas linhas agora, e sem folga elas encostavam na
+                regua da linha seguinte. O recuo LATERAL continua sendo do CSS:
+                estilo em linha vence seletor, e cravar `padding` aqui mataria a
+                regra que tira a margem da primeira e da ultima celula. */}
+            <Td style={CELULA}>
+              {/*
+                Despesas DEPOIS do nome, na mesma linha, com quebra quando não
+                couberem. Embaixo elas empurravam a descrição para longe do nome.
+              */}
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+              >
+                {/* Sem servico vinculado, o texto livre assume o topo — senao a
+                    linha ficaria sem identificacao. */}
+                <span>{item.servicoNome ?? item.descricao ?? "Serviço avulso"}</span>
+
+                {/* De onde veio o valor. Sem isto o ticket mostrava o número sem
+                    dizer o que foi entregue para chegar nele. */}
+                {item.demandaTitulo && (
+                  <span
+                    title={`Gerado pela tarefa "${item.demandaTitulo}"`}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4,
+                      fontSize: "var(--text-xs)",
+                      fontWeight: "var(--fw-medium)",
+                      color: "var(--text-tertiary)",
+                      letterSpacing: "var(--tracking-wide)",
+                    }}
+                  >
+                    <svg
+                      aria-hidden
+                      width="11"
+                      height="11"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <circle cx="12" cy="12" r="9" />
+                      <path d="M8.5 12.2l2.5 2.5 4.5-5" />
+                    </svg>
+                    TAREFA
+                  </span>
+                )}
+
+                {/* ⚠️ Sem as despesas aqui.
+
+                    Elas saiam como etiquetas na frente do nome do serviço, e
+                    numa coluna estreita empurravam o nome — que e o dado da
+                    linha — para o fim, atras de dois ou tres balões. Elas ja
+                    entram no total, e o detalhe delas e a aba do drawer. */}
+              </div>
+
+              {item.servicoNome && item.descricao && (
+                <div
+                  style={{
+                    marginTop: 2,
+                    fontSize: "var(--text-sm)",
+                    color: "var(--text-tertiary)",
+                  }}
+                >
+                  {item.descricao}
+                </div>
+              )}
+            </Td>
+
+            {/* ⚠️ Ao CENTRO na vertical, como as outras. Alinhada ao topo, a
+                data ficava na altura da primeira linha da célula de valor e
+                parecia legenda dela, e não o dado da sua própria coluna. */}
+            <Td style={CELULA}>
+              {item.data ? (
+                paraFormatoBR(item.data as DataISO)
+              ) : (
+                <span style={{ color: "var(--text-disabled)" }}>—</span>
+              )}
+            </Td>
+
+            <Td style={{ ...tdNum, ...CELULA }}>
+              <Valor item={item} />
+            </Td>
+
+            {/*
+              ⚠️ MENU de "…", e não dois ícones soltos — o mesmo padrão da lista
+              de tickets da conta a receber e da de lançamentos da conta a pagar.
+
+              Ícones soltos multiplicam alvos numa coluna estreita e, quando uma
+              ação está barrada, ou some (e a coluna dança de linha para linha)
+              ou fica cinza sem dizer por quê. No menu cada item tem espaço para
+              o rótulo, e o que não pode aparece desabilitado com o motivo.
+            */}
+            <Td style={CELULA}>
+              <AcoesDaLinha>
+                <MenuDeLinha>
+                  {(fechar) => (
+                    <>
+                      <ItemDoMenu
+                        rotulo={editando ? "Editar serviço" : "Ver serviço"}
+                        icone={<Icon name="ticket" size={14} />}
+                        onClick={() => {
+                          fechar();
+                          aoEditar(item);
+                        }}
+                      />
+
+                      <ItemDoMenu
+                        rotulo="Remover serviço"
+                        perigo
+                        desabilitado={!podeRemover}
+                        motivo={
+                          !editando
+                            ? "Ticket encerrado: valor e serviços já viraram cobrança recebida"
+                            : faturado > 0
+                              ? "Este ticket já virou conta a receber; os serviços dele não saem mais"
+                              : undefined
+                        }
+                        icone={
+                          <svg
+                            width="14"
+                            height="14"
+                            viewBox="0 0 16 16"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.4"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M2.5 4h11" />
+                            <path d="M5.5 4V2.8a.8.8 0 0 1 .8-.8h3.4a.8.8 0 0 1 .8.8V4" />
+                            <path d="M12.3 4l-.7 9a.8.8 0 0 1-.8.8H5.2a.8.8 0 0 1-.8-.8L3.7 4" />
+                            <path d="M6.5 6.8v4.4M9.5 6.8v4.4" />
+                          </svg>
+                        }
+                        onClick={() => {
+                          fechar();
+                          aoRemover(item.id);
+                        }}
+                      />
+                    </>
+                  )}
+                </MenuDeLinha>
+              </AcoesDaLinha>
+            </Td>
+          </Tr>
+          ))}
+      </tbody>
+    </TableArea>
+  );
+}
+
+/** Recuo vertical da célula. O lateral é do CSS — ver o comentário no `Tr`. */
+const CELULA: React.CSSProperties = { paddingTop: 9, paddingBottom: 9 };
+
+/**
+ * O valor da linha: a conta em cima, o que vale embaixo.
+ *
+ * `1 un × 1.000,00` apagado, e `1.000,00` em negrito. O total é o número que se
+ * procura; a composição fica ali para quem quiser conferir, sem gastar duas
+ * colunas.
+ *
+ * ⚠️ Quando há desconto ou acréscimo, a primeira linha mostra o BRUTO — que é
+ * exatamente `quantidade × unitário` — e uma etiqueta diz o abatimento. Sem ela,
+ * a diferença entre as duas linhas apareceria sem causa, e o leitor procuraria
+ * um erro que não existe.
+ */
+function Valor({ item }: { item: Item }) {
+  const bruto = Math.round(item.quantidade * item.valorUnitario);
+  const liquido = totalDoItem(item);
+  const ajuste = liquido - bruto;
+
+  return (
+    /* ⚠️ `alignItems: flex-end`. A célula é alinhada à direita, mas a caixa
+       flex de dentro alinhava os próprios filhos à esquerda: as duas linhas
+       ficavam justificadas pela borda esquerda do bloco, e os totais da coluna
+       não se alinhavam entre si. */
+    <div
+      style={{
+        display: "inline-flex",
+        flexDirection: "column",
+        alignItems: "flex-end",
+        gap: 2,
+      }}
+    >
+      <span style={{ fontSize: "var(--text-xs)", color: "var(--text-tertiary)" }}>
+        {quantidadeComUnidade(item)} × {formatarSemSimbolo(item.valorUnitario as Centavos)}
+      </span>
+
+      <span style={{ display: "inline-flex", alignItems: "baseline", gap: 6 }}>
+        {ajuste !== 0 && (
+          <span
+            style={{
+              fontSize: "var(--text-xs)",
+              /* Crédito para o que abate, débito para o que soma: as mesmas
+                 cores do extrato, onde essa leitura já está aprendida. */
+              color: ajuste < 0 ? "var(--credito)" : "var(--debito)",
+            }}
+          >
+            {ajuste < 0 ? "−" : "+"}
+            {formatarSemSimbolo(Math.abs(ajuste) as Centavos)}
+          </span>
+        )}
+        <span style={{ fontWeight: "var(--fw-semibold)", color: "var(--text-primary)" }}>
+          {formatarSemSimbolo(liquido as Centavos)}
+        </span>
+      </span>
+    </div>
+  );
+}
+
+/** "3 un" ou "2h30" — o decimal é o formato de quem calcula, não de quem lê. */
+function quantidadeComUnidade(item: Item): string {
+  if (item.unidade === "H") {
+    const min = Math.round(item.quantidade * 60);
+    const m = min % 60;
+    return m === 0 ? `${min / 60}h` : `${Math.floor(min / 60)}h${String(m).padStart(2, "0")}`;
+  }
+  return Number.isInteger(item.quantidade)
+    ? `${item.quantidade} un`
+    : `${item.quantidade.toFixed(2).replace(".", ",")} un`;
+}
+
+
+let proximoIdDespesa = -1;
+
+/**
+ * Um serviço do ticket, num drawer POR CIMA do dele.
+ *
+ * ⚠️ Substituiu o card que aparecia dentro da lista. Editando, a tabela se
+ * desmontava para virar formulário: as colunas sumiam justamente quando se
+ * precisa comparar um serviço com o outro. Aqui a tabela fica de pé atrás, e ao
+ * fechar a linha alterada já está no lugar.
+ *
+ * ⚠️ Ele edita uma CÓPIA e só devolve no salvar. Escrevendo direto no item da
+ * lista, cada tecla digitada já teria mudado a tabela atrás — e "Cancelar" não
+ * teria o que desfazer.
+ *
+ * ⚠️ FATURADO congela a composição: seletor de serviço, quantidade, valores e
+ * despesas travam, e só a descrição segue livre. Sem isso dava para trocar o
+ * serviço de um ticket já cobrado por outro, de outro centro de custo, mantendo
+ * o mesmo total — a conta continuava fechando e o rateio contábil passava a
+ * apontar para uma categoria que nunca foi cobrada, com a operação do outro
+ * lado possivelmente já encerrada. A mesma regra vive em `atualizarTicket`.
+ */
+function ServicoDrawer({
+  item,
+  servicos,
+  faturado,
+  somenteLeitura,
+  onClose,
+  aoSalvar,
+}: {
+  item: Item;
+  servicos: OpcaoServico[];
+  faturado: number;
+  somenteLeitura: boolean;
+  onClose: () => void;
+  aoSalvar: (item: Item) => void;
+}) {
+  const [rascunho, setRascunho] = useState<Item>(item);
+
+  function mudar(campos: Partial<Item>) {
+    setRascunho((r) => ({ ...r, ...campos }));
+  }
+
+  function mudarDespesa(id: number, campos: Partial<{ descricao: string; valor: number }>) {
+    mudar({
+      despesas: rascunho.despesas.map((d) => (d.id === id ? { ...d, ...campos } : d)),
+    });
+  }
+
+  const novo = rascunho.id < 0;
+  /** Quem manda no dinheiro. A descrição fica de fora, sempre. */
+  const podeMexerNoValor = !somenteLeitura && faturado === 0;
+
+  /*
+   * ⚠️ UMA aba, e o serviço NAO e uma delas.
+   *
+   * Os campos do serviço sao o conteudo do drawer, nao uma escolha: por-los numa
+   * aba obrigaria a escolher entre olhar o que se esta editando e olhar as
+   * despesas dele. A aba unica e o ROTULO da tabela, no mesmo desenho das outras
+   * listas do sistema — e por isso ela vem depois dos campos, onde a tabela
+   * comeca.
+   */
+  const ABA_DESPESAS = `Despesas (${rascunho.despesas.length})`;
+
+  return (
+    <Drawer
+      open
+      nivel={2}
+      onClose={onClose}
+      title={novo ? "Novo serviço" : "Serviço"}
+      acoes={
+        somenteLeitura ? undefined : (
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Button
+              size="xs"
+              variant="primary"
+              onClick={() => aoSalvar({ ...rascunho, total: totalDoItem(rascunho) })}
+              disabled={rascunho.quantidade <= 0}
+            >
+              {novo ? "Adicionar" : "Salvar"}
+            </Button>
+            <Button size="xs" onClick={onClose}>
+              Cancelar
+            </Button>
+          </div>
+        )
+      }
+    >
+      {/*
+        ⚠️ O aviso mora AQUI, e não em cima da lista de serviços.
+
+        Lá ele era uma faixa amarela permanente sobre o rótulo da tabela,
+        avisando de uma trava que só importa na hora de mexer num serviço. Aqui
+        ele aparece exatamente onde o gesto seria feito, e explica por que os
+        campos estão cinza.
+      */}
+      {faturado > 0 && (
         <div
           style={{
+            marginBottom: 12,
             padding: "8px 11px",
             borderRadius: "var(--radius-md)",
             background: "var(--warning-bg)",
@@ -1002,488 +1810,286 @@ function ListaServicos({
             fontSize: "var(--text-sm)",
           }}
         >
-          {formatarSemSimbolo(avisoFaturado as Centavos)} deste ticket já virou conta a receber.
-          O total dos serviços não pode ficar abaixo disso.
+          {formatarSemSimbolo(faturado as Centavos)} deste ticket já virou conta a receber.
+          Serviço, valores e despesas não mudam mais; só a descrição.
         </div>
       )}
 
-      {itens.length === 0 && !editando && (
-        <div
-          style={{
-            padding: "28px 12px",
-            textAlign: "center",
-            color: "var(--text-tertiary)",
-            fontSize: "var(--text-base)",
-          }}
-        >
-          Nenhum serviço lançado.
-        </div>
-      )}
-
-      {itens.map((it) =>
-        editando ? (
-          <CardServicoEdicao
-            key={it.id}
-            item={it}
-            servicos={servicos}
-            aoMudar={(c) => mudar(it.id, c)}
-            aoRemover={() => aoMudar(itens.filter((x) => x.id !== it.id))}
-          />
-        ) : (
-          <CardServico key={it.id} item={it} />
-        ),
-      )}
-
-      {/* Sem totalizador aqui: a soma e a contagem sao a aba Financeiro, e
-          repetir na lista dava dois lugares dizendo a mesma coisa. */}
-      {editando && (
-        <AreaDeAdicionar primeira={itens.length === 0} onClick={adicionar} />
-      )}
-    </div>
-  );
-}
-
-/**
- * O convite para lancar servico.
- *
- * Com a lista vazia ele e a tela inteira, e explica o que esta em jogo: o total
- * do ticket nasce daqui, e sem servico nao ha o que faturar. Um botao pequeno
- * embaixo de uma caixa escrita "nenhum servico lancado" dizia duas vezes que
- * nao havia nada, e nenhuma vez o que fazer a respeito.
- *
- * Com a lista cheia ele encolhe para uma faixa: ja nao precisa ensinar, so
- * precisa estar no caminho de quem quer somar mais um.
- */
-function AreaDeAdicionar({ primeira, onClick }: { primeira: boolean; onClick: () => void }) {
-  const [hover, setHover] = useState(false);
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{
-        width: "100%",
-        display: "flex",
-        flexDirection: primeira ? "column" : "row",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: primeira ? 4 : 7,
-        padding: primeira ? "30px 16px" : "11px 16px",
-        borderRadius: "var(--radius-lg)",
-        border: "1px dashed var(--primary-border)",
-        background: hover ? "var(--primary-subtle)" : "transparent",
-        color: "var(--primary)",
-        fontFamily: "var(--font)",
-        cursor: "pointer",
-        transition: "border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease)",
-      }}
-    >
-      <span
-        aria-hidden
-        style={{
-          display: "grid",
-          placeItems: "center",
-          width: primeira ? 34 : 18,
-          height: primeira ? 34 : 18,
-          marginBottom: primeira ? 6 : 0,
-          borderRadius: "var(--radius-full)",
-          background: "var(--primary-subtle)",
-          color: "var(--primary)",
-        }}
-      >
-        <svg
-          width={primeira ? 15 : 10}
-          height={primeira ? 15 : 10}
-          viewBox="0 0 12 12"
-          fill="currentColor"
-        >
-          <path d="M6.75 1.75a.75.75 0 0 0-1.5 0V5.25H1.75a.75.75 0 0 0 0 1.5H5.25v3.5a.75.75 0 0 0 1.5 0V6.75h3.5a.75.75 0 0 0 0-1.5H6.75V1.75z" />
-        </svg>
-      </span>
-
-      <span
-        style={{
-          fontSize: primeira ? "var(--text-md)" : "var(--text-base)",
-          fontWeight: "var(--fw-medium)",
-          letterSpacing: "var(--tracking-normal)",
-        }}
-      >
-        {primeira ? "Adicionar o primeiro serviço" : "Adicionar serviço"}
-      </span>
-
-      {primeira && (
-        <span style={{ fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>
-          O valor do ticket é a soma dos serviços. Sem eles não há o que faturar.
-        </span>
-      )}
-    </button>
-  );
-}
-
-const MOLDURA_ITEM: React.CSSProperties = {
-  border: "1px solid var(--border)",
-  borderRadius: "var(--radius-lg)",
-  padding: "11px 13px",
-};
-
-function CardServico({ item }: { item: Item }) {
-  const bruto = Math.round(item.quantidade * item.valorUnitario);
-
-  return (
-    <div style={MOLDURA_ITEM}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-        <div style={{ minWidth: 0 }}>
-          {/* Despesas DEPOIS do nome, na mesma linha, com quebra quando nao
-              couberem. Embaixo elas empurravam a descricao para longe do nome e
-              o card crescia uma faixa inteira so para dizer "teve pedagio". */}
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              alignItems: "center",
-              gap: 6,
-              fontSize: "var(--text-base)",
-              fontWeight: "var(--fw-medium)",
-              letterSpacing: "var(--tracking-normal)",
-            }}
-          >
-            {/* Sem servico vinculado, o texto livre assume o topo — senao a
-                linha ficaria sem identificacao. */}
-            <span>{item.servicoNome ?? item.descricao ?? "Serviço avulso"}</span>
-
-            {/* De onde veio o valor. Sem isto o ticket mostrava o número sem
-                dizer o que foi entregue para chegar nele. */}
-            {item.demandaTitulo && (
-              <span
-                title={`Gerado pela tarefa "${item.demandaTitulo}"`}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 4,
-                  fontSize: "var(--text-xs)",
-                  fontWeight: "var(--fw-medium)",
-                  color: "var(--text-tertiary)",
-                  letterSpacing: "var(--tracking-wide)",
-                }}
-              >
-                <svg
-                  aria-hidden
-                  width="11"
-                  height="11"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <circle cx="12" cy="12" r="9" />
-                  <path d="M8.5 12.2l2.5 2.5 4.5-5" />
-                </svg>
-                TAREFA
-              </span>
-            )}
-
-            {item.despesas.map((d) => (
-              <Etiqueta key={d.id} rotulo={d.descricao || "Despesa"} valor={d.valor} />
-            ))}
-          </div>
-
-          {item.servicoNome && item.descricao && (
-            <div
-              style={{
-                marginTop: 2,
-                fontSize: "var(--text-sm)",
-                color: "var(--text-tertiary)",
-                letterSpacing: "var(--tracking-normal)",
-              }}
-            >
-              {item.descricao}
-            </div>
-          )}
-        </div>
-
-        <Preco bruto={bruto} liquido={totalDoItem(item)} />
-      </div>
-    </div>
-  );
-}
-
-/**
- * Preco no formato de vitrine.
- *
- * De cima para baixo: o valor cheio riscado, o valor que vale, e o percentual
- * do abatimento em verde. E a leitura que ja esta no olho de quem compra
- * online — dispensa rotulo, e mostra desconto e acrescimo sem gastar duas
- * linhas de texto explicando cada um.
- *
- * Sem ajuste nenhum, so o numero: riscar um preco igual ao outro anunciaria
- * desconto que nao existe.
- */
-function Preco({ bruto, liquido }: { bruto: number; liquido: number }) {
-  const abatimento = bruto - liquido;
-  const pct = bruto > 0 ? Math.round((abatimento / bruto) * 100) : 0;
-
-  return (
-    <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-      {abatimento !== 0 && (
-        <div
-          style={{
-            fontSize: "var(--text-xs)",
-            color: "var(--text-tertiary)",
-            textDecoration: "line-through",
-            fontVariantNumeric: "tabular-nums",
-          }}
-        >
-          {formatarSemSimbolo(bruto as Centavos)}
-        </div>
-      )}
-
-      <div
-        style={{
-          display: "flex",
-          alignItems: "baseline",
-          justifyContent: "flex-end",
-          gap: 7,
-        }}
-      >
-        {/* Percentual a ESQUERDA do valor: lido antes dele, funciona como sinal
-            do que vem — e nao como carimbo de promocao pendurado no fim.
-            Verde no desconto, ambar no acrescimo: os dois mudam o preco, so um
-            e boa noticia para quem paga. */}
-        {abatimento !== 0 && (
-          <span
-            style={{
-              fontSize: "var(--text-sm)",
-              fontWeight: "var(--fw-semi)",
-              fontVariantNumeric: "tabular-nums",
-              color: abatimento > 0 ? "var(--credito)" : "var(--warning-text)",
-            }}
-          >
-            {abatimento > 0 ? "−" : "+"}
-            {Math.abs(pct)}%
-          </span>
-        )}
-
-        <span
-          style={{
-            fontSize: "var(--text-lg)",
-            fontWeight: "var(--fw-semi)",
-            letterSpacing: "var(--tracking-snug)",
-            fontVariantNumeric: "tabular-nums",
-          }}
-        >
-          {formatarSemSimbolo(liquido as Centavos)}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-let proximoIdDespesa = -1;
-
-/**
- * Servico em edicao: UM rotulo e UM campo por linha, empilhados.
- *
- * A grade de tres colunas cabia na largura mas quebrava o padrao do resto do
- * drawer, onde todo campo tem rotulo a esquerda e campo a direita. Duas
- * gramaticas de formulario na mesma tela obrigam o olho a reaprender onde
- * procurar o rotulo a cada bloco.
- */
-function CardServicoEdicao({
-  item,
-  servicos,
-  aoMudar,
-  aoRemover,
-}: {
-  item: Item;
-  servicos: OpcaoServico[];
-  aoMudar: (campos: Partial<Item>) => void;
-  aoRemover: () => void;
-}) {
-  function mudarDespesa(id: number, campos: Partial<{ descricao: string; valor: number }>) {
-    aoMudar({
-      despesas: item.despesas.map((d) => (d.id === id ? { ...d, ...campos } : d)),
-    });
-  }
-
-  return (
-    <div style={{ ...MOLDURA_ITEM, background: "var(--surface-2)" }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-        <Field label="Serviço">
-            <select
-              value={item.servicoId ?? ""}
-              onChange={(e) => {
-                const id = e.target.value ? Number(e.target.value) : null;
-                const s = servicos.find((x) => x.id === id);
-                // Nao mexe na `descricao`: ela e complemento livre, e
-                // sobrescrever apagaria o que o usuario escreveu ao trocar.
-                aoMudar({
-                  servicoId: id,
-                  servicoNome: s ? s.descricao : null,
-                  valorUnitario: s ? s.valor : item.valorUnitario,
-                });
-              }}
-              style={selectStyle}
-            >
-              <option value="">Serviço avulso</option>
-              {servicos.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.descricao}
-                </option>
-              ))}
-            </select>
-        </Field>
-
-        <Field label="Descrição">
-          <input
-            value={item.descricao}
-            onChange={(e) => aoMudar({ descricao: e.target.value })}
-            placeholder={item.servicoId == null ? "Nome do serviço" : "Complemento (opcional)"}
-            maxLength={255}
-            style={inputStyle}
-          />
-        </Field>
-
-        <Field label="Data">
-          <input
-            type="date"
-            value={item.data ?? ""}
-            onChange={(e) => aoMudar({ data: e.target.value || null })}
-            style={inputStyle}
-          />
-        </Field>
-
-        <Field label="Quantidade">
-          <CampoQuantidade
-            valor={item.quantidade}
-            unidade={item.unidade}
-            aoMudar={(v, u) => aoMudar({ quantidade: v, unidade: u })}
-          />
-        </Field>
-
-        <Field label="Valor unitário">
-          <CampoValor
-            valor={item.valorUnitario}
-            aoMudar={(v) => aoMudar({ valorUnitario: v })}
-          />
-        </Field>
-
-        <Field label="Desconto">
-          <CampoValor valor={item.desconto} aoMudar={(v) => aoMudar({ desconto: v })} />
-        </Field>
-
-        <Field label="Acréscimo">
-          <CampoValor valor={item.acrescimo} aoMudar={(v) => aoMudar({ acrescimo: v })} />
-        </Field>
-      </div>
-
-      {/* Despesas: cada gasto com nome e valor. Entram no total do servico. */}
-      <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border)" }}>
-        <div
-          className="rotulo"
-          style={{ fontSize: "var(--text-xs)", marginBottom: item.despesas.length ? 6 : 8 }}
-        >
-          Despesas adicionais
-        </div>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {item.despesas.map((d) => (
-            <div key={d.id} style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <input
-                value={d.descricao}
-                onChange={(e) => mudarDespesa(d.id, { descricao: e.target.value })}
-                placeholder="Abastecimento, pedágio…"
-                maxLength={120}
-                style={{ ...inputStyle, flex: 1, minWidth: 0 }}
-              />
-              <div style={{ width: 110, flexShrink: 0 }}>
-                <CampoValor valor={d.valor} aoMudar={(v) => mudarDespesa(d.id, { valor: v })} />
-              </div>
-              <button
-                type="button"
-                title="Remover despesa"
-                aria-label="Remover despesa"
-                onClick={() =>
-                  aoMudar({ despesas: item.despesas.filter((x) => x.id !== d.id) })
-                }
-                style={BOTAO_REMOVER}
+          <Field label="Serviço" required={!faturado}>
+            {podeMexerNoValor ? (
+              <select
+                value={rascunho.servicoId ?? ""}
+                onChange={(e) => {
+                  const id = e.target.value ? Number(e.target.value) : null;
+                  const s = servicos.find((x) => x.id === id);
+                  // Nao mexe na `descricao`: ela e complemento livre, e
+                  // sobrescrever apagaria o que o usuario escreveu ao trocar.
+                  mudar({
+                    servicoId: id,
+                    servicoNome: s ? s.descricao : null,
+                    valorUnitario: s ? s.valor : rascunho.valorUnitario,
+                  });
+                }}
+                style={selectStyle}
               >
-                ✕
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
+                <option value="">Serviço avulso</option>
+                {servicos.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.descricao}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <CampoBloqueado
+                valor={rascunho.servicoNome ?? "Serviço avulso"}
+                titulo="Já faturado — o serviço não pode ser trocado"
+              />
+            )}
+          </Field>
 
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginTop: 10,
-          paddingTop: 10,
-          borderTop: "1px solid var(--border)",
-        }}
-      >
-        {/* Calculado, nunca digitado: quem manda no total sao os campos acima,
-            e um campo editavel aqui abriria a chance de eles nao fecharem. */}
-        <span
-          style={{
-            fontSize: "var(--text-md)",
-            fontWeight: "var(--fw-semi)",
-            fontVariantNumeric: "tabular-nums",
-          }}
-        >
-          {formatarSemSimbolo(totalDoItem(item) as Centavos)}
-        </span>
+          <Field label="Data">
+            <input
+              type="date"
+              value={rascunho.data ?? ""}
+              onChange={(e) => mudar({ data: e.target.value || null })}
+              disabled={!podeMexerNoValor}
+              style={inputStyle}
+            />
+          </Field>
 
-        {/* As duas acoes do card juntas na direita, no mesmo corpo de texto.
-            Acrescentar e remover sao o mesmo tipo de gesto — separa-las por
-            peso visual faria uma parecer mais importante que a outra. A cor e
-            que diz o que cada uma faz. */}
-        <div style={{ display: "flex", gap: 8 }}>
-          <Button
-            size="sm"
-            onClick={() =>
-              aoMudar({
-                despesas: [
-                  ...item.despesas,
-                  { id: proximoIdDespesa--, descricao: "", valor: 0 },
-                ],
-              })
+          <Field label="Quantidade">
+            {podeMexerNoValor ? (
+              <CampoQuantidade
+                valor={rascunho.quantidade}
+                unidade={rascunho.unidade}
+                aoMudar={(v, u) => mudar({ quantidade: v, unidade: u })}
+              />
+            ) : (
+              <CampoBloqueado valor={quantidadeComUnidade(rascunho)} />
+            )}
+          </Field>
+
+          <Field label="Valor unitário">
+            {podeMexerNoValor ? (
+              <CampoValor
+                valor={rascunho.valorUnitario}
+                aoMudar={(v) => mudar({ valorUnitario: v })}
+              />
+            ) : (
+              <CampoBloqueado
+                valor={formatarSemSimbolo(rascunho.valorUnitario as Centavos)}
+              />
+            )}
+          </Field>
+
+          <Field label="Desconto">
+            {podeMexerNoValor ? (
+              <CampoValor valor={rascunho.desconto} aoMudar={(v) => mudar({ desconto: v })} />
+            ) : (
+              <CampoBloqueado valor={formatarSemSimbolo(rascunho.desconto as Centavos)} />
+            )}
+          </Field>
+
+          <Field label="Acréscimo">
+            {podeMexerNoValor ? (
+              <CampoValor valor={rascunho.acrescimo} aoMudar={(v) => mudar({ acrescimo: v })} />
+            ) : (
+              <CampoBloqueado valor={formatarSemSimbolo(rascunho.acrescimo as Centavos)} />
+            )}
+          </Field>
+
+          {/*
+            ⚠️ O total é um CAMPO, logo abaixo de acréscimo — e não um rodapé.
+
+            Ele é o resultado da conta que os campos acima fazem, e lido na mesma
+            coluna deles a conta se fecha na vertical: quantidade, unitário,
+            desconto, acréscimo, total. No rodapé ele ficava longe das parcelas
+            que o formam, e as despesas da outra aba entravam nele sem aviso.
+
+            Calculado, nunca digitado: um campo editável aqui abriria a chance de
+            os de cima não fecharem com ele.
+          */}
+          <Field
+            label="Total"
+            hint={
+              rascunho.despesas.length > 0
+                ? `Inclui ${formatarSemSimbolo(
+                    rascunho.despesas.reduce((t, d) => t + d.valor, 0) as Centavos,
+                  )} de despesas`
+                : undefined
             }
           >
-            + Despesa
-          </Button>
+            <CampoBloqueado
+              valor={formatarSemSimbolo(totalDoItem(rascunho) as Centavos)}
+              titulo="Calculado: quantidade × unitário, menos desconto, mais acréscimo e despesas"
+            />
+          </Field>
 
-          {/* Remover mora aqui e nao ao lado do dropdown: la ficava na frente
-              do campo mais usado do card. */}
-          <Button size="sm" variant="danger" onClick={aoRemover}>
-            Remover serviço
-          </Button>
-        </div>
+          {/*
+            ⚠️ `textarea`, e não `input` de uma linha.
+
+            É o único campo que continua livre depois de faturado, e é onde se
+            escreve o que a nota vai discriminar. Numa linha só, texto de duas
+            frases rolava para o lado e não dava para reler o que se escreveu.
+          */}
+          <Field label="Descrição">
+            <textarea
+              value={rascunho.descricao}
+              onChange={(e) => mudar({ descricao: e.target.value })}
+              placeholder={
+                rascunho.servicoId == null ? "Nome do serviço" : "Complemento (opcional)"
+              }
+              maxLength={255}
+              rows={3}
+              disabled={somenteLeitura}
+              style={{
+                ...inputStyle,
+                width: "100%",
+                height: "auto",
+                padding: 8,
+                resize: "vertical",
+                lineHeight: 1.45,
+              }}
+            />
+          </Field>
       </div>
-    </div>
+
+      {/* A aba única é o RÓTULO da tabela — mesmo desenho das outras listas do
+          sistema —, e vem depois dos campos porque é ali que a tabela começa. */}
+      <div style={{ marginTop: 18 }}>
+        <PanelTabs tabs={[ABA_DESPESAS]} active={ABA_DESPESAS} onChange={() => {}} />
+      </div>
+
+      <div>
+          {/*
+            ⚠️ O título COMPLEMENTA o nome da aba, não o repete. A aba já se
+            chama "Despesas"; um título igual seria a mesma palavra duas vezes,
+            uma embaixo da outra.
+
+            Elas viram TABELA pela mesma razão que os serviços viraram: eram três
+            campos soltos por linha, sem cabeçalho, e nada dizia qual era o nome
+            e qual era o valor até se clicar dentro.
+          */}
+          <GrupoDeCampos
+            primeiro
+            titulo="Gastos lançados junto"
+            legenda="Abastecimento, pedágio, material. Entram no total do serviço."
+            onIncluir={
+              podeMexerNoValor
+                ? () =>
+                    mudar({
+                      despesas: [
+                        ...rascunho.despesas,
+                        { id: proximoIdDespesa--, descricao: "", valor: 0 },
+                      ],
+                    })
+                : undefined
+            }
+            rotuloIncluir="Adicionar despesa"
+          >
+            {/* Sem linha de totais: o total do serviço fica na aba ao lado, e
+                repetir a soma aqui daria dois lugares dizendo o mesmo. */}
+            <TableArea minWidth={0}>
+              <TableHead>
+                <Th>Descrição</Th>
+                <Th align="right" minWidth={120}>
+                  Valor
+                </Th>
+                <Th> </Th>
+              </TableHead>
+
+              <tbody>
+                {rascunho.despesas.length === 0 && (
+                  <EmptyRow colSpan={3} message="Nenhuma despesa neste serviço." />
+                )}
+
+                {rascunho.despesas.map((d) => (
+                  <Tr key={d.id}>
+                    <Td style={CELULA}>
+                      {podeMexerNoValor ? (
+                        <input
+                          value={d.descricao}
+                          onChange={(e) => mudarDespesa(d.id, { descricao: e.target.value })}
+                          placeholder="Abastecimento, pedágio…"
+                          maxLength={120}
+                          style={{ ...inputDeCelula, width: "100%" }}
+                        />
+                      ) : (
+                        (d.descricao || "Despesa")
+                      )}
+                    </Td>
+
+                    <Td style={{ ...tdNum, ...CELULA }}>
+                      {podeMexerNoValor ? (
+                        <CampoValor
+                          emCelula
+                          valor={d.valor}
+                          aoMudar={(v) => mudarDespesa(d.id, { valor: v })}
+                        />
+                      ) : (
+                        formatarSemSimbolo(d.valor as Centavos)
+                      )}
+                    </Td>
+
+                    <Td style={CELULA}>
+                      {podeMexerNoValor && (
+                        <AcoesDaLinha>
+                          <BotaoDeAcao
+                            rotulo="Remover despesa"
+                            perigo
+                            onClick={() =>
+                              mudar({
+                                despesas: rascunho.despesas.filter((x) => x.id !== d.id),
+                              })
+                            }
+                          >
+                            <path d="M2.5 4h11" />
+                            <path d="M5.5 4V2.8a.8.8 0 0 1 .8-.8h3.4a.8.8 0 0 1 .8.8V4" />
+                            <path d="M12.3 4l-.7 9a.8.8 0 0 1-.8.8H5.2a.8.8 0 0 1-.8-.8L3.7 4" />
+                            <path d="M6.5 6.8v4.4M9.5 6.8v4.4" />
+                          </BotaoDeAcao>
+                        </AcoesDaLinha>
+                      )}
+                    </Td>
+                  </Tr>
+                ))}
+              </tbody>
+            </TableArea>
+          </GrupoDeCampos>
+      </div>
+    </Drawer>
   );
 }
 
-const BOTAO_REMOVER: React.CSSProperties = {
-  width: 26,
-  height: 26,
-  flexShrink: 0,
-  border: "none",
-  background: "transparent",
-  color: "var(--text-tertiary)",
-  cursor: "pointer",
-  borderRadius: "var(--radius-xs)",
-};
-
 /** Dinheiro em reais na tela, centavos inteiros no estado. */
-function CampoValor({ valor, aoMudar }: { valor: number; aoMudar: (v: number) => void }) {
-  return <CampoNumerico valor={valor} aoMudar={aoMudar} escala={100} casas={2} />;
+function CampoValor({
+  valor,
+  aoMudar,
+  emCelula,
+}: {
+  valor: number;
+  aoMudar: (v: number) => void;
+  /**
+   * Dentro de tabela: pontilhado embaixo e sem moldura, igual ao campo de texto
+   * ao lado.
+   *
+   * ⚠️ Com a moldura padrao ele virava uma caixa fechada ao lado de um campo que
+   * so tem sublinhado — dois desenhos de campo na mesma linha, e o de valor
+   * parecendo o unico editavel.
+   */
+  emCelula?: boolean;
+}) {
+  return (
+    <CampoNumerico
+      valor={valor}
+      aoMudar={aoMudar}
+      escala={100}
+      casas={2}
+      alinhar={emCelula ? "right" : "left"}
+      style={emCelula ? inputDeCelula : undefined}
+    />
+  );
 }
 
 
@@ -1495,64 +2101,4 @@ function CampoValor({ valor, aoMudar }: { valor: number; aoMudar: (v: number) =>
 
 
 
-/**
- * Despesa do serviço como etiqueta.
- *
- * Nome e valor juntos porque separados não dizem nada: "R$ 42,50" solto no card
- * não sustenta a conversa com o cliente — "Pedágio 42,50" sustenta.
- *
- * Azul só no valor. O rótulo é o que se lê para saber do que se trata; o valor
- * é o que se procura quando a pergunta é quanto — pintar os dois tiraria da cor
- * a função de apontar.
- */
-function Etiqueta({ rotulo, valor }: { rotulo: string; valor: number }) {
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 5,
-        height: 19,
-        padding: "0 8px",
-        borderRadius: "var(--radius-full)",
-        background: "var(--info-bg)",
-        color: "var(--text-secondary)",
-        fontSize: "var(--text-xs)",
-        fontWeight: "var(--fw-normal)",
-        fontVariantNumeric: "tabular-nums",
-        whiteSpace: "nowrap",
-      }}
-    >
-      {rotulo}
-      <strong style={{ fontWeight: "var(--fw-semi)", color: "var(--info-text)" }}>
-        {formatarSemSimbolo(valor as Centavos)}
-      </strong>
-    </span>
-  );
-}
 
-/** Placeholder da lista de serviços enquanto o detalhe não chegou. */
-function EsqueletoLista() {
-  return (
-    <div aria-hidden style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      {[0, 1].map((i) => (
-        <div key={i} style={{ ...MOLDURA_ITEM, opacity: 1 - i * 0.4 }}>
-          <div
-            className="sk"
-            style={{ height: 12, width: "58%", borderRadius: 6, background: "var(--surface-3)" }}
-          />
-          <div
-            className="sk"
-            style={{
-              height: 10,
-              width: "34%",
-              marginTop: 8,
-              borderRadius: 6,
-              background: "var(--surface-3)",
-            }}
-          />
-        </div>
-      ))}
-    </div>
-  );
-}

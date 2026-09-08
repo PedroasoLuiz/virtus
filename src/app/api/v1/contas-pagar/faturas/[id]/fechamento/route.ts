@@ -19,3 +19,19 @@ export const POST = handler(
   { params: idParamSchema, requerModulo: "financeiro", idempotente: true },
   controller.fecharFatura,
 );
+
+/**
+ * Reabre a fatura.
+ *
+ * ⚠️ Apaga a conta a pagar que o fechamento gerou, e por isso recusa quando ela
+ * ja tem parcela paga: dinheiro que saiu do banco nao volta porque alguem
+ * reabriu um ciclo. Quem barra e o proprio `excluirConta`.
+ *
+ * Para nota que chegou atrasada o caminho costuma ser outro: lancar no ciclo
+ * SEGUINTE com a data real. A despesa entra atrasada, que e a verdade, e nada do
+ * que ja fechou se mexe. Reabrir e para quem fechou sem querer.
+ */
+export const DELETE = handler(
+  { params: idParamSchema, requerModulo: "financeiro" },
+  controller.reabrirFatura,
+);

@@ -600,6 +600,13 @@ export type ItemDoParcelamento = {
   valor: Centavos;
 };
 
+/** Centavos como a tela mostra. So para mensagem de erro. */
+function reais(centavos: number): string {
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(
+    centavos / 100,
+  );
+}
+
 export function redefinirParcelas(
   existentes: ParcelaExistente[],
   itens: ItemDoParcelamento[],
@@ -643,9 +650,23 @@ export function redefinirParcelas(
   const somaItens = itens.reduce<Centavos>((s, i) => somar(s, i.valor), ZERO);
 
   if (somar(somaPagas, somaItens) !== totalDaConta) {
+    /*
+     * ⚠️ Os NUMEROS entram na frase, e nao so no `details`.
+     *
+     * A mensagem seca era indefensavel na tela: o rodape do editor mostrava a
+     * soma fechando com o total e o servidor recusava dizendo que nao fechava.
+     * Sem ver os dois lados nao havia como descobrir quem estava certo — e a
+     * causa costuma ser esta: a tela e o servidor discordam sobre QUAIS parcelas
+     * estao em aberto, entao cada um soma um conjunto diferente. Com os numeros
+     * na frase, a diferenca aparece e aponta para a parcela que sobrou ou faltou.
+     */
+    const soma = somar(somaPagas, somaItens);
+
     throw new BusinessRuleError(
-      "A soma das parcelas nao bate com o total da conta",
-      { soma: somar(somaPagas, somaItens), total: totalDaConta },
+      `A soma das parcelas (${reais(soma)}) nao bate com o total da conta (${reais(totalDaConta)}). ` +
+        `Diferenca de ${reais(Math.abs(totalDaConta - soma) as Centavos)}. ` +
+        `Foram somadas ${pagas.length} parcela(s) ja paga(s) e ${itens.length} em aberto.`,
+      { soma, total: totalDaConta, pagas: pagas.length, abertas: itens.length },
     );
   }
 

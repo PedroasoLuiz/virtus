@@ -13,10 +13,21 @@ import type {
 /**
  * Unica porta de acesso aos dados da conciliacao.
  *
- * Duas tabelas: `extratobancario`, que e o que o banco mandou, e `pagamentos`,
- * que e o que a empresa lancou. O vinculo mora nas duas pontas — `fkPagamento`
- * de um lado e `conciliado` do outro —, e e por isso que gravar e desfazer
- * passam por aqui e nao por dois caminhos separados.
+ * Tres tabelas: `extratobancario`, que e o que o banco mandou; `pagamentos`, que
+ * e o que a empresa lancou; e `extratovinculos`, que guarda a afirmacao de que
+ * uma linha de cada lado sao o mesmo dinheiro.
+ *
+ * ⚠️ O vinculo e uma TABELA porque um credito do banco pode pagar varias contas:
+ * a Cresol compensa dois boletos de clientes diferentes num deposito so. No
+ * sistema sao dois recebimentos — um pagamento e de um pagador so —, e no extrato
+ * e uma linha. Enquanto isso era uma coluna, um dos dois conciliava e o outro
+ * ficava pendente para sempre.
+ *
+ * ⚠️ `conciliado` continua nas duas pontas e e CONSEQUENCIA dos vinculos, e nao o
+ * registro deles: e por ele que as listas filtram, e contar vinculos a cada
+ * leitura seria uma junta para responder sim ou nao. Por isso gravar e desfazer
+ * passam por aqui, e nao por caminhos separados — quem escreve o vinculo escreve
+ * as duas bandeiras junto.
  */
 
 /*
@@ -35,7 +46,7 @@ export async function linhasDoExtrato(
 
   const { data, error } = await supabase
     .from("extratobancario")
-    .select("id, data, valor, nome, descricao, conciliado, fkPagamento")
+    .select("id, data, valor, nome, descricao, conciliado")
     .eq("fkEmpresa", empresaId)
     .eq("fkContaBancaria", contaId)
     .gte("data", de)
@@ -44,6 +55,11 @@ export async function linhasDoExtrato(
     .order("id", { ascending: true });
 
   if (error) throw error;
+
+  const vinculos = await vinculosDasLinhas(
+    empresaId,
+    (data ?? []).map((l) => l.id),
+  );
 
   return (data ?? []).map((l) => ({
     id: l.id,
@@ -64,8 +80,42 @@ export async function linhasDoExtrato(
     nome: l.nome?.trim() || l.descricao?.trim() || "",
     tipo: l.descricao?.trim() || "OTHER",
     conciliado: l.conciliado ?? false,
-    pagamentoId: l.fkPagamento,
+    pagamentoIds: vinculos.get(l.id) ?? [],
   }));
+}
+
+/**
+ * Com quem cada linha da pagina casou.
+ *
+ * ⚠️ UMA consulta para a pagina inteira, e nao uma por linha. Um extrato mensal
+ * traz duzentas linhas; perguntando uma a uma, abrir a tela eram duzentas idas ao
+ * banco para responder a mesma pergunta com o id trocado.
+ */
+async function vinculosDasLinhas(
+  empresaId: number,
+  linhaIds: number[],
+): Promise<Map<number, number[]>> {
+  const mapa = new Map<number, number[]>();
+  if (linhaIds.length === 0) return mapa;
+
+  const supabase = await serverClient();
+
+  const { data, error } = await supabase
+    .from("extratovinculos")
+    .select("id, fkExtrato, fkPagamento")
+    .eq("fkEmpresa", empresaId)
+    .in("fkExtrato", linhaIds)
+    .order("id", { ascending: true });
+
+  if (error) throw error;
+
+  for (const v of data ?? []) {
+    const lista = mapa.get(v.fkExtrato) ?? [];
+    lista.push(v.fkPagamento);
+    mapa.set(v.fkExtrato, lista);
+  }
+
+  return mapa;
 }
 
 function ehSaida(tipo: string | null): boolean {
@@ -279,21 +329,44 @@ export async function gravarLinhas(
 /**
  * Afirma que a linha e o lancamento sao o mesmo dinheiro.
  *
- * ⚠️ As DUAS pontas, sempre. `extratobancario.fkPagamento` diz com quem a linha
- * casou; `pagamentos.conciliado` e o que a tela de extrato e o fechamento leem.
- * Gravando so uma, o extrato mostra conferido e a conciliacao mostra pendente —
- * e nao ha como saber qual das duas esta certa.
+ * ⚠️ TRES escritas, sempre. O vinculo em `extratovinculos` e a afirmacao; os dois
+ * `conciliado` sao as bandeiras que a tela de extrato e o fechamento leem.
+ * Gravando so uma parte, um lado mostra conferido e o outro mostra pendente — e
+ * nao ha como saber qual dos dois esta certo.
+ *
+ * ⚠️ A linha ACEITA outro vinculo depois de conciliada, e e para isso que a
+ * tabela existe: o segundo boleto do mesmo deposito chega assim.
+ *
+ * ⚠️ Ja o LANCAMENTO nao: `UNIQUE(fkPagamento)` no banco recusa amarra-lo a uma
+ * segunda linha. Sem isso, o mesmo recebimento apareceria em dois creditos do
+ * extrato e o saldo fecharia contando o dinheiro duas vezes.
  */
 export async function vincular(
   empresaId: number,
   linhaId: number,
   pagamentoId: number,
+  usuarioId: string,
 ): Promise<void> {
   const supabase = await serverClient();
 
+  const { error: erroVinculo } = await supabase.from("extratovinculos").insert({
+    fkEmpresa: empresaId,
+    fkExtrato: linhaId,
+    fkPagamento: pagamentoId,
+    fkUserCriacao: usuarioId,
+  });
+
+  /*
+   * ⚠️ `23505` e a UNIQUE, e nao um defeito: e a tela mandando duas vezes o mesmo
+   * par. O estado desejado ja existe, e as bandeiras abaixo fecham o que faltava.
+   * O caso de roubar um lancamento de outra linha nao chega aqui — o servico
+   * recusa antes, com nome e numero da linha que ja o tem.
+   */
+  if (erroVinculo && erroVinculo.code !== "23505") throw erroVinculo;
+
   const { error: erroLinha } = await supabase
     .from("extratobancario")
-    .update({ fkPagamento: pagamentoId, conciliado: true })
+    .update({ conciliado: true })
     .eq("fkEmpresa", empresaId)
     .eq("id", linhaId);
 
@@ -308,39 +381,165 @@ export async function vincular(
   if (erroPagamento) throw erroPagamento;
 }
 
-/** Desfaz o vinculo, nas duas pontas. */
+/**
+ * Desfaz o vinculo — um so, ou todos os da linha.
+ *
+ * ⚠️ `pagamentoId` sendo opcional e o que separa os dois gestos da tela. Numa
+ * linha que casou com tres lancamentos, "desfazer este" tira um e deixa os outros
+ * dois de pe; sem ele, corrigir um dos tres obrigava a refazer os tres.
+ *
+ * ⚠️ A linha so volta a PENDENTE quando nao sobra vinculo nenhum. Limpando a
+ * bandeira junto com o primeiro vinculo removido, uma linha ainda casada com dois
+ * lancamentos reapareceria como pendente, convidando a conciliar de novo o que ja
+ * esta conciliado.
+ */
 export async function desvincular(
   empresaId: number,
   linhaId: number,
+  pagamentoId?: number,
 ): Promise<void> {
   const supabase = await serverClient();
 
-  const { data, error } = await supabase
-    .from("extratobancario")
+  /* Quais saem — precisa saber ANTES de apagar, para limpar `pagamentos`. */
+  let consulta = supabase
+    .from("extratovinculos")
     .select("fkPagamento")
+    .eq("fkEmpresa", empresaId)
+    .eq("fkExtrato", linhaId);
+
+  if (pagamentoId != null) consulta = consulta.eq("fkPagamento", pagamentoId);
+
+  const { data, error } = await consulta;
+  if (error) throw error;
+
+  const saindo = (data ?? []).map((v) => v.fkPagamento);
+
+  if (saindo.length > 0) {
+    const { error: erroApagar } = await supabase
+      .from("extratovinculos")
+      .delete()
+      .eq("fkEmpresa", empresaId)
+      .eq("fkExtrato", linhaId)
+      .in("fkPagamento", saindo);
+
+    if (erroApagar) throw erroApagar;
+
+    const { error: erroPagamento } = await supabase
+      .from("pagamentos")
+      .update({ conciliado: false })
+      .eq("fkEmpresa", empresaId)
+      .in("id", saindo);
+
+    if (erroPagamento) throw erroPagamento;
+  }
+
+  const { count, error: erroConta } = await supabase
+    .from("extratovinculos")
+    .select("id", { count: "exact", head: true })
+    .eq("fkEmpresa", empresaId)
+    .eq("fkExtrato", linhaId);
+
+  if (erroConta) throw erroConta;
+  if ((count ?? 0) > 0) return;
+
+  const { error: erroLinha } = await supabase
+    .from("extratobancario")
+    .update({ conciliado: false })
+    .eq("fkEmpresa", empresaId)
+    .eq("id", linhaId);
+
+  if (erroLinha) throw erroLinha;
+}
+
+/**
+ * O valor da linha e a soma do que ja esta casado com ela.
+ *
+ * ⚠️ Le o valor dos lancamentos VINCULADOS, e nao os do periodo carregado na
+ * tela. A linha pode ter casado com um lancamento de outro mes — a conciliacao
+ * puxa a data da baixa para o dia do extrato, mas o vinculo pode ser antigo — e
+ * somando so o que a tela mostra, uma linha ja fechada pareceria ter espaco.
+ *
+ * ⚠️ O sinal do extrato segue a mesma leitura de `linhasDoExtrato`: valor
+ * negativo gravado manda, e sem sinal quem decide e o tipo. Duas regras
+ * diferentes para o mesmo campo fariam a saida fechar como entrada.
+ */
+export async function saldoDaLinha(
+  empresaId: number,
+  linhaId: number,
+): Promise<{ valor: Centavos; casado: Centavos } | null> {
+  const supabase = await serverClient();
+
+  const { data: linha, error } = await supabase
+    .from("extratobancario")
+    .select("valor, descricao")
     .eq("fkEmpresa", empresaId)
     .eq("id", linhaId)
     .maybeSingle();
 
   if (error) throw error;
+  if (!linha) return null;
 
-  const { error: erroLinha } = await supabase
-    .from("extratobancario")
-    .update({ fkPagamento: null, conciliado: false })
+  const valor = (
+    linha.valor != null && linha.valor < 0
+      ? doBanco(linha.valor)
+      : ehSaida(linha.descricao)
+        ? -doBanco(linha.valor)
+        : doBanco(linha.valor)
+  ) as Centavos;
+
+  const { data: vinculos, error: erroVinculos } = await supabase
+    .from("extratovinculos")
+    .select("fkPagamento")
     .eq("fkEmpresa", empresaId)
-    .eq("id", linhaId);
+    .eq("fkExtrato", linhaId);
 
-  if (erroLinha) throw erroLinha;
+  if (erroVinculos) throw erroVinculos;
 
-  if (data?.fkPagamento == null) return;
+  const ids = (vinculos ?? []).map((v) => v.fkPagamento);
+  if (ids.length === 0) return { valor, casado: 0 as Centavos };
 
-  const { error: erroPagamento } = await supabase
+  const { data: pagamentos, error: erroPagamentos } = await supabase
     .from("pagamentos")
-    .update({ conciliado: false })
+    .select("valor, natureza")
     .eq("fkEmpresa", empresaId)
-    .eq("id", data.fkPagamento);
+    .in("id", ids);
 
-  if (erroPagamento) throw erroPagamento;
+  if (erroPagamentos) throw erroPagamentos;
+
+  const casado = (pagamentos ?? []).reduce((soma, p) => {
+    const bruto = doBanco(Math.abs(p.valor ?? 0));
+    return soma + (p.natureza === RECEITA ? bruto : -bruto);
+  }, 0) as Centavos;
+
+  return { valor, casado };
+}
+
+/**
+ * De que linha do extrato cada um destes lancamentos ja e.
+ *
+ * ⚠️ Existe para o servico poder RECUSAR com nome: `UNIQUE(fkPagamento)` barraria
+ * de qualquer jeito, mas com um erro de banco que nao diz onde o lancamento esta.
+ * Quem concilia precisa saber qual linha o tomou para poder desfazer aquela.
+ */
+export async function linhasDosLancamentos(
+  empresaId: number,
+  pagamentoIds: number[],
+): Promise<Map<number, number>> {
+  const mapa = new Map<number, number>();
+  if (pagamentoIds.length === 0) return mapa;
+
+  const supabase = await serverClient();
+
+  const { data, error } = await supabase
+    .from("extratovinculos")
+    .select("fkExtrato, fkPagamento")
+    .eq("fkEmpresa", empresaId)
+    .in("fkPagamento", pagamentoIds);
+
+  if (error) throw error;
+
+  for (const v of data ?? []) mapa.set(v.fkPagamento, v.fkExtrato);
+  return mapa;
 }
 
 /**
@@ -373,10 +572,8 @@ export async function quaisPertencem(
 /**
  * Marca varios lancamentos como conferidos de uma vez.
  *
- * ⚠️ O lado de `pagamentos` vai numa UPDATE so; o de `extratobancario` continua
- * linha a linha porque cada uma recebe um `fkPagamento` diferente, e nao ha
- * update em lote com valor por linha sem cair em upsert — que, num erro de
- * coluna omitida, apagaria dado financeiro em vez de atualizar.
+ * ⚠️ E o lado de `pagamentos` do lote. Os vinculos e a bandeira das linhas ficam
+ * com `apontarLinhas`, que grava todos de uma vez.
  */
 export async function marcarPagamentosConciliados(
   empresaId: number,
@@ -394,19 +591,45 @@ export async function marcarPagamentosConciliados(
   if (error) throw error;
 }
 
-/** Aponta a linha do extrato para o lancamento, sem tocar no outro lado. */
-export async function apontarLinha(
+/**
+ * Grava os vinculos do lote e marca as linhas, sem tocar em `pagamentos`.
+ *
+ * ⚠️ Um upsert so para todos os pares, e nao um por par. Era uma ida ao banco por
+ * linha; cinquenta pares conferidos eram cinquenta viagens para gravar o que cabe
+ * numa. O lado de `pagamentos` fecha em `marcarPagamentosConciliados`.
+ *
+ * ⚠️ `ignoreDuplicates` porque o par pode ja existir: reenviar o lote depois de
+ * uma queda nao pode virar erro no meio, com metade gravada.
+ */
+export async function apontarLinhas(
   empresaId: number,
-  linhaId: number,
-  pagamentoId: number,
+  pares: { linhaId: number; pagamentoId: number }[],
+  usuarioId: string,
 ): Promise<void> {
+  if (pares.length === 0) return;
+
   const supabase = await serverClient();
+
+  const { error: erroVinculos } = await supabase.from("extratovinculos").upsert(
+    pares.map((p) => ({
+      fkEmpresa: empresaId,
+      fkExtrato: p.linhaId,
+      fkPagamento: p.pagamentoId,
+      fkUserCriacao: usuarioId,
+    })),
+    { onConflict: "fkExtrato,fkPagamento", ignoreDuplicates: true },
+  );
+
+  if (erroVinculos) throw erroVinculos;
 
   const { error } = await supabase
     .from("extratobancario")
-    .update({ fkPagamento: pagamentoId, conciliado: true })
+    .update({ conciliado: true })
     .eq("fkEmpresa", empresaId)
-    .eq("id", linhaId);
+    .in(
+      "id",
+      pares.map((p) => p.linhaId),
+    );
 
   if (error) throw error;
 }

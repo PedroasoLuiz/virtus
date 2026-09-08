@@ -80,7 +80,24 @@ export const criarTicketBodySchema = z.object({
 /** Edicao: tudo opcional — a tela envia so o que mudou. */
 export const atualizarTicketBodySchema = criarTicketBodySchema
   .partial()
-  .extend({ cancelada: z.boolean().optional() });
+  .extend({
+    cancelada: z.boolean().optional(),
+    /*
+     * ⚠️ `itens` REDECLARADO, e nao herdado do `.partial()`.
+     *
+     * Em `criarTicketBodySchema` ele tem `.default([])`, e `.partial()` NAO tira
+     * default: torna a chave opcional na entrada e continua preenchendo a saida.
+     * Entao todo PATCH que nao falava de servico — trocar o endereco, o cliente,
+     * a descricao — chegava ao servico com `itens: []`, que le como "apague
+     * todos". Aparecia como "o total dos servicos nao pode ficar abaixo do
+     * faturado" ao salvar o ENDERECO; num ticket sem nada faturado, teria
+     * passado e apagado os servicos em silencio.
+     *
+     * ⚠️ E a QUINTA vez que o Zod descartando ou preenchendo campo por conta
+     * propria morde este projeto. Ver o comentario em `criarTicketBodySchema`.
+     */
+    itens: z.array(itemTicketBodySchema).optional(),
+  });
 
 /**
  * Cor e um TOM do design system, nao um hexadecimal.

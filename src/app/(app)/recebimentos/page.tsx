@@ -30,7 +30,7 @@ export default async function RecebimentosPage() {
    * encolhendo e o grafico desenharia uma queda que nao existe.
    */
   const [{ itens }, indicadores] = await Promise.all([
-    listarRecebimentos(ctx.empresaId, {}, { page: 1, perPage: 100 }),
+    listarRecebimentos(ctx.empresaId, {}, { page: 1, perPage: 500 }),
     indicadoresDeRecebimento(ctx.empresaId, hoje()),
   ]);
 

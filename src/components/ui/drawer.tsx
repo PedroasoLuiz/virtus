@@ -40,6 +40,7 @@ export function Drawer({
   footer,
   acoes,
   headerExtra,
+  fecharPersonalizado,
   nivel = 1,
   children,
 }: {
@@ -63,6 +64,17 @@ export function Drawer({
    */
   acoes?: React.ReactNode;
   headerExtra?: React.ReactNode;
+  /**
+   * Troca o que o X da ponta faz, sem tirá-lo do lugar.
+   *
+   * ⚠️ Existe para o drawer com alteração pendente. Ali o X não pode fechar: o
+   * que a pessoa mexeu e não gravou sumiria sem aviso. Mas escondê-lo também
+   * não serve — a mão já sabe onde ele está, e um canto vazio faz procurar.
+   *
+   * Então ele fica no mesmo pixel e passa a DESCARTAR. Mesmo gesto, mesmo
+   * lugar, e o que se perde é só o que ainda não tinha sido gravado.
+   */
+  fecharPersonalizado?: { rotulo: string; onClick: () => void };
   /**
    * Em que andar este drawer abre.
    *
@@ -195,8 +207,9 @@ export function Drawer({
             {acoes}
             {headerExtra}
             <button
-              onClick={onClose}
-              aria-label="Fechar"
+              onClick={fecharPersonalizado?.onClick ?? onClose}
+              title={fecharPersonalizado?.rotulo}
+              aria-label={fecharPersonalizado?.rotulo ?? "Fechar"}
               style={{
                 width: 28,
                 height: 28,

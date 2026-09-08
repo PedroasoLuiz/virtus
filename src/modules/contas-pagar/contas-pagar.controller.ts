@@ -16,6 +16,10 @@ import {
   parcelaAPagarSchema,
   tipoDeDocumentoSchema,
   type AtualizarContaBody,
+  type CartaoAtivoBody,
+  type CompraNoCartaoBody,
+  type FaturasQuery,
+  type LancamentoParam,
   type CriarBaixaBody,
   type CriarCartaoBody,
   type CriarContaBody,
@@ -58,6 +62,108 @@ export async function obter({ params, ctx }: Entrada<undefined, undefined, IdPar
   const saida: z.input<typeof contaDetalheSchema> = await service.obterConta(empresaId, params.id);
 
   return ok(contaDetalheSchema.parse(saida));
+}
+
+export async function atualizarCartao({
+  body,
+  params,
+  ctx,
+}: Entrada<CartaoAtivoBody, undefined, IdParam>) {
+  const empresaId = empresaObrigatoria(ctx);
+  await service.atualizarCartao(empresaId, ctx.usuarioId, params.id, {
+    ativo: body.ativo,
+    fornecedorId: body.fornecedorId,
+  });
+  return ok(await service.cartoesDaEmpresa(empresaId));
+}
+
+export async function excluirCartao({ params, ctx }: Entrada<undefined, undefined, IdParam>) {
+  await service.excluirCartao(empresaObrigatoria(ctx), params.id);
+  return noContent();
+}
+
+export async function lancarCompraNoCartao({
+  body,
+  params,
+  ctx,
+}: Entrada<CompraNoCartaoBody, undefined, IdParam>) {
+  const empresaId = empresaObrigatoria(ctx);
+
+  await service.lancarCompraNoCartao(empresaId, ctx.usuarioId, {
+    cartaoId: params.id,
+    fornecedorId: body.fornecedorId,
+    descricao: body.descricao,
+    dataCompra: body.dataCompra,
+    valor: centavos(body.valor),
+    centroCustoId: body.centroCustoId ?? null,
+    parcelas: body.parcelas,
+    competenciaInicial: body.competenciaInicial,
+  });
+
+  return created(await service.faturasDoCartao(empresaId, params.id));
+}
+
+export async function lancamentosDaFatura({ params, ctx }: Entrada<undefined, undefined, IdParam>) {
+  return ok(await service.lancamentosDaFatura(empresaObrigatoria(ctx), params.id));
+}
+
+export async function cancelarLancamentoDaFatura({
+  params,
+  ctx,
+}: Entrada<undefined, undefined, LancamentoParam>) {
+  const empresaId = empresaObrigatoria(ctx);
+  await service.definirLancamentoCancelado(
+    empresaId,
+    ctx.usuarioId,
+    params.id,
+    params.lancamentoId,
+    true,
+  );
+  return ok(await service.lancamentosDaFatura(empresaId, params.id));
+}
+
+export async function reativarLancamentoDaFatura({
+  params,
+  ctx,
+}: Entrada<undefined, undefined, LancamentoParam>) {
+  const empresaId = empresaObrigatoria(ctx);
+  await service.definirLancamentoCancelado(
+    empresaId,
+    ctx.usuarioId,
+    params.id,
+    params.lancamentoId,
+    false,
+  );
+  return ok(await service.lancamentosDaFatura(empresaId, params.id));
+}
+
+export async function removerLancamentoDaFatura({
+  params,
+  ctx,
+}: Entrada<undefined, undefined, LancamentoParam>) {
+  await service.removerLancamentoDaFatura(
+    empresaObrigatoria(ctx),
+    params.id,
+    params.lancamentoId,
+  );
+  return noContent();
+}
+
+export async function cancelarConta({ params, ctx }: Entrada<undefined, undefined, IdParam>) {
+  const empresaId = empresaObrigatoria(ctx);
+  await service.cancelarConta(empresaId, ctx.usuarioId, params.id);
+  return ok(contaDetalheSchema.parse(await service.obterConta(empresaId, params.id)));
+}
+
+export async function reativarConta({ params, ctx }: Entrada<undefined, undefined, IdParam>) {
+  const empresaId = empresaObrigatoria(ctx);
+  await service.cancelarConta(empresaId, ctx.usuarioId, params.id, false);
+  return ok(contaDetalheSchema.parse(await service.obterConta(empresaId, params.id)));
+}
+
+export async function excluirConta({ params, ctx }: Entrada<undefined, undefined, IdParam>) {
+  await service.excluirConta(empresaObrigatoria(ctx), params.id);
+  return noContent();
 }
 
 export async function cancelarParcela({
@@ -127,9 +233,15 @@ export async function criarCartao({ body, ctx }: Entrada<CriarCartaoBody, undefi
   return created(lista.map((c) => cartaoDaBaixaSchema.parse(c)));
 }
 
-export async function faturas({ ctx }: Entrada<undefined, undefined, unknown>) {
-  const lista = await service.faturasDoCartao(empresaObrigatoria(ctx));
+export async function faturas({ query, ctx }: Entrada<undefined, FaturasQuery, unknown>) {
+  const lista = await service.faturasDoCartao(empresaObrigatoria(ctx), query.cartaoId);
   return ok(lista.map((f) => faturaDeCartaoSchema.parse(f)));
+}
+
+export async function reabrirFatura({ params, ctx }: Entrada<undefined, undefined, IdParam>) {
+  const empresaId = empresaObrigatoria(ctx);
+  await service.reabrirFatura(empresaId, ctx.usuarioId, params.id);
+  return ok(await service.faturasDoCartao(empresaId));
 }
 
 export async function fecharFatura({ params, ctx }: Entrada<undefined, undefined, IdParam>) {

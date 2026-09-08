@@ -67,6 +67,57 @@ export const redefinirParcelasBodySchema = z.object({
     .max(360),
 });
 
+/**
+ * Uma compra lancada no cartao.
+ *
+ * ⚠️ Ela NAO passa por conta a pagar. A linha da fatura ja carrega fornecedor,
+ * descricao, data, valor e centro de custo — ela e a despesa. Ver o servico.
+ */
+export const compraNoCartaoBodySchema = z.object({
+  fornecedorId: idSchema,
+  descricao: textoCurtoSchema,
+  dataCompra: dataISOSchema,
+  valor: centavosPositivoSchema,
+  centroCustoId: idSchema.nullish(),
+  /*
+   * ⚠️ Cada parcela cai num CICLO diferente, e pode acabar em faturas
+   * diferentes. Comprar em 10x nao e uma despesa de dez vezes o valor neste mes.
+   */
+  parcelas: z.number().int().min(1).max(36).default(1),
+  /*
+   * ⚠️ O ciclo de onde a compra foi lancada, quando ela nasce DE DENTRO de uma
+   * fatura.
+   *
+   * Sem ele, o ciclo sai da data da compra pela regra do cartao — e e o certo
+   * quando se lanca "no cartao". Mas quem abriu a fatura de junho e clicou em
+   * lancar ja disse em qual ciclo aquilo entra: recalcular pela data jogaria a
+   * compra para outra fatura, e a pessoa veria o lancamento sumir da tela em que
+   * estava.
+   */
+  competenciaInicial: dataISOSchema.optional(),
+});
+
+/**
+ * O que se muda num cartao ja cadastrado.
+ *
+ * ⚠️ Os dois campos sao OPCIONAIS e independentes: a tela manda o que mexeu. O
+ * interruptor da lista manda so `ativo`; o seletor de fornecedor manda so ele.
+ */
+export const cartaoAtivoBodySchema = z.object({
+  ativo: z.boolean().optional(),
+  fornecedorId: idSchema.nullish(),
+});
+
+/** O filtro da lista de faturas. Sem cartao, vem tudo. */
+export const faturasQuerySchema = z.object({
+  cartaoId: idSchema.optional(),
+});
+
+export const lancamentoParamSchema = z.object({
+  id: idSchema,
+  lancamentoId: idSchema,
+});
+
 export const atualizarContaBodySchema = z.object({
   observacoes: textoLongoSchema.nullish(),
 });
@@ -200,6 +251,9 @@ export const contaDetalheSchema = contaResumoSchema.extend({
       /* Combinada e nao vai mais acontecer: contrato encerrado antes dela. */
       cancelada: z.boolean(),
       motivoDoCancelamento: z.string().nullable(),
+      /* Juros e multa pagos por atraso, somados. Nao e `acrescimo`: aquele foi
+         combinado no parcelamento e ja esta dentro de `total`. */
+      jurosMulta: z.number(),
       conciliado: z.boolean(),
       nfs: z.string().nullable(),
       boleto: z.string().nullable(),
@@ -289,6 +343,12 @@ export const faturaDeCartaoSchema = z.object({
   total: z.number(),
   status: z.string(),
   contaPagarId: z.number().nullable(),
+  /* O numero por empresa da conta do fechamento — o que a tela mostra. O `id`
+     acima e a chave, e nao aparece em nenhuma outra tela. */
+  contaPagarNumero: z.number().nullable(),
+  /* A conta do fechamento ja recebeu dinheiro: e o que barra o reabrir na tela,
+     antes do clique, em vez de deixar o servidor recusar depois. */
+  contaPaga: z.boolean(),
   qtdLancamentos: z.number(),
 });
 
@@ -390,3 +450,8 @@ export type ParcelaParam = z.infer<typeof parcelaParamSchema>;
 export type CancelarParcelaBody = z.infer<typeof cancelarParcelaBodySchema>;
 export type TipoDocumentoQuery = z.infer<typeof tipoDocumentoQuerySchema>;
 export type IdParam = z.infer<typeof idParamSchema>;
+
+export type CompraNoCartaoBody = z.infer<typeof compraNoCartaoBodySchema>;
+export type LancamentoParam = z.infer<typeof lancamentoParamSchema>;
+export type FaturasQuery = z.infer<typeof faturasQuerySchema>;
+export type CartaoAtivoBody = z.infer<typeof cartaoAtivoBodySchema>;

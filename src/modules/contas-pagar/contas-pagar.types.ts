@@ -211,8 +211,15 @@ export type CartaoDaBaixa = {
   bandeira: string | null;
   diaFechamento: number;
   diaVencimento: number;
-  /** O cadastro que recebe o pagamento da fatura. Por cartao, logo por empresa. */
+  /**
+   * O cadastro que recebe o pagamento da fatura.
+   *
+   * ⚠️ EXIGIDO no fechamento: e o credor da conta a pagar que nasce ali. Antes o
+   * sistema inventava um cliente com o nome do banco quando faltava, e a conta
+   * nascia no nome de um cadastro sem CNPJ que ninguem reconhecia.
+   */
   fornecedorId: number | null;
+  fornecedorNome: string | null;
   /** A instituicao emissora, da lista de bancos. */
   bancoId: number | null;
   bancoNome: string | null;
@@ -261,6 +268,26 @@ export type FaturaDeCartao = {
   status: string;
   /** A conta a pagar gerada no fechamento. Nulo enquanto aberta. */
   contaPagarId: number | null;
+  /**
+   * O NUMERO dessa conta — o que a tela mostra.
+   *
+   * ⚠️ Nao e o `contaPagarId`. O sistema e multiempresa: `id` e a sequencia
+   * global e nao aparece em lugar nenhum, e a tela dizia "Conta 190" para a
+   * conta que a lista de contas a pagar chama de 189. Mesmo defeito que o
+   * extrato tinha na coluna de registro.
+   */
+  contaPagarNumero: number | null;
+  /**
+   * A conta a pagar do fechamento ja recebeu dinheiro.
+   *
+   * ⚠️ Existe para a TELA poder barrar o reabrir antes do clique. Reabrir apaga
+   * a conta a pagar, e conta com parcela paga nao se apaga — o servidor ja
+   * recusava, mas so depois de a pessoa confirmar um dialogo que prometia o que
+   * nao ia acontecer. Barrado no menu, o motivo aparece antes.
+   *
+   * Falso quando a fatura esta aberta: nao ha conta ainda.
+   */
+  contaPaga: boolean;
   qtdLancamentos: number;
 };
 
@@ -416,3 +443,40 @@ export function estaVencida(conta: ContaPagarResumo): boolean {
 
   return conta.proximoVencimento != null && conta.proximoVencimento < hoje();
 }
+
+/**
+ * Uma compra dentro da fatura do cartão.
+ *
+ * ⚠️ Ela é a DESPESA, e não o reflexo de uma conta a pagar. Carrega fornecedor,
+ * descrição, data da compra, competência, valor e centro de custo próprios — é
+ * assim que a DRE a lê, pela competência do ciclo e pelo centro da linha.
+ */
+export type LancamentoDaFatura = {
+  id: number;
+  descricao: string;
+  /** Quando a compra aconteceu. */
+  dataCompra: DataISO | null;
+  /**
+   * O ciclo em que ela cai.
+   *
+   * ⚠️ Diferente de `dataCompra`, e é ESTE que vale na DRE. Compra depois do
+   * fechamento entra no ciclo seguinte: é por isso que a despesa do cartão
+   * aparece no mês em que a fatura vence, e não no dia em que se comprou.
+   */
+  competencia: DataISO | null;
+  numeroParcela: number;
+  valor: Centavos;
+  /**
+   * Combinada e desfeita — estorno, compra negada, cobranca indevida.
+   *
+   * ⚠️ Ela FICA na fatura e para de somar. Apagada, ninguem descobre depois por
+   * que a fatura do mes deu menos do que a soma das notas.
+   */
+  cancelada: boolean;
+  centroCustoId: number | null;
+  /** O código do centro. A tela mostra "012 · Marketing", como na conta a pagar. */
+  centroCustoCodigo: string | null;
+  centroCustoNome: string | null;
+  fornecedorId: number | null;
+  fornecedorNome: string | null;
+};

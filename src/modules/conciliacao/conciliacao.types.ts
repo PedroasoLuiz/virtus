@@ -22,8 +22,16 @@ export type LinhaDoExtrato = {
   /** `DEBIT`, `CREDIT`... como o arquivo trouxe. */
   tipo: string;
   conciliado: boolean;
-  /** O lancamento com que ela foi casada. */
-  pagamentoId: number | null;
+  /**
+   * Os lancamentos com que ela foi casada. Vazia enquanto pendente.
+   *
+   * ⚠️ LISTA, e nao um so. O banco compensa varios boletos num credito unico —
+   * 2.220 que sao 2.000 de um cliente e 220 de outro. No sistema sao dois
+   * recebimentos, porque um pagamento e de um pagador so; no extrato e uma linha
+   * so. Com um campo unico, um dos dois conciliava e o outro ficava pendente
+   * para sempre, e o extrato nunca fechava.
+   */
+  pagamentoIds: number[];
 };
 
 /** Um lancamento do sistema, do lado de ca da conciliacao. */

@@ -150,12 +150,77 @@ export async function atualizarTicket(
         `O ticket ja tem ${reais(atual.faturado)} faturado. O total dos servicos nao pode ficar abaixo disso.`,
       );
     }
+
+    if (atual.faturado > 0) checaComposicaoCongelada(atual, itens);
   }
 
   await repo.atualizar(empresaId, id, usuarioId, campos);
   if (itens !== undefined) await repo.substituirItens(id, usuarioId, paraGravar(itens));
 
   return obterTicket(empresaId, id);
+}
+
+/**
+ * A COMPOSICAO do ticket faturado nao muda mais — so o texto.
+ *
+ * ⚠️ Nao bastava barrar o total para baixo.
+ *
+ * O ticket 158, de R$ 200, ja virou conta a receber. Sem esta regra dava para
+ * trocar o servico dele por outro — de outro centro de custo, de outro preco —
+ * mantendo o mesmo total: a conta continuava fechando, e o rateio contabil
+ * passava a apontar para uma categoria que nunca foi cobrada. A operacao do
+ * outro lado pode ate ja estar encerrada, e ninguem seria avisado.
+ *
+ * O que fica LIVRE e a descricao: ela nao entra em nenhuma conta, e e onde se
+ * corrige um nome errado no documento sem mexer no que foi cobrado.
+ *
+ * ⚠️ E o numero de itens tambem congela: acrescentar servico depois de faturado
+ * criaria saldo a faturar num ticket que ja fechou, e o modelo cobra o ticket
+ * por inteiro. Servico novo e ticket novo.
+ *
+ * Vive no servico e nao so na tela porque a API tambem e caminho de escrita.
+ */
+function checaComposicaoCongelada(atual: Ticket, itens: ItemEntrada[]): void {
+  if (itens.length !== atual.itens.length) {
+    throw new BusinessRuleError(
+      itens.length > atual.itens.length
+        ? "Este ticket ja foi faturado. Servico novo entra num ticket novo."
+        : "Este ticket ja foi faturado. Os servicos dele nao podem mais ser removidos.",
+    );
+  }
+
+  const gravaveis = paraGravar(itens);
+
+  for (const [i, novo] of gravaveis.entries()) {
+    const antigo = atual.itens[i];
+
+    /* Despesas entram na assinatura: elas somam no total do item, e trocar uma
+       de 50 por outra de 50 mudaria o que a nota discrimina. */
+    const assinatura = (x: {
+      servicoId: number | null;
+      quantidade: number;
+      unidade: string;
+      valorUnitario: number;
+      desconto: number;
+      acrescimo: number;
+      despesas: { descricao: string; valor: number }[];
+    }) =>
+      JSON.stringify([
+        x.servicoId,
+        x.quantidade,
+        x.unidade,
+        x.valorUnitario,
+        x.desconto,
+        x.acrescimo,
+        x.despesas.map((d) => [d.descricao, d.valor]),
+      ]);
+
+    if (assinatura(novo) !== assinatura(antigo)) {
+      throw new BusinessRuleError(
+        `Este ticket ja tem ${reais(atual.faturado)} faturado. Servico, valores e despesas nao mudam mais; so a descricao.`,
+      );
+    }
+  }
 }
 
 async function primeiraColuna(empresaId: number): Promise<number | null> {
@@ -226,6 +291,63 @@ const PASSO = 10;
 
 export function listarStatus(empresaId: number): Promise<StatusTicket[]> {
   return repo.listarStatus(empresaId);
+}
+
+/**
+ * Cancela o ticket, ou desfaz o cancelamento.
+ *
+ * ⚠️ Recusa quando alguma conta a receber deste ticket ja tem baixa.
+ *
+ * Cancelar solta as origens: as tarefas voltam a poder ser cobradas e o vinculo
+ * com o projeto sai. Com dinheiro ja recebido, isso deixaria um pagamento
+ * apontando para uma cobranca que o sistema passou a dizer que nao existe — e a
+ * mesma entrega poderia ser cobrada de novo. Estorna-se o recebimento primeiro.
+ *
+ * ⚠️ Faturado sem baixa CANCELA. A conta gerada continua la e a decisao sobre
+ * ela e de quem cuida do financeiro; o gatilho so devolve o saldo da origem.
+ */
+export async function cancelarTicket(
+  empresaId: number,
+  usuarioId: string | null,
+  id: number,
+  cancelada = true,
+): Promise<Ticket> {
+  const ticket = await obterTicket(empresaId, id);
+
+  if (ticket.cancelada === cancelada) return ticket; // idempotente
+
+  if (cancelada && ticket.faturas.some((f) => f.pago > 0)) {
+    throw new BusinessRuleError(
+      "Este ticket ja tem recebimento na conta a receber. Estorne a baixa antes de cancelar.",
+    );
+  }
+
+  await repo.definirCancelada(empresaId, id, cancelada, usuarioId);
+  return obterTicket(empresaId, id);
+}
+
+/**
+ * Apaga o ticket.
+ *
+ * ⚠️ Recusa quando ele ja gerou conta a receber, mesmo sem baixa.
+ *
+ * A conta guarda o valor que saiu daqui; sumindo o ticket, ninguem mais sabe
+ * dizer de onde aquele numero veio, e a composicao da conta fica apontando para
+ * um registro que nao existe. Ticket que ja virou cobranca se CANCELA — ele
+ * continua na tela, e a memoria fica.
+ */
+export async function excluirTicket(empresaId: number, id: number): Promise<void> {
+  const ticket = await obterTicket(empresaId, id);
+
+  if (ticket.faturas.length > 0) {
+    throw new BusinessRuleError(
+      `Este ticket ja gerou a conta a receber ${ticket.faturas
+        .map((f) => f.numero)
+        .join(", ")}. Cancele em vez de excluir.`,
+    );
+  }
+
+  await repo.excluirTicket(empresaId, id);
 }
 
 export async function criarStatus(

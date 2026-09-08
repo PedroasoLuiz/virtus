@@ -1,6 +1,7 @@
 import { BusinessRuleError, NotFoundError } from "@/shared/errors/app-error";
 import { ajusteDeData, casar } from "@/shared/domain/conciliacao";
 import { paraFormatoBR, type DataISO } from "@/shared/utils/datas";
+import { formatarSemSimbolo, type Centavos } from "@/shared/utils/money";
 import * as repo from "@/modules/conciliacao/conciliacao.repository";
 import type {
   LinhaImportada,
@@ -64,6 +65,16 @@ export async function importar(
 /**
  * Afirma que a linha e o lancamento sao o mesmo dinheiro.
  *
+ * ⚠️ Uma linha pode receber VARIOS lancamentos, e e o caso que justifica tudo
+ * isto: o banco compensa dois boletos de clientes diferentes num deposito so.
+ * Como um pagamento e de um pagador so, no sistema sao dois recebimentos — e sem
+ * o vinculo multiplo um deles ficava pendente para sempre.
+ *
+ * ⚠️ O contrario NAO vale: o lancamento pertence a uma linha so. Amarrando o
+ * mesmo recebimento a dois creditos do extrato, o dinheiro passaria a ser contado
+ * duas vezes e o saldo fecharia mentindo. O banco ja recusa pela UNIQUE; a
+ * checagem aqui existe para dizer QUAL linha o tem, que e o que permite desfazer.
+ *
  * ⚠️ O lancamento e conferido contra o BANCO, e nao contra o que a tela mandou.
  * O corpo vem do navegador: sem esta consulta, um `pagamentoId` trocado a mao
  * conciliaria a linha contra o lancamento de outra conta — e o saldo das duas
@@ -81,8 +92,66 @@ export async function conciliar(
     throw new NotFoundError("Lançamento não encontrado nesta conta");
   }
 
+  await recusarLancamentoJaUsado(empresaId, linhaId, [pagamentoId]);
+  await recusarLinhaFechada(empresaId, linhaId);
   await alinharDatas(empresaId, usuarioId, [{ linhaId, pagamentoId }], confirmaMudancaDeMes);
-  await repo.vincular(empresaId, linhaId, pagamentoId);
+  await repo.vincular(empresaId, linhaId, pagamentoId, usuarioId);
+}
+
+/**
+ * Recusa somar mais um lancamento a uma linha que ja fechou.
+ *
+ * ⚠️ Fechou = o que ja esta casado soma EXATAMENTE o valor da linha. Dali em
+ * diante todo lancamento a mais e dinheiro inventado: o banco moveu 2.220 e o
+ * sistema passaria a afirmar que aquele mesmo movimento pagou 2.440. O saldo
+ * continuaria fechando pelo extrato e mentindo por dentro, que e o erro mais
+ * dificil de achar depois.
+ *
+ * ⚠️ So o EXATO fecha. Faltando ou sobrando um centavo a linha continua aberta,
+ * porque e justamente a diferenca que aponta o que ainda falta achar — e um
+ * "quase" travado seria uma linha que ninguem mais consegue completar.
+ *
+ * ⚠️ Vale so para a linha que JA TEM vinculo. A primeira conciliacao de uma
+ * linha nunca e barrada: um lancamento de valor diferente pode ser o certo, com
+ * juros, tarifa ou desconto explicando a diferenca.
+ */
+async function recusarLinhaFechada(empresaId: number, linhaId: number): Promise<void> {
+  const saldo = await repo.saldoDaLinha(empresaId, linhaId);
+  if (!saldo || saldo.casado === 0) return;
+  if (saldo.casado !== saldo.valor) return;
+
+  throw new BusinessRuleError(
+    `Esta linha já está fechada: os lançamentos casados somam ` +
+      `${formatarSemSimbolo(Math.abs(saldo.valor) as Centavos)}, que é o valor do movimento. ` +
+      `Para trocar um deles, desfaça o vínculo primeiro.`,
+  );
+}
+
+/**
+ * Recusa o lancamento que ja e de OUTRA linha do extrato.
+ *
+ * ⚠️ Antes de qualquer escrita, e para o lote inteiro de uma vez. Deixando o
+ * banco barrar pela UNIQUE, o erro chega como falha de servidor no meio da
+ * gravacao — parte do lote dentro, parte fora, e a mensagem sem dizer onde o
+ * lancamento ja esta. Quem concilia precisa do numero da linha para poder ir la
+ * desfazer aquela.
+ */
+async function recusarLancamentoJaUsado(
+  empresaId: number,
+  linhaId: number | null,
+  pagamentoIds: number[],
+): Promise<void> {
+  const ocupados = await repo.linhasDosLancamentos(empresaId, pagamentoIds);
+
+  for (const pagamentoId of pagamentoIds) {
+    const dono = ocupados.get(pagamentoId);
+    if (dono == null || dono === linhaId) continue;
+
+    throw new BusinessRuleError(
+      "Este lançamento já está conciliado com outra linha do extrato. " +
+        "Desfaça o vínculo lá antes de casá-lo aqui.",
+    );
+  }
 }
 
 /**
@@ -150,8 +219,19 @@ async function alinharDatas(
   }
 }
 
-export async function desfazer(empresaId: number, linhaId: number): Promise<void> {
-  await repo.desvincular(empresaId, linhaId);
+/**
+ * Desfaz o vinculo — um so, ou a linha inteira.
+ *
+ * ⚠️ `pagamentoId` sendo opcional e o que separa os dois gestos. Numa linha que
+ * casou com tres lancamentos, "desfazer este" tira um e deixa os outros dois de
+ * pe; sem o campo, corrigir um dos tres obrigava a refazer os tres.
+ */
+export async function desfazer(
+  empresaId: number,
+  linhaId: number,
+  pagamentoId?: number,
+): Promise<void> {
+  await repo.desvincular(empresaId, linhaId, pagamentoId);
 }
 
 /**
@@ -192,14 +272,32 @@ export async function conciliarVarios(
     throw new NotFoundError("Lançamento não encontrado nesta conta");
   }
 
+  /*
+   * ⚠️ O lote nao pode trazer o MESMO lancamento em dois pares.
+   *
+   * A tela sugere por valor e data, e duas linhas iguais no extrato recebem a
+   * mesma sugestao. Marcando as duas, o lote pediria para amarrar um recebimento
+   * a dois creditos — o banco recusaria a segunda pela UNIQUE, e o resultado
+   * seria metade gravada com uma falha de servidor no lugar da explicacao.
+   */
+  const repetido = ids.find((id, i) => ids.indexOf(id) !== i);
+  if (repetido != null) {
+    throw new BusinessRuleError(
+      "O mesmo lançamento foi marcado em duas linhas do extrato. " +
+        "Um lançamento pertence a uma linha só.",
+    );
+  }
+
+  for (const par of pares) {
+    await recusarLancamentoJaUsado(empresaId, par.linhaId, [par.pagamentoId]);
+    await recusarLinhaFechada(empresaId, par.linhaId);
+  }
+
   await alinharDatas(empresaId, usuarioId, pares, confirmaMudancaDeMes);
 
-  // O lado de `pagamentos` fecha numa UPDATE so; o do extrato precisa de um
-  // valor por linha. Ver `marcarPagamentosConciliados`.
+  // Duas escritas em lote, e nao duas por par. Ver `apontarLinhas`.
   await repo.marcarPagamentosConciliados(empresaId, ids);
-  for (const par of pares) {
-    await repo.apontarLinha(empresaId, par.linhaId, par.pagamentoId);
-  }
+  await repo.apontarLinhas(empresaId, pares, usuarioId);
 
   return pares.length;
 }

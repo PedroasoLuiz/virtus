@@ -1,5 +1,5 @@
 import type { Paginacao, Pagina } from "@/shared/utils/paginacao";
-import { hoje } from "@/shared/utils/datas";
+import { hoje, primeiroDiaDoMes, somarMeses, type DataISO } from "@/shared/utils/datas";
 import * as repo from "@/modules/contas-pagar/contas-pagar.repository";
 import { BusinessRuleError, NotFoundError } from "@/shared/errors/app-error";
 import {
@@ -10,7 +10,15 @@ import {
   redistribuirTotal,
   type ItemDoParcelamento,
 } from "@/shared/domain/parcelas";
-import { centavos, formatarSemSimbolo, somar, subtrair, ZERO, type Centavos } from "@/shared/utils/money";
+import {
+  centavos,
+  dividir,
+  formatarSemSimbolo,
+  somar,
+  subtrair,
+  ZERO,
+  type Centavos,
+} from "@/shared/utils/money";
 import {
   competenciaBR,
   competenciaDaCompra,
@@ -38,6 +46,7 @@ import type {
   FiltroContas,
   IndicadoresDeBaixaPagar,
   LancamentoDaConta,
+  LancamentoDaFatura,
   ParcelaAPagar,
   TipoDeDocumento,
 } from "@/modules/contas-pagar/contas-pagar.types";
@@ -358,6 +367,204 @@ export async function faturasDoCartao(
   return repo.faturasDoCartao(empresaId, cartaoId);
 }
 
+/** Muda o cartao: liga/desliga, e escolhe quem recebe o pagamento da fatura. */
+export async function atualizarCartao(
+  empresaId: number,
+  usuarioId: string,
+  cartaoId: number,
+  campos: { ativo?: boolean; fornecedorId?: number | null },
+): Promise<void> {
+  const feito = await repo.atualizarCartao(empresaId, cartaoId, campos, usuarioId);
+  if (!feito) throw new NotFoundError("Cartao nao encontrado");
+}
+
+/**
+ * Apaga o cartao.
+ *
+ * ⚠️ Recusa quando ele ja teve QUALQUER fatura, mesmo aberta e vazia.
+ *
+ * A fatura carrega as compras, e as compras sao despesa lancada — elas ja
+ * contaram na DRE pela competencia do ciclo. Sumindo o cartao, o historico dessa
+ * despesa fica sem dono, e a conta a pagar gerada num fechamento passado aponta
+ * para um cartao que ninguem mais consegue nomear.
+ *
+ * Cartao que ja rodou se INATIVA: ele some da lista de escolha e continua
+ * explicando o passado.
+ */
+export async function excluirCartao(empresaId: number, cartaoId: number): Promise<void> {
+  const faturas = await repo.contarFaturasDoCartao(empresaId, cartaoId);
+
+  if (faturas > 0) {
+    throw new BusinessRuleError(
+      `Este cartao ja tem ${faturas} fatura(s). Inative em vez de excluir — as compras dele ja contaram no resultado.`,
+    );
+  }
+
+  const feito = await repo.excluirCartao(empresaId, cartaoId);
+  if (!feito) throw new NotFoundError("Cartao nao encontrado");
+}
+
+/**
+ * Lanca uma compra NO CARTAO.
+ *
+ * ⚠️ A compra do cartao nasce aqui, e nao como conta a pagar.
+ *
+ * `cartaofaturasparcelas` e auto-suficiente — fornecedor, descricao, data da
+ * compra, competencia, valor e centro de custo proprios — e e assim que a DRE a
+ * le: pela competencia do ciclo e pelo centro da linha. Ela E a despesa, e nao o
+ * reflexo de um titulo.
+ *
+ * ⚠️ Cada parcela cai num CICLO diferente, e por isso pode acabar em faturas
+ * diferentes. Comprar em 10x nao e uma despesa de dez vezes o valor neste mes: e
+ * uma despesa por mes, e o resultado de cada mes tem de mostrar so a sua.
+ *
+ * ⚠️ Data retroativa e permitida e cai no ciclo dela — a nota chega depois, e
+ * empurrar tudo para a competencia corrente faria o historico mentir. Quem
+ * recusa e o STATUS da fatura: ciclo ja fechado nao recebe mais nada.
+ */
+export async function lancarCompraNoCartao(
+  empresaId: number,
+  usuarioId: string,
+  entrada: {
+    cartaoId: number;
+    fornecedorId: number;
+    descricao: string;
+    dataCompra: DataISO;
+    valor: Centavos;
+    centroCustoId: number | null;
+    parcelas: number;
+    /** O ciclo de onde ela foi lancada. Sem ele, sai da data pela regra do cartao. */
+    competenciaInicial?: DataISO;
+  },
+): Promise<void> {
+  const cartao = await repo.cartaoDaEmpresa(empresaId, entrada.cartaoId);
+  if (!cartao) throw new NotFoundError("Cartao nao encontrado");
+
+  if (entrada.valor <= 0) {
+    throw new BusinessRuleError("A compra precisa de um valor maior que zero");
+  }
+  if (entrada.parcelas < 1 || !Number.isInteger(entrada.parcelas)) {
+    throw new BusinessRuleError("O numero de parcelas precisa ser inteiro e maior que zero");
+  }
+
+  /* Reparte o centavo entre as parcelas em vez de jogar a sobra na ultima —
+     mesma regra do parcelamento de conta a pagar. Ver `dividir`. */
+  const valores = dividir(entrada.valor, entrada.parcelas);
+  const base =
+    entrada.competenciaInicial ??
+    competenciaDaCompra(cartao.diaFechamento, entrada.dataCompra);
+
+  for (const [i, valor] of valores.entries()) {
+    /* Competencia e MES, entao o primeiro dia normaliza: somar mes sobre o
+       dia 31 escorregaria para o mes errado em fevereiro. */
+    const competencia = primeiroDiaDoMes(somarMeses(base, i));
+
+    const fatura = await repo.faturaDaCompetencia(
+      empresaId,
+      cartao.id,
+      competencia,
+      fechamentoDaCompetencia(cartao.diaFechamento, competencia),
+      vencimentoDaCompetencia(cartao.diaFechamento, cartao.diaVencimento, competencia),
+      usuarioId,
+    );
+
+    if (!faturaAceitaLancamento(fatura.status)) {
+      throw new BusinessRuleError(
+        `A fatura de ${competenciaBR(competencia)} ja esta fechada. Reabra-a ou lance na competencia seguinte.`,
+      );
+    }
+
+    await repo.lancarNaFatura(empresaId, fatura.id, cartao.id, usuarioId, [
+      {
+        fornecedorId: entrada.fornecedorId,
+        descricao:
+          entrada.parcelas > 1
+            ? `${entrada.descricao} (${i + 1}/${entrada.parcelas})`
+            : entrada.descricao,
+        dataCompra: entrada.dataCompra,
+        competencia,
+        valor,
+        centroCustoId: entrada.centroCustoId,
+      },
+    ]);
+  }
+}
+
+/** As compras de uma fatura. */
+export async function lancamentosDaFatura(
+  empresaId: number,
+  faturaId: number,
+): Promise<LancamentoDaFatura[]> {
+  return repo.lancamentosDaFatura(empresaId, faturaId);
+}
+
+/**
+ * Cancela uma compra do ciclo, ou reativa.
+ *
+ * ⚠️ Cancelar e diferente de remover, e os dois existem de proposito.
+ *
+ * Remover e para o que foi lancado ERRADO: digitou duas vezes, errou o cartao.
+ * Cancelar e para o que aconteceu e foi desfeito: estorno da loja, compra
+ * negada, cobranca indevida. A linha cancelada fica na fatura, riscada, e para
+ * de somar — e e ela que explica, em dezembro, por que a fatura de maio deu
+ * menos que a soma das notas daquele mes.
+ *
+ * ⚠️ So com a fatura ABERTA. Fechada, ela ja virou conta a pagar com um total:
+ * cancelar uma linha faria a fatura somar menos do que a conta que a representa.
+ */
+export async function definirLancamentoCancelado(
+  empresaId: number,
+  usuarioId: string,
+  faturaId: number,
+  lancamentoId: number,
+  cancelado: boolean,
+): Promise<void> {
+  const faturas = await repo.faturasDoCartao(empresaId);
+  const fatura = faturas.find((f) => f.id === faturaId);
+
+  if (!fatura) throw new NotFoundError("Fatura nao encontrada");
+  if (!faturaAceitaLancamento(fatura.status)) {
+    throw new BusinessRuleError(
+      "Esta fatura ja esta fechada. Reabra-a antes de mexer nas compras.",
+    );
+  }
+
+  const feito = await repo.definirLancamentoCancelado(
+    empresaId,
+    faturaId,
+    lancamentoId,
+    cancelado,
+    usuarioId,
+  );
+  if (!feito) throw new NotFoundError("Compra nao encontrada nesta fatura");
+}
+
+/**
+ * Tira uma compra da fatura.
+ *
+ * ⚠️ So com a fatura ABERTA. Fechada, ela ja virou conta a pagar com um total:
+ * tirar uma linha faria a fatura somar menos do que a conta que a representa, e
+ * a diferenca so apareceria quando o extrato do cartao chegasse.
+ */
+export async function removerLancamentoDaFatura(
+  empresaId: number,
+  faturaId: number,
+  lancamentoId: number,
+): Promise<void> {
+  const faturas = await repo.faturasDoCartao(empresaId);
+  const fatura = faturas.find((f) => f.id === faturaId);
+
+  if (!fatura) throw new NotFoundError("Fatura nao encontrada");
+  if (!faturaAceitaLancamento(fatura.status)) {
+    throw new BusinessRuleError(
+      "Esta fatura ja esta fechada. Reabra-a antes de mexer nas compras.",
+    );
+  }
+
+  const feito = await repo.apagarLancamentoDaFatura(empresaId, faturaId, lancamentoId);
+  if (!feito) throw new NotFoundError("Compra nao encontrada nesta fatura");
+}
+
 /**
  * Fecha a fatura e gera a conta a pagar que a representa.
  *
@@ -400,23 +607,21 @@ export async function fecharFatura(
   if (!cartao) throw new NotFoundError("Cartão não encontrado");
 
   /*
-   * ⚠️ O fornecedor e resolvido AQUI, e nao exigido no cadastro do cartao.
+   * ⚠️ O fornecedor vem do CADASTRO do cartao, e nao e mais inventado a partir
+   * do banco.
    *
-   * Na tela se escolhe o BANCO, que e o que a pessoa sabe. O cadastro que recebe
-   * o dinheiro e detalhe contabil, e ele so precisa existir no momento em que a
-   * conta a pagar nasce. Resolvido uma vez, fica gravado no cartao.
+   * A versao anterior criava um cliente com o nome do banco quando faltava — e o
+   * que aparecia na conta a pagar era um "133 Cresol" que nao existe no cadastro
+   * de ninguem: sem CNPJ, sem historico, e duplicando o fornecedor de verdade se
+   * ele ja estivesse la. O banco no cartao e informacao secundaria; quem recebe
+   * o dinheiro e um fornecedor de verdade, e ele se escolhe.
    */
-  let fornecedorId = cartao.fornecedorId;
+  const fornecedorId = cartao.fornecedorId;
 
   if (!fornecedorId) {
-    if (!cartao.bancoNome) {
-      throw new BusinessRuleError(
-        "Este cartão não tem emissor. Escolha o banco no cadastro do cartão.",
-      );
-    }
-
-    fornecedorId = await repo.fornecedorDoBanco(empresaId, usuarioId, cartao.bancoNome);
-    await repo.ligarFornecedorAoCartao(cartao.id, usuarioId, fornecedorId);
+    throw new BusinessRuleError(
+      "Este cartão não tem fornecedor. Escolha quem recebe o pagamento da fatura no cadastro do cartão, e feche de novo.",
+    );
   }
 
   const tipos = await repo.listarTiposDeDocumento();
@@ -447,6 +652,63 @@ export async function fecharFatura(
 
   await repo.marcarFaturaFechada(faturaId, usuarioId, total, contaId);
   return contaId;
+}
+
+/**
+ * Reabre a fatura: ela volta a receber compra, e a conta a pagar dela some.
+ *
+ * ⚠️ Reabrir tem de desfazer as DUAS coisas que fechar fez. Fechar marcou o
+ * ciclo e gerou uma conta a pagar; devolver so o status deixaria a conta viva,
+ * cobrando uma fatura que voltou a ser rascunho — e o mesmo dinheiro apareceria
+ * duas vezes, uma no ciclo aberto e outra no titulo.
+ *
+ * ⚠️ A trava vem de `excluirConta`, e nao de uma checagem escrita aqui.
+ *
+ * Ela ja recusa a conta com parcela paga, que e exatamente o limite: dinheiro
+ * que saiu do banco nao volta porque alguem reabriu um ciclo. Repetir a regra
+ * aqui criaria dois lugares para mante-la, e o dia em que uma mudasse a outra
+ * ficaria mentindo.
+ *
+ * ⚠️ A ORDEM aqui foi invertida depois de estourar, e o motivo e uma chave
+ * estrangeira: `cartaofaturas.fkContaPagar` aponta para a conta e NAO tem
+ * cascade. Apagar a conta com a fatura ainda apontando para ela violava a chave
+ * e virava 500 na tela.
+ *
+ * Entao o ponteiro se solta primeiro (a fatura volta a ABERTA, sem conta), e so
+ * depois a conta e apagada. Se a exclusao falhar, sobra uma conta a pagar sem
+ * fatura — visivel na listagem, com valor e fornecedor, e que a pessoa apaga a
+ * mao. O contrario deixaria uma fatura FECHADA apontando para o vazio, que
+ * ninguem consegue nem abrir para entender.
+ *
+ * ⚠️ A trava continua ANTES de tudo: `excluirConta` recusa conta com parcela
+ * paga, e por isso ela e consultada antes de qualquer escrita.
+ */
+export async function reabrirFatura(
+  empresaId: number,
+  usuarioId: string,
+  faturaId: number,
+): Promise<void> {
+  const faturas = await repo.faturasDoCartao(empresaId);
+  const fatura = faturas.find((f) => f.id === faturaId);
+
+  if (!fatura) throw new NotFoundError("Fatura nao encontrada");
+  if (faturaAceitaLancamento(fatura.status)) {
+    throw new BusinessRuleError("Esta fatura ja esta aberta");
+  }
+
+  /* Pergunta antes de escrever: se a conta tem baixa, nada acontece. */
+  if (fatura.contaPagarId != null) {
+    const conta = await obterConta(empresaId, fatura.contaPagarId);
+    if (conta.parcelasPagas > 0) {
+      throw new BusinessRuleError(
+        "A conta a pagar desta fatura ja tem parcela paga. Estorne a baixa antes de reabrir.",
+      );
+    }
+  }
+
+  const contaId = fatura.contaPagarId;
+  await repo.marcarFaturaAberta(faturaId, usuarioId);
+  if (contaId != null) await excluirConta(empresaId, contaId);
 }
 
 export async function listarBancos(): Promise<BancoDaLista[]> {
@@ -899,6 +1161,78 @@ export async function criarConta(
  * de tal data" decidia por varias parcelas de uma vez, e obrigava a confiar num
  * corte que a tela nao mostrava antes de gravar.
  */
+/**
+ * Cancela a conta a pagar inteira, ou desfaz o cancelamento.
+ *
+ * ⚠️ Recusa quando alguma parcela ja foi paga.
+ *
+ * Cancelar diz "esta divida deixou de existir". Com dinheiro ja saido do banco,
+ * isso deixaria um pagamento apontando para uma conta que o sistema passou a
+ * dizer que nao vale — e o extrato continuaria mostrando a saida. Estorna-se a
+ * baixa primeiro.
+ *
+ * ⚠️ Cancelar a CONTA nao e a soma de cancelar cada parcela. Ate hoje a unica
+ * saida era ir de uma em uma, e a conta continuava viva no meio delas: o total
+ * seguia contando, e nada explicava por que todas as parcelas estavam mortas.
+ */
+export async function cancelarConta(
+  empresaId: number,
+  usuarioId: string,
+  contaId: number,
+  cancelada = true,
+): Promise<void> {
+  const conta = await obterConta(empresaId, contaId);
+
+  if (conta.cancelada === cancelada) return; // idempotente
+
+  if (cancelada && conta.parcelasPagas > 0) {
+    throw new BusinessRuleError(
+      "Esta conta ja tem parcela paga. Estorne a baixa antes de cancelar.",
+    );
+  }
+
+  await repo.definirCancelada(empresaId, contaId, cancelada, usuarioId);
+}
+
+/**
+ * Apaga a conta a pagar.
+ *
+ * ⚠️ Recusa quando ha QUALQUER pagamento vinculado, mesmo parcial.
+ *
+ * O pagamento e dinheiro que saiu do banco; apagar a conta deixaria a baixa
+ * apontando para uma divida que ninguem mais consegue explicar, e a conciliacao
+ * do extrato ficaria com uma linha sem par. Conta que ja recebeu dinheiro se
+ * CANCELA — ela continua na tela, e a memoria fica.
+ *
+ * ⚠️ Os arquivos vao antes do registro. Apagando so a linha, o comprovante e a
+ * nota ficariam no Storage sem nada que os alcance: ninguem os encontra e
+ * ninguem os apaga.
+ */
+export async function excluirConta(
+  empresaId: number,
+  contaId: number,
+): Promise<void> {
+  const conta = await obterConta(empresaId, contaId);
+
+  if (conta.parcelasPagas > 0) {
+    throw new BusinessRuleError(
+      "Esta conta ja tem parcela paga. Cancele em vez de excluir.",
+    );
+  }
+
+  const anexos = await repo.listarAnexos(contaId);
+  for (const anexo of anexos) await apagarDocumento(anexo.caminho).catch(() => {});
+
+  for (const parcela of conta.parcelas) {
+    for (const tipo of ["nfs", "boleto", "comprovante"] as const) {
+      const caminho = parcela[tipo];
+      if (caminho) await apagarDocumento(caminho).catch(() => {});
+    }
+  }
+
+  await repo.excluir(empresaId, contaId);
+}
+
 export async function cancelarParcelaDaConta(
   empresaId: number,
   usuarioId: string,
