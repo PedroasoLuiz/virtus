@@ -41,6 +41,7 @@ export function Sidebar({
   inicio = "/dashboard",
   hrefTrocarEmpresa,
   whatsapp = false,
+  interno = false,
 }: {
   modulos: Modulo[];
   empresa: string | null;
@@ -68,6 +69,14 @@ export function Sidebar({
    * caixa de entrada nenhuma para abrir.
    */
   whatsapp?: boolean;
+  /**
+   * Ve as areas ainda em desenvolvimento, e a lista de favoritos.
+   *
+   * ⚠️ Chega de fora e nao e lido aqui de proposito: a barra e componente de
+   * apresentacao, e quem sabe quem e a pessoa e a sessao. O portal passa falso
+   * porque la nao ha area em obra nenhuma para mostrar.
+   */
+  interno?: boolean;
 }) {
   const pathname = usePathname();
   const [recolhida, setRecolhida] = useState(recolhidaInicial);
@@ -80,7 +89,7 @@ export function Sidebar({
     document.cookie = `${COOKIE_SIDEBAR}=${valor ? "1" : "0"}; path=/; max-age=31536000; samesite=lax`;
   }
 
-  const grupos = gruposFixos ?? gruposDosModulos(modulos);
+  const grupos = gruposFixos ?? gruposDosModulos(modulos, interno);
 
   // So telas que o plano libera entram nos favoritos: perder o modulo nao pode
   // deixar um atalho morto no topo do menu.
@@ -175,7 +184,16 @@ export function Sidebar({
           />
         ) : (
           <>
-            {telasFavoritas.length > 0 && <Favoritos telas={telasFavoritas} pathname={pathname} />}
+            {/*
+              ⚠️ Os favoritos tambem estao em obra, e por isso seguem `interno`.
+
+              Marcar e desmarcar funciona; o que falta e a tela de gerir a lista.
+              Mostrar o bloco a quem nao pode ainda organiza-lo seria oferecer
+              meio recurso.
+            */}
+            {interno && telasFavoritas.length > 0 && (
+              <Favoritos telas={telasFavoritas} pathname={pathname} />
+            )}
 
             {!gruposFixos && grupos.length === 1 && (
               <p

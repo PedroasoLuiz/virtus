@@ -69,6 +69,18 @@ export type PerfilDoUsuario = {
    * proposito, e o que ele enxerga sao as proprias cobrancas, pelo portal.
    */
   externo: boolean;
+  /**
+   * Ve as areas ainda EM DESENVOLVIMENTO.
+   *
+   * ⚠️ Nao e permissao, e ESTAGIO. Suprimentos, Estoque, Social, Plataforma e os
+   * Favoritos estao pela metade; o primeiro cliente vai testar o sistema, e o
+   * que esta em obra nao pode aparecer no menu dele.
+   *
+   * ⚠️ NAO substitui o modulo do plano. Social e Estoque continuam presos ao que
+   * a empresa assinou; esta marca e um segundo portao, e os dois precisam abrir.
+   * O dia em que Social ficar pronto, o que se tira e este portao.
+   */
+  interno: boolean;
 };
 
 export async function perfilDoUsuario(usuarioId: string): Promise<PerfilDoUsuario | null> {
@@ -76,7 +88,7 @@ export async function perfilDoUsuario(usuarioId: string): Promise<PerfilDoUsuari
 
   const { data, error } = await supabase
     .from("usuarios")
-    .select("nome, ativo, externo")
+    .select("nome, ativo, externo, interno")
     .eq("fkUser", usuarioId)
     .maybeSingle();
 
@@ -86,6 +98,10 @@ export async function perfilDoUsuario(usuarioId: string): Promise<PerfilDoUsuari
     nome: data.nome,
     ativo: data.ativo ?? true,
     externo: data.externo ?? false,
+    /* Na duvida, NAO ve: quem cai aqui sem a coluna preenchida e alguem de
+       fora, e mostrar area em obra a um cliente e pior que esconder um atalho
+       de quem trabalha na casa. */
+    interno: data.interno ?? false,
   };
 }
 

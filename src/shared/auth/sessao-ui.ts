@@ -38,6 +38,14 @@ export type SessaoUI = {
    * ⚠️ Vem de graca no `Promise.all` que a sessao ja fazia — e uma consulta a
    * mais em paralelo, e nao um tempo a mais na tela.
    */
+  /**
+   * Ve as areas ainda em desenvolvimento: Suprimentos, Estoque, Social,
+   * Plataforma e os Favoritos.
+   *
+   * ⚠️ Nao e permissao, e ESTAGIO. Nao substitui o modulo do plano — os dois
+   * portoes precisam abrir.
+   */
+  interno: boolean;
   visao: Visao;
   demo: boolean;
 };
@@ -58,6 +66,9 @@ export async function sessaoUI(): Promise<SessaoUI> {
       usuarioNome: "Demonstração",
       podeTrocarEmpresa: false,
       externo: false,
+      /* Na demonstracao vale TUDO: e a vitrine do produto, e esconder metade
+         dela seria mostrar menos do que existe. */
+      interno: true,
       visao: VISAO_PADRAO,
       demo: true,
     };
@@ -81,6 +92,7 @@ export async function sessaoUI(): Promise<SessaoUI> {
     usuarioNome: usuario?.nome ?? null,
     podeTrocarEmpresa: empresas.length > 1,
     externo: usuario?.externo ?? false,
+    interno: usuario?.interno ?? false,
     visao,
     demo: false,
   };

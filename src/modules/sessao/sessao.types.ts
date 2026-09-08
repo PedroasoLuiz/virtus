@@ -19,6 +19,15 @@ export type UsuarioAutenticado = {
    * nao devolve nada a um externo.
    */
   externo?: boolean;
+  /**
+   * Ve as areas ainda EM DESENVOLVIMENTO: Suprimentos, Estoque, Social,
+   * Plataforma e os Favoritos.
+   *
+   * Opcional pela mesma razao de `externo`, e com o mesmo padrao restritivo: nem
+   * todo caminho que monta este tipo consulta o perfil, e na duvida a area em
+   * obra fica escondida.
+   */
+  interno?: boolean;
 };
 
 /**

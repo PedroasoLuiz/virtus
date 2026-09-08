@@ -847,6 +847,18 @@ export type UsuarioRow = {
   email: string | null;
   ativo: boolean | null;
   externo: boolean | null;
+  /**
+   * Ve as areas ainda EM DESENVOLVIMENTO.
+   *
+   * ⚠️ Nao e permissao, e ESTAGIO. `externo` diz se a pessoa e do cliente;
+   * `interno` diz se ela pode ver o que ainda esta em obra — Suprimentos,
+   * Estoque, Social, Plataforma e os Favoritos.
+   *
+   * ⚠️ NAO substitui o modulo do plano. Social e Estoque continuam presos ao
+   * que a empresa assinou; esta marca e um segundo portao, e os dois precisam
+   * abrir.
+   */
+  interno: boolean;
 };
 
 export type UsuarioEmpresaRow = {
@@ -1363,6 +1375,30 @@ export type Database = {
        * ⚠️ Nao confundir com `get_projecao_caixa_json`, do legado, que continua
        * no banco sem ninguem chamar.
        */
+      /**
+       * As parcelas EM ABERTO de um periodo, dos dois lados.
+       *
+       * `plado` e "RECEBER" ou "PAGAR". Devolve uma linha por parcela, com o
+       * saldo que falta — e nao o valor de face, que e o que a parcela paga pela
+       * metade ainda guarda em `total`.
+       *
+       * ⚠️ Nao confundir com `get_contasreceber` e `get_contaspagar`, do legado,
+       * que continuam no banco sem ninguem chamar e cobram o valor cheio.
+       */
+      /**
+       * Os ciclos de cartao ainda ABERTOS que vencem no periodo, um por linha.
+       *
+       * ⚠️ So os SEM conta a pagar: a fatura fechada ja virou titulo e aparece
+       * nas parcelas a pagar. Trazer as duas contaria o cartao duas vezes.
+       */
+      relatorio_de_ciclos_de_cartao: {
+        Args: { pde: string; pate: string; pfkempresa: number };
+        Returns: unknown;
+      };
+      relatorio_de_parcelas: {
+        Args: { pde: string; pate: string; pfkempresa: number; plado: string };
+        Returns: unknown;
+      };
       projecao_de_caixa: {
         Args: {
           pdatafim: string;

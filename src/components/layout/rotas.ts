@@ -276,8 +276,35 @@ export function rotuloDaRota(href: string): string | null {
   return TODAS_AS_ROTAS.find((i) => i.href === href)?.label ?? null;
 }
 
-export function gruposDosModulos(modulos: Modulo[]): Grupo[] {
-  return modulos.flatMap((m) => GRUPOS_POR_MODULO[m] ?? []).concat(GRUPO_PLATAFORMA);
+/**
+ * Os grupos que ainda estao EM DESENVOLVIMENTO.
+ *
+ * ⚠️ Lista pelas CHAVES do grupo, e nao por rota. Uma tela nova dentro de
+ * Suprimentos entraria escondida sozinha; por rota, cada tela nova exigiria
+ * lembrar de vir aqui — e a que esquecessem apareceria para o cliente.
+ *
+ * ⚠️ Social e Estoque ja sao presos ao MODULO do plano, e continuam sendo. Esta
+ * lista e um SEGUNDO portao: os dois precisam abrir. Um plano dado por engano
+ * nao pode ser o unico a separar o cliente de uma tela pela metade.
+ *
+ * O dia em que uma delas ficar pronta, o que se tira e a chave daqui.
+ */
+const EM_DESENVOLVIMENTO = new Set(["suprimentos", "estoque", "social", "plataforma"]);
+
+/**
+ * O menu de quem esta logado.
+ *
+ * ⚠️ `interno` decide o que esta EM OBRA, e o plano decide o que a empresa
+ * COMPROU. Sao duas perguntas diferentes e as duas valem: quem nao e interno nao
+ * ve area pela metade nem que o plano libere, e quem e interno tambem nao ve o
+ * modulo que a empresa nao assinou.
+ */
+export function gruposDosModulos(modulos: Modulo[], interno = false): Grupo[] {
+  const grupos = modulos
+    .flatMap((m) => GRUPOS_POR_MODULO[m] ?? [])
+    .concat(GRUPO_PLATAFORMA);
+
+  return interno ? grupos : grupos.filter((g) => !EM_DESENVOLVIMENTO.has(g.key));
 }
 
 /** Telas de um grupo, incluindo as dentro de subgrupos. Usado para "ativo". */

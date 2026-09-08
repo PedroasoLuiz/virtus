@@ -88,7 +88,12 @@ export async function usuarioLogado(): Promise<UsuarioAutenticado | null> {
   if (!usuario) return null;
 
   const perfil = await repo.perfilDoUsuario(usuario.id);
-  return { ...usuario, nome: perfil?.nome ?? null, externo: perfil?.externo ?? false };
+  return {
+    ...usuario,
+    nome: perfil?.nome ?? null,
+    externo: perfil?.externo ?? false,
+    interno: perfil?.interno ?? false,
+  };
 }
 
 export async function recuperarSenha(email: string, redirectTo: string): Promise<void> {

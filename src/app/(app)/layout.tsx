@@ -61,6 +61,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         usuarioNome={sessao.usuarioNome}
         podeTrocarEmpresa={sessao.podeTrocarEmpresa}
         whatsapp={!sessao.demo}
+        interno={sessao.interno}
       />
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
         <Topbar aviso={sessao.demo ? "demo" : null} />
