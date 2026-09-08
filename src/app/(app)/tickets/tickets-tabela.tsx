@@ -1,32 +1,38 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Badge,
+  Button,
   EmptyRow,
-  FilterButton,
   FilterItem,
   IconeKanban,
   IconeTabela,
-  IncluirButton,
   PageHeader,
   PageLayout,
   Pagination,
   Panel,
-  SearchInput,
   TableArea,
   TableFrame,
   TableHead,
   Td,
   Th,
   Tr,
-  ViewButton,
   inputStyle,
   selectStyle,
   tdNum,
   type Tom,
 } from "@/components/ui/kit";
+import {
+  BarraDeFerramentas,
+  BotaoDaBarra,
+  IconeFunil,
+  IconeMais,
+  OpcaoDoPainel,
+  TituloDoPainel,
+} from "@/components/ui/barra-de-ferramentas";
+import { useRegistrarBusca } from "@/components/layout/busca-da-tela";
 import { TicketDrawer, type OpcaoCliente, type OpcaoServico } from "./ticket-drawer";
 import { useAvisos } from "@/components/ui/avisos";
 import { salvarVisao } from "@/modules/preferencias/preferencias.actions";
@@ -128,6 +134,22 @@ export function TicketsTabela({
 
   const filtrosAtivos = [statusId, origem].filter(Boolean).length + (verCancelados ? 1 : 0);
 
+  /*
+   * ⚠️ A tela nao tem campo de busca: ela anuncia o seu filtro para a caixa do
+   * topo, a unica do sistema. Ver `busca-da-tela`.
+   *
+   * ⚠️ `useCallback` porque o registro entra num efeito com dependencias: uma
+   * funcao nova a cada render faria o efeito rodar a cada render.
+   */
+  const buscar = useCallback((v: string) => {
+    setBusca(v);
+    /* Buscar volta para a primeira pagina: filtrado, o resultado quase nunca
+       tem a pagina 4 em que a pessoa estava, e ela veria uma tabela vazia. */
+    setPagina(1);
+  }, []);
+
+  useRegistrarBusca("Tickets", busca, buscar, filtrados.length);
+
   /**
    * A escolha entre tabela e kanban vira PREFERENCIA DO USUARIO.
    *
@@ -179,198 +201,269 @@ export function TicketsTabela({
   return (
     <PageLayout>
       <Panel>
-        <PageHeader title="Tickets">
-          <ViewButton
-            view={modo}
-            setView={escolherModo}
-            opcoes={[
-              { valor: "tabela", rotulo: "Tabela", icone: <IconeTabela /> },
-              { valor: "kanban", rotulo: "Kanban", icone: <IconeKanban /> },
-            ]}
-          />
-          <FilterButton
-            activeCount={filtrosAtivos}
-            onClear={() => {
-              setStatusId("");
-              setOrigem("");
-              setVerCancelados(false);
-              setPagina(1);
-            }}
-          >
-            <FilterItem label="Coluna">
-              <select
-                value={statusId}
-                onChange={(e) => {
-                  setStatusId(e.target.value);
-                  setPagina(1);
-                }}
-                style={selectStyle}
-              >
-                <option value="">Todas</option>
-                {ativas.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.descricao}
-                  </option>
-                ))}
-              </select>
-            </FilterItem>
+        <PageHeader title="Tickets" />
 
-            <FilterItem label="Origem">
-              <select
-                value={origem}
-                onChange={(e) => {
-                  setOrigem(e.target.value);
-                  setPagina(1);
-                }}
-                style={selectStyle}
-              >
-                <option value="">Todas</option>
-                <option value="EXECUCAO">Execução</option>
-                <option value="MIGRACAO">Migração</option>
-                <option value="CONTRATO">Contrato</option>
-              </select>
-            </FilterItem>
+        {/*
+          ⚠️ O recuo da pagina mora AQUI, e a tabela entra `solto`.
 
-            <FilterItem label="Cancelados">
-              <label
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 7,
-                  fontSize: "var(--text-base)",
-                  cursor: "pointer",
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={verCancelados}
-                  onChange={(e) => {
-                    setVerCancelados(e.target.checked);
-                    setPagina(1);
-                  }}
-                  style={{ accentColor: "var(--primary)", cursor: "pointer" }}
-                />
-                Exibir cancelados
-              </label>
-            </FilterItem>
-          </FilterButton>
-
-          <SearchInput
-            value={busca}
-            onSearch={(v) => {
-              setBusca(v);
-              setPagina(1);
-            }}
-          />
-          <IncluirButton onClick={() => setCriando(true)} />
-        </PageHeader>
-
-        {modo === "kanban" ? (
-          <QuadroTickets
-            colunas={ativas}
-            tickets={filtrados}
-            aoAbrir={setDetalhe}
-            aoMover={mover}
-            aoMudarColunas={() => router.refresh()}
-            aoFalhar={(msg) => avisar("atencao", msg)}
-            confirmar={confirmar}
-          />
-        ) : (
-          <TableFrame>
-            <TableArea minWidth={880}>
-              <TableHead>
-                <Th minWidth={70}>Nº</Th>
-                <Th>Cliente</Th>
-                <Th minWidth={100}>Encerrado</Th>
-                <Th align="center" minWidth={130}>
-                  Situação
-                </Th>
-                <Th align="right" minWidth={100}>
-                  Total
-                </Th>
-                <Th align="right" minWidth={100}>
-                  Faturado
-                </Th>
-                <Th align="right" minWidth={100}>
-                  Saldo
-                </Th>
-              </TableHead>
-              <tbody>
-                {visiveis.length === 0 && <EmptyRow colSpan={7} />}
-                {visiveis.map((t, i) => {
-                  const coluna = ativas.find((c) => c.id === t.statusId);
-                  return (
-                    <Tr
-                      key={t.id}
-                      delay={Math.min(i * 20, 150)}
-                      dimmed={t.cancelada}
-                      onClick={() => setDetalhe(t.id)}
-                    >
-                      <Td style={{ fontVariantNumeric: "tabular-nums" }}>
-                        <div style={{ color: "var(--text-tertiary)" }}>{t.numero}</div>
-                        {t.origem !== "EXECUCAO" && (
-                          <div
-                            style={{ fontSize: "var(--text-xs)", color: "var(--text-tertiary)" }}
+          Com a barra ao lado, a margem propria do `TableFrame` viraria um vao
+          entre o cartao e a barra — e os dois precisam se encostar. Passando o
+          recuo para a linha, o conjunto continua alinhado com o resto da tela.
+        */}
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            display: "flex",
+            /* Sem margem a DIREITA: aquele respiro e da propria barra, que o
+               carrega na largura. Ver `BarraDeFerramentas`. */
+            margin: "0 0 16px 16px",
+          }}
+        >
+          {modo === "kanban" ? (
+            <QuadroTickets
+              colunas={ativas}
+              tickets={filtrados}
+              aoAbrir={setDetalhe}
+              aoMover={mover}
+              aoMudarColunas={() => router.refresh()}
+              aoFalhar={(msg) => avisar("atencao", msg)}
+              confirmar={confirmar}
+            />
+          ) : (
+            <TableFrame solto>
+              <TableArea minWidth={880}>
+                <TableHead>
+                  <Th minWidth={70}>Nº</Th>
+                  <Th>Cliente</Th>
+                  <Th minWidth={100}>Encerrado</Th>
+                  <Th align="center" minWidth={130}>
+                    Situação
+                  </Th>
+                  <Th align="right" minWidth={100}>
+                    Total
+                  </Th>
+                  <Th align="right" minWidth={100}>
+                    Faturado
+                  </Th>
+                  <Th align="right" minWidth={100}>
+                    Saldo
+                  </Th>
+                </TableHead>
+                <tbody>
+                  {visiveis.length === 0 && <EmptyRow colSpan={7} />}
+                  {visiveis.map((t, i) => {
+                    const coluna = ativas.find((c) => c.id === t.statusId);
+                    return (
+                      <Tr
+                        key={t.id}
+                        delay={Math.min(i * 20, 150)}
+                        dimmed={t.cancelada}
+                        onClick={() => setDetalhe(t.id)}
+                      >
+                        <Td style={{ fontVariantNumeric: "tabular-nums" }}>
+                          <div style={{ color: "var(--text-tertiary)" }}>{t.numero}</div>
+                          {t.origem !== "EXECUCAO" && (
+                            <div
+                              style={{ fontSize: "var(--text-xs)", color: "var(--text-tertiary)" }}
+                            >
+                              {t.origem === "MIGRACAO" ? "migrado" : "contrato"}
+                            </div>
+                          )}
+                        </Td>
+                        <Td style={{ maxWidth: 280 }}>
+                          <span
+                            style={{
+                              display: "block",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                              fontWeight: "var(--fw-medium)",
+                            }}
                           >
-                            {t.origem === "MIGRACAO" ? "migrado" : "contrato"}
-                          </div>
-                        )}
-                      </Td>
-                      <Td style={{ maxWidth: 280 }}>
-                        <span
+                            {t.clienteNome ?? "—"}
+                          </span>
+                        </Td>
+                        <Td style={{ whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
+                          {t.fim ? paraFormatoBR(t.fim) : "—"}
+                        </Td>
+                        <Td style={{ textAlign: "center" }}>
+                          {/* Cancelado vence a etapa: e a informacao que muda a
+                              leitura de todas as outras colunas da linha. */}
+                          {t.cancelada ? (
+                            <Badge tom="neutral">CANCELADO</Badge>
+                          ) : (
+                            <Badge tom={(coluna?.cor as Tom) ?? "neutral"}>
+                              {coluna?.descricao ?? t.status}
+                            </Badge>
+                          )}
+                        </Td>
+                        <Td style={tdNum}>{formatarSemSimbolo(t.total)}</Td>
+                        <Td style={{ ...tdNum, color: "var(--text-tertiary)" }}>
+                          {formatarSemSimbolo(t.faturado)}
+                        </Td>
+                        <Td
                           style={{
-                            display: "block",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
+                            ...tdNum,
                             fontWeight: "var(--fw-medium)",
+                            // Saldo positivo é dinheiro esperando virar cobrança.
+                            color: t.saldo > 0 ? "var(--credito)" : "var(--text-tertiary)",
                           }}
                         >
-                          {t.clienteNome ?? "—"}
-                        </span>
-                      </Td>
-                      <Td style={{ whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
-                        {t.fim ? paraFormatoBR(t.fim) : "—"}
-                      </Td>
-                      <Td style={{ textAlign: "center" }}>
-                        {/* Cancelado vence a etapa: e a informacao que muda a
-                            leitura de todas as outras colunas da linha. */}
-                        {t.cancelada ? (
-                          <Badge tom="neutral">CANCELADO</Badge>
-                        ) : (
-                          <Badge tom={(coluna?.cor as Tom) ?? "neutral"}>
-                            {coluna?.descricao ?? t.status}
-                          </Badge>
-                        )}
-                      </Td>
-                      <Td style={tdNum}>{formatarSemSimbolo(t.total)}</Td>
-                      <Td style={{ ...tdNum, color: "var(--text-tertiary)" }}>
-                        {formatarSemSimbolo(t.faturado)}
-                      </Td>
-                      <Td
-                        style={{
-                          ...tdNum,
-                          fontWeight: "var(--fw-medium)",
-                          // Saldo positivo é dinheiro esperando virar cobrança.
-                          color: t.saldo > 0 ? "var(--credito)" : "var(--text-tertiary)",
-                        }}
-                      >
-                        {formatarSemSimbolo(t.saldo)}
-                      </Td>
-                    </Tr>
-                  );
-                })}
-              </tbody>
-            </TableArea>
-            <Pagination
-              page={paginaAtual}
-              totalPages={totalPaginas}
-              total={filtrados.length}
-              pageSize={PAGE_SIZE}
-              onPage={setPagina}
+                          {formatarSemSimbolo(t.saldo)}
+                        </Td>
+                      </Tr>
+                    );
+                  })}
+                </tbody>
+              </TableArea>
+              <Pagination
+                page={paginaAtual}
+                totalPages={totalPaginas}
+                total={filtrados.length}
+                pageSize={PAGE_SIZE}
+                onPage={setPagina}
+              />
+            </TableFrame>
+          )}
+
+          <BarraDeFerramentas>
+            <BotaoDaBarra
+              rotulo="Novo ticket"
+              legenda="Novo"
+              destaque
+              icone={<IconeMais />}
+              onClick={() => setCriando(true)}
             />
-          </TableFrame>
-        )}
+
+            {/*
+              ⚠️ O modo de exibicao e ferramenta, e nao identidade da tela.
+
+              Ele morava no cabecalho, colado no titulo, como se "Tickets" fosse
+              outra coisa em kanban e em tabela. E a mesma tela: muda so por onde
+              se olha. Na barra ele fica junto do resto que se FAZ aqui, e o icone
+              do modo atual continua dizendo em qual dos dois voce esta.
+            */}
+            <BotaoDaBarra
+              rotulo={`Exibição: ${modo === "kanban" ? "Kanban" : "Tabela"}`}
+              legenda="Exibir"
+              icone={modo === "kanban" ? <IconeKanban /> : <IconeTabela />}
+              painel={(fechar) => (
+                <>
+                  <TituloDoPainel>Exibição</TituloDoPainel>
+                  {[
+                    { valor: "tabela", rotulo: "Tabela", icone: <IconeTabela /> },
+                    { valor: "kanban", rotulo: "Kanban", icone: <IconeKanban /> },
+                  ].map((o) => (
+                    <OpcaoDoPainel
+                      key={o.valor}
+                      icone={o.icone}
+                      rotulo={o.rotulo}
+                      marcada={modo === o.valor}
+                      onClick={() => {
+                        escolherModo(o.valor);
+                        fechar();
+                      }}
+                    />
+                  ))}
+                </>
+              )}
+            />
+
+            {/*
+              Os filtros mudaram de casa, nao de conteudo: sao os mesmos tres
+              campos do antigo `FilterButton`, agora dentro do painel da barra. O
+              botao fica ACESO enquanto algum estiver valendo — sem isso, filtro
+              escondido atras de icone vira lista curta sem explicacao.
+            */}
+            <BotaoDaBarra
+              rotulo={
+                filtrosAtivos > 0
+                  ? `Filtros (${filtrosAtivos} em uso)`
+                  : "Filtrar os tickets"
+              }
+              legenda="Filtros"
+              aceso={filtrosAtivos > 0}
+              icone={<IconeFunil ativo={filtrosAtivos > 0} />}
+              painel={() => (
+                <>
+                  <TituloDoPainel>Filtros</TituloDoPainel>
+                <FilterItem label="Coluna">
+                  <select
+                    value={statusId}
+                    onChange={(e) => {
+                      setStatusId(e.target.value);
+                      setPagina(1);
+                    }}
+                    style={selectStyle}
+                  >
+                    <option value="">Todas</option>
+                    {ativas.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.descricao}
+                      </option>
+                    ))}
+                  </select>
+                </FilterItem>
+
+                <FilterItem label="Origem">
+                  <select
+                    value={origem}
+                    onChange={(e) => {
+                      setOrigem(e.target.value);
+                      setPagina(1);
+                    }}
+                    style={selectStyle}
+                  >
+                    <option value="">Todas</option>
+                    <option value="EXECUCAO">Execução</option>
+                    <option value="MIGRACAO">Migração</option>
+                    <option value="CONTRATO">Contrato</option>
+                  </select>
+                </FilterItem>
+
+                <FilterItem label="Cancelados">
+                  <label
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 7,
+                      fontSize: "var(--text-base)",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={verCancelados}
+                      onChange={(e) => {
+                        setVerCancelados(e.target.checked);
+                        setPagina(1);
+                      }}
+                      style={{ accentColor: "var(--primary)", cursor: "pointer" }}
+                    />
+                    Exibir cancelados
+                  </label>
+                </FilterItem>
+
+                  {filtrosAtivos > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setStatusId("");
+                        setOrigem("");
+                        setVerCancelados(false);
+                        setPagina(1);
+                      }}
+                    >
+                      Limpar filtros
+                    </Button>
+                  )}
+                </>
+              )}
+            />
+          </BarraDeFerramentas>
+        </div>
       </Panel>
 
       <TicketDrawer
@@ -439,7 +532,9 @@ function QuadroTickets({
      * A conta so fecha porque o numero de colunas e pequeno e limitado: as
      * cinco do sistema mais as que o usuario ja tinha criado.
      */
-    <div style={{ flex: 1, overflow: "hidden", padding: "0 16px", minHeight: 0 }}>
+    /* Sem recuo proprio: quem o da agora e a linha que segura o quadro e a
+       barra de ferramentas, para os dois se encostarem. */
+    <div style={{ flex: 1, overflow: "hidden", minHeight: 0 }}>
       <div
         style={{
           display: "flex",

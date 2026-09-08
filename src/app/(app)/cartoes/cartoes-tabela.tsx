@@ -8,11 +8,9 @@ import {
   ActiveToggle,
   BotaoDeAcao,
   EmptyRow,
-  IncluirButton,
   PageHeader,
   PageLayout,
   Panel,
-  SearchInput,
   TableArea,
   TableFrame,
   TableHead,
@@ -20,6 +18,8 @@ import {
   Th,
   Tr,
 } from "@/components/ui/kit";
+import { BarraDeFerramentas, BotaoDaBarra, IconeMais } from "@/components/ui/barra-de-ferramentas";
+import { useRegistrarBusca } from "@/components/layout/busca-da-tela";
 import { formatarSemSimbolo, type Centavos } from "@/shared/utils/money";
 import { NovoCartaoDrawer } from "./novo-cartao-drawer";
 import { FaturasDrawer } from "./faturas-drawer";
@@ -96,105 +96,138 @@ export function CartoesTabela({ cartoes }: { cartoes: CartaoDaBaixa[] }) {
       (c.ultimosDigitos ?? "").includes(termo),
   );
 
+  /*
+   * ⚠️ Sem campo de busca proprio: a tela ANUNCIA o seu filtro para a caixa do
+   * topo, a unica do sistema. O estado continua sendo daqui — quem sabe o que e
+   * "buscar um cartao" e esta tela; a caixa so chama `setBusca`, e a etiqueta com
+   * o termo em vigor aparece sozinha no `PageHeader`. Ver `busca-da-tela`.
+   */
+  useRegistrarBusca("Cartões", busca, setBusca, visiveis.length);
+
   return (
     <PageLayout>
       <Panel>
-        <PageHeader title="Cartões">
-          <SearchInput value={busca} onSearch={setBusca} />
-          <IncluirButton onClick={() => setCriando(true)} />
-        </PageHeader>
+        <PageHeader title="Cartões" />
 
-        <TableFrame>
-          <TableArea minWidth={860}>
-            <TableHead>
-              <Th minWidth={180}>Apelido</Th>
-              <Th minWidth={170}>Emissor</Th>
-              <Th minWidth={110}>Bandeira</Th>
-              <Th minWidth={110}>Número</Th>
-              <Th minWidth={110}>Fechamento</Th>
-              <Th minWidth={110}>Vencimento</Th>
-              <Th minWidth={110}>Limite</Th>
-              <Th minWidth={90}>Situação</Th>
-              <Th minWidth={80}>Ações</Th>
-            </TableHead>
+        {/*
+          ⚠️ O recuo da pagina mora AQUI, e a tabela entra `solto`.
 
-            <tbody>
-              {visiveis.length === 0 && (
-                <EmptyRow colSpan={9} message="Nenhum cartão cadastrado." />
-              )}
+          Com a barra ao lado, a margem propria do `TableFrame` viraria um vao
+          entre o cartao e a barra — e os dois precisam se encostar. Passando o
+          recuo para a linha, o conjunto continua alinhado com o resto da tela.
+        */}
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            display: "flex",
+            /* Sem margem a DIREITA: aquele respiro e da propria barra, que o
+               carrega na largura. Ver `BarraDeFerramentas`. */
+            margin: "0 0 16px 16px",
+          }}
+        >
+          <TableFrame solto>
+            <TableArea minWidth={860}>
+              <TableHead>
+                <Th minWidth={180}>Apelido</Th>
+                <Th minWidth={170}>Emissor</Th>
+                <Th minWidth={110}>Bandeira</Th>
+                <Th minWidth={110}>Número</Th>
+                <Th minWidth={110}>Fechamento</Th>
+                <Th minWidth={110}>Vencimento</Th>
+                <Th minWidth={110}>Limite</Th>
+                <Th minWidth={90}>Situação</Th>
+                <Th minWidth={80}>Ações</Th>
+              </TableHead>
 
-              {visiveis.map((c, i) => (
-                <Tr key={c.id} delay={Math.min(i * 20, 150)} dimmed={!c.ativo}>
-                  <Td>{c.apelido ?? `Cartão ${c.id}`}</Td>
-                  {/* O emissor e quem cobra a fatura: e ele que vira fornecedor
-                      da conta a pagar quando o ciclo fecha. */}
-                  <Td>{c.bancoNome ?? "—"}</Td>
-                  <Td>{c.bandeira ?? "—"}</Td>
+              <tbody>
+                {visiveis.length === 0 && (
+                  <EmptyRow colSpan={9} message="Nenhum cartão cadastrado." />
+                )}
 
-                  {/*
-                    ⚠️ Só os 4 últimos, com os pontos na frente para deixar claro
-                    que o resto não existe aqui. O número completo e o CVV não
-                    são guardados pelo sistema.
-                  */}
-                  <Td style={NUM}>{c.ultimosDigitos ? `•••• ${c.ultimosDigitos}` : "—"}</Td>
+                {visiveis.map((c, i) => (
+                  <Tr key={c.id} delay={Math.min(i * 20, 150)} dimmed={!c.ativo}>
+                    <Td>{c.apelido ?? `Cartão ${c.id}`}</Td>
+                    {/* O emissor e quem cobra a fatura: e ele que vira fornecedor
+                        da conta a pagar quando o ciclo fecha. */}
+                    <Td>{c.bancoNome ?? "—"}</Td>
+                    <Td>{c.bandeira ?? "—"}</Td>
 
-                  <Td style={NUM}>dia {c.diaFechamento}</Td>
-                  <Td style={NUM}>dia {c.diaVencimento}</Td>
-                  <Td style={NUM}>
-                    {c.limite > 0 ? formatarSemSimbolo(c.limite as Centavos) : "—"}
-                  </Td>
+                    {/*
+                      ⚠️ Só os 4 últimos, com os pontos na frente para deixar claro
+                      que o resto não existe aqui. O número completo e o CVV não
+                      são guardados pelo sistema.
+                    */}
+                    <Td style={NUM}>{c.ultimosDigitos ? `•••• ${c.ultimosDigitos}` : "—"}</Td>
 
-                  {/*
-                    ⚠️ Interruptor, e não pastilha.
+                    <Td style={NUM}>dia {c.diaFechamento}</Td>
+                    <Td style={NUM}>dia {c.diaVencimento}</Td>
+                    <Td style={NUM}>
+                      {c.limite > 0 ? formatarSemSimbolo(c.limite as Centavos) : "—"}
+                    </Td>
 
-                    A pastilha só CONTAVA a situação, e mudá-la exigia abrir o
-                    cadastro — dois cliques e uma tela para um estado de sim ou
-                    não. O interruptor conta e muda no mesmo lugar, que é como o
-                    resto do sistema trata "ativo".
-                  */}
-                  <Td>
-                    <ActiveToggle active={c.ativo} onChange={() => void alternarAtivo(c)} />
-                  </Td>
+                    {/*
+                      ⚠️ Interruptor, e não pastilha.
 
-                  <Td>
-                    <AcoesDaLinha>
-                      <BotaoDeAcao rotulo="Ver faturas" onClick={() => setFaturasDe(c)}>
-                        {/* Recibo com linhas: os ciclos daquele cartão. */}
-                        <path d="M3.4 2.4h9.2v11.2l-1.5-1-1.5 1-1.6-1-1.5 1-1.6-1-1.5 1z" />
-                        <path d="M5.8 6h4.4M5.8 8.6h3" />
-                      </BotaoDeAcao>
+                      A pastilha só CONTAVA a situação, e mudá-la exigia abrir o
+                      cadastro — dois cliques e uma tela para um estado de sim ou
+                      não. O interruptor conta e muda no mesmo lugar, que é como o
+                      resto do sistema trata "ativo".
+                    */}
+                    <Td>
+                      <ActiveToggle active={c.ativo} onChange={() => void alternarAtivo(c)} />
+                    </Td>
 
-                      {/*
-                        ⚠️ Excluir vale só para o cartão que NUNCA teve fatura —
-                        quem recusa é o servidor, com o número de faturas na
-                        mensagem. Com fatura, as compras já contaram na DRE: o
-                        histórico ficaria sem dono, e o caminho é o interruptor
-                        ao lado.
-                      */}
-                      <BotaoDeAcao
-                        rotulo="Excluir cartão"
-                        perigo
-                        onClick={() =>
-                          confirmar(
-                            `Excluir o cartão ${c.apelido ?? c.id}?`,
-                            "Excluir",
-                            () => excluir(c),
-                            "Só é possível enquanto ele não tiver nenhuma fatura. Se já tiver, inative pelo interruptor da linha.",
-                          )
-                        }
-                      >
-                        <path d="M2.5 4h11" />
-                        <path d="M5.5 4V2.8a.8.8 0 0 1 .8-.8h3.4a.8.8 0 0 1 .8.8V4" />
-                        <path d="M12.3 4l-.7 9a.8.8 0 0 1-.8.8H5.2a.8.8 0 0 1-.8-.8L3.7 4" />
-                        <path d="M6.5 6.8v4.4M9.5 6.8v4.4" />
-                      </BotaoDeAcao>
-                    </AcoesDaLinha>
-                  </Td>
-                </Tr>
-              ))}
-            </tbody>
-          </TableArea>
-        </TableFrame>
+                    <Td>
+                      <AcoesDaLinha>
+                        <BotaoDeAcao rotulo="Ver faturas" onClick={() => setFaturasDe(c)}>
+                          {/* Recibo com linhas: os ciclos daquele cartão. */}
+                          <path d="M3.4 2.4h9.2v11.2l-1.5-1-1.5 1-1.6-1-1.5 1-1.6-1-1.5 1z" />
+                          <path d="M5.8 6h4.4M5.8 8.6h3" />
+                        </BotaoDeAcao>
+
+                        {/*
+                          ⚠️ Excluir vale só para o cartão que NUNCA teve fatura —
+                          quem recusa é o servidor, com o número de faturas na
+                          mensagem. Com fatura, as compras já contaram na DRE: o
+                          histórico ficaria sem dono, e o caminho é o interruptor
+                          ao lado.
+                        */}
+                        <BotaoDeAcao
+                          rotulo="Excluir cartão"
+                          perigo
+                          onClick={() =>
+                            confirmar(
+                              `Excluir o cartão ${c.apelido ?? c.id}?`,
+                              "Excluir",
+                              () => excluir(c),
+                              "Só é possível enquanto ele não tiver nenhuma fatura. Se já tiver, inative pelo interruptor da linha.",
+                            )
+                          }
+                        >
+                          <path d="M2.5 4h11" />
+                          <path d="M5.5 4V2.8a.8.8 0 0 1 .8-.8h3.4a.8.8 0 0 1 .8.8V4" />
+                          <path d="M12.3 4l-.7 9a.8.8 0 0 1-.8.8H5.2a.8.8 0 0 1-.8-.8L3.7 4" />
+                          <path d="M6.5 6.8v4.4M9.5 6.8v4.4" />
+                        </BotaoDeAcao>
+                      </AcoesDaLinha>
+                    </Td>
+                  </Tr>
+                ))}
+              </tbody>
+            </TableArea>
+          </TableFrame>
+
+          <BarraDeFerramentas>
+            <BotaoDaBarra
+              rotulo="Novo cartão"
+              legenda="Novo"
+              destaque
+              icone={<IconeMais />}
+              onClick={() => setCriando(true)}
+            />
+          </BarraDeFerramentas>
+        </div>
       </Panel>
 
       <FaturasDrawer cartao={faturasDe} onClose={() => setFaturasDe(null)} />

@@ -6,11 +6,9 @@ import {
   Badge,
   Button,
   EmptyRow,
-  IncluirButton,
   PageHeader,
   PageLayout,
   Panel,
-  SearchInput,
   TableArea,
   TableFrame,
   TableHead,
@@ -19,6 +17,8 @@ import {
   Tr,
   tdNum,
 } from "@/components/ui/kit";
+import { BarraDeFerramentas, BotaoDaBarra, IconeMais } from "@/components/ui/barra-de-ferramentas";
+import { useRegistrarBusca } from "@/components/layout/busca-da-tela";
 import { ContratoDrawer, type OpcaoCliente } from "./contrato-drawer";
 import { useAvisos } from "@/components/ui/avisos";
 import { formatarSemSimbolo } from "@/shared/utils/money";
@@ -100,116 +100,149 @@ export function ContratosTela({
     router.refresh();
   }
 
+  /*
+   * ⚠️ Sem campo de busca proprio: a tela ANUNCIA o seu filtro para a caixa do
+   * topo, a unica do sistema. O estado continua sendo daqui — quem sabe o que e
+   * "buscar um contrato" e esta tela; a caixa so chama `setBusca`, e a etiqueta com
+   * o termo em vigor aparece sozinha no `PageHeader`. Ver `busca-da-tela`.
+   */
+  useRegistrarBusca("Contratos", busca, setBusca, filtrados.length);
+
   return (
     <PageLayout>
       <Panel>
         {/* O titulo nao repete o nome do grupo do menu: dentro de contas a
             pagar, "Recorrentes" ja diz de que despesa se trata. */}
-        <PageHeader title={ehDespesa ? "Recorrentes" : "Contratos"}>
-          <SearchInput value={busca} onSearch={setBusca} />
-          <IncluirButton onClick={() => setCriando(true)} />
-        </PageHeader>
+        <PageHeader title={ehDespesa ? "Recorrentes" : "Contratos"} />
 
-        <TableFrame>
-          <TableArea minWidth={900}>
-            <TableHead>
-              <Th>Contrato</Th>
-              <Th minWidth={110}>Periodicidade</Th>
-              <Th minWidth={130}>Vigência</Th>
-              <Th minWidth={150}>Próxima competência</Th>
-              <Th align="right" minWidth={100}>
-                Valor
-              </Th>
-              <Th align="center" minWidth={130} />
-            </TableHead>
-            <tbody>
-              {filtrados.length === 0 && <EmptyRow colSpan={6} />}
-              {filtrados.map((c, i) => {
-                const regra = podeGerarCompetencia(c, hojeISO);
+        {/*
+          ⚠️ O recuo da pagina mora AQUI, e a tabela entra `solto`.
 
-                /*
-                 * ⚠️ Gerar competencia esta TRAVADO no lado da despesa.
-                 *
-                 * A geracao cria um TICKET, que e o caminho do lado que recebe:
-                 * ticket -> conta a receber -> baixa. Numa despesa isso
-                 * produziria um ticket de servico prestado para um fornecedor —
-                 * dado errado, e que ainda entraria no faturamento.
-                 *
-                 * O caminho certo e a competencia gerar uma CONTA A PAGAR, e ele
-                 * ainda nao existe. Travado com o motivo a vista, ninguem cria a
-                 * sujeira e todo mundo sabe o que falta.
-                 */
-                const pode = regra.pode && !ehDespesa;
-                const motivo = ehDespesa
-                  ? "Gerar conta a pagar a partir do contrato ainda não existe."
-                  : regra.motivo;
+          Com a barra ao lado, a margem propria do `TableFrame` viraria um vao
+          entre o cartao e a barra — e os dois precisam se encostar. Passando o
+          recuo para a linha, o conjunto continua alinhado com o resto da tela.
+        */}
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            display: "flex",
+            /* Sem margem a DIREITA: aquele respiro e da propria barra, que o
+               carrega na largura. Ver `BarraDeFerramentas`. */
+            margin: "0 0 16px 16px",
+          }}
+        >
+          <TableFrame solto>
+            <TableArea minWidth={900}>
+              <TableHead>
+                <Th>Contrato</Th>
+                <Th minWidth={110}>Periodicidade</Th>
+                <Th minWidth={130}>Vigência</Th>
+                <Th minWidth={150}>Próxima competência</Th>
+                <Th align="right" minWidth={100}>
+                  Valor
+                </Th>
+                <Th align="center" minWidth={130} />
+              </TableHead>
+              <tbody>
+                {filtrados.length === 0 && <EmptyRow colSpan={6} />}
+                {filtrados.map((c, i) => {
+                  const regra = podeGerarCompetencia(c, hojeISO);
 
-                return (
-                  <Tr key={c.id} delay={Math.min(i * 20, 150)} dimmed={!c.ativo}>
-                    <Td style={{ maxWidth: 280 }} >
-                      <div
-                        onClick={() => setDetalhe(c.id)}
-                        style={{
-                          fontWeight: "var(--fw-medium)",
-                          cursor: "pointer",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {c.numero ? `${c.numero} · ` : ""}
-                        {c.descricao || "Sem descrição"}
-                      </div>
-                      {c.clienteNome && (
-                        <div style={{ fontSize: "var(--text-xs)", color: "var(--text-tertiary)" }}>
-                          {c.clienteNome}
+                  /*
+                   * ⚠️ Gerar competencia esta TRAVADO no lado da despesa.
+                   *
+                   * A geracao cria um TICKET, que e o caminho do lado que recebe:
+                   * ticket -> conta a receber -> baixa. Numa despesa isso
+                   * produziria um ticket de servico prestado para um fornecedor —
+                   * dado errado, e que ainda entraria no faturamento.
+                   *
+                   * O caminho certo e a competencia gerar uma CONTA A PAGAR, e ele
+                   * ainda nao existe. Travado com o motivo a vista, ninguem cria a
+                   * sujeira e todo mundo sabe o que falta.
+                   */
+                  const pode = regra.pode && !ehDespesa;
+                  const motivo = ehDespesa
+                    ? "Gerar conta a pagar a partir do contrato ainda não existe."
+                    : regra.motivo;
+
+                  return (
+                    <Tr key={c.id} delay={Math.min(i * 20, 150)} dimmed={!c.ativo}>
+                      <Td style={{ maxWidth: 280 }} >
+                        <div
+                          onClick={() => setDetalhe(c.id)}
+                          style={{
+                            fontWeight: "var(--fw-medium)",
+                            cursor: "pointer",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {c.numero ? `${c.numero} · ` : ""}
+                          {c.descricao || "Sem descrição"}
                         </div>
-                      )}
-                    </Td>
+                        {c.clienteNome && (
+                          <div style={{ fontSize: "var(--text-xs)", color: "var(--text-tertiary)" }}>
+                            {c.clienteNome}
+                          </div>
+                        )}
+                      </Td>
 
-                    <Td style={{ color: "var(--text-secondary)" }}>
-                      {ROTULO_PERIODO[c.periodicidade] ?? c.periodicidade}
-                    </Td>
+                      <Td style={{ color: "var(--text-secondary)" }}>
+                        {ROTULO_PERIODO[c.periodicidade] ?? c.periodicidade}
+                      </Td>
 
-                    <Td style={{ whiteSpace: "nowrap", color: "var(--text-secondary)" }}>
-                      {c.inicio ? paraFormatoBR(c.inicio) : "—"}
-                      {c.fim ? ` a ${paraFormatoBR(c.fim)}` : ""}
-                    </Td>
+                      <Td style={{ whiteSpace: "nowrap", color: "var(--text-secondary)" }}>
+                        {c.inicio ? paraFormatoBR(c.inicio) : "—"}
+                        {c.fim ? ` a ${paraFormatoBR(c.fim)}` : ""}
+                      </Td>
 
-                    <Td>
-                      {c.proximaCompetencia ? (
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
-                          <span style={{ fontVariantNumeric: "tabular-nums" }}>
-                            {competenciaBR(c.proximaCompetencia)}
+                      <Td>
+                        {c.proximaCompetencia ? (
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
+                            <span style={{ fontVariantNumeric: "tabular-nums" }}>
+                              {competenciaBR(c.proximaCompetencia)}
+                            </span>
+                            {pode && <Badge tom="warning">A GERAR</Badge>}
                           </span>
-                          {pode && <Badge tom="warning">A GERAR</Badge>}
-                        </span>
-                      ) : (
-                        "—"
-                      )}
-                    </Td>
+                        ) : (
+                          "—"
+                        )}
+                      </Td>
 
-                    <Td style={tdNum}>{formatarSemSimbolo(c.valor)}</Td>
+                      <Td style={tdNum}>{formatarSemSimbolo(c.valor)}</Td>
 
-                    <Td style={{ textAlign: "center" }}>
-                      {/* Desabilitado com o motivo no `title`: some o botão e a
-                          pessoa procura onde ele foi parar. */}
-                      <Button
-                        size="sm"
-                        variant={pode ? "primary" : "secondary"}
-                        disabled={!pode || gerando === c.id}
-                        title={motivo}
-                        onClick={() => void gerar(c)}
-                      >
-                        {gerando === c.id ? "Gerando…" : "Gerar competência"}
-                      </Button>
-                    </Td>
-                  </Tr>
-                );
-              })}
-            </tbody>
-          </TableArea>
-        </TableFrame>
+                      <Td style={{ textAlign: "center" }}>
+                        {/* Desabilitado com o motivo no `title`: some o botão e a
+                            pessoa procura onde ele foi parar. */}
+                        <Button
+                          size="sm"
+                          variant={pode ? "primary" : "secondary"}
+                          disabled={!pode || gerando === c.id}
+                          title={motivo}
+                          onClick={() => void gerar(c)}
+                        >
+                          {gerando === c.id ? "Gerando…" : "Gerar competência"}
+                        </Button>
+                      </Td>
+                    </Tr>
+                  );
+                })}
+              </tbody>
+            </TableArea>
+          </TableFrame>
+
+          <BarraDeFerramentas>
+            <BotaoDaBarra
+              rotulo="Novo contrato"
+              legenda="Novo"
+              destaque
+              icone={<IconeMais />}
+              onClick={() => setCriando(true)}
+            />
+          </BarraDeFerramentas>
+        </div>
       </Panel>
 
       <ContratoDrawer

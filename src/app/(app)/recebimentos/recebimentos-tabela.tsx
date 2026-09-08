@@ -1,19 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  Button,
   BotaoDeAcao,
   EmptyRow,
-  FilterButton,
   FilterItem,
-  IncluirButton,
   MarcaDeConciliacao,
   PageHeader,
   PageLayout,
   Pagination,
   Panel,
-  SearchInput,
   TableArea,
   TableFrame,
   TableHead,
@@ -22,6 +20,14 @@ import {
   Tr,
   inputStyle,
 } from "@/components/ui/kit";
+import {
+  BarraDeFerramentas,
+  BotaoDaBarra,
+  IconeFunil,
+  IconeMais,
+  TituloDoPainel,
+} from "@/components/ui/barra-de-ferramentas";
+import { useRegistrarBusca } from "@/components/layout/busca-da-tela";
 import { useAvisos } from "@/components/ui/avisos";
 import { NovoRecebimentoDrawer } from "./novo-recebimento-drawer";
 import { RecebimentoDrawer } from "./recebimento-drawer";
@@ -102,50 +108,21 @@ export function RecebimentosTabela({
   const paginaAtual = Math.min(pagina, totalPaginas);
   const visiveis = filtrados.slice((paginaAtual - 1) * PAGE_SIZE, paginaAtual * PAGE_SIZE);
 
+  const filtrosAtivos = (de ? 1 : 0) + (ate ? 1 : 0);
+
+  /* ⚠️ Sem campo proprio: a tela anuncia o filtro para a caixa do topo, a unica
+     do sistema. Ver `busca-da-tela`. */
+  const buscar = useCallback((v: string) => {
+    setBusca(v);
+    setPagina(1);
+  }, []);
+
+  useRegistrarBusca("Baixas", busca, buscar, filtrados.length);
+
   return (
     <PageLayout>
       <Panel>
-        <PageHeader title="Baixas">
-          <FilterButton
-            activeCount={(de ? 1 : 0) + (ate ? 1 : 0)}
-            onClear={() => {
-              setDe("");
-              setAte("");
-              setPagina(1);
-            }}
-          >
-            <FilterItem label="De">
-              <input
-                type="date"
-                value={de}
-                onChange={(e) => {
-                  setDe(e.target.value);
-                  setPagina(1);
-                }}
-                style={inputStyle}
-              />
-            </FilterItem>
-            <FilterItem label="Até">
-              <input
-                type="date"
-                value={ate}
-                onChange={(e) => {
-                  setAte(e.target.value);
-                  setPagina(1);
-                }}
-                style={inputStyle}
-              />
-            </FilterItem>
-          </FilterButton>
-          <SearchInput
-            value={busca}
-            onSearch={(v) => {
-              setBusca(v);
-              setPagina(1);
-            }}
-          />
-          <IncluirButton onClick={() => setCriando(true)} />
-        </PageHeader>
+        <PageHeader title="Baixas" />
 
         {/*
           ⚠️ Os cartoes ficam FORA do `TableFrame`.
@@ -159,127 +136,204 @@ export function RecebimentosTabela({
           <IndicadoresDeBaixa dados={indicadores} />
         </div>
 
-        <TableFrame>
-          <TableArea minWidth={900}>
-            <TableHead>
-              <Th minWidth={64}>#</Th>
-              {/*
-                ⚠️ Conciliado abre a linha, antes da data.
+        {/*
+          ⚠️ O recuo da pagina mora AQUI, e a tabela entra `solto`. Com a barra
+          ao lado, a margem propria do `TableFrame` viraria um vao entre o
+          cartao e a barra — e os dois precisam se encostar.
+        */}
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            display: "flex",
+            /* Sem margem a DIREITA: aquele respiro e da propria barra, que o
+               carrega na largura. Ver `BarraDeFerramentas`. */
+            margin: "0 0 16px 16px",
+          }}
+        >
+          <TableFrame solto>
+            <TableArea minWidth={900}>
+              <TableHead>
+                <Th minWidth={64}>#</Th>
+                {/*
+                  ⚠️ Conciliado abre a linha, antes da data.
 
-                E o estado do registro, e nao um dado dele: a pergunta de quem
-                varre a lista e "o que ainda falta conferir?". No fim da linha,
-                responder isso exigia atravessar cinco colunas de dado por vez.
+                  E o estado do registro, e nao um dado dele: a pergunta de quem
+                  varre a lista e "o que ainda falta conferir?". No fim da linha,
+                  responder isso exigia atravessar cinco colunas de dado por vez.
 
-                ⚠️ TUDO a esquerda, inclusive o dinheiro e as acoes. E a regra da
-                conta a receber, e ela existe para o olho nao refazer o percurso
-                a cada tela: com uma coluna puxada para a direita, a leitura
-                salta o vao vazio do meio e volta.
-              */}
-              <Th minWidth={80}>Conciliado</Th>
-              <Th minWidth={90}>Data</Th>
-              <Th>Cliente</Th>
-              <Th minWidth={110}>Forma</Th>
-              <Th minWidth={190}>Conta</Th>
-              <Th minWidth={130}>Destino</Th>
-              <Th minWidth={110}>Valor</Th>
-              <Th minWidth={80}>Ações</Th>
-            </TableHead>
-            <tbody>
-              {visiveis.length === 0 && <EmptyRow colSpan={9} />}
-              {visiveis.map((r, i) => (
-                <Tr key={r.id} delay={Math.min(i * 20, 150)} onClick={() => setDetalhe(r.id)}>
-                  <Td style={NUM}>{r.id}</Td>
-                  <Td>
-                    {/* Conciliado e gesto humano: significa "conferi no extrato".
-                        Por isso nasce pendente e nada no sistema o marca sozinho. */}
-                    <MarcaDeConciliacao conciliado={r.conciliado} />
-                  </Td>
-                  <Td style={NUM}>{r.data ? paraFormatoBR(r.data as DataISO) : "—"}</Td>
-                  <Td style={{ maxWidth: 240 }}>
-                    <span
-                      style={{
-                        display: "block",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
+                  ⚠️ TUDO a esquerda, inclusive o dinheiro e as acoes. E a regra da
+                  conta a receber, e ela existe para o olho nao refazer o percurso
+                  a cada tela: com uma coluna puxada para a direita, a leitura
+                  salta o vao vazio do meio e volta.
+                */}
+                <Th minWidth={80}>Conciliado</Th>
+                <Th minWidth={90}>Data</Th>
+                <Th>Cliente</Th>
+                <Th minWidth={110}>Forma</Th>
+                <Th minWidth={190}>Conta</Th>
+                <Th minWidth={130}>Destino</Th>
+                <Th minWidth={110}>Valor</Th>
+                <Th minWidth={80}>Ações</Th>
+              </TableHead>
+              <tbody>
+                {visiveis.length === 0 && <EmptyRow colSpan={9} />}
+                {visiveis.map((r, i) => (
+                  <Tr key={r.id} delay={Math.min(i * 20, 150)} onClick={() => setDetalhe(r.id)}>
+                    <Td style={NUM}>{r.id}</Td>
+                    <Td>
+                      {/* Conciliado e gesto humano: significa "conferi no extrato".
+                          Por isso nasce pendente e nada no sistema o marca sozinho. */}
+                      <MarcaDeConciliacao conciliado={r.conciliado} />
+                    </Td>
+                    <Td style={NUM}>{r.data ? paraFormatoBR(r.data as DataISO) : "—"}</Td>
+                    <Td style={{ maxWidth: 240 }}>
+                      <span
+                        style={{
+                          display: "block",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {r.clienteNome ?? "—"}
+                      </span>
+                    </Td>
+                    {/*
+                      ⚠️ Todas as celulas no mesmo peso e na mesma cor.
+
+                      Forma, conta e destino eram `--text-secondary` e o valor era
+                      verde e semibold. Tres pesos numa linha so criam uma
+                      hierarquia que nao existe no dado: numa lista de dinheiro que
+                      entrou, TODO valor e credito, e pintar todos de verde nao
+                      distingue nada — so tira a cor de circulacao para quando ela
+                      tiver algo a dizer.
+                    */}
+                    <Td>{r.tipo ?? "—"}</Td>
+                    <Td style={{ whiteSpace: "nowrap" }}>{r.contaNome ?? "—"}</Td>
+                    <Td style={{ whiteSpace: "nowrap" }}>{destino(r)}</Td>
+                    <Td style={NUM}>{formatarSemSimbolo(r.valor)}</Td>
+                    <Td>
+                      {/*
+                        ⚠️ Nao e o `AcoesDaLinha` do kit: ele empurra para a
+                        direita, e nesta tabela tudo alinha a esquerda.
+                      */}
+                      <span style={{ display: "inline-flex", gap: 4 }}>
+                        <BotaoDeAcao rotulo="Abrir este recebimento" onClick={() => setDetalhe(r.id)}>
+                          {/* Olho: ver sem mexer, que e o que o drawer faz. */}
+                          <path d="M1.3 8s2.4-4.5 6.7-4.5S14.7 8 14.7 8s-2.4 4.5-6.7 4.5S1.3 8 1.3 8z" />
+                          <circle cx="8" cy="8" r="1.9" />
+                        </BotaoDeAcao>
+
+                        {/*
+                          ⚠️ Estornar, e nao editar.
+
+                          Recebimento gravado ja abateu parcela e pode ter recibo
+                          emitido: mudar o valor por cima deixaria a parcela dizendo
+                          uma coisa e o extrato outra. A correcao e desfazer e
+                          lancar de novo, que e o mesmo gesto do cabecalho do
+                          drawer. Desabilitado com o motivo quando ja foi
+                          conciliado, e nao escondido: sumir faria parecer que o
+                          sistema nao sabe estornar.
+                        */}
+                        <BotaoDeAcao
+                          rotulo={
+                            r.conciliado
+                              ? "Não dá para estornar: este recebimento já foi conciliado no extrato"
+                              : "Estornar este recebimento"
+                          }
+                          perigo
+                          desabilitado={r.conciliado}
+                          onClick={() =>
+                            confirmar(
+                              `Estornar o recebimento ${r.id}?`,
+                              "Estornar",
+                              () => estornar(r.id),
+                              "O lançamento é apagado e as parcelas voltam a ficar em aberto. O desconto dado na baixa volta a ser devido.",
+                            )
+                          }
+                        >
+                          {/* Seta circular anti-horária: desfazer. Grade de 16. */}
+                          <path d="M2.7 8a5.3 5.3 0 1 0 1.55-3.75L2.7 5.8" />
+                          <path d="M2.7 2.7v3.3h3.3" />
+                        </BotaoDeAcao>
+                      </span>
+                    </Td>
+                  </Tr>
+                ))}
+              </tbody>
+            </TableArea>
+
+            <Pagination
+              page={paginaAtual}
+              totalPages={totalPaginas}
+              total={filtrados.length}
+              pageSize={PAGE_SIZE}
+              onPage={setPagina}
+            />
+          </TableFrame>
+
+          <BarraDeFerramentas>
+            <BotaoDaBarra
+              rotulo="Nova baixa"
+              legenda="Nova"
+              destaque
+              icone={<IconeMais />}
+              onClick={() => setCriando(true)}
+            />
+
+            {/* O periodo mudou de casa, nao de conteudo: os mesmos dois campos
+                do antigo botao de filtro. Aceso enquanto algum vale — recorte
+                escondido atras de icone vira lista curta sem explicacao. */}
+            <BotaoDaBarra
+              rotulo={filtrosAtivos > 0 ? `Período (${filtrosAtivos} em uso)` : "Filtrar por período"}
+              legenda="Período"
+              aceso={filtrosAtivos > 0}
+              icone={<IconeFunil ativo={filtrosAtivos > 0} />}
+              painel={() => (
+                <>
+                  <TituloDoPainel>Período</TituloDoPainel>
+              <FilterItem label="De">
+                <input
+                  type="date"
+                  value={de}
+                  onChange={(e) => {
+                    setDe(e.target.value);
+                    setPagina(1);
+                  }}
+                  style={inputStyle}
+                />
+              </FilterItem>
+              <FilterItem label="Até">
+                <input
+                  type="date"
+                  value={ate}
+                  onChange={(e) => {
+                    setAte(e.target.value);
+                    setPagina(1);
+                  }}
+                  style={inputStyle}
+                />
+              </FilterItem>
+
+                  {filtrosAtivos > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setDe("");
+                        setAte("");
+                        setPagina(1);
                       }}
                     >
-                      {r.clienteNome ?? "—"}
-                    </span>
-                  </Td>
-                  {/*
-                    ⚠️ Todas as celulas no mesmo peso e na mesma cor.
-
-                    Forma, conta e destino eram `--text-secondary` e o valor era
-                    verde e semibold. Tres pesos numa linha so criam uma
-                    hierarquia que nao existe no dado: numa lista de dinheiro que
-                    entrou, TODO valor e credito, e pintar todos de verde nao
-                    distingue nada — so tira a cor de circulacao para quando ela
-                    tiver algo a dizer.
-                  */}
-                  <Td>{r.tipo ?? "—"}</Td>
-                  <Td style={{ whiteSpace: "nowrap" }}>{r.contaNome ?? "—"}</Td>
-                  <Td style={{ whiteSpace: "nowrap" }}>{destino(r)}</Td>
-                  <Td style={NUM}>{formatarSemSimbolo(r.valor)}</Td>
-                  <Td>
-                    {/*
-                      ⚠️ Nao e o `AcoesDaLinha` do kit: ele empurra para a
-                      direita, e nesta tabela tudo alinha a esquerda.
-                    */}
-                    <span style={{ display: "inline-flex", gap: 4 }}>
-                      <BotaoDeAcao rotulo="Abrir este recebimento" onClick={() => setDetalhe(r.id)}>
-                        {/* Olho: ver sem mexer, que e o que o drawer faz. */}
-                        <path d="M1.3 8s2.4-4.5 6.7-4.5S14.7 8 14.7 8s-2.4 4.5-6.7 4.5S1.3 8 1.3 8z" />
-                        <circle cx="8" cy="8" r="1.9" />
-                      </BotaoDeAcao>
-
-                      {/*
-                        ⚠️ Estornar, e nao editar.
-
-                        Recebimento gravado ja abateu parcela e pode ter recibo
-                        emitido: mudar o valor por cima deixaria a parcela dizendo
-                        uma coisa e o extrato outra. A correcao e desfazer e
-                        lancar de novo, que e o mesmo gesto do cabecalho do
-                        drawer. Desabilitado com o motivo quando ja foi
-                        conciliado, e nao escondido: sumir faria parecer que o
-                        sistema nao sabe estornar.
-                      */}
-                      <BotaoDeAcao
-                        rotulo={
-                          r.conciliado
-                            ? "Não dá para estornar: este recebimento já foi conciliado no extrato"
-                            : "Estornar este recebimento"
-                        }
-                        perigo
-                        desabilitado={r.conciliado}
-                        onClick={() =>
-                          confirmar(
-                            `Estornar o recebimento ${r.id}?`,
-                            "Estornar",
-                            () => estornar(r.id),
-                            "O lançamento é apagado e as parcelas voltam a ficar em aberto. O desconto dado na baixa volta a ser devido.",
-                          )
-                        }
-                      >
-                        {/* Seta circular anti-horária: desfazer. Grade de 16. */}
-                        <path d="M2.7 8a5.3 5.3 0 1 0 1.55-3.75L2.7 5.8" />
-                        <path d="M2.7 2.7v3.3h3.3" />
-                      </BotaoDeAcao>
-                    </span>
-                  </Td>
-                </Tr>
-              ))}
-            </tbody>
-          </TableArea>
-
-          <Pagination
-            page={paginaAtual}
-            totalPages={totalPaginas}
-            total={filtrados.length}
-            pageSize={PAGE_SIZE}
-            onPage={setPagina}
-          />
-        </TableFrame>
+                      Limpar filtros
+                    </Button>
+                  )}
+                </>
+              )}
+            />
+          </BarraDeFerramentas>
+        </div>
       </Panel>
 
       <RecebimentoDrawer

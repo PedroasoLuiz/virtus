@@ -1,30 +1,36 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
+  Button,
   Badge,
   EmptyRow,
-  FilterButton,
   FilterItem,
   IconeKanban,
   IconeTabela,
-  IncluirButton,
   Alert,
   PageHeader,
   PageLayout,
   Pagination,
   Panel,
-  SearchInput,
   TableArea,
   TableFrame,
   TableHead,
   Td,
   Th,
   Tr,
-  ViewButton,
   selectStyle,
   type Tom,
 } from "@/components/ui/kit";
+import {
+  BarraDeFerramentas,
+  BotaoDaBarra,
+  IconeFunil,
+  IconeMais,
+  OpcaoDoPainel,
+  TituloDoPainel,
+} from "@/components/ui/barra-de-ferramentas";
+import { useRegistrarBusca } from "@/components/layout/busca-da-tela";
 import {
   estaVencida,
   situacaoDaConta,
@@ -171,55 +177,22 @@ export function ContasTabela({
     paginaAtual * PAGE_SIZE,
   );
 
+  const filtrosAtivos = situacao ? 1 : 0;
+
+  /* ⚠️ Sem campo proprio: a tela anuncia o filtro para a caixa do topo, a unica
+     do sistema. Voltar para a primeira pagina e parte do gesto — filtrado, o
+     resultado quase nunca tem a pagina em que se estava. Ver `busca-da-tela`. */
+  const buscar = useCallback((v: string) => {
+    setBusca(v);
+    setPagina(1);
+  }, []);
+
+  useRegistrarBusca("Contas a pagar", busca, buscar, filtradas.length);
+
   return (
     <PageLayout>
       <Panel>
-        <PageHeader title="Contas a pagar">
-          <ViewButton
-            view={modo}
-            setView={escolherModo}
-            opcoes={[
-              { valor: "tabela", rotulo: "Tabela", icone: <IconeTabela /> },
-              { valor: "kanban", rotulo: "Kanban", icone: <IconeKanban /> },
-            ]}
-          />
-          <FilterButton
-            activeCount={situacao ? 1 : 0}
-            onClear={() => {
-              setSituacao("");
-              setPagina(1);
-            }}
-          >
-            <FilterItem label="Situação">
-              <select
-                value={situacao}
-                onChange={(e) => {
-                  setSituacao(e.target.value);
-                  setPagina(1);
-                }}
-                style={selectStyle}
-              >
-                <option value="">Todas</option>
-                {OPCOES_DE_FILTRO.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-            </FilterItem>
-          </FilterButton>
-          {/* O que a busca alcança, dito no campo: sem isso ela parece quebrada
-              quando alguém digita algo que ela não olha. */}
-          <SearchInput
-            value={busca}
-            placeholder="Fornecedor, descrição, código ou valor"
-            onSearch={(v) => {
-              setBusca(v);
-              setPagina(1);
-            }}
-          />
-          <IncluirButton onClick={() => setNova(true)} />
-        </PageHeader>
+        <PageHeader title="Contas a pagar" />
 
         {cortadas > 0 && (
           <div style={{ marginBottom: 10 }}>
@@ -233,124 +206,223 @@ export function ContasTabela({
           </div>
         )}
 
-        {modo === "kanban" ? (
-          <QuadroDeContas itens={filtradas} aoAbrir={setDetalhe} />
-        ) : (
-          <TableFrame>
-            <TableArea minWidth={880}>
-              <TableHead>
-                <Th minWidth={60}>Nº</Th>
-                <Th>Descrição</Th>
-                <Th minWidth={180}>Fornecedor</Th>
-                <Th minWidth={100}>Vencimento</Th>
-                {/*
-                ⚠️ Tudo a esquerda, inclusive numero e dinheiro. Havia
-                "Parcelas" e "Situacao" centralizadas e "Valor" a direita: tres
-                eixos diferentes na mesma tabela, e o olho refazia a mira em
-                cada coluna.
-              */}
-                <Th minWidth={80}>Parcelas</Th>
-                <Th minWidth={100}>Situação</Th>
-                <Th minWidth={110}>Valor</Th>
-              </TableHead>
-              <tbody>
-                {visiveis.length === 0 && <EmptyRow colSpan={7} />}
-                {visiveis.map(({ conta, situacao: s, vencida }, i) => (
-                  <Tr
-                    key={conta.id}
-                    delay={Math.min(i * 20, 150)}
-                    dimmed={conta.cancelada}
-                    onClick={() => setDetalhe(conta.id)}
-                  >
-                    <Td
-                      style={{
-                        fontVariantNumeric: "tabular-nums",
-                        color: "var(--text-tertiary)",
-                      }}
+        {/*
+          ⚠️ O recuo da pagina mora AQUI, e a tabela entra `solto`. Com a barra
+          ao lado, a margem propria do `TableFrame` viraria um vao entre o
+          cartao e a barra — e os dois precisam se encostar.
+        */}
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            display: "flex",
+            /* Sem margem a DIREITA: aquele respiro e da propria barra, que o
+               carrega na largura. Ver `BarraDeFerramentas`. */
+            margin: "0 0 16px 16px",
+          }}
+        >
+          {modo === "kanban" ? (
+            <QuadroDeContas itens={filtradas} aoAbrir={setDetalhe} />
+          ) : (
+            <TableFrame solto>
+              <TableArea minWidth={880}>
+                <TableHead>
+                  <Th minWidth={60}>Nº</Th>
+                  <Th>Descrição</Th>
+                  <Th minWidth={180}>Fornecedor</Th>
+                  <Th minWidth={100}>Vencimento</Th>
+                  {/*
+                  ⚠️ Tudo a esquerda, inclusive numero e dinheiro. Havia
+                  "Parcelas" e "Situacao" centralizadas e "Valor" a direita: tres
+                  eixos diferentes na mesma tabela, e o olho refazia a mira em
+                  cada coluna.
+                */}
+                  <Th minWidth={80}>Parcelas</Th>
+                  <Th minWidth={100}>Situação</Th>
+                  <Th minWidth={110}>Valor</Th>
+                </TableHead>
+                <tbody>
+                  {visiveis.length === 0 && <EmptyRow colSpan={7} />}
+                  {visiveis.map(({ conta, situacao: s, vencida }, i) => (
+                    <Tr
+                      key={conta.id}
+                      delay={Math.min(i * 20, 150)}
+                      dimmed={conta.cancelada}
+                      onClick={() => setDetalhe(conta.id)}
                     >
-                      {conta.numero ?? conta.id}
-                    </Td>
-                    <Td style={{ maxWidth: 280 }}>
-                      <span
+                      <Td
                         style={{
-                          display: "block",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
+                          fontVariantNumeric: "tabular-nums",
+                          color: "var(--text-tertiary)",
+                        }}
+                      >
+                        {conta.numero ?? conta.id}
+                      </Td>
+                      <Td style={{ maxWidth: 280 }}>
+                        <span
+                          style={{
+                            display: "block",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                            fontWeight: "var(--fw-medium)",
+                          }}
+                        >
+                          {conta.descricao || "—"}
+                        </span>
+                      </Td>
+                      <Td
+                        style={{ maxWidth: 200, color: "var(--text-secondary)" }}
+                      >
+                        <span
+                          style={{
+                            display: "block",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {conta.fornecedorNome ?? "—"}
+                        </span>
+                      </Td>
+                      {/*
+                      ⚠️ VENCIDA vive AQUI, na data, e nao na coluna de situacao.
+                      Ela e um fato sobre o calendario, e o lugar de um fato sobre
+                      o calendario e do lado da data que o produziu.
+                    */}
+                      <Td
+                        style={{
                           whiteSpace: "nowrap",
+                          fontVariantNumeric: "tabular-nums",
+                          color: vencida ? "var(--danger-text)" : undefined,
+                          fontWeight: vencida ? "var(--fw-medium)" : undefined,
+                        }}
+                      >
+                        {conta.proximoVencimento
+                          ? paraFormatoBR(conta.proximoVencimento as DataISO)
+                          : "—"}
+                      </Td>
+                      <Td style={{ fontVariantNumeric: "tabular-nums" }}>
+                        {conta.qtdParcelas > 0
+                          ? `${conta.parcelasPagas}/${conta.qtdParcelas}`
+                          : "—"}
+                      </Td>
+                      <Td>
+                        {/* Cancelada ganha a propria pastilha: ela nao esta num
+                          ponto do caminho, saiu do caminho. */}
+                        {conta.cancelada ? (
+                          <Badge tom="danger">CANCELADA</Badge>
+                        ) : (
+                          <Badge tom={TOM[s]}>{s}</Badge>
+                        )}
+                      </Td>
+                      <Td
+                        style={{
+                          whiteSpace: "nowrap",
+                          fontVariantNumeric: "tabular-nums",
                           fontWeight: "var(--fw-medium)",
+                          color: "var(--debito)",
                         }}
                       >
-                        {conta.descricao || "—"}
-                      </span>
-                    </Td>
-                    <Td
-                      style={{ maxWidth: 200, color: "var(--text-secondary)" }}
-                    >
-                      <span
-                        style={{
-                          display: "block",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
+                        {formatarSemSimbolo(conta.total)}
+                      </Td>
+                    </Tr>
+                  ))}
+                </tbody>
+              </TableArea>
+              <Pagination
+                page={paginaAtual}
+                totalPages={totalPaginas}
+                total={filtradas.length}
+                pageSize={PAGE_SIZE}
+                onPage={setPagina}
+              />
+            </TableFrame>
+          )}
+
+            <BarraDeFerramentas>
+              <BotaoDaBarra
+                rotulo="Nova conta a pagar"
+                legenda="Nova"
+                destaque
+                icone={<IconeMais />}
+                onClick={() => setNova(true)}
+              />
+
+              {/* O modo de exibicao e ferramenta, e nao identidade da tela: e a
+                  mesma listagem, muda so por onde se olha. */}
+              <BotaoDaBarra
+                rotulo={`Exibição: ${modo === "kanban" ? "Kanban" : "Tabela"}`}
+                legenda="Exibir"
+                icone={modo === "kanban" ? <IconeKanban /> : <IconeTabela />}
+                painel={(fechar) => (
+                  <>
+                    <TituloDoPainel>Exibição</TituloDoPainel>
+                    {[
+                      { valor: "tabela", rotulo: "Tabela", icone: <IconeTabela /> },
+                      { valor: "kanban", rotulo: "Kanban", icone: <IconeKanban /> },
+                    ].map((o) => (
+                      <OpcaoDoPainel
+                        key={o.valor}
+                        icone={o.icone}
+                        rotulo={o.rotulo}
+                        marcada={modo === o.valor}
+                        onClick={() => {
+                          escolherModo(o.valor);
+                          fechar();
+                        }}
+                      />
+                    ))}
+                  </>
+                )}
+              />
+
+              {/* Os mesmos campos do antigo botao de filtro, agora no painel da
+                  barra. Aceso enquanto algum vale: filtro escondido atras de
+                  icone vira lista curta sem explicacao. */}
+              <BotaoDaBarra
+                rotulo={filtrosAtivos > 0 ? `Filtros (${filtrosAtivos} em uso)` : "Filtrar as contas"}
+                legenda="Filtros"
+                aceso={filtrosAtivos > 0}
+                icone={<IconeFunil ativo={filtrosAtivos > 0} />}
+                painel={() => (
+                  <>
+                    <TituloDoPainel>Filtros</TituloDoPainel>
+                <FilterItem label="Situação">
+                  <select
+                    value={situacao}
+                    onChange={(e) => {
+                      setSituacao(e.target.value);
+                      setPagina(1);
+                    }}
+                    style={selectStyle}
+                  >
+                    <option value="">Todas</option>
+                    {OPCOES_DE_FILTRO.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </FilterItem>
+
+                    {filtrosAtivos > 0 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setSituacao("");
+                          setPagina(1);
                         }}
                       >
-                        {conta.fornecedorNome ?? "—"}
-                      </span>
-                    </Td>
-                    {/*
-                    ⚠️ VENCIDA vive AQUI, na data, e nao na coluna de situacao.
-                    Ela e um fato sobre o calendario, e o lugar de um fato sobre
-                    o calendario e do lado da data que o produziu.
-                  */}
-                    <Td
-                      style={{
-                        whiteSpace: "nowrap",
-                        fontVariantNumeric: "tabular-nums",
-                        color: vencida ? "var(--danger-text)" : undefined,
-                        fontWeight: vencida ? "var(--fw-medium)" : undefined,
-                      }}
-                    >
-                      {conta.proximoVencimento
-                        ? paraFormatoBR(conta.proximoVencimento as DataISO)
-                        : "—"}
-                    </Td>
-                    <Td style={{ fontVariantNumeric: "tabular-nums" }}>
-                      {conta.qtdParcelas > 0
-                        ? `${conta.parcelasPagas}/${conta.qtdParcelas}`
-                        : "—"}
-                    </Td>
-                    <Td>
-                      {/* Cancelada ganha a propria pastilha: ela nao esta num
-                        ponto do caminho, saiu do caminho. */}
-                      {conta.cancelada ? (
-                        <Badge tom="danger">CANCELADA</Badge>
-                      ) : (
-                        <Badge tom={TOM[s]}>{s}</Badge>
-                      )}
-                    </Td>
-                    <Td
-                      style={{
-                        whiteSpace: "nowrap",
-                        fontVariantNumeric: "tabular-nums",
-                        fontWeight: "var(--fw-medium)",
-                        color: "var(--debito)",
-                      }}
-                    >
-                      {formatarSemSimbolo(conta.total)}
-                    </Td>
-                  </Tr>
-                ))}
-              </tbody>
-            </TableArea>
-            <Pagination
-              page={paginaAtual}
-              totalPages={totalPaginas}
-              total={filtradas.length}
-              pageSize={PAGE_SIZE}
-              onPage={setPagina}
-            />
-          </TableFrame>
-        )}
+                        Limpar filtros
+                      </Button>
+                    )}
+                  </>
+                )}
+              />
+            </BarraDeFerramentas>
+        </div>
       </Panel>
 
       <ContaDrawer contaId={detalhe} onClose={() => setDetalhe(null)} />
@@ -414,6 +486,7 @@ function QuadroDeContas({
 
   return (
     <Quadro
+      solto
       colunas={colunas.map((c, i) => ({
         id: i,
         descricao: c,

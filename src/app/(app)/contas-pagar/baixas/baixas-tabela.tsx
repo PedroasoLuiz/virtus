@@ -2,18 +2,16 @@
 
 import { useRouter } from "next/navigation";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
+  Button,
   EmptyRow,
-  FilterButton,
   FilterItem,
-  IncluirButton,
   MarcaDeConciliacao,
   PageHeader,
   PageLayout,
   Pagination,
   Panel,
-  SearchInput,
   TableArea,
   TableFrame,
   TableHead,
@@ -22,6 +20,14 @@ import {
   Tr,
   inputStyle,
 } from "@/components/ui/kit";
+import {
+  BarraDeFerramentas,
+  BotaoDaBarra,
+  IconeFunil,
+  IconeMais,
+  TituloDoPainel,
+} from "@/components/ui/barra-de-ferramentas";
+import { useRegistrarBusca } from "@/components/layout/busca-da-tela";
 import { formatarSemSimbolo } from "@/shared/utils/money";
 import { paraFormatoBR, type DataISO } from "@/shared/utils/datas";
 import { IndicadoresDeBaixa } from "@/components/financeiro/indicadores-de-baixa";
@@ -95,6 +101,17 @@ export function BaixasTabela({
     paginaAtual * PAGE_SIZE,
   );
 
+  const filtrosAtivos = (de ? 1 : 0) + (ate ? 1 : 0);
+
+  /* ⚠️ Sem campo proprio: a tela anuncia o filtro para a caixa do topo, a unica
+     do sistema. Ver `busca-da-tela`. */
+  const buscar = useCallback((v: string) => {
+    setBusca(v);
+    setPagina(1);
+  }, []);
+
+  useRegistrarBusca("Baixas", busca, buscar, filtradas.length);
+
   return (
     <PageLayout>
       <Panel>
@@ -103,47 +120,7 @@ export function BaixasTabela({
           que o financeiro usa para o gesto de dar por pago. E o titulo nao
           repete o nome do grupo do menu.
         */}
-        <PageHeader title="Baixas">
-          <FilterButton
-            activeCount={(de ? 1 : 0) + (ate ? 1 : 0)}
-            onClear={() => {
-              setDe("");
-              setAte("");
-              setPagina(1);
-            }}
-          >
-            <FilterItem label="De">
-              <input
-                type="date"
-                value={de}
-                onChange={(e) => {
-                  setDe(e.target.value);
-                  setPagina(1);
-                }}
-                style={inputStyle}
-              />
-            </FilterItem>
-            <FilterItem label="Até">
-              <input
-                type="date"
-                value={ate}
-                onChange={(e) => {
-                  setAte(e.target.value);
-                  setPagina(1);
-                }}
-                style={inputStyle}
-              />
-            </FilterItem>
-          </FilterButton>
-          <SearchInput
-            value={busca}
-            onSearch={(v) => {
-              setBusca(v);
-              setPagina(1);
-            }}
-          />
-          <IncluirButton onClick={() => setCriando(true)} />
-        </PageHeader>
+        <PageHeader title="Baixas" />
 
         {/*
           ⚠️ Os cartoes ficam FORA do `TableFrame`. O recuo lateral de 16 mora no
@@ -154,72 +131,149 @@ export function BaixasTabela({
           <IndicadoresDeBaixa dados={indicadores} sentido="saida" />
         </div>
 
-        <TableFrame>
-          <TableArea minWidth={900}>
-            <TableHead>
-              {/*
-                ⚠️ Conciliado abre a linha, antes da data: e o estado do
-                registro, e a pergunta de quem varre a lista e "o que ainda falta
-                conferir?". E TUDO a esquerda, inclusive o dinheiro.
-              */}
-              <Th minWidth={64}>#</Th>
-              <Th minWidth={80}>Conciliado</Th>
-              <Th minWidth={90}>Data</Th>
-              <Th>Fornecedor</Th>
-              <Th minWidth={110}>Forma</Th>
-              <Th minWidth={190}>Conta</Th>
-              <Th minWidth={130}>Destino</Th>
-              <Th minWidth={110}>Valor</Th>
-            </TableHead>
-            <tbody>
-              {visiveis.length === 0 && <EmptyRow colSpan={8} />}
-              {visiveis.map((b, i) => (
-                <Tr
-                  key={b.id}
-                  delay={Math.min(i * 20, 150)}
-                  onClick={() => setDetalhe(b.id)}
-                >
-                  <Td style={NUM}>{b.id}</Td>
-                  <Td>
-                    <MarcaDeConciliacao conciliado={b.conciliado} />
-                  </Td>
-                  <Td style={NUM}>
-                    {b.data ? paraFormatoBR(b.data as DataISO) : "—"}
-                  </Td>
-                  <Td style={{ maxWidth: 240 }}>
-                    <span
-                      style={{
-                        display: "block",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
+        {/*
+          ⚠️ O recuo da pagina mora AQUI, e a tabela entra `solto`. Com a barra
+          ao lado, a margem propria do `TableFrame` viraria um vao entre o
+          cartao e a barra — e os dois precisam se encostar.
+        */}
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            display: "flex",
+            /* Sem margem a DIREITA: aquele respiro e da propria barra, que o
+               carrega na largura. Ver `BarraDeFerramentas`. */
+            margin: "0 0 16px 16px",
+          }}
+        >
+          <TableFrame solto>
+            <TableArea minWidth={900}>
+              <TableHead>
+                {/*
+                  ⚠️ Conciliado abre a linha, antes da data: e o estado do
+                  registro, e a pergunta de quem varre a lista e "o que ainda falta
+                  conferir?". E TUDO a esquerda, inclusive o dinheiro.
+                */}
+                <Th minWidth={64}>#</Th>
+                <Th minWidth={80}>Conciliado</Th>
+                <Th minWidth={90}>Data</Th>
+                <Th>Fornecedor</Th>
+                <Th minWidth={110}>Forma</Th>
+                <Th minWidth={190}>Conta</Th>
+                <Th minWidth={130}>Destino</Th>
+                <Th minWidth={110}>Valor</Th>
+              </TableHead>
+              <tbody>
+                {visiveis.length === 0 && <EmptyRow colSpan={8} />}
+                {visiveis.map((b, i) => (
+                  <Tr
+                    key={b.id}
+                    delay={Math.min(i * 20, 150)}
+                    onClick={() => setDetalhe(b.id)}
+                  >
+                    <Td style={NUM}>{b.id}</Td>
+                    <Td>
+                      <MarcaDeConciliacao conciliado={b.conciliado} />
+                    </Td>
+                    <Td style={NUM}>
+                      {b.data ? paraFormatoBR(b.data as DataISO) : "—"}
+                    </Td>
+                    <Td style={{ maxWidth: 240 }}>
+                      <span
+                        style={{
+                          display: "block",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {b.fornecedorNome ?? "—"}
+                      </span>
+                    </Td>
+                    {/*
+                      ⚠️ Todas as celulas no mesmo peso e na mesma cor. Numa lista
+                      de dinheiro que saiu, TODO valor e debito: pintar todos de
+                      vermelho nao distingue nada, so tira a cor de circulacao para
+                      quando ela tiver algo a dizer.
+                    */}
+                    <Td>{b.tipo ?? "—"}</Td>
+                    <Td style={{ whiteSpace: "nowrap" }}>{b.contaNome ?? "—"}</Td>
+                    <Td style={{ whiteSpace: "nowrap" }}>{destino(b)}</Td>
+                    <Td style={NUM}>{formatarSemSimbolo(b.valor)}</Td>
+                  </Tr>
+                ))}
+              </tbody>
+            </TableArea>
+            <Pagination
+              page={paginaAtual}
+              totalPages={totalPaginas}
+              total={filtradas.length}
+              pageSize={PAGE_SIZE}
+              onPage={setPagina}
+            />
+          </TableFrame>
+
+          <BarraDeFerramentas>
+            <BotaoDaBarra
+              rotulo="Nova baixa"
+              legenda="Nova"
+              destaque
+              icone={<IconeMais />}
+              onClick={() => setCriando(true)}
+            />
+
+            {/* O periodo mudou de casa, nao de conteudo: os mesmos dois campos
+                do antigo botao de filtro. Aceso enquanto algum vale — recorte
+                escondido atras de icone vira lista curta sem explicacao. */}
+            <BotaoDaBarra
+              rotulo={filtrosAtivos > 0 ? `Período (${filtrosAtivos} em uso)` : "Filtrar por período"}
+              legenda="Período"
+              aceso={filtrosAtivos > 0}
+              icone={<IconeFunil ativo={filtrosAtivos > 0} />}
+              painel={() => (
+                <>
+                  <TituloDoPainel>Período</TituloDoPainel>
+              <FilterItem label="De">
+                <input
+                  type="date"
+                  value={de}
+                  onChange={(e) => {
+                    setDe(e.target.value);
+                    setPagina(1);
+                  }}
+                  style={inputStyle}
+                />
+              </FilterItem>
+              <FilterItem label="Até">
+                <input
+                  type="date"
+                  value={ate}
+                  onChange={(e) => {
+                    setAte(e.target.value);
+                    setPagina(1);
+                  }}
+                  style={inputStyle}
+                />
+              </FilterItem>
+
+                  {filtrosAtivos > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setDe("");
+                        setAte("");
+                        setPagina(1);
                       }}
                     >
-                      {b.fornecedorNome ?? "—"}
-                    </span>
-                  </Td>
-                  {/*
-                    ⚠️ Todas as celulas no mesmo peso e na mesma cor. Numa lista
-                    de dinheiro que saiu, TODO valor e debito: pintar todos de
-                    vermelho nao distingue nada, so tira a cor de circulacao para
-                    quando ela tiver algo a dizer.
-                  */}
-                  <Td>{b.tipo ?? "—"}</Td>
-                  <Td style={{ whiteSpace: "nowrap" }}>{b.contaNome ?? "—"}</Td>
-                  <Td style={{ whiteSpace: "nowrap" }}>{destino(b)}</Td>
-                  <Td style={NUM}>{formatarSemSimbolo(b.valor)}</Td>
-                </Tr>
-              ))}
-            </tbody>
-          </TableArea>
-          <Pagination
-            page={paginaAtual}
-            totalPages={totalPaginas}
-            total={filtradas.length}
-            pageSize={PAGE_SIZE}
-            onPage={setPagina}
-          />
-        </TableFrame>
+                      Limpar filtros
+                    </Button>
+                  )}
+                </>
+              )}
+            />
+          </BarraDeFerramentas>
+        </div>
       </Panel>
 
       <BaixaDrawer

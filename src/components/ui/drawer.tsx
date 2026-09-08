@@ -42,6 +42,7 @@ export function Drawer({
   headerExtra,
   fecharPersonalizado,
   nivel = 1,
+  capa,
   children,
 }: {
   open: boolean;
@@ -91,6 +92,18 @@ export function Drawer({
    * nascia atras da tela que o abriu.
    */
   nivel?: 1 | 2 | 3;
+  /**
+   * Pinta o CABECALHO e apaga a divisoria de baixo dele.
+   *
+   * ⚠️ Existe para a gaveta que abre com uma faixa logo abaixo do titulo — hoje
+   * o perfil. Ali o cabecalho e a faixa sao a mesma superficie; com a divisoria
+   * no meio, a cor virava duas tiras coladas e aparecia um fio no meio de um
+   * bloco continuo.
+   *
+   * ⚠️ Quem pinta a faixa e a TELA, e nao o drawer: e ela que sabe onde a faixa
+   * termina. Aqui so se apaga o fio e se continua a cor para cima.
+   */
+  capa?: string;
   children: React.ReactNode;
 }) {
   const base = 300 + nivel * 100;
@@ -165,7 +178,9 @@ export function Drawer({
             alignItems: "center",
             gap: 12,
             padding: "12px 12px 12px 16px",
-            borderBottom: "1px solid var(--border)",
+            background: capa,
+            /* Com capa nao ha fio: a cor segue direto para a faixa abaixo. */
+            borderBottom: capa ? "none" : "1px solid var(--border)",
           }}
         >
           <div style={{ flex: 1, minWidth: 0 }}>

@@ -51,16 +51,26 @@ export default async function PortalLayout({ children }: { children: React.React
           modulos={[]}
           empresa={emitenteAtual?.nome ?? null}
           recolhidaInicial={recolhida}
-          email={sessao.ctx.email}
-          usuarioNome={sessao.usuarioNome}
-          // Mesma mecânica do sistema, outro significado: aqui a empresa é
-          // quem ESTÁ COBRANDO, e não o tenant que se administra.
+          // Mesma mecânica do sistema, outro significado: aqui a empresa é quem
+          // ESTÁ COBRANDO, e não o tenant que se administra.
           podeTrocarEmpresa={emitentes.length > 1}
           hrefTrocarEmpresa="/portal-empresa"
         />
 
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
-          <Topbar aviso={sessao.demo ? "demo" : null} />
+          <Topbar
+            aviso={sessao.demo ? "demo" : null}
+            email={sessao.ctx.email}
+            usuarioNome={sessao.usuarioNome}
+            usuarioFoto={sessao.usuarioFoto}
+            emailPendente={sessao.emailPendente}
+            dadosDoUsuario={sessao.dadosDoUsuario}
+            /* O externo nao tem vinculo com empresa nenhuma: o acesso dele e
+               por CLIENTE, e a aba de empresas do perfil diz isso. */
+            empresas={[]}
+            empresaAtualId={null}
+            interno={false}
+          />
           <main style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>{children}</main>
         </div>
       </div>

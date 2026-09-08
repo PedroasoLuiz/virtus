@@ -1,25 +1,52 @@
-import { EmConstrucao } from "../em-construcao";
+import { sessaoUI } from "@/shared/auth/sessao-ui";
+import { listar as listarMovimentacoes } from "@/modules/movimentacoes/movimentacoes.service";
+import { listar as listarContas } from "@/modules/contas/contas.repository";
+import { dadosDaEmpresa } from "@/modules/empresa/empresa.repository";
+import { hoje, type DataISO } from "@/shared/utils/datas";
+import { SemEmpresa } from "../sem-empresa";
+import { MovimentacoesTela } from "./movimentacoes-tela";
 
 /**
- * Movimentação entre contas próprias.
+ * Transferencias entre as contas da propria empresa.
  *
- * É diferente de recebimento e de pagamento: nada entra nem sai da empresa, o
- * dinheiro só troca de lugar. Por isso não pode virar um par
- * Receita/Despesa solto — os dois lados precisam nascer amarrados, senão o DRE
- * conta a mesma transferência como faturamento de um lado e custo do outro.
+ * ⚠️ Nao e recebimento nem pagamento: nada entra ou sai da empresa, o dinheiro
+ * so troca de lugar. As duas pontas nascem amarradas pelo mesmo identificador, e
+ * a DRE as ignora pelo `tipo` — contadas, elas inflariam faturamento e custo ao
+ * mesmo tempo, pelo mesmo valor.
  */
-export default function Page() {
+export default async function MovimentacoesPage() {
+  const { ctx, usuarioNome } = await sessaoUI();
+  if (ctx.empresaId == null) return <SemEmpresa />;
+
+  /* Os noventa dias que se conferem: transferencia se olha perto do extrato, e
+     um ano inteiro traria centenas de linhas para achar a da semana passada. */
+  const [de, ate] = ultimosNoventaDias();
+
+  const [inicial, contas, empresa] = await Promise.all([
+    listarMovimentacoes(ctx.empresaId, de, ate),
+    listarContas(ctx.empresaId),
+    /*
+     * A empresa vai junto porque a tela IMPRIME: o PDF e montado no navegador, e
+     * o cabecalho do documento nao pode depender de uma segunda ida ao servidor
+     * no meio do clique de imprimir. Mesmo caminho da DRE e do fluxo.
+     */
+    dadosDaEmpresa(ctx.empresaId),
+  ]);
+
   return (
-    <EmConstrucao
-      titulo="Movimentações"
-      descricao="Transferências entre as contas da empresa."
-      pendencias={[
-        "Transferência entre duas contas próprias: sai de uma, entra na outra, na mesma data",
-        "Os dois lançamentos precisam nascer ligados por um identificador comum, para que um estorno leve os dois e o par nunca fique pela metade",
-        "Ficar FORA do DRE: transferência não é receita nem despesa, e contá-la infla faturamento e custo ao mesmo tempo",
-        "Aparecer no extrato das duas contas, com o nome da conta do outro lado no histórico",
-        "Aplicação e resgate são o mesmo gesto (conta corrente <-> investimento) e devem usar este mesmo caminho",
-      ]}
+    <MovimentacoesTela
+      inicial={inicial}
+      contas={contas}
+      de={de}
+      ate={ate}
+      empresa={empresa}
+      emitidoPor={usuarioNome ?? ""}
     />
   );
+}
+
+function ultimosNoventaDias(): [DataISO, DataISO] {
+  const fim = hoje();
+  const inicio = new Date(Date.parse(fim) - 90 * 24 * 60 * 60 * 1000);
+  return [inicio.toISOString().slice(0, 10) as DataISO, fim];
 }

@@ -3,20 +3,44 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { TODAS_AS_ROTAS, type Item } from "@/components/layout/rotas";
+import { useBuscaDaTela } from "@/components/layout/busca-da-tela";
 
 /**
- * Busca global de modulos — mesmo padrao do SIC.
+ * A busca do sistema — a unica caixa de procura que existe.
  *
- * Centralizada no topo, 340px, atalho Ctrl+K. Navega entre telas; nao procura
- * registro. Buscar dentro de uma listagem continua sendo o campo da propria
- * tela — misturar as duas coisas numa caixa so torna o resultado imprevisivel.
+ * Centralizada no topo, 340px, atalho Ctrl+K. Ela faz duas coisas de uma vez:
+ *
+ *   1. FILTRA A TELA ABERTA, ao vivo, enquanto se digita. A tela se anuncia em
+ *      `busca-da-tela`; aqui so se chama a funcao que ela deixou.
+ *   2. Sugere MODULOS com aquele nome, embaixo.
+ *
+ * ⚠️ A tela vem PRIMEIRO, e nao os modulos. Quem digita "cresol" com uma
+ * listagem aberta quer achar registro em nove de cada dez vezes; a navegacao e
+ * o caso raro, e caso raro fica embaixo.
+ *
+ * ⚠️ O filtro NAO se desfaz quando a caixa fecha. Ele continua valendo, e quem
+ * o mostra e a etiqueta no cabecalho da tela (`PageHeader`). Sem essa etiqueta
+ * a caixa nao poderia filtrar coisa nenhuma: numa tela de dinheiro, uma lista
+ * curta filtrada em silencio se le como "nao ha nada a pagar".
+ *
+ * ⚠️ Sem tela anunciada — painel, DRE, um grafico — ela e so navegacao, como
+ * sempre foi. A secao da tela simplesmente nao aparece.
  */
 export function BuscaGlobal() {
   const router = useRouter();
+  const tela = useBuscaDaTela();
   const [aberta, setAberta] = useState(false);
-  const [termo, setTermo] = useState("");
+  /* So vale quando nao ha tela: com tela, a dona do texto e ela. */
+  const [rascunho, setRascunho] = useState("");
   const caixa = useRef<HTMLDivElement>(null);
   const campo = useRef<HTMLInputElement>(null);
+
+  const termo = tela ? tela.termo : rascunho;
+
+  function escrever(valor: string) {
+    if (tela) tela.buscar(valor);
+    else setRascunho(valor);
+  }
 
   useEffect(() => {
     const aoTeclar = (e: KeyboardEvent) => {
@@ -47,7 +71,13 @@ export function BuscaGlobal() {
 
   function ir(item: Item) {
     setAberta(false);
-    setTermo("");
+    /*
+     * ⚠️ Sair da tela LIMPA o filtro dela. O termo era daquela listagem; levado
+     * para a proxima, a pessoa chegaria numa tabela ja filtrada por uma palavra
+     * que ela digitou para outra coisa.
+     */
+    escrever("");
+    setRascunho("");
     router.push(item.href);
   }
 
@@ -85,12 +115,19 @@ export function BuscaGlobal() {
         <input
           ref={campo}
           value={termo}
-          onChange={(e) => setTermo(e.target.value)}
+          onChange={(e) => escrever(e.target.value)}
           onFocus={() => setAberta(true)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && resultados[0]) ir(resultados[0]);
+            /*
+             * Com tela aberta, Enter nao navega: o filtro ja esta aplicado a
+             * cada tecla, e o gesto seguinte e olhar a tabela. Navegar aqui
+             * tiraria a pessoa da tela que ela acabou de filtrar.
+             */
+            if (e.key !== "Enter") return;
+            if (tela && busca) return setAberta(false);
+            if (resultados[0]) ir(resultados[0]);
           }}
-          placeholder="Buscar módulos e funções..."
+          placeholder={tela ? `Pesquisar em ${tela.rotulo}...` : "Buscar módulos e funções..."}
           style={{
             flex: 1,
             minWidth: 0,
@@ -142,25 +179,56 @@ export function BuscaGlobal() {
             overflowY: "auto",
           }}
         >
-          {resultados.length === 0 ? (
-            <div
-              style={{
-                padding: 20,
-                textAlign: "center",
-                fontSize: "var(--text-base)",
-                color: "var(--text-tertiary)",
-              }}
-            >
-              Nenhum resultado para &ldquo;{termo}&rdquo;
-            </div>
-          ) : (
-            <div style={{ padding: 8 }}>
-              {!busca && (
+          <div style={{ padding: 8 }}>
+            {/*
+              A secao da tela. Ela NAO e clicavel: o filtro ja aconteceu a cada
+              tecla, e um botao aqui prometeria um segundo passo que nao existe.
+              O que ela faz e contar quantas linhas sobraram — a resposta que a
+              tabela atras do painel esta escondendo neste instante.
+            */}
+            {tela && busca && (
+              <>
                 <div className="rotulo" style={{ padding: "2px 6px 6px" }}>
-                  Módulos
+                  Nesta tela
                 </div>
-              )}
-              {resultados.map((item) => (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "7px 6px",
+                    fontSize: "var(--text-md)",
+                    color: "var(--text-primary)",
+                  }}
+                >
+                  <span style={{ fontWeight: 500 }}>{tela.rotulo}</span>
+                  <span style={{ marginLeft: "auto", color: "var(--text-tertiary)" }}>
+                    {tela.resultados === undefined
+                      ? "filtrando"
+                      : tela.resultados === 1
+                        ? "1 resultado"
+                        : `${tela.resultados} resultados`}
+                  </span>
+                </div>
+              </>
+            )}
+
+            <div className="rotulo" style={{ padding: "2px 6px 6px" }}>
+              {busca ? "Ir para" : "Módulos"}
+            </div>
+
+            {resultados.length === 0 ? (
+              <div
+                style={{
+                  padding: "10px 6px",
+                  fontSize: "var(--text-base)",
+                  color: "var(--text-tertiary)",
+                }}
+              >
+                Nenhum módulo com esse nome.
+              </div>
+            ) : (
+              resultados.map((item) => (
                 <button
                   key={item.href}
                   onClick={() => ir(item)}
@@ -199,9 +267,9 @@ export function BuscaGlobal() {
                     {item.href}
                   </span>
                 </button>
-              ))}
-            </div>
-          )}
+              ))
+            )}
+          </div>
         </div>
       )}
     </div>

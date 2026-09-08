@@ -3,28 +3,34 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  Button,
   Badge,
   EmptyRow,
-  FilterButton,
   FilterItem,
   IconeKanban,
   IconeTabela,
-  IncluirButton,
   PageHeader,
   PageLayout,
   Panel,
-  SearchInput,
   TableArea,
   TableFrame,
   TableHead,
   Td,
   Th,
   Tr,
-  ViewButton,
   selectStyle,
   tdNum,
   type Tom,
 } from "@/components/ui/kit";
+import {
+  BarraDeFerramentas,
+  BotaoDaBarra,
+  IconeFunil,
+  IconeMais,
+  OpcaoDoPainel,
+  TituloDoPainel,
+} from "@/components/ui/barra-de-ferramentas";
+import { useRegistrarBusca } from "@/components/layout/busca-da-tela";
 import { Quadro } from "@/components/ui/quadro";
 import { useAvisos } from "@/components/ui/avisos";
 import { salvarVisao } from "@/modules/preferencias/preferencias.actions";
@@ -128,175 +134,244 @@ export function ProjetosTela({
     router.refresh();
   }
 
+  const filtrosAtivos = (modalidade ? 1 : 0) + (verInativos ? 1 : 0);
+
+  /* ⚠️ Sem campo proprio: a tela anuncia o filtro para a caixa do topo. Ver
+     `busca-da-tela`. */
+  useRegistrarBusca("Projetos", busca, setBusca, filtrados.length);
+
   return (
     <PageLayout>
       <Panel>
-        <PageHeader title="Projetos">
-          <ViewButton
-            view={modo}
-            setView={escolherModo}
-            opcoes={[
-              { valor: "tabela", rotulo: "Tabela", icone: <IconeTabela /> },
-              { valor: "kanban", rotulo: "Kanban", icone: <IconeKanban /> },
-            ]}
-          />
-          <FilterButton
-            activeCount={(modalidade ? 1 : 0) + (verInativos ? 1 : 0)}
-            onClear={() => {
-              setModalidade("");
-              setVerInativos(false);
-            }}
-          >
-            <FilterItem label="Modalidade">
-              <select
-                value={modalidade}
-                onChange={(e) => setModalidade(e.target.value)}
-                style={selectStyle}
-              >
-                <option value="">Todas</option>
-                <option value="FECHADO">Escopo fechado</option>
-                <option value="POR_DEMANDA">Por demanda</option>
-              </select>
-            </FilterItem>
+        <PageHeader title="Projetos" />
 
-            <FilterItem label="Inativos">
-              <label
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 7,
-                  fontSize: "var(--text-base)",
-                  cursor: "pointer",
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={verInativos}
-                  onChange={(e) => setVerInativos(e.target.checked)}
-                  style={{ accentColor: "var(--primary)", cursor: "pointer" }}
-                />
-                Exibir inativos
-              </label>
-            </FilterItem>
-          </FilterButton>
-
-          <SearchInput value={busca} onSearch={setBusca} />
-          <IncluirButton onClick={() => setCriando(true)} />
-        </PageHeader>
-
-        {modo === "kanban" ? (
-          <Quadro
-            // O índice vira o id da coluna: a situação é conjunto fixo, não
-            // tabela — não há id de verdade para usar.
-            colunas={SITUACOES.map((s, i) => ({
-              id: i,
-              descricao: ROTULO_SITUACAO[s],
-              cor: TOM_SITUACAO[s],
-            }))}
-            cartoes={filtrados.map((p) => ({ ...p, colunaId: SITUACOES.indexOf(p.situacao) }))}
-            aoMover={mover}
-            aoAbrir={(p) => router.push(`/projetos/${p.id}`)}
-            vazio="Nenhum projeto"
-            corpo={(p) => <CardProjeto projeto={p} />}
-            /* Sem valor no cartao: em POR_DEMANDA ele nao existe ate a tarefa
-               ser concluida, entao metade dos cartoes mostraria "—" numa coluna
-               reservada a dinheiro. O quadro de projeto responde "como vai a
-               entrega"; quanto se cobra e pergunta da tela de tickets. */
-            rodape={(p) => (
-              <>
-                <span style={{ fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>
-                  {p.qtdConcluidas}/{p.qtdDemandas} tarefas
-                </span>
-                <span style={{ flex: 1 }} />
-                {/* A fracao diz quantas faltam; a porcentagem diz o quanto anda.
-                    Sao leituras diferentes, e no cartao cabem as duas. */}
-                {p.qtdDemandas > 0 && (
-                  <span
-                    style={{
-                      fontSize: "var(--text-sm)",
-                      fontWeight: "var(--fw-semi)",
-                      fontVariantNumeric: "tabular-nums",
-                      color: "var(--text-secondary)",
-                    }}
-                  >
-                    {Math.round(progresso(p) * 100)}%
+        {/*
+          ⚠️ O recuo da pagina mora AQUI, e a tabela entra `solto`. Com a barra
+          ao lado, a margem propria do `TableFrame` viraria um vao entre o
+          cartao e a barra — e os dois precisam se encostar.
+        */}
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            display: "flex",
+            /* Sem margem a DIREITA: aquele respiro e da propria barra, que o
+               carrega na largura. Ver `BarraDeFerramentas`. */
+            margin: "0 0 16px 16px",
+          }}
+        >
+          {modo === "kanban" ? (
+            <Quadro
+              solto
+              // O índice vira o id da coluna: a situação é conjunto fixo, não
+              // tabela — não há id de verdade para usar.
+              colunas={SITUACOES.map((s, i) => ({
+                id: i,
+                descricao: ROTULO_SITUACAO[s],
+                cor: TOM_SITUACAO[s],
+              }))}
+              cartoes={filtrados.map((p) => ({ ...p, colunaId: SITUACOES.indexOf(p.situacao) }))}
+              aoMover={mover}
+              aoAbrir={(p) => router.push(`/projetos/${p.id}`)}
+              vazio="Nenhum projeto"
+              corpo={(p) => <CardProjeto projeto={p} />}
+              /* Sem valor no cartao: em POR_DEMANDA ele nao existe ate a tarefa
+                 ser concluida, entao metade dos cartoes mostraria "—" numa coluna
+                 reservada a dinheiro. O quadro de projeto responde "como vai a
+                 entrega"; quanto se cobra e pergunta da tela de tickets. */
+              rodape={(p) => (
+                <>
+                  <span style={{ fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>
+                    {p.qtdConcluidas}/{p.qtdDemandas} tarefas
                   </span>
-                )}
-              </>
-            )}
-          />
-        ) : (
-          <TableFrame>
-            <TableArea minWidth={900}>
-              <TableHead>
-                <Th minWidth={60}>Nº</Th>
-                <Th>Projeto</Th>
-                <Th align="center" minWidth={120}>
-                  Situação
-                </Th>
-                <Th minWidth={130}>Período</Th>
-                <Th minWidth={150}>Progresso</Th>
-                <Th align="right" minWidth={100}>
-                  Valor
-                </Th>
-              </TableHead>
-              <tbody>
-                {filtrados.length === 0 && <EmptyRow colSpan={6} />}
-                {filtrados.map((p, i) => (
-                  <Tr
-                    key={p.id}
-                    delay={Math.min(i * 20, 150)}
-                    dimmed={!p.ativo || p.cancelado}
-                    onClick={() => router.push(`/projetos/${p.id}`)}
-                  >
-                    <Td style={{ color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>
-                      {p.numero}
-                    </Td>
-                    <Td style={{ maxWidth: 300 }}>
-                      <div
-                        style={{
-                          fontWeight: "var(--fw-medium)",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {p.nome}
-                      </div>
-                      {p.clienteNome && (
+                  <span style={{ flex: 1 }} />
+                  {/* A fracao diz quantas faltam; a porcentagem diz o quanto anda.
+                      Sao leituras diferentes, e no cartao cabem as duas. */}
+                  {p.qtdDemandas > 0 && (
+                    <span
+                      style={{
+                        fontSize: "var(--text-sm)",
+                        fontWeight: "var(--fw-semi)",
+                        fontVariantNumeric: "tabular-nums",
+                        color: "var(--text-secondary)",
+                      }}
+                    >
+                      {Math.round(progresso(p) * 100)}%
+                    </span>
+                  )}
+                </>
+              )}
+            />
+          ) : (
+            <TableFrame solto>
+              <TableArea minWidth={900}>
+                <TableHead>
+                  <Th minWidth={60}>Nº</Th>
+                  <Th>Projeto</Th>
+                  <Th align="center" minWidth={120}>
+                    Situação
+                  </Th>
+                  <Th minWidth={130}>Período</Th>
+                  <Th minWidth={150}>Progresso</Th>
+                  <Th align="right" minWidth={100}>
+                    Valor
+                  </Th>
+                </TableHead>
+                <tbody>
+                  {filtrados.length === 0 && <EmptyRow colSpan={6} />}
+                  {filtrados.map((p, i) => (
+                    <Tr
+                      key={p.id}
+                      delay={Math.min(i * 20, 150)}
+                      dimmed={!p.ativo || p.cancelado}
+                      onClick={() => router.push(`/projetos/${p.id}`)}
+                    >
+                      <Td style={{ color: "var(--text-tertiary)", fontVariantNumeric: "tabular-nums" }}>
+                        {p.numero}
+                      </Td>
+                      <Td style={{ maxWidth: 300 }}>
                         <div
                           style={{
-                            fontSize: "var(--text-xs)",
-                            color: "var(--text-tertiary)",
+                            fontWeight: "var(--fw-medium)",
                             overflow: "hidden",
                             textOverflow: "ellipsis",
                             whiteSpace: "nowrap",
                           }}
                         >
-                          {p.clienteNome}
+                          {p.nome}
                         </div>
-                      )}
-                    </Td>
-                    <Td style={{ textAlign: "center" }}>
-                      <Badge tom={TOM_SITUACAO[p.situacao] as Tom}>
-                        {ROTULO_SITUACAO[p.situacao]}
-                      </Badge>
-                    </Td>
-                    <Td style={{ whiteSpace: "nowrap", color: "var(--text-secondary)" }}>
-                      {periodoEmMeses(p.inicio, p.fim) ?? "—"}
-                    </Td>
-                    <Td>
-                      <Progresso projeto={p} />
-                    </Td>
-                    <Td style={tdNum}>
-                      {p.modalidade === "FECHADO" ? formatarSemSimbolo(p.valor) : "—"}
-                    </Td>
-                  </Tr>
-                ))}
-              </tbody>
-            </TableArea>
-          </TableFrame>
-        )}
+                        {p.clienteNome && (
+                          <div
+                            style={{
+                              fontSize: "var(--text-xs)",
+                              color: "var(--text-tertiary)",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {p.clienteNome}
+                          </div>
+                        )}
+                      </Td>
+                      <Td style={{ textAlign: "center" }}>
+                        <Badge tom={TOM_SITUACAO[p.situacao] as Tom}>
+                          {ROTULO_SITUACAO[p.situacao]}
+                        </Badge>
+                      </Td>
+                      <Td style={{ whiteSpace: "nowrap", color: "var(--text-secondary)" }}>
+                        {periodoEmMeses(p.inicio, p.fim) ?? "—"}
+                      </Td>
+                      <Td>
+                        <Progresso projeto={p} />
+                      </Td>
+                      <Td style={tdNum}>
+                        {p.modalidade === "FECHADO" ? formatarSemSimbolo(p.valor) : "—"}
+                      </Td>
+                    </Tr>
+                  ))}
+                </tbody>
+              </TableArea>
+            </TableFrame>
+          )}
+
+            <BarraDeFerramentas>
+              <BotaoDaBarra
+                rotulo="Novo projeto"
+                legenda="Novo"
+                destaque
+                icone={<IconeMais />}
+                onClick={() => setCriando(true)}
+              />
+
+              {/* O modo de exibicao e ferramenta, e nao identidade da tela: e a
+                  mesma listagem, muda so por onde se olha. */}
+              <BotaoDaBarra
+                rotulo={`Exibição: ${modo === "kanban" ? "Kanban" : "Tabela"}`}
+                legenda="Exibir"
+                icone={modo === "kanban" ? <IconeKanban /> : <IconeTabela />}
+                painel={(fechar) => (
+                  <>
+                    <TituloDoPainel>Exibição</TituloDoPainel>
+                    {[
+                      { valor: "tabela", rotulo: "Tabela", icone: <IconeTabela /> },
+                      { valor: "kanban", rotulo: "Kanban", icone: <IconeKanban /> },
+                    ].map((o) => (
+                      <OpcaoDoPainel
+                        key={o.valor}
+                        icone={o.icone}
+                        rotulo={o.rotulo}
+                        marcada={modo === o.valor}
+                        onClick={() => {
+                          escolherModo(o.valor);
+                          fechar();
+                        }}
+                      />
+                    ))}
+                  </>
+                )}
+              />
+
+              {/* Os mesmos campos do antigo botao de filtro, agora no painel da
+                  barra. Aceso enquanto algum vale: filtro escondido atras de
+                  icone vira lista curta sem explicacao. */}
+              <BotaoDaBarra
+                rotulo={filtrosAtivos > 0 ? `Filtros (${filtrosAtivos} em uso)` : "Filtrar os projetos"}
+                legenda="Filtros"
+                aceso={filtrosAtivos > 0}
+                icone={<IconeFunil ativo={filtrosAtivos > 0} />}
+                painel={() => (
+                  <>
+                    <TituloDoPainel>Filtros</TituloDoPainel>
+                <FilterItem label="Modalidade">
+                  <select
+                    value={modalidade}
+                    onChange={(e) => setModalidade(e.target.value)}
+                    style={selectStyle}
+                  >
+                    <option value="">Todas</option>
+                    <option value="FECHADO">Escopo fechado</option>
+                    <option value="POR_DEMANDA">Por demanda</option>
+                  </select>
+                </FilterItem>
+
+                <FilterItem label="Inativos">
+                  <label
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 7,
+                      fontSize: "var(--text-base)",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={verInativos}
+                      onChange={(e) => setVerInativos(e.target.checked)}
+                      style={{ accentColor: "var(--primary)", cursor: "pointer" }}
+                    />
+                    Exibir inativos
+                  </label>
+                </FilterItem>
+
+                    {filtrosAtivos > 0 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setModalidade("");
+                          setVerInativos(false);
+                        }}
+                      >
+                        Limpar filtros
+                      </Button>
+                    )}
+                  </>
+                )}
+              />
+            </BarraDeFerramentas>
+        </div>
       </Panel>
 
       {criando && (

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useBuscaDaTela } from "@/components/layout/busca-da-tela";
 import { createPortal } from "react-dom";
 
 /**
@@ -177,6 +178,8 @@ export function PageHeader({
             {onIncluir && (
               <BotaoMais rotulo={rotuloIncluir} onClick={onIncluir} />
             )}
+
+            <EtiquetaDaBusca />
           </div>
           {description && (
             <p
@@ -207,6 +210,89 @@ export function PageHeader({
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * O termo que a busca do topo aplicou nesta tela, ao lado do titulo.
+ *
+ * ⚠️ Ela existe para a lista filtrada NAO passar por lista vazia.
+ *
+ * O campo de busca saiu de dentro das listagens e virou a caixa do topo — a
+ * mesma que procura modulo. Ganhamos uma caixa so, mas perdemos o unico lugar
+ * onde o termo aplicado ficava a vista: fechada a caixa, a tabela continuava
+ * filtrada sem nada dizer. Numa tela de dinheiro isso mente — "nao ha nada a
+ * pagar" e "ha, mas escondido por uma palavra" precisam ser distinguiveis sem
+ * clicar em nada.
+ *
+ * ⚠️ Ela le a loja SOZINHA, sem prop. Assim nenhuma tela precisa lembrar de
+ * mostrar a etiqueta: quem chama `useRegistrarBusca` ganha ela de graca, e uma
+ * tela nova nao tem como esquecer.
+ */
+function EtiquetaDaBusca() {
+  const tela = useBuscaDaTela();
+  const termo = tela?.termo.trim() ?? "";
+  if (!tela || !termo) return null;
+
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        height: 22,
+        padding: "0 4px 0 9px",
+        borderRadius: 999,
+        background: "var(--surface-3)",
+        fontSize: "var(--text-sm)",
+        color: "var(--text-secondary)",
+        maxWidth: 260,
+      }}
+    >
+      <span
+        style={{
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {termo}
+      </span>
+
+      {/* O X limpa o filtro. E o caminho de volta mais curto, e sem ele a pessoa
+          teria de subir ate a caixa do topo e apagar letra por letra. */}
+      <button
+        type="button"
+        onClick={() => tela.buscar("")}
+        aria-label="Limpar a busca"
+        title="Limpar a busca"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: 16,
+          height: 16,
+          padding: 0,
+          border: "none",
+          borderRadius: 999,
+          background: "transparent",
+          color: "var(--text-tertiary)",
+          cursor: "pointer",
+        }}
+      >
+        <svg
+          width="9"
+          height="9"
+          viewBox="0 0 10 10"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+        >
+          <path d="M1.5 1.5l7 7M8.5 1.5l-7 7" />
+        </svg>
+      </button>
+    </span>
   );
 }
 

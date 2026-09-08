@@ -130,10 +130,8 @@ export function RelatoriosTela({
 
   return (
     <PageLayout>
-      <PageHeader
-        title="Relatórios"
-        description="O que falta receber e o que falta pagar, por mês de vencimento."
-      >
+      {/* Sem legenda: modulo nao tem subtitulo nesta casa. */}
+      <PageHeader title="Relatórios">
         <select
           style={{
             ...selectStyle,

@@ -1,30 +1,36 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
+  Button,
   Badge,
   EmptyRow,
-  FilterButton,
   IconeKanban,
   IconeTabela,
   FilterItem,
-  IncluirButton,
   PageHeader,
   PageLayout,
   Pagination,
   Panel,
-  SearchInput,
   TableArea,
   TableFrame,
   TableHead,
   Td,
   Th,
   Tr,
-  ViewButton,
   selectStyle,
   tdNum,
   type Tom,
 } from "@/components/ui/kit";
+import {
+  BarraDeFerramentas,
+  BotaoDaBarra,
+  IconeFunil,
+  IconeMais,
+  OpcaoDoPainel,
+  TituloDoPainel,
+} from "@/components/ui/barra-de-ferramentas";
+import { useRegistrarBusca } from "@/components/layout/busca-da-tela";
 import { NovaFaturaDrawer } from "./nova-fatura-drawer";
 import { FaturaDrawer } from "./fatura-drawer";
 import { formatarSemSimbolo, type Centavos } from "@/shared/utils/money";
@@ -138,149 +144,217 @@ export function FaturasTabela({
     paginaAtual * PAGE_SIZE,
   );
 
+  const filtrosAtivos = status ? 1 : 0;
+
+  /* ⚠️ Sem campo proprio: a tela anuncia o filtro para a caixa do topo. Ver
+     `busca-da-tela`. */
+  const buscar = useCallback((v: string) => {
+    setBusca(v);
+    setPagina(1);
+  }, []);
+
+  useRegistrarBusca("Contas a receber", busca, buscar, filtradas.length);
+
   return (
     <PageLayout>
       <Panel>
-        <PageHeader title="Contas a receber">
-          <ViewButton
-            view={modo}
-            setView={escolherModo}
-            opcoes={[
-              { valor: "tabela", rotulo: "Tabela", icone: <IconeTabela /> },
-              { valor: "kanban", rotulo: "Kanban", icone: <IconeKanban /> },
-            ]}
-          />
-          <FilterButton
-            activeCount={status ? 1 : 0}
-            onClear={() => {
-              setStatus("");
-              setPagina(1);
-            }}
-          >
-            <FilterItem label="Situação">
-              <select
-                value={status}
-                onChange={(e) => {
-                  setStatus(e.target.value);
-                  setPagina(1);
-                }}
-                style={selectStyle}
-              >
-                <option value="">Todas</option>
-                {STATUS_FATURA.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-                <option value="CANCELADA">CANCELADA</option>
-              </select>
-            </FilterItem>
-          </FilterButton>
-          <SearchInput
-            value={busca}
-            onSearch={(v) => {
-              setBusca(v);
-              setPagina(1);
-            }}
-          />
-          <IncluirButton onClick={() => setCriando(true)} />
-        </PageHeader>
+        <PageHeader title="Contas a receber" />
 
-        {modo === "tabela" ? (
-          <TableFrame>
-            <TableArea minWidth={900}>
-              <TableHead>
-                <Th minWidth={70}>Nº</Th>
-                <Th>Cliente</Th>
-                <Th minWidth={150}>Apuração</Th>
-                <Th minWidth={100}>Vencimento</Th>
-                <Th align="center" minWidth={70}>
-                  Parcelas
-                </Th>
-                <Th align="center" minWidth={100}>
-                  Situação
-                </Th>
-                <Th align="right" minWidth={110}>
-                  Valor
-                </Th>
-              </TableHead>
-              <tbody>
-                {visiveis.length === 0 && <EmptyRow colSpan={7} />}
-                {visiveis.map((f, i) => (
-                  <Tr
-                    key={f.id}
-                    delay={Math.min(i * 20, 150)}
-                    dimmed={f.cancelada}
-                    onClick={() => setDetalhe(f.id)}
-                  >
-                    <Td
-                      style={{
-                        fontVariantNumeric: "tabular-nums",
-                        color: "var(--text-tertiary)",
-                      }}
+        {/*
+          ⚠️ O recuo da pagina mora AQUI, e a tabela entra `solto`. Com a barra
+          ao lado, a margem propria do `TableFrame` viraria um vao entre o
+          cartao e a barra — e os dois precisam se encostar.
+        */}
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            display: "flex",
+            /* Sem margem a DIREITA: aquele respiro e da propria barra, que o
+               carrega na largura. Ver `BarraDeFerramentas`. */
+            margin: "0 0 16px 16px",
+          }}
+        >
+          {modo === "tabela" ? (
+            <TableFrame solto>
+              <TableArea minWidth={900}>
+                <TableHead>
+                  <Th minWidth={70}>Nº</Th>
+                  <Th>Cliente</Th>
+                  <Th minWidth={150}>Apuração</Th>
+                  <Th minWidth={100}>Vencimento</Th>
+                  <Th align="center" minWidth={70}>
+                    Parcelas
+                  </Th>
+                  <Th align="center" minWidth={100}>
+                    Situação
+                  </Th>
+                  <Th align="right" minWidth={110}>
+                    Valor
+                  </Th>
+                </TableHead>
+                <tbody>
+                  {visiveis.length === 0 && <EmptyRow colSpan={7} />}
+                  {visiveis.map((f, i) => (
+                    <Tr
+                      key={f.id}
+                      delay={Math.min(i * 20, 150)}
+                      dimmed={f.cancelada}
+                      onClick={() => setDetalhe(f.id)}
                     >
-                      {f.numero}
-                    </Td>
-                    <Td style={{ maxWidth: 260 }}>
-                      <span
+                      <Td
                         style={{
-                          display: "block",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                          fontWeight: "var(--fw-medium)",
+                          fontVariantNumeric: "tabular-nums",
+                          color: "var(--text-tertiary)",
                         }}
                       >
-                        {f.clienteNome ?? "—"}
-                      </span>
-                    </Td>
-                    <Td
-                      style={{
-                        whiteSpace: "nowrap",
-                        color: "var(--text-secondary)",
-                      }}
-                    >
-                      {periodo(f.apuracaoInicio, f.apuracaoFim)}
-                    </Td>
-                    <Td style={{ whiteSpace: "nowrap" }}>
-                      <Vencimento
-                        data={f.proximoVencimento}
-                        situacao={f.situacao}
-                      />
-                    </Td>
-                    <Td
-                      style={{
-                        textAlign: "center",
-                        fontVariantNumeric: "tabular-nums",
-                      }}
-                    >
-                      {f.qtdParcelas}
-                    </Td>
-                    <Td style={{ textAlign: "center" }}>
-                      <Badge tom={TOM[f.situacao]}>{f.situacao}</Badge>
-                    </Td>
-                    <Td style={{ ...tdNum, fontWeight: "var(--fw-medium)" }}>
-                      {formatarSemSimbolo(f.total)}
-                    </Td>
-                  </Tr>
-                ))}
-              </tbody>
-            </TableArea>
-            <Pagination
-              page={paginaAtual}
-              totalPages={totalPaginas}
-              total={filtradas.length}
-              pageSize={PAGE_SIZE}
-              onPage={setPagina}
+                        {f.numero}
+                      </Td>
+                      <Td style={{ maxWidth: 260 }}>
+                        <span
+                          style={{
+                            display: "block",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                            fontWeight: "var(--fw-medium)",
+                          }}
+                        >
+                          {f.clienteNome ?? "—"}
+                        </span>
+                      </Td>
+                      <Td
+                        style={{
+                          whiteSpace: "nowrap",
+                          color: "var(--text-secondary)",
+                        }}
+                      >
+                        {periodo(f.apuracaoInicio, f.apuracaoFim)}
+                      </Td>
+                      <Td style={{ whiteSpace: "nowrap" }}>
+                        <Vencimento
+                          data={f.proximoVencimento}
+                          situacao={f.situacao}
+                        />
+                      </Td>
+                      <Td
+                        style={{
+                          textAlign: "center",
+                          fontVariantNumeric: "tabular-nums",
+                        }}
+                      >
+                        {f.qtdParcelas}
+                      </Td>
+                      <Td style={{ textAlign: "center" }}>
+                        <Badge tom={TOM[f.situacao]}>{f.situacao}</Badge>
+                      </Td>
+                      <Td style={{ ...tdNum, fontWeight: "var(--fw-medium)" }}>
+                        {formatarSemSimbolo(f.total)}
+                      </Td>
+                    </Tr>
+                  ))}
+                </tbody>
+              </TableArea>
+              <Pagination
+                page={paginaAtual}
+                totalPages={totalPaginas}
+                total={filtradas.length}
+                pageSize={PAGE_SIZE}
+                onPage={setPagina}
+              />
+            </TableFrame>
+          ) : (
+            <QuadroDeContas
+              faturas={filtradas}
+              aoAbrir={setDetalhe}
+              aoMover={moverConta}
             />
-          </TableFrame>
-        ) : (
-          <QuadroDeContas
-            faturas={filtradas}
-            aoAbrir={setDetalhe}
-            aoMover={moverConta}
-          />
-        )}
+          )}
+
+            <BarraDeFerramentas>
+              <BotaoDaBarra
+                rotulo="Nova conta a receber"
+                legenda="Nova"
+                destaque
+                icone={<IconeMais />}
+                onClick={() => setCriando(true)}
+              />
+
+              {/* O modo de exibicao e ferramenta, e nao identidade da tela: e a
+                  mesma listagem, muda so por onde se olha. */}
+              <BotaoDaBarra
+                rotulo={`Exibição: ${modo === "kanban" ? "Kanban" : "Tabela"}`}
+                legenda="Exibir"
+                icone={modo === "kanban" ? <IconeKanban /> : <IconeTabela />}
+                painel={(fechar) => (
+                  <>
+                    <TituloDoPainel>Exibição</TituloDoPainel>
+                    {[
+                      { valor: "tabela", rotulo: "Tabela", icone: <IconeTabela /> },
+                      { valor: "kanban", rotulo: "Kanban", icone: <IconeKanban /> },
+                    ].map((o) => (
+                      <OpcaoDoPainel
+                        key={o.valor}
+                        icone={o.icone}
+                        rotulo={o.rotulo}
+                        marcada={modo === o.valor}
+                        onClick={() => {
+                          escolherModo(o.valor);
+                          fechar();
+                        }}
+                      />
+                    ))}
+                  </>
+                )}
+              />
+
+              {/* Os mesmos campos do antigo botao de filtro, agora no painel da
+                  barra. Aceso enquanto algum vale: filtro escondido atras de
+                  icone vira lista curta sem explicacao. */}
+              <BotaoDaBarra
+                rotulo={filtrosAtivos > 0 ? `Filtros (${filtrosAtivos} em uso)` : "Filtrar as contas"}
+                legenda="Filtros"
+                aceso={filtrosAtivos > 0}
+                icone={<IconeFunil ativo={filtrosAtivos > 0} />}
+                painel={() => (
+                  <>
+                    <TituloDoPainel>Filtros</TituloDoPainel>
+                <FilterItem label="Situação">
+                  <select
+                    value={status}
+                    onChange={(e) => {
+                      setStatus(e.target.value);
+                      setPagina(1);
+                    }}
+                    style={selectStyle}
+                  >
+                    <option value="">Todas</option>
+                    {STATUS_FATURA.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                    <option value="CANCELADA">CANCELADA</option>
+                  </select>
+                </FilterItem>
+
+                    {filtrosAtivos > 0 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setStatus("");
+                          setPagina(1);
+                        }}
+                      >
+                        Limpar filtros
+                      </Button>
+                    )}
+                  </>
+                )}
+              />
+            </BarraDeFerramentas>
+        </div>
       </Panel>
 
       <FaturaDrawer
@@ -453,6 +527,7 @@ function QuadroDeContas({
 
   return (
     <Quadro
+      solto
       colunas={colunas.map((c, i) => ({
         id: i,
         descricao: c,

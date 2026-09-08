@@ -56,15 +56,24 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <Sidebar
         modulos={sessao.entitlements.modulos}
         empresa={sessao.empresaNome}
+        empresaLogo={sessao.empresaLogo}
         recolhidaInicial={recolhida}
-        email={sessao.ctx.email}
-        usuarioNome={sessao.usuarioNome}
         podeTrocarEmpresa={sessao.podeTrocarEmpresa}
         whatsapp={!sessao.demo}
         interno={sessao.interno}
       />
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
-        <Topbar aviso={sessao.demo ? "demo" : null} />
+        <Topbar
+          aviso={sessao.demo ? "demo" : null}
+          email={sessao.ctx.email}
+          usuarioNome={sessao.usuarioNome}
+          usuarioFoto={sessao.usuarioFoto}
+          emailPendente={sessao.emailPendente}
+          dadosDoUsuario={sessao.dadosDoUsuario}
+          empresas={sessao.empresas}
+          empresaAtualId={sessao.ctx.empresaId ?? null}
+          interno={sessao.interno}
+        />
         <main style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>{children}</main>
         </div>
       </div>

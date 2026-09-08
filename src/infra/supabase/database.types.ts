@@ -840,10 +840,36 @@ export type EmpresaRow = {
 };
 
 /** Perfil do usuario. PK e `fkUser` (uuid de auth.users), nao ha `id`. */
+/**
+ * Pedido do titular sobre os proprios dados (LGPD).
+ *
+ * ⚠️ E pedido, e nao apagamento: `fkUserCriacao` aponta para a pessoa em
+ * lancamento fiscal que a empresa e obrigada a guardar.
+ */
+export type SolicitacaoDeDadosRow = {
+  id: number;
+  created_at: string;
+  fkUser: string;
+  tipo: "EXCLUSAO" | "EXPORTACAO";
+  motivo: string | null;
+  situacao: "ABERTA" | "ATENDIDA" | "RECUSADA";
+  respondida_em: string | null;
+  resposta: string | null;
+};
+
 export type UsuarioRow = {
   created_at: string;
   fkUser: string;
   nome: string | null;
+  /** URL publica da foto de perfil, em `virtusmind/Usuarios/<fkUser>/`. */
+  foto: string | null;
+  /** Data de aniversario, sem hora. */
+  nascimento: string | null;
+  whatsapp: string | null;
+  instagram: string | null;
+  pronome: string | null;
+  /** O que a pessoa faz na empresa. Texto livre, e NAO permissao. */
+  funcao: string | null;
   email: string | null;
   ativo: boolean | null;
   externo: boolean | null;
@@ -1281,6 +1307,7 @@ export type Database = {
       servicos: { Row: ServicoRow; Insert: Partial<ServicoRow>; Update: Partial<ServicoRow>; Relationships: [] };
       centrodecusto: { Row: CentroCustoRow; Insert: Partial<CentroCustoRow>; Update: Partial<CentroCustoRow>; Relationships: [] };
       empresas: { Row: EmpresaRow; Insert: Partial<EmpresaRow>; Update: Partial<EmpresaRow>; Relationships: [] };
+      solicitacoesdedados: { Row: SolicitacaoDeDadosRow; Insert: Partial<SolicitacaoDeDadosRow>; Update: Partial<SolicitacaoDeDadosRow>; Relationships: [] };
       usuarios: { Row: UsuarioRow; Insert: Partial<UsuarioRow>; Update: Partial<UsuarioRow>; Relationships: [] };
       usuariosxclientes: { Row: UsuarioClienteRow; Insert: Partial<UsuarioClienteRow>; Update: Partial<UsuarioClienteRow>; Relationships: [] };
       usuariosxempresas: { Row: UsuarioEmpresaRow; Insert: Partial<UsuarioEmpresaRow>; Update: Partial<UsuarioEmpresaRow>; Relationships: [] };

@@ -18,7 +18,34 @@ export type SessaoUI = {
   ctx: Contexto;
   entitlements: Entitlements;
   empresaNome: string | null;
+  /**
+   * A marca da empresa ativa, para o cartao no topo da barra.
+   *
+   * ⚠️ Ja vinha em `empresasDisponiveis`; a sessao e que a jogava fora. Buscar
+   * de novo por `dadosDaEmpresa` seria uma segunda ida ao banco pelo mesmo dado
+   * que ja esta na mao.
+   */
+  empresaLogo: string | null;
   usuarioNome: string | null;
+  /** A foto de perfil, para o avatar do topo. Nula usa as iniciais. */
+  usuarioFoto: string | null;
+  /** Endereco novo esperando confirmacao. Nulo quando nao ha troca em curso. */
+  emailPendente: string | null;
+  /** O cadastro pessoal, para a gaveta de perfil. */
+  dadosDoUsuario: {
+    nascimento: string | null;
+    whatsapp: string | null;
+    instagram: string | null;
+    pronome: string | null;
+    funcao: string | null;
+  };
+  /**
+   * As empresas ligadas a este acesso, para a aba de empresas do perfil.
+   *
+   * ⚠️ Ja vem de `empresasDisponiveis`, que a sessao consulta de qualquer jeito
+   * para saber a empresa ativa: nao ha ida a mais ao banco por causa disto.
+   */
+  empresas: { id: number; nome: string; logo: string | null }[];
   /** Mais de uma empresa disponivel: habilita "trocar de empresa" no menu. */
   podeTrocarEmpresa: boolean;
   /**
@@ -63,7 +90,18 @@ export async function sessaoUI(): Promise<SessaoUI> {
       ctx: CONTEXTO_DEMO,
       entitlements: { ...SEM_PLANO, modulos: ["financeiro"] },
       empresaNome: "Empresa de demonstração",
+      empresaLogo: null,
       usuarioNome: "Demonstração",
+      usuarioFoto: null,
+      emailPendente: null,
+      dadosDoUsuario: {
+        nascimento: null,
+        whatsapp: null,
+        instagram: null,
+        pronome: null,
+        funcao: null,
+      },
+      empresas: [],
       podeTrocarEmpresa: false,
       externo: false,
       /* Na demonstracao vale TUDO: e a vitrine do produto, e esconder metade
@@ -89,7 +127,18 @@ export async function sessaoUI(): Promise<SessaoUI> {
     ctx,
     entitlements,
     empresaNome: atual?.nome ?? null,
+    empresaLogo: atual?.logo ?? null,
     usuarioNome: usuario?.nome ?? null,
+    usuarioFoto: usuario?.foto ?? null,
+    emailPendente: usuario?.emailPendente ?? null,
+    dadosDoUsuario: {
+      nascimento: usuario?.nascimento ?? null,
+      whatsapp: usuario?.whatsapp ?? null,
+      instagram: usuario?.instagram ?? null,
+      pronome: usuario?.pronome ?? null,
+      funcao: usuario?.funcao ?? null,
+    },
+    empresas: empresas.map((e) => ({ id: e.id, nome: e.nome, logo: e.logo })),
     podeTrocarEmpresa: empresas.length > 1,
     externo: usuario?.externo ?? false,
     interno: usuario?.interno ?? false,

@@ -38,6 +38,7 @@ export function Quadro<T extends CartaoQuadro>({
   rodape,
   cabecalhoExtra,
   larguraFixa,
+  solto,
   vazio = "Nada aqui",
 }: {
   colunas: ColunaQuadro[];
@@ -59,6 +60,15 @@ export function Quadro<T extends CartaoQuadro>({
    * projeto — continua dividindo, porque ali o número de colunas não cresce.
    */
   larguraFixa?: boolean;
+  /**
+   * Tira o recuo lateral proprio do quadro.
+   *
+   * ⚠️ Mesma peca do `solto` do `TableFrame`, e pela mesma razao: com a barra de
+   * ferramentas ao lado, quem da o recuo e a linha que segura os dois. Sem
+   * isto, o quadro teria 32 pixels de vao a esquerda e um vao a direita
+   * separando ele da barra — e a barra tem de se encostar.
+   */
+  solto?: boolean;
   vazio?: string;
 }) {
   const [arrastando, setArrastando] = useState<number | null>(null);
@@ -78,7 +88,7 @@ export function Quadro<T extends CartaoQuadro>({
         flex: 1,
         overflowX: larguraFixa ? "auto" : "hidden",
         overflowY: "hidden",
-        padding: "0 16px",
+        padding: solto ? 0 : "0 16px",
         minHeight: 0,
       }}
     >

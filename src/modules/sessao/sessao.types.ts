@@ -11,6 +11,20 @@ export type UsuarioAutenticado = {
   id: string;
   email: string;
   nome: string | null;
+  /** URL publica da foto. Ausente onde o caminho nao consulta o perfil. */
+  foto?: string | null;
+  /**
+   * Endereco novo esperando confirmacao, quando ha uma troca em curso.
+   *
+   * ⚠️ Vem do Auth, e nao de `usuarios`: enquanto os dois links nao forem
+   * abertos, o e-mail da conta continua sendo o antigo.
+   */
+  emailPendente?: string | null;
+  nascimento?: string | null;
+  whatsapp?: string | null;
+  instagram?: string | null;
+  pronome?: string | null;
+  funcao?: string | null;
   /**
    * Pessoa do CLIENTE, nao da casa. Vai para o portal, nao para o sistema.
    *

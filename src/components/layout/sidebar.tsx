@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Modulo } from "@/modules/plataforma/plataforma.types";
 import {
   gruposDosModulos,
@@ -15,7 +15,6 @@ import {
 import { useFavoritos } from "@/components/layout/favoritos";
 import { ArvoreNav, Chevron, GrupoFlutuante, ItemNav, ehAtivo } from "@/components/layout/nav";
 import { Icon } from "@/components/layout/icones";
-import { MenuUsuario } from "@/components/layout/menu-usuario";
 import { Marca } from "@/components/layout/marca";
 import { BotaoLateralDoWhatsapp } from "@/components/whatsapp/botao-lateral";
 import { COOKIE_SIDEBAR } from "@/components/layout/cookies";
@@ -33,22 +32,36 @@ import { COOKIE_SIDEBAR } from "@/components/layout/cookies";
 export function Sidebar({
   modulos,
   empresa,
+  empresaLogo,
   recolhidaInicial,
-  email,
-  usuarioNome,
-  podeTrocarEmpresa,
   grupos: gruposFixos,
   inicio = "/dashboard",
-  hrefTrocarEmpresa,
+  podeTrocarEmpresa = false,
+  hrefTrocarEmpresa = "/selecionar-empresa",
   whatsapp = false,
   interno = false,
 }: {
   modulos: Modulo[];
   empresa: string | null;
+  /**
+   * A marca da empresa ativa, no cartao do topo.
+   *
+   * ⚠️ Nula e estado legitimo, e nao falha: empresa sem logo cadastrado cai nas
+   * iniciais. O cartao nao pode depender de uma imagem que talvez nao exista.
+   */
+  empresaLogo?: string | null;
   recolhidaInicial: boolean;
-  email: string;
-  usuarioNome: string | null;
-  podeTrocarEmpresa: boolean;
+  /**
+   * Se ha mais de uma empresa para escolher.
+   *
+   * ⚠️ Isto e do CARTAO DA EMPRESA, e nao do menu do usuario. Trocar de empresa
+   * responde "com qual empresa estou trabalhando?", que e a pergunta que o
+   * cartao do topo ja faz — e nao "quem sou eu?", que e a do avatar. Enquanto
+   * moravam juntas no perfil, a troca ficava escondida atras da identidade.
+   */
+  podeTrocarEmpresa?: boolean;
+  /** Destino da troca. O portal escolhe entre EMISSORES, nao entre tenants. */
+  hrefTrocarEmpresa?: string;
   /**
    * Menu pronto, no lugar do derivado dos modulos do plano.
    *
@@ -60,10 +73,8 @@ export function Sidebar({
   grupos?: Grupo[];
   /** Para onde a marca leva. O portal nao tem dashboard. */
   inicio?: string;
-  /** Destino do "Trocar de empresa". O portal escolhe entre EMISSORES. */
-  hrefTrocarEmpresa?: string;
   /**
-   * O acesso ao WhatsApp, acima da identidade do usuario.
+   * O acesso ao WhatsApp, no rodape.
    *
    * ⚠️ Nao vem ligado. O portal do cliente usa esta mesma barra, e la nao ha
    * caixa de entrada nenhuma para abrir.
@@ -185,6 +196,24 @@ export function Sidebar({
         ) : (
           <>
             {/*
+              ⚠️ A empresa ativa abre a barra, acima do primeiro grupo.
+
+              Ela morava dentro do cartão do perfil, no rodapé — e ali respondia
+              "em qual empresa eu estou?" só para quem já tinha aberto o menu do
+              usuário para perguntar outra coisa. É a primeira pergunta de quem
+              trabalha em mais de uma empresa, e no topo ela se responde sem
+              clique nenhum.
+            */}
+            {empresa && (
+              <CartaoDaEmpresa
+                nome={empresa}
+                logo={empresaLogo ?? null}
+                podeTrocar={podeTrocarEmpresa}
+                hrefTrocar={hrefTrocarEmpresa}
+              />
+            )}
+
+            {/*
               ⚠️ Os favoritos tambem estao em obra, e por isso seguem `interno`.
 
               Marcar e desmarcar funciona; o que falta e a tela de gerir a lista.
@@ -217,31 +246,223 @@ export function Sidebar({
         )}
       </nav>
 
-      {/* Rodape: WhatsApp, empresa ativa e identidade do usuario. */}
-      <div style={{ flexShrink: 0, padding: recolhida ? "10px 6px" : "10px 12px" }}>
+      {/*
+        Rodape: WhatsApp e configuracoes.
+
+        ⚠️ A IDENTIDADE saiu daqui e foi para o canto superior direito, redonda.
+        No rodape ela dividia espaco com navegacao, e quem procurava "sair" ou
+        "tema" varria a lista de modulos antes de achar. Ver `Topbar`.
+
+        ⚠️ O recuo e o MESMO da `nav` (8px), e nao 12. Com 12, os icones do
+        rodape comecavam quatro pixels a direita dos icones dos grupos — pouco
+        para nomear e o bastante para a coluna parecer torta.
+      */}
+      <div style={{ flexShrink: 0, padding: recolhida ? "10px 6px" : "10px 8px" }}>
         {whatsapp && (
-          <div style={{ marginBottom: 8 }}>
+          <div style={{ marginBottom: 2 }}>
             <BotaoLateralDoWhatsapp recolhida={recolhida} />
           </div>
         )}
 
         {/*
-          ⚠️ A empresa ativa saiu daqui e foi para DENTRO do cartao do perfil.
-          Solta acima do avatar ela era um nome sem dono: nao dizia que era a
-          empresa em uso nem que dava para trocar, e competia com a identidade
-          logo abaixo.
+          ⚠️ Configuracoes fica no RODAPE, e nao no meio dos modulos.
+
+          Ela nao e um assunto do negocio como Financeiro ou Projetos: e o ajuste
+          da propria casa, e a pessoa vai ali de vez em quando. Na lista, ocupava
+          o mesmo peso de um modulo que se usa todo dia; embaixo, do lado do
+          WhatsApp, ela e o que sempre foi — a ultima parada da barra.
+
+          ⚠️ MESMA forma do botao do WhatsApp: caixa de 15px para o glifo, altura
+          de item de menu, rotulo na coluna de texto dos demais. Dois desenhos
+          diferentes lado a lado fariam o rodape parecer remendo.
         */}
-        <MenuUsuario
-          email={email}
-          nome={usuarioNome}
-          empresa={empresa}
-          trocarEmpresa={podeTrocarEmpresa}
-          hrefTrocarEmpresa={hrefTrocarEmpresa}
-          compacto={recolhida}
-          acimaDoBotao
-        />
+        <ItemDoRodape rotulo="Configurações" recolhida={recolhida} icone={<IconeEngrenagem />} />
       </div>
     </aside>
+  );
+}
+
+/**
+ * A empresa ativa, em cartao branco no topo da barra.
+ *
+ * ⚠️ Branco sobre o cinza da barra, e sem titulo. O contraste do cartao ja diz
+ * que aquilo nao e item de menu; uma palavra "Empresa" em cima gastaria uma
+ * linha para nomear o que a marca e o nome ja nomeiam.
+ *
+ * ⚠️ DUAS LINHAS no maximo, e nao reticencias na primeira.
+ *
+ * Razao social e comprida por natureza — "VIRTUS SERVICOS DE TECNOLOGIA LTDA"
+ * nao cabe em 220px de barra. Cortada na primeira linha, sobrariam duas
+ * palavras; em duas, o nome se le quase sempre inteiro. Passando disso, aí sim
+ * corta, senão um nome enorme empurraria o menu para baixo da dobra.
+ */
+function CartaoDaEmpresa({
+  nome,
+  logo,
+  podeTrocar,
+  hrefTrocar,
+}: {
+  nome: string;
+  logo: string | null;
+  podeTrocar: boolean;
+  hrefTrocar: string;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const caixa = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!aberto) return;
+    const fora = (e: MouseEvent) => {
+      if (!caixa.current?.contains(e.target as Node)) setAberto(false);
+    };
+    document.addEventListener("mousedown", fora);
+    return () => document.removeEventListener("mousedown", fora);
+  }, [aberto]);
+
+  const conteudo = (
+    <>
+      {logo ? (
+        /*
+          `img` e nao `next/image`: a URL vem do storage e muda por empresa, e o
+          otimizador exigiria cadastrar cada host. A marca ja e pequena, entao
+          nao ha o que otimizar.
+        */
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={logo}
+          alt=""
+          style={{
+            width: 26,
+            height: 26,
+            flexShrink: 0,
+            objectFit: "contain",
+            borderRadius: "var(--radius-sm)",
+          }}
+        />
+      ) : (
+        /* Sem marca cadastrada, as iniciais: um quadrado vazio faria parecer
+           que a imagem falhou ao carregar. */
+        <span
+          aria-hidden
+          style={{
+            width: 26,
+            height: 26,
+            flexShrink: 0,
+            display: "grid",
+            placeItems: "center",
+            borderRadius: "var(--radius-sm)",
+            background: "var(--primary-subtle)",
+            color: "var(--primary)",
+            fontSize: 10,
+            fontWeight: "var(--fw-bold)",
+          }}
+        >
+          {nome.trim().slice(0, 2).toUpperCase()}
+        </span>
+      )}
+
+      <span
+        style={{
+          minWidth: 0,
+          textAlign: "left",
+          fontSize: "var(--text-xs)",
+          fontWeight: "var(--fw-semi)",
+          color: "var(--text-primary)",
+          lineHeight: 1.25,
+          /* Duas linhas e entao reticencias. `-webkit-` porque `line-clamp` sem
+             prefixo ainda nao vale em todos os navegadores que o app suporta. */
+          display: "-webkit-box",
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: "vertical",
+          overflow: "hidden",
+          wordBreak: "break-word",
+        }}
+      >
+        {nome}
+      </span>
+    </>
+  );
+
+  const molde: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    width: "100%",
+    padding: 8,
+    borderRadius: "var(--radius-md)",
+    border: "1px solid var(--border)",
+    background: "var(--surface)",
+    fontFamily: "var(--font)",
+  };
+
+  /* Com uma empresa so, o cartao nao e botao: nao ha para onde ir, e um alvo de
+     clique que nao faz nada ensina a nao clicar nele. */
+  if (!podeTrocar) {
+    return (
+      <div title={nome} style={{ ...molde, marginBottom: 10 }}>
+        {conteudo}
+      </div>
+    );
+  }
+
+  return (
+    <div ref={caixa} style={{ position: "relative", marginBottom: 10 }}>
+      <button
+        type="button"
+        title={nome}
+        aria-haspopup="menu"
+        aria-expanded={aberto}
+        onClick={() => setAberto((v) => !v)}
+        style={{ ...molde, cursor: "pointer" }}
+      >
+        {conteudo}
+
+        {/* A seta so existe quando ha escolha: ela e a promessa de que algo abre. */}
+        <span style={{ marginLeft: "auto", flexShrink: 0, color: "var(--text-tertiary)" }}>
+          <Chevron aberto={aberto} tamanho={12} />
+        </span>
+      </button>
+
+      {/*
+        ⚠️ ABSOLUTO e nao por portal, ao contrario do menu do usuario.
+
+        Este cartao mora no TOPO da barra, dentro da area que nao rola e sobra
+        altura de sobra abaixo dele — nada a cortar. O do usuario precisava de
+        portal porque abria para cima, no rodape, contra a borda da tela.
+      */}
+      {aberto && (
+        <div
+          role="menu"
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            top: "calc(100% + 4px)",
+            zIndex: 60,
+            padding: 4,
+            borderRadius: "var(--radius-md)",
+            border: "1px solid var(--border-strong)",
+            background: "var(--surface)",
+            boxShadow: "var(--shadow-md)",
+          }}
+        >
+          <Link
+            href={hrefTrocar}
+            onClick={() => setAberto(false)}
+            style={{
+              display: "block",
+              padding: "7px 8px",
+              borderRadius: "var(--radius-sm)",
+              fontSize: "var(--text-base)",
+              color: "var(--text-primary)",
+              textDecoration: "none",
+            }}
+          >
+            Trocar de empresa
+          </Link>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -387,3 +608,108 @@ function MenuRecolhido({
   );
 }
 
+
+/**
+ * Um item do rodape da barra — hoje, Configuracoes.
+ *
+ * ⚠️ E o mesmo desenho do botao do WhatsApp, de proposito: caixa de 15px para o
+ * glifo, altura de item de menu, rotulo comecando na coluna de texto de todos os
+ * outros. O rodape tem dois moradores e eles precisam parecer da mesma casa.
+ *
+ * ⚠️ Recolhida, sobra so o icone e o nome vai para a dica do mouse — como os
+ * grupos fazem.
+ */
+function ItemDoRodape({
+  href,
+  rotulo,
+  icone,
+  recolhida,
+  ativo = false,
+}: {
+  /**
+   * Para onde leva. SEM ele, o item aparece mas nao clica.
+   *
+   * ⚠️ Existe assim de proposito: Configuracoes esta reservado e vai deixar de
+   * apontar para `/configuracoes` — o destino dele sera outro. Enquanto o
+   * destino nao existe, levar a pessoa a uma tela que nao e aquela ensina o
+   * caminho errado, e tirar o item do rodape faria a pessoa reaprender o lugar
+   * quando ele voltasse.
+   */
+  href?: string;
+  rotulo: string;
+  icone: React.ReactNode;
+  recolhida: boolean;
+  ativo?: boolean;
+}) {
+  const estilo: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: recolhida ? "center" : "flex-start",
+    gap: 8,
+    height: "var(--nav-item-h)",
+    padding: recolhida ? 0 : "0 8px",
+    borderRadius: "var(--radius-sm)",
+    background: ativo ? "var(--primary-subtle)" : "transparent",
+    color: ativo ? "var(--primary)" : "var(--sidebar-item-sub)",
+    fontSize: "var(--text-base)",
+    fontWeight: ativo ? 600 : 450,
+    textDecoration: "none",
+    whiteSpace: "nowrap",
+    transition: "background var(--dur-fast) var(--ease)",
+  };
+
+  const dentro = (
+    <>
+      <span style={{ width: 15, display: "grid", placeItems: "center", flexShrink: 0 }}>
+        {icone}
+      </span>
+      {!recolhida && rotulo}
+    </>
+  );
+
+  /* Sem destino, e so a marca do lugar: nao acende ao passar o mouse, para nao
+     prometer um clique que nao acontece. */
+  if (!href) {
+    return (
+      <div title={recolhida ? rotulo : undefined} style={{ ...estilo, opacity: 0.55 }}>
+        {dentro}
+      </div>
+    );
+  }
+
+  return (
+    <Link
+      href={href}
+      title={recolhida ? rotulo : undefined}
+      aria-label={rotulo}
+      style={estilo}
+      onMouseOver={(e) => {
+        if (!ativo) e.currentTarget.style.background = "var(--sidebar-item-bg-hover)";
+      }}
+      onMouseOut={(e) => {
+        if (!ativo) e.currentTarget.style.background = "transparent";
+      }}
+    >
+      {dentro}
+    </Link>
+  );
+}
+
+/** Engrenagem: os ajustes da casa. */
+function IconeEngrenagem() {
+  return (
+    <svg
+      width="17"
+      height="17"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="3.2" />
+      <path d="M19.4 14.5a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.04 1.56V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.04H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.56-1.1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9.5A1.7 1.7 0 0 0 10.5 3.1V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1.04 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.08a1.7 1.7 0 0 0 1.56 1.04H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1.04z" />
+    </svg>
+  );
+}

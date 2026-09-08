@@ -146,10 +146,8 @@ export function FluxoTela({
 
   return (
     <PageLayout>
-      <PageHeader
-        title="Fluxo de caixa"
-        description="O saldo de hoje e o previsto a cada mês, pelo vencimento do que está em aberto."
-      >
+      {/* Sem legenda: modulo nao tem subtitulo nesta casa. */}
+      <PageHeader title="Fluxo de caixa">
         <label
           style={{
             display: "flex",

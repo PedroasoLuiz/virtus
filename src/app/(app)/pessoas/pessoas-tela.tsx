@@ -2,15 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
+  Button,
   EmptyRow,
-  FilterButton,
-  IncluirButton,
   FilterItem,
   PageHeader,
   PageLayout,
   Pagination,
   Panel,
-  SearchInput,
   selectStyle,
   SkeletonRows,
   TableArea,
@@ -18,6 +16,14 @@ import {
   TableHead,
   Th,
 } from "@/components/ui/kit";
+import {
+  BarraDeFerramentas,
+  BotaoDaBarra,
+  IconeFunil,
+  IconeMais,
+  TituloDoPainel,
+} from "@/components/ui/barra-de-ferramentas";
+import { useRegistrarBusca } from "@/components/layout/busca-da-tela";
 import type { Cliente, PapelPessoa } from "@/modules/clientes/clientes.types";
 import { PessoaDrawer } from "./pessoa-drawer";
 import { LinhaDaPessoa } from "./pessoa-linha";
@@ -163,6 +169,21 @@ export function PessoasTela() {
 
   const totalPaginas = Math.max(1, Math.ceil(total / POR_PAGINA));
   const visiveis = pessoas ?? [];
+  const filtrosAtivos = (papel ? 1 : 0) + (inativos ? 1 : 0);
+
+  /*
+   * ⚠️ Sem campo proprio: a tela anuncia o filtro para a caixa do topo.
+   *
+   * ⚠️ Sem contagem de resultados: a busca aqui e do SERVIDOR, com paginacao, e
+   * o que esta na mao e so a pagina atual. Dizer "12 resultados" quando ha 300
+   * seria pior que nao dizer nada.
+   */
+  const buscar = useCallback((v: string) => {
+    setBusca(v);
+    setPagina(1);
+  }, []);
+
+  useRegistrarBusca("Pessoas", busca, buscar);
 
   /*
    * Clicar na mesma coluna INVERTE; clicar noutra comeca do inicio.
@@ -185,190 +206,221 @@ export function PessoasTela() {
   return (
     <PageLayout>
       <Panel>
-        <PageHeader
-          title="Pessoas"
-          description="Clientes, fornecedores e colaboradores no mesmo cadastro. Os papéis dizem em que cada um entra."
+        {/* ⚠️ SEM legenda: titulo de modulo nunca leva descricao. A frase que
+            morava aqui explicava o cadastro, e explicacao de cadastro e assunto
+            do drawer, nao do cabecalho de toda visita a tela. */}
+        <PageHeader title="Pessoas" />
+
+        {/*
+          ⚠️ O recuo da pagina mora AQUI, e a tabela entra `solto`. Com a barra
+          ao lado, a margem propria do `TableFrame` viraria um vao entre o cartao
+          e a barra — e os dois precisam se encostar.
+        */}
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            display: "flex",
+            /* Sem margem a DIREITA: aquele respiro e da propria barra, que o
+               carrega na largura. Ver `BarraDeFerramentas`. */
+            margin: "0 0 16px 16px",
+          }}
         >
-          {/*
-            ⚠️ Papel e situação moram DENTRO do botão de filtro.
-
-            Eles já foram uma fileira de pastilhas acima da tabela, e ali
-            custavam uma faixa inteira da tela para um recorte que não se troca a
-            todo instante. No botão, o mesmo recorte cabe em dois campos, e o
-            contador de filtros ativos diz quando a lista está aparada — que era
-            o único aviso que a fileira dava de graça.
-          */}
-          <FilterButton
-            activeCount={(papel ? 1 : 0) + (inativos ? 1 : 0)}
-            onClear={() => {
-              setPapel("");
-              setInativos(false);
-              setPagina(1);
-            }}
-          >
-            <FilterItem label="Papel">
-              <select
-                value={papel}
-                onChange={(e) => {
-                  setPapel(e.target.value as PapelPessoa | "");
-                  setPagina(1);
-                }}
-                style={selectStyle}
-              >
+          <TableFrame solto>
+            <TableArea minWidth={1174}>
+              <TableHead>
                 {/*
-                  A CONTAGEM vem junto de cada opção.
-
-                  ⚠️ É o que a fileira de pastilhas fazia bem e não podia se
-                  perder no caminho: sem o número, escolher "Fornecedores" é uma
-                  aposta, e quem quer saber quantos são precisa filtrar para
-                  descobrir.
+                  O número vem PRIMEIRO, e a bolinha logo depois.
+                
+                  ⚠️ Ela não tem título — é reconhecimento, não um dado a ler —, e
+                  uma coluna sem cabeçalho abrindo a tabela deixava a primeira
+                  célula do cabeçalho vazia, com o "#" parecendo o título dela.
                 */}
-                <option value="">Todos ({contado(contagem.total)})</option>
-                {PAPEIS.map((p) => (
-                  <option key={p.valor} value={p.valor}>
-                    {p.rotulo} ({contado(contagem[p.valor])})
-                  </option>
+                <Th minWidth={46} ordem={daColuna("id")} onOrdenar={() => ordenarPor("id")}>
+                  #
+                </Th>
+                <Th className="col-avatar" minWidth={26}>
+                  {" "}
+                </Th>
+                <Th ordem={daColuna("razao")} onOrdenar={() => ordenarPor("razao")}>
+                  Nome
+                </Th>
+                {/* Papéis não ordena: a coluna é um conjunto, e "CLI+FOR" não vem
+                    antes nem depois de "COL" em ordem nenhuma que signifique algo.
+                    Quem quer ver só um papel usa o filtro. */}
+                <Th minWidth={216}>Papéis</Th>
+                <Th
+                  minWidth={150}
+                  ordem={daColuna("cnpj")}
+                  onOrdenar={() => ordenarPor("cnpj")}
+                >
+                  Documento
+                </Th>
+                <Th
+                  minWidth={140}
+                  ordem={daColuna("contato")}
+                  onOrdenar={() => ordenarPor("contato")}
+                >
+                  Contato
+                </Th>
+                <Th minWidth={190} ordem={daColuna("email")} onOrdenar={() => ordenarPor("email")}>
+                  E-mail
+                </Th>
+                <Th
+                  minWidth={140}
+                  ordem={daColuna("responsavel")}
+                  onOrdenar={() => ordenarPor("responsavel")}
+                >
+                  Responsável
+                </Th>
+                <Th align="right" minWidth={80}>
+                  Ações
+                </Th>
+              </TableHead>
+
+              <tbody>
+                {pessoas == null ? (
+                  <SkeletonRows
+                    cols={9}
+                    rows={6}
+                    labels={[
+                      "#",
+                      "",
+                      "Nome",
+                      "Papéis",
+                      "Documento",
+                      "Contato",
+                      "E-mail",
+                      "Responsável",
+                      "",
+                    ]}
+                  />
+                ) : (
+                  visiveis.length === 0 && (
+                    <EmptyRow
+                      colSpan={9}
+                      message={
+                        busca.trim() || papel
+                          ? "Nenhuma pessoa com esse filtro."
+                          : "Nenhuma pessoa cadastrada ainda."
+                      }
+                    />
+                  )
+                )}
+
+                {visiveis.map((p, i) => (
+                  <LinhaDaPessoa
+                    key={p.id}
+                    pessoa={p}
+                    atraso={Math.min(i * 20, 150)}
+                    onAbrir={() => setEdicao({ pessoa: p })}
+                  />
                 ))}
-              </select>
-            </FilterItem>
+              </tbody>
+            </TableArea>
+
+            {total > POR_PAGINA && (
+              <Pagination
+                page={pagina}
+                totalPages={totalPaginas}
+                total={total}
+                pageSize={POR_PAGINA}
+                onPage={setPagina}
+              />
+            )}
+          </TableFrame>
+
+          <BarraDeFerramentas>
+            <BotaoDaBarra
+              rotulo="Nova pessoa"
+              legenda="Nova"
+              destaque
+              icone={<IconeMais />}
+              onClick={() => setEdicao({ pessoa: null })}
+            />
 
             {/*
-              ⚠️ Inativo fica FORA por padrão.
-
-              Antes eles vinham na lista misturados: quem procurava um fornecedor
-              achava o cadastro velho e mandava cobrança para ele. Aqui a
-              exceção é explícita, e o contador do botão avisa que ela está
-              ligada.
+              Papel e situacao mudaram de casa, nao de conteudo: sao os mesmos
+              campos do antigo botao de filtro. Aceso enquanto algum vale — sem
+              isso, filtro escondido atras de icone vira lista curta sem
+              explicacao, e aqui isso significa cobrar quem ja saiu.
             */}
-            <FilterItem label="Situação">
-              <select
-                value={inativos ? "todos" : "ativos"}
-                onChange={(e) => {
-                  setInativos(e.target.value === "todos");
-                  setPagina(1);
-                }}
-                style={selectStyle}
-              >
-                <option value="ativos">Só os ativos</option>
-                <option value="todos">Ativos e inativos</option>
-              </select>
-            </FilterItem>
-          </FilterButton>
+            <BotaoDaBarra
+              rotulo={
+                filtrosAtivos > 0 ? `Filtros (${filtrosAtivos} em uso)` : "Filtrar as pessoas"
+              }
+              legenda="Filtros"
+              aceso={filtrosAtivos > 0}
+              icone={<IconeFunil ativo={filtrosAtivos > 0} />}
+              painel={() => (
+                <>
+                  <TituloDoPainel>Filtros</TituloDoPainel>
+              <FilterItem label="Papel">
+                <select
+                  value={papel}
+                  onChange={(e) => {
+                    setPapel(e.target.value as PapelPessoa | "");
+                    setPagina(1);
+                  }}
+                  style={selectStyle}
+                >
+                  {/*
+                    A CONTAGEM vem junto de cada opção.
 
-          <SearchInput
-            value={busca}
-            onSearch={(v) => {
-              setBusca(v);
-              setPagina(1);
-            }}
-          />
+                    ⚠️ É o que a fileira de pastilhas fazia bem e não podia se
+                    perder no caminho: sem o número, escolher "Fornecedores" é uma
+                    aposta, e quem quer saber quantos são precisa filtrar para
+                    descobrir.
+                  */}
+                  <option value="">Todos ({contado(contagem.total)})</option>
+                  {PAPEIS.map((p) => (
+                    <option key={p.valor} value={p.valor}>
+                      {p.rotulo} ({contado(contagem[p.valor])})
+                    </option>
+                  ))}
+                </select>
+              </FilterItem>
 
-          <IncluirButton onClick={() => setEdicao({ pessoa: null })} rotulo="Nova pessoa" />
-        </PageHeader>
-
-        <TableFrame>
-          <TableArea minWidth={1174}>
-            <TableHead>
               {/*
-                O número vem PRIMEIRO, e a bolinha logo depois.
-                
-                ⚠️ Ela não tem título — é reconhecimento, não um dado a ler —, e
-                uma coluna sem cabeçalho abrindo a tabela deixava a primeira
-                célula do cabeçalho vazia, com o "#" parecendo o título dela.
+                ⚠️ Inativo fica FORA por padrão.
+
+                Antes eles vinham na lista misturados: quem procurava um fornecedor
+                achava o cadastro velho e mandava cobrança para ele. Aqui a
+                exceção é explícita, e o contador do botão avisa que ela está
+                ligada.
               */}
-              <Th minWidth={46} ordem={daColuna("id")} onOrdenar={() => ordenarPor("id")}>
-                #
-              </Th>
-              <Th className="col-avatar" minWidth={26}>
-                {" "}
-              </Th>
-              <Th ordem={daColuna("razao")} onOrdenar={() => ordenarPor("razao")}>
-                Nome
-              </Th>
-              {/* Papéis não ordena: a coluna é um conjunto, e "CLI+FOR" não vem
-                  antes nem depois de "COL" em ordem nenhuma que signifique algo.
-                  Quem quer ver só um papel usa o filtro. */}
-              <Th minWidth={216}>Papéis</Th>
-              <Th
-                minWidth={150}
-                ordem={daColuna("cnpj")}
-                onOrdenar={() => ordenarPor("cnpj")}
-              >
-                Documento
-              </Th>
-              <Th
-                minWidth={140}
-                ordem={daColuna("contato")}
-                onOrdenar={() => ordenarPor("contato")}
-              >
-                Contato
-              </Th>
-              <Th minWidth={190} ordem={daColuna("email")} onOrdenar={() => ordenarPor("email")}>
-                E-mail
-              </Th>
-              <Th
-                minWidth={140}
-                ordem={daColuna("responsavel")}
-                onOrdenar={() => ordenarPor("responsavel")}
-              >
-                Responsável
-              </Th>
-              <Th align="right" minWidth={80}>
-                Ações
-              </Th>
-            </TableHead>
+              <FilterItem label="Situação">
+                <select
+                  value={inativos ? "todos" : "ativos"}
+                  onChange={(e) => {
+                    setInativos(e.target.value === "todos");
+                    setPagina(1);
+                  }}
+                  style={selectStyle}
+                >
+                  <option value="ativos">Só os ativos</option>
+                  <option value="todos">Ativos e inativos</option>
+                </select>
+              </FilterItem>
 
-            <tbody>
-              {pessoas == null ? (
-                <SkeletonRows
-                  cols={9}
-                  rows={6}
-                  labels={[
-                    "#",
-                    "",
-                    "Nome",
-                    "Papéis",
-                    "Documento",
-                    "Contato",
-                    "E-mail",
-                    "Responsável",
-                    "",
-                  ]}
-                />
-              ) : (
-                visiveis.length === 0 && (
-                  <EmptyRow
-                    colSpan={9}
-                    message={
-                      busca.trim() || papel
-                        ? "Nenhuma pessoa com esse filtro."
-                        : "Nenhuma pessoa cadastrada ainda."
-                    }
-                  />
-                )
+                  {filtrosAtivos > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setPapel("");
+                        setInativos(false);
+                        setPagina(1);
+                      }}
+                    >
+                      Limpar filtros
+                    </Button>
+                  )}
+                </>
               )}
-
-              {visiveis.map((p, i) => (
-                <LinhaDaPessoa
-                  key={p.id}
-                  pessoa={p}
-                  atraso={Math.min(i * 20, 150)}
-                  onAbrir={() => setEdicao({ pessoa: p })}
-                />
-              ))}
-            </tbody>
-          </TableArea>
-
-          {total > POR_PAGINA && (
-            <Pagination
-              page={pagina}
-              totalPages={totalPaginas}
-              total={total}
-              pageSize={POR_PAGINA}
-              onPage={setPagina}
             />
-          )}
-        </TableFrame>
+          </BarraDeFerramentas>
+        </div>
       </Panel>
 
       {edicao && (
