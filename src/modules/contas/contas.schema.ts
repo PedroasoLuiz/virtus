@@ -105,6 +105,19 @@ export const extratoSchema = z.object({
           tipo: z.enum(["CR", "CP", "MOV"]),
           contaId: z.number().nullable(),
           parcela: z.number().nullable(),
+          /* Todas as contas que a baixa quitou. O rotulo cabe num numero so
+             ("CP 168 +1"); a dica e o menu de abrir precisam da lista. */
+          origens: z.array(
+            z.object({
+              tipo: z.enum(["CR", "CP"]),
+              contaId: z.number(),
+              /* O numero que a pessoa ve: `idtenant` na conta a receber,
+                 `numero` na conta a pagar. Nunca o `id`. */
+              numero: z.number(),
+              parcela: z.number().nullable(),
+              valor: z.number(),
+            }),
+          ),
         })
         .nullable(),
       saldoApos: z.number(),

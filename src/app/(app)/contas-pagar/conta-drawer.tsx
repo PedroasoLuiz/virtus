@@ -2,7 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Drawer } from "@/components/ui/drawer";
+import { useRouter } from "next/navigation";
 import { useAvisos } from "@/components/ui/avisos";
+import { MenuDoCabecalho } from "@/components/ui/menu-de-cabecalho";
 import { ItemDoMenu, MenuDeLinha } from "@/components/ui/menu-de-linha";
 import { NovaBaixaDrawer } from "./baixas/nova-baixa-drawer";
 import { EditorDeParcelamento } from "@/components/financeiro/editor-de-parcelamento";
@@ -56,6 +58,15 @@ type Parcela = {
   /** Combinada, mas nao vai mais acontecer: o contrato foi encerrado antes. */
   cancelada: boolean;
   motivoDoCancelamento: string | null;
+  /**
+   * Juros e multa PAGOS por atraso, somados — o que a baixa cobrou a mais.
+   *
+   * ⚠️ Nao e `acrescimo`: aquele foi combinado no parcelamento e ja esta dentro
+   * de `total`. Este e a diferenca entre pagar em dia e pagar tarde, e por isso
+   * aparece AO LADO do valor, e nao dentro dele — o valor precisa continuar
+   * batendo com o boleto.
+   */
+  jurosMulta: number;
   /** O dinheiro desta parcela ja bateu no extrato. */
   conciliado: boolean;
   nfs: string | null;
@@ -178,6 +189,115 @@ function Conteudo({
   }
   const entrada = useRef<HTMLInputElement>(null);
   const { avisar, confirmar } = useAvisos();
+
+  /**
+   * O envio de documento DA PARCELA — nota, boleto, comprovante.
+   *
+   * ⚠️ Mora aqui, e nao dentro do menu da linha, e essa e a correcao.
+   *
+   * O `input type=file` estava dentro de `AcoesDaParcela`, que o `MenuDeLinha`
+   * so monta enquanto aberto. Escolher "Anexar nota" fechava o menu, e o menu
+   * fechado DESMONTA o filho: quando o clique programado chegava, o input ja nao
+   * existia e nada acontecia — nem dialogo, nem erro. Os tres itens estavam
+   * mortos desde que o menu passou a montar por funcao.
+   *
+   * ⚠️ O alvo viaja em `ref`, e nao em estado. Estado exigiria um render entre o
+   * clique da pessoa e o clique no input, e e nesse intervalo que o navegador
+   * pode considerar o gesto expirado e recusar abrir o seletor de arquivo.
+   */
+  const alvoDoAnexo = useRef<{
+    parcelaId: number;
+    tipo: "nfs" | "boleto" | "comprovante";
+  } | null>(null);
+  const entradaDaParcela = useRef<HTMLInputElement>(null);
+
+  function pedirDocumentoDaParcela(
+    parcelaId: number,
+    tipo: "nfs" | "boleto" | "comprovante",
+  ) {
+    alvoDoAnexo.current = { parcelaId, tipo };
+    entradaDaParcela.current?.click();
+  }
+
+  async function enviarDocumentoDaParcela(arquivo: File) {
+    const alvo = alvoDoAnexo.current;
+    if (!alvo) return;
+
+    const corpo = new FormData();
+    corpo.append("arquivo", arquivo);
+
+    const r = await fetch(
+      `/api/v1/contas-pagar/${contaId}/parcelas/${alvo.parcelaId}/documento?tipo=${alvo.tipo}`,
+      { method: "POST", body: corpo },
+    );
+    const dados = await r.json().catch(() => null);
+
+    if (!r.ok) {
+      avisar("erro", dados?.error?.message ?? "Não foi possível anexar");
+      return;
+    }
+
+    setConta(dados.data as Conta);
+    avisar("sucesso", "Documento anexado");
+  }
+
+  /*
+   * ⚠️ A LISTA atrás também muda, e por isso o `router.refresh()`.
+   *
+   * Este drawer não tinha router nenhum: ele só sabia atualizar a si mesmo. Com
+   * cancelar e excluir isso deixou de bastar — a conta some ou muda de situação
+   * na tabela e nos indicadores do topo, e sem o refresh a tela atrás continuava
+   * mostrando uma conta que não existe mais até alguém apertar F5.
+   *
+   * `refresh` e não recarga da página: ele refaz só o que o servidor renderiza,
+   * mantendo o estado do que está aberto.
+   */
+  const router = useRouter();
+
+  /*
+   * ⚠️ Cancelar e excluir CHEGARAM AGORA. Nao existiam.
+   *
+   * Contas a receber tinha os dois desde o comeco; aqui a unica saida era
+   * cancelar parcela por parcela, e a conta continuava viva no meio delas — o
+   * total seguia contando e nada explicava por que todas estavam mortas. Nao era
+   * decisao de modelo, era buraco.
+   *
+   * As travas espelham o outro lado, e sao as MESMAS aqui: o que barra os dois e
+   * ter parcela paga. Do lado de la, cancelar aceita conta emitida sem baixa
+   * porque a cobranca ainda pode ser desfeita; aqui, uma conta sem pagamento e
+   * so um compromisso — e compromisso se desfaz inteiro ou nao se desfaz.
+   */
+  const temBaixa = (conta?.parcelasPagas ?? 0) > 0;
+
+  async function cancelarConta() {
+    const r = await fetch(`/api/v1/contas-pagar/${contaId}/cancelamento`, { method: "POST" });
+    const dados = await r.json().catch(() => null);
+
+    if (!r.ok) {
+      avisar("erro", "Não foi possível cancelar a conta", dados?.error?.message);
+      return;
+    }
+
+    setConta(dados.data as Conta);
+    router.refresh();
+    avisar("sucesso", "Conta cancelada", "Ela saiu das listagens do dia a dia. O histórico fica.");
+  }
+
+  async function excluirConta() {
+    const r = await fetch(`/api/v1/contas-pagar/${contaId}`, { method: "DELETE" });
+
+    if (!r.ok) {
+      const dados = await r.json().catch(() => null);
+      avisar("erro", "Não foi possível excluir a conta", dados?.error?.message);
+      return;
+    }
+
+    // Fecha antes de atualizar: o drawer aponta para uma conta que não existe
+    // mais, e recarregar com ele aberto daria 404 na tela.
+    onClose();
+    router.refresh();
+    avisar("sucesso", "Conta a pagar excluída");
+  }
 
   /*
    * As duas escritas devolvem a CONTA inteira, e a tela adota a resposta.
@@ -363,7 +483,117 @@ function Conteudo({
         rodape ele nao sabia nenhuma. O gesto mora no menu da linha, que sabe.
       */
       title="Conta a pagar"
+      /*
+        ⚠️ Um "…" so, sem barra de icones.
+
+        Cancelar e excluir sao os dois gestos destrutivos da tela, e soltos ao
+        lado do X ficariam a um pixel do fechar. No menu cada um tem rotulo
+        escrito e, quando barrado, o motivo no lugar do icone cinza.
+
+        Mesmo componente do drawer de ticket e do de conta a receber.
+      */
+      headerExtra={
+        conta ? (
+          <MenuDoCabecalho>
+            {(fechar) => (
+              <>
+                {!conta.cancelada && (
+                  <ItemDoMenu
+                    rotulo="Cancelar conta"
+                    desabilitado={temBaixa}
+                    motivo={
+                      temBaixa
+                        ? "Conta com parcela paga não é cancelada; estorne a baixa antes"
+                        : undefined
+                    }
+                    icone={
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                      >
+                        {/* Círculo cortado: proibido, e não um X, que aqui
+                            significaria fechar o drawer. */}
+                        <circle cx="12" cy="12" r="9" />
+                        <path d="M5.6 5.6l12.8 12.8" />
+                      </svg>
+                    }
+                    onClick={() => {
+                      fechar();
+                      confirmar(
+                        `Cancelar a conta ${conta.numero}?`,
+                        "Cancelar conta",
+                        cancelarConta,
+                        "Ela para de ser cobrada e sai das listagens do dia a dia. As parcelas e os anexos ficam.",
+                      );
+                    }}
+                  />
+                )}
+
+                <ItemDoMenu
+                  rotulo="Excluir conta a pagar"
+                  perigo
+                  desabilitado={temBaixa}
+                  motivo={
+                    temBaixa ? "Conta com baixa não é excluída, é cancelada" : undefined
+                  }
+                  icone={
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M3 6h18" />
+                      <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
+                      <path d="M19 6l-1 14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1L5 6" />
+                      <path d="M10 11v6M14 11v6" />
+                    </svg>
+                  }
+                  onClick={() => {
+                    fechar();
+                    confirmar(
+                      `Excluir a conta ${conta.numero}?`,
+                      "Excluir",
+                      excluirConta,
+                      "Parcelas, rateio e anexos vão junto, e os arquivos saem do armazenamento.",
+                    );
+                  }}
+                />
+              </>
+            )}
+          </MenuDoCabecalho>
+        ) : null
+      }
     >
+      {/*
+        ⚠️ FORA do menu da linha e fora das abas: ele precisa continuar montado
+        enquanto o seletor de arquivo do sistema esta aberto. Dentro do menu, o
+        proprio gesto de escolher a opcao o desmontava. Ver
+        `pedirDocumentoDaParcela`.
+      */}
+      <input
+        ref={entradaDaParcela}
+        type="file"
+        accept="application/pdf,image/png,image/jpeg,image/webp"
+        style={{ display: "none" }}
+        onChange={(e) => {
+          const arquivo = e.target.files?.[0];
+          // Limpo para que enviar o MESMO arquivo de novo volte a disparar o
+          // evento: sem isso, o segundo envio nao acontece e a tela trava.
+          e.target.value = "";
+          if (arquivo) void enviarDocumentoDaParcela(arquivo);
+        }}
+      />
+
       {erro && (
         /*
           O `Alert` do kit, e nao uma caixa escrita aqui. A que existia
@@ -775,6 +1005,41 @@ function Conteudo({
                             −{formatarSemSimbolo(p.desconto as Centavos)}
                           </div>
                         )}
+
+                        {/*
+                          ⚠️ Juros e multa vao AO LADO do valor, e nao somados
+                          nele.
+
+                          O valor da parcela e o que se combinou com o
+                          fornecedor, e e por ele que se confere o boleto. O que
+                          o atraso custou e outra coisa — e a diferenca entre
+                          pagar em dia e pagar tarde. Embutido, o numero deixava
+                          de bater com o documento e ninguem via quanto o atraso
+                          cobrou; ao lado, os dois se leem de uma vez.
+
+                          ⚠️ Os dois num numero so, pelo mesmo motivo: quem olha
+                          a coluna quer o quanto, nao a quebra. Ela esta na
+                          baixa.
+                        */}
+                        {p.jurosMulta > 0 && (
+                          <div
+                            title={`Juros e multa de ${formatarSemSimbolo(p.jurosMulta as Centavos)} pagos por atraso`}
+                            /*
+                              ⚠️ VERMELHO, e nao verde. Verde aqui leria como
+                              dinheiro que entrou; juros e multa sao dinheiro
+                              que SAIU a mais do que se devia. Numa conta a
+                              pagar todo acrescimo e prejuizo, e a cor precisa
+                              dizer isso antes do sinal.
+                            */
+                            style={{
+                              marginTop: 1,
+                              fontSize: "var(--text-xs)",
+                              color: "var(--debito)",
+                            }}
+                          >
+                            +{formatarSemSimbolo(p.jurosMulta as Centavos)}
+                          </div>
+                        )}
                       </Td>
 
                       <Td>
@@ -790,13 +1055,14 @@ function Conteudo({
                           <MenuDeLinha>
                             {(fechar) => (
                               <AcoesDaParcela
-                                contaId={conta.id}
                                 parcela={p}
                                 cancelada={conta.cancelada}
                                 fechar={fechar}
                                 aoBaixar={() => setBaixando(p.id)}
                                 aoEditarParcelamento={() => setParcelando(true)}
-                                aoMudar={setConta}
+                                aoAnexar={(tipo) =>
+                                  pedirDocumentoDaParcela(p.id, tipo)
+                                }
                                 aoCancelar={() =>
                                   confirmar(
                                     `Cancelar a parcela ${p.numero}?`,
@@ -1081,73 +1347,43 @@ function Bolinha({
  * fornecedor em vez de sair daqui.
  */
 function AcoesDaParcela({
-  contaId,
   parcela,
   cancelada,
   fechar,
   aoBaixar,
   aoEditarParcelamento,
-  aoMudar,
+  aoAnexar,
   aoCancelar,
   aoReativar,
 }: {
-  contaId: number;
   parcela: Parcela;
   cancelada: boolean;
   fechar: () => void;
   aoBaixar: () => void;
   aoEditarParcelamento: () => void;
-  aoMudar: (conta: Conta) => void;
+  /**
+   * Pede o arquivo e envia — quem faz e o DRAWER.
+   *
+   * ⚠️ Nao pode ser feito aqui. Este componente so existe enquanto o menu esta
+   * aberto, e todo item do menu fecha o menu ao ser escolhido: o `input` que
+   * abriria o seletor de arquivo era desmontado no mesmo gesto que devia
+   * aciona-lo, e os tres "Anexar" nao faziam nada.
+   */
+  aoAnexar: (tipo: "nfs" | "boleto" | "comprovante") => void;
   aoCancelar: () => void;
   aoReativar: () => void;
 }) {
-  const entrada = useRef<HTMLInputElement>(null);
-  const [tipo, setTipo] = useState<"nfs" | "boleto" | "comprovante">("nfs");
-  const { avisar } = useAvisos();
-
-  async function enviar(arquivo: File) {
-    const corpo = new FormData();
-    corpo.append("arquivo", arquivo);
-
-    const r = await fetch(
-      `/api/v1/contas-pagar/${contaId}/parcelas/${parcela.id}/documento?tipo=${tipo}`,
-      { method: "POST", body: corpo },
-    );
-    const dados = await r.json().catch(() => null);
-
-    if (!r.ok) {
-      avisar("atencao", dados?.error?.message ?? "Não foi possível anexar");
-      return;
-    }
-
-    aoMudar(dados.data as Conta);
-    avisar("sucesso", "Documento anexado");
-  }
-
   function pedirArquivo(qual: "nfs" | "boleto" | "comprovante") {
-    setTipo(qual);
+    /*
+      ⚠️ O pedido vem ANTES de fechar. Fechando primeiro, este componente
+      desmonta e a chamada seguinte roda em cima do que ja saiu da tela.
+    */
+    aoAnexar(qual);
     fechar();
-    // O clique vai para o fim da fila para o `tipo` novo ja valer quando o
-    // arquivo voltar: `setTipo` so vale no proximo render.
-    setTimeout(() => entrada.current?.click(), 0);
   }
 
   return (
     <>
-      <input
-        ref={entrada}
-        type="file"
-        accept="application/pdf,image/png,image/jpeg,image/webp"
-        style={{ display: "none" }}
-        onChange={(e) => {
-          const arquivo = e.target.files?.[0];
-          // Limpo para que enviar o MESMO arquivo de novo volte a disparar o
-          // evento: sem isso, o segundo envio nao acontece e a tela trava.
-          e.target.value = "";
-          if (arquivo) void enviar(arquivo);
-        }}
-      />
-
       <ItemDoMenu
         rotulo="Baixar parcela"
         icone={<IconeSaida />}

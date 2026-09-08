@@ -45,7 +45,7 @@ export async function conciliar({ body, params, ctx }: Entrada<ConciliarBody, un
 }
 
 export async function desfazer({ body, ctx }: Entrada<DesfazerBody, undefined, ContaParam>) {
-  await service.desfazer(empresaObrigatoria(ctx), body.linhaId);
+  await service.desfazer(empresaObrigatoria(ctx), body.linhaId, body.pagamentoId);
   return noContent();
 }
 

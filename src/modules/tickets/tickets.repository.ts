@@ -1,4 +1,5 @@
 import { serverClient } from "@/infra/supabase/client";
+import { BusinessRuleError } from "@/shared/errors/app-error";
 import { doBanco, paraBanco, type Centavos } from "@/shared/utils/money";
 import { hoje, type DataISO } from "@/shared/utils/datas";
 import { primeiroPreenchido } from "@/shared/utils/texto";
@@ -786,6 +787,74 @@ export async function contarTicketsNoStatus(empresaId: number, id: number): Prom
 
   if (error) throw error;
   return count ?? 0;
+}
+
+/**
+ * Marca o ticket como cancelado, ou desfaz.
+ *
+ * ⚠️ Nao apaga. O gatilho `trg_ticket_cancelado_libera_origem` cuida do resto:
+ * solta as tarefas que viraram itens e tira a linha de `projetosordens`, para
+ * que a origem volte a poder ser cobrada. O ticket continua na tela, cancelado,
+ * porque e la que se consulta uma cobranca desfeita.
+ */
+export async function definirCancelada(
+  empresaId: number,
+  ticketId: number,
+  cancelada: boolean,
+  usuarioId: string | null,
+): Promise<void> {
+  const supabase = await serverClient();
+
+  const { error } = await supabase
+    .from("ordensservico")
+    .update({
+      cancelada,
+      fkUserModificacao: usuarioId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("fkEmpresa", empresaId)
+    .eq("id", ticketId);
+
+  if (error) throw error;
+}
+
+/**
+ * Apaga o ticket.
+ *
+ * ⚠️ Itens, despesas e vinculo com projeto caem por `on delete cascade`, e a
+ * tarefa de projeto e SOLTA (`on delete set null`) — ela existia antes de virar
+ * item e volta a poder ser faturada.
+ *
+ * ⚠️ Isso passou a ser verdade numa migracao. Antes so `projetosordens` tinha
+ * cascade: apagar qualquer ticket com um servico dentro batia na chave
+ * estrangeira de `ordensservicoxservicos` e virava 500 na tela.
+ *
+ * O que RESTRINGE de proposito: conta a receber, movimentacao de estoque,
+ * competencia de contrato e mensagem de conversa. Sao registros de outros
+ * dominios apontando para este ticket, e some-lo deixaria cada um referenciando
+ * o vazio. O servico recusa a conta antes de chegar aqui; os outros tres viram
+ * a mensagem abaixo.
+ */
+export async function excluirTicket(empresaId: number, ticketId: number): Promise<void> {
+  const supabase = await serverClient();
+
+  const { error } = await supabase
+    .from("ordensservico")
+    .delete()
+    .eq("fkEmpresa", empresaId)
+    .eq("id", ticketId);
+
+  /* 23503 e violacao de chave estrangeira. Sem traduzir, ela sobe como erro
+     inesperado e o usuario recebe "algo falhou do nosso lado" com um codigo —
+     quando o que houve tem explicacao e saida. */
+  if (error) {
+    if (error.code === "23503") {
+      throw new BusinessRuleError(
+        "Este ticket esta referenciado em outro registro (movimentacao, competencia de contrato ou conversa) e nao pode ser excluido. Cancele em vez de excluir.",
+      );
+    }
+    throw error;
+  }
 }
 
 export async function moverTicket(

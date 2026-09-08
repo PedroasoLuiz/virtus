@@ -21,6 +21,7 @@ import type {
   FiltroContas,
   IndicadoresDeBaixaPagar,
   LancamentoComNome,
+  LancamentoDaFatura,
   LancamentoDaConta,
   OrigemDaConta,
   ParcelaAPagar,
@@ -225,6 +226,19 @@ export type ParcelaConta = {
    */
   cancelada: boolean;
   motivoDoCancelamento: string | null;
+  /**
+   * Juros e multa PAGOS nesta parcela, somados.
+   *
+   * ⚠️ Vem da baixa (`pagamentosxparcelaspagar`), e nao de `acrescimo`. Aquele e
+   * o acrescimo COMBINADO no parcelamento e ja esta dentro de `total`; este e o
+   * que o atraso custou a mais na hora de pagar, e por isso aparece somado ao
+   * lado do valor em vez de embutido nele.
+   *
+   * ⚠️ Os dois juntos num numero so. Separados, a coluna ganhava duas linhas
+   * minusculas para dizer o que a pessoa le como uma coisa: quanto o atraso
+   * custou. Quem precisa da quebra abre a baixa.
+   */
+  jurosMulta: Centavos;
   /** O dinheiro desta parcela ja bateu no extrato. */
   conciliado: boolean;
   nfs: string | null;
@@ -349,7 +363,10 @@ export async function listarParcelas(contaId: number): Promise<ParcelaConta[]> {
 
   if (error) throw error;
 
-  const conciliados = await pagamentosConciliados((data ?? []).map((l) => l.fkPagamento));
+  const [conciliados, jurosEMulta] = await Promise.all([
+    pagamentosConciliados((data ?? []).map((l) => l.fkPagamento)),
+    jurosEMultaDasParcelas((data ?? []).map((l) => l.id)),
+  ]);
 
   return (data ?? []).map((l) => ({
     id: l.id,
@@ -363,11 +380,44 @@ export async function listarParcelas(contaId: number): Promise<ParcelaConta[]> {
     pago: l.pago ?? false,
     cancelada: l.cancelada ?? false,
     motivoDoCancelamento: l.cancelamento_motivo,
+    jurosMulta: (jurosEMulta.get(l.id) ?? 0) as Centavos,
     conciliado: l.fkPagamento != null && conciliados.has(l.fkPagamento),
     nfs: l.nfs,
     boleto: l.boleto,
     comprovante: l.comprovante,
   }));
+}
+
+/**
+ * Quanto de juros e multa cada parcela custou a mais, somando as baixas.
+ *
+ * ⚠️ SOMA das baixas, e nao a ultima. Uma parcela pode ser paga em pedacos, e
+ * cada pedaco pode ter cobrado juros — mostrar so o ultimo diria que o atraso
+ * custou menos do que custou.
+ *
+ * ⚠️ Uma consulta para todas as parcelas da conta. Perguntando parcela a
+ * parcela, abrir uma conta de doze parcelas eram doze idas ao banco para somar
+ * dois campos.
+ */
+async function jurosEMultaDasParcelas(parcelaIds: number[]): Promise<Map<number, number>> {
+  const mapa = new Map<number, number>();
+  if (parcelaIds.length === 0) return mapa;
+
+  const supabase = await serverClient();
+  const { data, error } = await supabase
+    .from("pagamentosxparcelaspagar")
+    .select("fkParcela, juros, multa")
+    .in("fkParcela", parcelaIds);
+
+  if (error) throw error;
+
+  for (const l of data ?? []) {
+    if (l.fkParcela == null) continue;
+    const soma = doBanco(l.juros) + doBanco(l.multa);
+    mapa.set(l.fkParcela, (mapa.get(l.fkParcela) ?? 0) + soma);
+  }
+
+  return mapa;
 }
 
 /**
@@ -428,27 +478,27 @@ const DESPESA = "Despesas";
  * em tempo de tipo, e montada com `+` o resultado inteiro perde o tipo.
  */
 const CAMPOS_BAIXA =
-  "id, data, tipo, valor, conciliado, descricao, contasbancarias(apelido, banco, conta), contaspagarparcelas!inner(id, fkContaPagar, contaspagar(numero, clientes(razao, nomefantasia)))";
+  "id, data, tipo, valor, conciliado, descricao, contasbancarias(apelido, banco, conta), pagamentosxparcelaspagar!inner(valor, contaspagarparcelas!inner(id, fkContaPagar, contaspagar(numero, clientes(razao, nomefantasia))))";
 
 /**
  * O dinheiro que saiu para quitar conta a pagar.
  *
- * ⚠️ O que define uma baixa aqui e a PARCELA APONTAR para o pagamento
- * (`contaspagarparcelas.fkPagamento`), e nao haver linha em
- * `pagamentosxparcelaspagar`.
+ * ⚠️ O recorte e o RATEIO (`pagamentosxparcelaspagar`), e nao mais a parcela
+ * apontando para o pagamento.
  *
- * O criterio do outro lado e o rateio, e copia-lo aqui abriria a tela vazia: o
- * rateio e novo e tem zero linhas, enquanto 171 baixas reais, feitas pelo
- * legado, so existem por este vinculo. Ele tambem vale para as baixas novas — o
- * gatilho `recalcula_baixa_da_parcela_pagar` grava `fkPagamento` sempre que
- * escreve rateio.
+ * Este arquivo dizia o contrario, e com razao na epoca: o rateio era novo e
+ * tinha zero linhas, enquanto 171 baixas do legado so existiam pelo
+ * `contaspagarparcelas.fkPagamento`. Hoje o rateio cobre TODAS — 295 pagamentos
+ * contra 294 pelo vinculo antigo, e nenhum que exista so no antigo.
  *
- * ⚠️ O furo conhecido: a parcela guarda so o ULTIMO pagamento. Duas baixas
- * parciais sobre a mesma parcela fariam a primeira sumir desta lista. Nao existe
- * nenhum caso assim hoje, e a saida definitiva e o rateio virar fonte unica.
+ * ⚠️ E o furo que aquele comentario previa ACONTECEU. A parcela guarda so o
+ * ULTIMO pagamento, porque `recalcula_baixa_da_parcela_pagar` sobrescreve
+ * `fkPagamento` a cada baixa. Duas baixas parciais na mesma parcela — 1.000 num
+ * dia e 1.000 no outro — faziam a PRIMEIRA sumir desta lista: o dinheiro saiu do
+ * banco, esta gravado no rateio, e a tela nao o mostrava. O rateio guarda uma
+ * linha por baixa, e por isso nao perde nenhuma.
  *
- * As demais despesas — 466 das 637 — sao gasto direto, sem titulo, e o lugar
- * delas e o extrato.
+ * As demais despesas sao gasto direto, sem titulo, e o lugar delas e o extrato.
  */
 export async function listarBaixas(
   empresaId: number,
@@ -480,11 +530,17 @@ export async function listarBaixas(
 /**
  * Uma baixa e as parcelas que ela quitou.
  *
- * ⚠️ Duas consultas para o rateio, e nao um embed. As parcelas vem pelo vinculo
- * do legado (`fkPagamento`), e o valor aplicado vem de
- * `pagamentosxparcelaspagar` quando existe. Nas 171 baixas antigas o rateio nao
- * existe, e ai o valor aplicado e o proprio total da parcela — que e o que o
- * legado gravou, porque ele sobrescrevia o total com o que foi pago.
+ * ⚠️ As parcelas vem do RATEIO, e nao mais de `contaspagarparcelas.fkPagamento`.
+ *
+ * Aquele vinculo guarda so o ULTIMO pagamento da parcela: numa parcela paga em
+ * duas vezes, abrir a PRIMEIRA baixa mostrava uma tela sem destino nenhum — o
+ * dinheiro saiu, e a ficha dele nao dizia para onde. O rateio tem uma linha por
+ * baixa, com o valor que aquela baixa aplicou.
+ *
+ * ⚠️ Duas consultas e nao um embed: `pagamentosxparcelaspagar` guarda o id da
+ * parcela e o valor aplicado, e os campos da parcela (numero, vencimento, total)
+ * moram na outra tabela. Embed aninhado aqui devolveria a parcela dentro do
+ * rateio e obrigaria a desmontar duas camadas para montar uma lista plana.
  */
 export async function buscarBaixaPorId(
   empresaId: number,
@@ -503,22 +559,27 @@ export async function buscarBaixaPorId(
   if (error) throw error;
   if (!data) return null;
 
-  const [parcelas, rateio] = await Promise.all([
-    supabase
-      .from("contaspagarparcelas")
-      .select("id, numeroparcela, vencimento, valor, total, fkContaPagar")
-      .eq("fkPagamento", id)
-      .order("numeroparcela", { ascending: true }),
-    supabase.from("pagamentosxparcelaspagar").select("fkParcela, valor").eq("fkPagamento", id),
-  ]);
+  const { data: rateio, error: erroRateio } = await supabase
+    .from("pagamentosxparcelaspagar")
+    .select("fkParcela, valor")
+    .eq("fkPagamento", id);
 
-  if (parcelas.error) throw parcelas.error;
-  if (rateio.error) throw rateio.error;
+  if (erroRateio) throw erroRateio;
 
-  const aplicado = new Map((rateio.data ?? []).map((r) => [r.fkParcela, doBanco(r.valor)]));
-  const contas = await contasDasParcelas((parcelas.data ?? []).map((p) => p.fkContaPagar));
+  const aplicado = new Map((rateio ?? []).map((r) => [r.fkParcela, doBanco(r.valor)]));
 
-  const destinos: DestinoDaBaixa[] = (parcelas.data ?? []).map((p) => {
+  const { data: parcelasDoBanco, error: erroParcelas } = await supabase
+    .from("contaspagarparcelas")
+    .select("id, numeroparcela, vencimento, valor, total, fkContaPagar")
+    .in("id", [...aplicado.keys()])
+    .order("numeroparcela", { ascending: true });
+
+  if (erroParcelas) throw erroParcelas;
+
+  const parcelas = parcelasDoBanco ?? [];
+  const contas = await contasDasParcelas(parcelas.map((p) => p.fkContaPagar));
+
+  const destinos: DestinoDaBaixa[] = parcelas.map((p) => {
     const total = p.total == null ? doBanco(p.valor) : doBanco(p.total);
     const conta = p.fkContaPagar == null ? undefined : contas.get(p.fkContaPagar);
 
@@ -568,9 +629,14 @@ async function contasDasParcelas(
  * ninguem conferiu continua sendo trabalho pendente hoje. Uma consulta so teria
  * de trazer o historico inteiro para responder as tres.
  *
- * ⚠️ O `contaspagarparcelas!inner` fica em todas: e o mesmo recorte da listagem
- * — despesa que quitou parcela e o que e baixa —, e sem ele os cartoes contariam
- * as 466 despesas diretas e nunca bateriam com a tabela logo abaixo.
+ * ⚠️ O `pagamentosxparcelaspagar!inner` fica em todas: e o mesmo recorte da
+ * listagem — despesa que quitou parcela e o que e baixa —, e sem ele os cartoes
+ * contariam as despesas diretas e nunca bateriam com a tabela logo abaixo.
+ *
+ * ⚠️ Tem de ser a MESMA tabela que a listagem usa. Enquanto os cartoes olhavam
+ * `contaspagarparcelas` e a lista olhasse o rateio, uma baixa parcial entrava
+ * num numero e nao no outro — e o topo da tela contradizia a tabela embaixo dele
+ * sem nada explicando.
  */
 export async function indicadoresDeBaixas(
   empresaId: number,
@@ -582,19 +648,19 @@ export async function indicadoresDeBaixas(
   const [janela, pendentes, total] = await Promise.all([
     supabase
       .from("pagamentos")
-      .select("id, data, valor, tipo, conciliado, contaspagarparcelas!inner(id)")
+      .select("id, data, valor, tipo, conciliado, pagamentosxparcelaspagar!inner(id)")
       .eq("fkEmpresa", empresaId)
       .ilike("natureza", DESPESA)
       .gte("data", `${desdeMes}-01`),
     supabase
       .from("pagamentos")
-      .select("id, valor, contaspagarparcelas!inner(id)")
+      .select("id, valor, pagamentosxparcelaspagar!inner(id)")
       .eq("fkEmpresa", empresaId)
       .ilike("natureza", DESPESA)
       .eq("conciliado", false),
     supabase
       .from("pagamentos")
-      .select("id, contaspagarparcelas!inner(id)", { count: "exact", head: true })
+      .select("id, pagamentosxparcelaspagar!inner(id)", { count: "exact", head: true })
       .eq("fkEmpresa", empresaId)
       .ilike("natureza", DESPESA),
   ]);
@@ -668,7 +734,8 @@ type LinhaBaixa = {
   conciliado: boolean | null;
   descricao: string | null;
   contasbancarias: unknown;
-  contaspagarparcelas: unknown;
+  /** Uma linha por parcela que esta baixa tocou. Ver `CAMPOS_BAIXA`. */
+  pagamentosxparcelaspagar: unknown;
 };
 
 function paraBaixa(linha: LinhaBaixa): BaixaPagarResumo {
@@ -678,11 +745,23 @@ function paraBaixa(linha: LinhaBaixa): BaixaPagarResumo {
     conta: string | null;
   } | null;
 
-  const parcelas = (linha.contaspagarparcelas ?? []) as {
-    id: number;
-    fkContaPagar: number | null;
-    contaspagar: { numero: number | null; clientes: unknown } | null;
-  }[];
+  /*
+    ⚠️ As parcelas vem DENTRO do rateio, uma por linha de baixa.
+
+    A mesma parcela paga em dois dias aparece uma vez em cada pagamento, que e o
+    que se quer: cada baixa fala das parcelas que ELA tocou. Pelo vinculo antigo
+    a parcela so lembrava do ultimo pagamento, e a primeira baixa parcial saia da
+    lista inteira.
+  */
+  const parcelas = ((linha.pagamentosxparcelaspagar ?? []) as {
+    contaspagarparcelas: {
+      id: number;
+      fkContaPagar: number | null;
+      contaspagar: { numero: number | null; clientes: unknown } | null;
+    } | null;
+  }[])
+    .map((r) => r.contaspagarparcelas)
+    .filter((p): p is NonNullable<typeof p> => p != null);
 
   const nomes = [
     ...new Set(
@@ -1237,6 +1316,11 @@ export async function cartoesDaEmpresa(empresaId: number): Promise<CartaoDaBaixa
   const bancos = await listarBancos();
   const nomes = new Map(bancos.map((b) => [b.id, `${b.codigo} · ${b.nome}`]));
 
+  /* O nome de quem recebe o pagamento da fatura. Sem ele a tela mostraria um id
+     onde precisa mostrar um nome, e o fechamento e justamente onde esse nome
+     importa. */
+  const fornecedores = await nomesDosFornecedores((data ?? []).map((c) => c.fkFornecedor));
+
   return (data ?? []).map((c) => ({
     id: c.id,
     apelido: c.apelido,
@@ -1244,6 +1328,8 @@ export async function cartoesDaEmpresa(empresaId: number): Promise<CartaoDaBaixa
     diaFechamento: c.diaFechamento ?? 1,
     diaVencimento: c.diaVencimento ?? 10,
     fornecedorId: c.fkFornecedor,
+    fornecedorNome:
+      c.fkFornecedor == null ? null : (fornecedores.get(c.fkFornecedor) ?? null),
     bancoId: c.fkBanco,
     bancoNome: c.fkBanco == null ? null : (nomes.get(c.fkBanco) ?? null),
     ultimosDigitos: c.numero,
@@ -1276,72 +1362,6 @@ export async function listarBancos(): Promise<BancoDaLista[]> {
     nome: b.nome,
     doSistema: b.fkEmpresa == null,
   }));
-}
-
-/**
- * Acha (ou cria) o cadastro de fornecedor que representa um banco.
- *
- * ⚠️ Criar cadastro como efeito colateral e coisa a se fazer com parcimonia, e
- * aqui ela se justifica: sem o fornecedor a fatura nao vira conta a pagar, e
- * pedir para cadastrar "Nubank" como fornecedor antes de cadastrar o cartao e a
- * mesma informacao pedida duas vezes. Acontece UMA vez por banco por empresa.
- *
- * ⚠️ Procura por nome exato antes de criar. Sem isso, cada fatura fechada
- * criaria um "Nubank" novo, e a listagem de pessoas encheria de duplicatas do
- * mesmo banco.
- */
-export async function fornecedorDoBanco(
-  empresaId: number,
-  usuarioId: string,
-  nomeDoBanco: string,
-): Promise<number> {
-  const supabase = await serverClient();
-
-  const { data, error } = await supabase
-    .from("clientes")
-    .select("id")
-    .eq("fkEmpresa", empresaId)
-    .ilike("razao", nomeDoBanco)
-    .limit(1)
-    .maybeSingle();
-
-  if (error) throw error;
-  if (data) return data.id;
-
-  const { data: novo, error: erroNovo } = await supabase
-    .from("clientes")
-    .insert({
-      fkEmpresa: empresaId,
-      fkUserCriacao: usuarioId,
-      razao: nomeDoBanco,
-      fornecedor: true,
-      ativo: true,
-    })
-    .select("id")
-    .single();
-
-  if (erroNovo) throw erroNovo;
-  return novo.id;
-}
-
-/** Guarda no cartao o fornecedor resolvido, para nao procurar de novo. */
-export async function ligarFornecedorAoCartao(
-  cartaoId: number,
-  usuarioId: string,
-  fornecedorId: number,
-): Promise<void> {
-  const supabase = await serverClient();
-
-  const { error } = await supabase
-    .from("cartao")
-    .update({
-      fkFornecedor: fornecedorId,
-      fkUserModificacao: usuarioId,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", cartaoId);
-
-  if (error) throw error;
 }
 
 export async function criarCartao(
@@ -1484,6 +1504,195 @@ export async function lancarNaFatura(
   if (error) throw error;
 }
 
+/**
+ * As compras de uma fatura.
+ *
+ * ⚠️ O centro de custo vem em consulta PROPRIA, e nao por embed: o
+ * `database.types.ts` e escrito a mao e declara `Relationships: []`, entao o
+ * cliente do Supabase nao resolve o vinculo e o resultado inteiro perde o tipo.
+ * Mesma razao do resto do modulo.
+ */
+export async function lancamentosDaFatura(
+  empresaId: number,
+  faturaId: number,
+): Promise<LancamentoDaFatura[]> {
+  const supabase = await serverClient();
+
+  const { data, error } = await supabase
+    .from("cartaofaturasparcelas")
+    .select(
+      'id, descricao, "dataCompra", competencia, numeroparcela, valor, status, "fkCentroCusto", "fkFornecedor"',
+    )
+    .eq("fkEmpresa", empresaId)
+    .eq("fkCartaoFatura", faturaId)
+    .order("dataCompra", { ascending: true })
+    .order("id", { ascending: true });
+
+  if (error) throw error;
+
+  const linhas = data ?? [];
+  const centros = await nomesDosCentros(linhas.map((l) => l.fkCentroCusto));
+  const fornecedores = await nomesDosFornecedores(linhas.map((l) => l.fkFornecedor));
+
+  return linhas.map((l) => ({
+    id: l.id,
+    descricao: l.descricao ?? "",
+    dataCompra: (l.dataCompra?.slice(0, 10) ?? null) as DataISO | null,
+    competencia: (l.competencia?.slice(0, 10) ?? null) as DataISO | null,
+    numeroParcela: l.numeroparcela ?? 1,
+    valor: doBanco(l.valor),
+    cancelada: (l.status ?? "").toUpperCase() === "CANCELADO",
+    centroCustoId: l.fkCentroCusto,
+    /* ⚠️ "012 · Marketing digital", como na conta a pagar: e pelo CODIGO que
+       o financeiro procura o centro, e a mesma tabela nas duas telas nao pode
+       mostrar um jeito de cada lado. */
+    centroCustoCodigo:
+      l.fkCentroCusto == null ? null : (centros.get(l.fkCentroCusto)?.codigo ?? null),
+    centroCustoNome:
+      l.fkCentroCusto == null ? null : (centros.get(l.fkCentroCusto)?.descricao ?? null),
+    fornecedorId: l.fkFornecedor,
+    fornecedorNome: l.fkFornecedor == null ? null : (fornecedores.get(l.fkFornecedor) ?? null),
+  }));
+}
+
+async function nomesDosFornecedores(ids: (number | null)[]): Promise<Map<number, string>> {
+  const alvos = [...new Set(ids.filter((i): i is number => i != null))];
+  if (alvos.length === 0) return new Map();
+
+  const supabase = await serverClient();
+  const { data, error } = await supabase
+    .from("clientes")
+    .select("id, razao, nomefantasia")
+    .in("id", alvos);
+  if (error) throw error;
+
+  return new Map(
+    (data ?? []).map((c) => [c.id, primeiroPreenchido(c.nomefantasia, c.razao) ?? ""]),
+  );
+}
+
+/**
+ * Apaga uma compra da fatura.
+ *
+ * ⚠️ So enquanto a fatura esta ABERTA — quem garante e o servico. Fechada, ela
+ * ja virou conta a pagar com um total, e tirar uma linha faria a fatura somar
+ * menos do que a conta que a representa.
+ */
+/**
+ * Cancela uma compra, ou desfaz.
+ *
+ * ⚠️ Cancelar NAO apaga: a linha fica, riscada, e para de somar. E a diferenca
+ * entre "isto nunca existiu" e "isto foi combinado e desfeito" — a segunda e a
+ * que explica um estorno da operadora, e a que alguem vai procurar em dezembro.
+ */
+export async function definirLancamentoCancelado(
+  empresaId: number,
+  faturaId: number,
+  lancamentoId: number,
+  cancelado: boolean,
+  usuarioId: string,
+): Promise<boolean> {
+  const supabase = await serverClient();
+
+  const { data, error } = await supabase
+    .from("cartaofaturasparcelas")
+    .update({
+      status: cancelado ? "CANCELADO" : "ABERTO",
+      fkUserModificacao: usuarioId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("fkEmpresa", empresaId)
+    .eq("fkCartaoFatura", faturaId)
+    .eq("id", lancamentoId)
+    .select("id");
+
+  if (error) throw error;
+  return (data ?? []).length > 0;
+}
+
+export async function apagarLancamentoDaFatura(
+  empresaId: number,
+  faturaId: number,
+  lancamentoId: number,
+): Promise<boolean> {
+  const supabase = await serverClient();
+
+  const { data, error } = await supabase
+    .from("cartaofaturasparcelas")
+    .delete()
+    .eq("fkEmpresa", empresaId)
+    .eq("fkCartaoFatura", faturaId)
+    .eq("id", lancamentoId)
+    .select("id");
+
+  if (error) throw error;
+  return (data ?? []).length > 0;
+}
+
+/** Liga ou desliga o cartao. Desligado nao aparece para escolher, e continua no historico. */
+export async function atualizarCartao(
+  empresaId: number,
+  cartaoId: number,
+  campos: { ativo?: boolean; fornecedorId?: number | null },
+  usuarioId: string,
+): Promise<boolean> {
+  const supabase = await serverClient();
+
+  /* Monta so o que veio: mandar `undefined` apagaria coluna nao editada. */
+  const mudanca: {
+    fkUserModificacao: string;
+    updated_at: string;
+    ativo?: boolean;
+    fkFornecedor?: number | null;
+  } = {
+    fkUserModificacao: usuarioId,
+    updated_at: new Date().toISOString(),
+  };
+  if (campos.ativo !== undefined) mudanca.ativo = campos.ativo;
+  if (campos.fornecedorId !== undefined) mudanca.fkFornecedor = campos.fornecedorId;
+
+  const { data, error } = await supabase
+    .from("cartao")
+    .update(mudanca)
+    .eq("fkEmpresa", empresaId)
+    .eq("id", cartaoId)
+    .select("id");
+
+  if (error) throw error;
+  return (data ?? []).length > 0;
+}
+
+/** Quantas faturas o cartao ja teve. Acima de zero, ele nao se apaga. */
+export async function contarFaturasDoCartao(
+  empresaId: number,
+  cartaoId: number,
+): Promise<number> {
+  const supabase = await serverClient();
+
+  const { count, error } = await supabase
+    .from("cartaofaturas")
+    .select("id", { count: "exact", head: true })
+    .eq("fkEmpresa", empresaId)
+    .eq("fkCartao", cartaoId);
+
+  if (error) throw error;
+  return count ?? 0;
+}
+
+export async function excluirCartao(empresaId: number, cartaoId: number): Promise<boolean> {
+  const supabase = await serverClient();
+
+  const { data, error } = await supabase
+    .from("cartao")
+    .delete()
+    .eq("fkEmpresa", empresaId)
+    .eq("id", cartaoId)
+    .select("id");
+
+  if (error) throw error;
+  return (data ?? []).length > 0;
+}
+
 /** As faturas de um cartao, da mais recente para tras. */
 export async function faturasDoCartao(
   empresaId: number,
@@ -1503,7 +1712,11 @@ export async function faturasDoCartao(
 
   const linhas = data ?? [];
   const cartoes = await cartoesDaEmpresa(empresaId);
-  const contagens = await contarLancamentosDasFaturas(linhas.map((f) => f.id));
+  const [resumo, comPagamento, numeros] = await Promise.all([
+    resumoDasFaturas(linhas.map((f) => f.id)),
+    contasComParcelaPaga(linhas.map((f) => f.fkContaPagar)),
+    numerosDasContas(linhas.map((f) => f.fkContaPagar)),
+  ]);
 
   return linhas.map((f) => ({
     id: f.id,
@@ -1512,29 +1725,105 @@ export async function faturasDoCartao(
     competencia: (f.competencia ?? "").slice(0, 10) as DataISO,
     fechamento: f.dataFechamento ? ((f.dataFechamento.slice(0, 10)) as DataISO) : null,
     vencimento: f.dataVencimento ? ((f.dataVencimento.slice(0, 10)) as DataISO) : null,
-    total: doBanco(f.valor),
+    /*
+     * ⚠️ O total vem das LINHAS, e nao da coluna `valor` da fatura.
+     *
+     * Aquela coluna so e escrita no FECHAMENTO (`marcarFaturaFechada`): fatura
+     * aberta ficava com zero para sempre, e a tela mostrava "R$ 0,00" num ciclo
+     * com dez compras dentro. Somar na leitura da uma fonte so — a compra —, e
+     * o numero passa a estar certo desde o primeiro lancamento.
+     */
+    total: resumo.get(f.id)?.total ?? (0 as Centavos),
     status: (f.status ?? "ABERTA").toUpperCase(),
     contaPagarId: f.fkContaPagar,
-    qtdLancamentos: contagens.get(f.id) ?? 0,
+    contaPagarNumero: f.fkContaPagar != null ? (numeros.get(f.fkContaPagar) ?? null) : null,
+    contaPaga: f.fkContaPagar != null && comPagamento.has(f.fkContaPagar),
+    qtdLancamentos: resumo.get(f.id)?.qtd ?? 0,
   }));
 }
 
-/** Uma consulta para a lista inteira: contar por linha seria N+1 na abertura. */
-async function contarLancamentosDasFaturas(ids: number[]): Promise<Map<number, number>> {
+/**
+ * O numero por empresa de cada conta a pagar citada.
+ *
+ * ⚠️ `numero`, e nao `id`. A tela mostrava o `id` — a sequencia global, que nao
+ * aparece em nenhuma outra tela do sistema — e quem fosse procurar a conta pelo
+ * numero exibido nao a encontrava.
+ */
+async function numerosDasContas(contaIds: (number | null)[]): Promise<Map<number, number>> {
   const mapa = new Map<number, number>();
+  const alvos = [...new Set(contaIds.filter((i): i is number => i != null))];
+  if (alvos.length === 0) return mapa;
+
+  const supabase = await serverClient();
+  const { data, error } = await supabase.from("contaspagar").select("id, numero").in("id", alvos);
+
+  if (error) throw error;
+
+  /* Sem `numero` cai para o `id`: registro do legado pode nao ter recebido a
+     numeracao, e vazio seria pior que a chave. */
+  for (const c of data ?? []) mapa.set(c.id, c.numero ?? c.id);
+  return mapa;
+}
+
+/**
+ * Quais destas contas a pagar ja tem ao menos uma parcela paga.
+ *
+ * ⚠️ Uma consulta para a lista inteira, e nao uma por fatura. A tela abre doze
+ * ciclos de uma vez; perguntando um a um, saber quais podem reabrir eram doze
+ * idas ao banco para responder sim ou nao.
+ *
+ * ⚠️ Le PARCELA e nao `contaspagar.pago`. Aquele campo so vira verdadeiro quando
+ * a conta inteira quita; uma fatura paga pela metade continuaria oferecendo o
+ * reabrir, que apagaria a conta e junto o dinheiro que ja saiu.
+ */
+async function contasComParcelaPaga(contaIds: (number | null)[]): Promise<Set<number>> {
+  const alvos = [...new Set(contaIds.filter((i): i is number => i != null))];
+  if (alvos.length === 0) return new Set();
+
+  const supabase = await serverClient();
+  const { data, error } = await supabase
+    .from("contaspagarparcelas")
+    .select("fkContaPagar")
+    .in("fkContaPagar", alvos)
+    .eq("pago", true);
+
+  if (error) throw error;
+
+  const achadas = new Set<number>();
+  for (const l of data ?? []) {
+    if (l.fkContaPagar != null) achadas.add(l.fkContaPagar);
+  }
+  return achadas;
+}
+
+/** Uma consulta para a lista inteira: somar por linha seria N+1 na abertura. */
+async function resumoDasFaturas(
+  ids: number[],
+): Promise<Map<number, { qtd: number; total: Centavos }>> {
+  const mapa = new Map<number, { qtd: number; total: Centavos }>();
   if (ids.length === 0) return mapa;
 
   const supabase = await serverClient();
   const { data, error } = await supabase
     .from("cartaofaturasparcelas")
-    .select("fkCartaoFatura")
+    .select("fkCartaoFatura, valor, status")
     .in("fkCartaoFatura", ids);
 
   if (error) throw error;
 
   for (const l of data ?? []) {
     if (l.fkCartaoFatura == null) continue;
-    mapa.set(l.fkCartaoFatura, (mapa.get(l.fkCartaoFatura) ?? 0) + 1);
+
+    /* ⚠️ A CANCELADA nao soma, e continua contando na quantidade: ela e um
+       registro do que foi combinado e desfeito, e some-la da contagem faria a
+       linha desaparecer do numero sem desaparecer da tela. */
+    const cancelada = (l.status ?? "").toUpperCase() === "CANCELADO";
+    const atual = mapa.get(l.fkCartaoFatura) ?? { qtd: 0, total: 0 as Centavos };
+
+    mapa.set(l.fkCartaoFatura, {
+      qtd: atual.qtd + 1,
+      total: (atual.total + (cancelada ? 0 : doBanco(l.valor))) as Centavos,
+    });
   }
   return mapa;
 }
@@ -1543,10 +1832,14 @@ async function contarLancamentosDasFaturas(ids: number[]): Promise<Map<number, n
 export async function totalDaFatura(faturaId: number): Promise<Centavos> {
   const supabase = await serverClient();
 
+  /* ⚠️ A CANCELADA fica de fora. Ela e registro do que foi desfeito: somada
+     aqui, a conta a pagar gerada no fechamento cobraria o que a operadora
+     estornou. */
   const { data, error } = await supabase
     .from("cartaofaturasparcelas")
-    .select("valor")
-    .eq("fkCartaoFatura", faturaId);
+    .select("valor, status")
+    .eq("fkCartaoFatura", faturaId)
+    .neq("status", "CANCELADO");
 
   if (error) throw error;
   return (data ?? []).reduce<Centavos>((s, l) => somar(s, doBanco(l.valor)), ZERO);
@@ -1560,6 +1853,43 @@ export async function totalDaFatura(faturaId: number): Promise<Centavos> {
  * doc 10 registra um caso em que ele errava em 32 de 123 contas. Aqui ele e
  * escrito uma vez, quando o numero para de mudar.
  */
+/**
+ * Devolve a fatura ao estado aberto.
+ *
+ * ⚠️ Desfaz TUDO que o fechamento escreveu: status, valor e o vinculo com a
+ * conta a pagar — e as linhas voltam a ABERTO. Deixar o `fkContaPagar` apontando
+ * para uma conta que o servico acabou de apagar seria um ponteiro para o vazio,
+ * e a tela mostraria "Conta 42" para uma conta que nao existe.
+ *
+ * ⚠️ A linha CANCELADA nao volta a ABERTO: ela foi desfeita por decisao, e nao
+ * pelo fechamento. Reabrir o ciclo nao ressuscita um estorno.
+ */
+export async function marcarFaturaAberta(faturaId: number, usuarioId: string): Promise<void> {
+  const supabase = await serverClient();
+
+  const { error } = await supabase
+    .from("cartaofaturas")
+    .update({
+      status: "ABERTA",
+      valor: 0,
+      total: 0,
+      fkContaPagar: null,
+      fkUserModificacao: usuarioId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", faturaId);
+
+  if (error) throw error;
+
+  const { error: erroLinhas } = await supabase
+    .from("cartaofaturasparcelas")
+    .update({ status: "ABERTO", fkUserModificacao: usuarioId })
+    .eq("fkCartaoFatura", faturaId)
+    .neq("status", "CANCELADO");
+
+  if (erroLinhas) throw erroLinhas;
+}
+
 export async function marcarFaturaFechada(
   faturaId: number,
   usuarioId: string,
@@ -1966,6 +2296,68 @@ export async function contaDoAnexo(anexoId: number): Promise<number | null> {
  * ⚠️ `fkContaPagar` no filtro alem do id: sem ele, um id de parcela de outra
  * conta passaria, e a RLS sozinha nao separa parcela de conta dentro do tenant.
  */
+/**
+ * Marca a conta como cancelada, ou desfaz.
+ *
+ * ⚠️ Nao apaga. A conta cancelada continua na tela, fora das listagens do dia a
+ * dia: e la que se consulta uma divida que deixou de valer, e sumir com ela
+ * apagaria a explicacao junto.
+ */
+export async function definirCancelada(
+  empresaId: number,
+  contaId: number,
+  cancelada: boolean,
+  usuarioId: string,
+): Promise<void> {
+  const supabase = await serverClient();
+
+  const { error } = await supabase
+    .from("contaspagar")
+    .update({
+      cancelada,
+      fkUserModificacao: usuarioId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("fkEmpresa", empresaId)
+    .eq("id", contaId);
+
+  if (error) throw error;
+}
+
+/**
+ * Apaga a conta e o que so existe por causa dela.
+ *
+ * ⚠️ Na ORDEM: parcelas, lancamentos e anexos antes da conta.
+ *
+ * Nenhuma dessas chaves tem cascade — mesma historia do ticket, que estourava
+ * com violacao de chave estrangeira ao ser excluido. Aqui a ordem e explicita
+ * para nao depender de um `on delete` que ninguem declarou.
+ *
+ * ⚠️ Quem NAO cai: o pagamento. Ele e dinheiro que saiu do banco, e existe
+ * independente da divida que quitou. Por isso o servico recusa antes de chegar
+ * aqui quando ha baixa.
+ */
+export async function excluir(empresaId: number, contaId: number): Promise<void> {
+  const supabase = await serverClient();
+
+  for (const tabela of [
+    "contaspagarparcelas",
+    "contaspagarcentrocusto",
+    "contaspagaranexos",
+  ] as const) {
+    const { error } = await supabase.from(tabela).delete().eq("fkContaPagar", contaId);
+    if (error) throw error;
+  }
+
+  const { error } = await supabase
+    .from("contaspagar")
+    .delete()
+    .eq("fkEmpresa", empresaId)
+    .eq("id", contaId);
+
+  if (error) throw error;
+}
+
 export async function cancelarParcela(
   contaId: number,
   parcelaId: number,

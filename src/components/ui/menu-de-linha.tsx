@@ -48,7 +48,37 @@ const FOLGA = 8;
  * O filho recebe `fechar` porque toda acao daqui termina o menu: deixar aberto
  * depois do clique faz parecer que nao aconteceu nada.
  */
-export function MenuDeLinha({ children }: { children: (fechar: () => void) => React.ReactNode }) {
+export function MenuDeLinha({
+  moldura,
+  gatilho,
+  rotulo,
+  children,
+}: {
+  /**
+   * Sobrepoe o tamanho do gatilho.
+   *
+   * ⚠️ Existe para o CABECALHO do drawer, onde os botoes tem 28 e este teria 24:
+   * um circulo menor no meio de tres iguais le como se estivesse desativado. O
+   * padrao continua sendo o da linha da tabela.
+   */
+  moldura?: React.CSSProperties;
+  /**
+   * O que aparece DENTRO do botao, no lugar dos tres pontos.
+   *
+   * ⚠️ So o conteudo: o botao continua sendo deste componente, com a medida, o
+   * portal e o fechar-ao-rolar. Deixar o chamador montar o proprio botao
+   * duplicaria essa maquinaria em cada tela que precisasse de outro gatilho — e
+   * e ela, e nao o desenho, que faz o menu funcionar dentro de uma tabela que
+   * rola.
+   *
+   * Nasceu para a coluna "Registro" do extrato, onde o gatilho e o proprio
+   * numero do titulo ("CP 168 +1") e nao um botao de acoes.
+   */
+  gatilho?: React.ReactNode;
+  /** O que a dica e o leitor de tela dizem. Padrao: "Ações". */
+  rotulo?: string;
+  children: (fechar: () => void) => React.ReactNode;
+}) {
   const [aberto, setAberto] = useState(false);
   const botao = useRef<HTMLButtonElement>(null);
   const cartao = useRef<HTMLDivElement>(null);
@@ -117,8 +147,8 @@ export function MenuDeLinha({ children }: { children: (fechar: () => void) => Re
       <button
         ref={botao}
         type="button"
-        title="Ações"
-        aria-label="Ações"
+        title={rotulo ?? "Ações"}
+        aria-label={rotulo ?? "Ações"}
         aria-expanded={aberto}
         onClick={(e) => {
           // A linha pode ter clique proprio; a acao nao dispara os dois.
@@ -126,13 +156,15 @@ export function MenuDeLinha({ children }: { children: (fechar: () => void) => Re
           if (aberto) fechar();
           else setAberto(true);
         }}
-        style={{ ...MOLDURA_DE_ACAO, color: "var(--text-secondary)" }}
+        style={{ ...MOLDURA_DE_ACAO, color: "var(--text-secondary)", ...moldura }}
       >
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-          <circle cx="3.5" cy="8" r="1.3" />
-          <circle cx="8" cy="8" r="1.3" />
-          <circle cx="12.5" cy="8" r="1.3" />
-        </svg>
+        {gatilho ?? (
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+            <circle cx="3.5" cy="8" r="1.3" />
+            <circle cx="8" cy="8" r="1.3" />
+            <circle cx="12.5" cy="8" r="1.3" />
+          </svg>
+        )}
       </button>
 
       {aberto &&

@@ -291,13 +291,21 @@ export function ConciliacaoDrawer({
     await carregar();
   }
 
-  async function desfazer(linhaId: number) {
+  /**
+   * Desfaz um vinculo da linha, ou todos.
+   *
+   * ⚠️ `pagamentoId` viaja quando a pessoa clica no "Desfazer" DAQUELE
+   * lançamento. Uma linha do banco pode ter casado com três — o depósito que
+   * compensou três boletos —, e sem o id o botão soltaria os três para corrigir
+   * um.
+   */
+  async function desfazer(linhaId: number, pagamentoId?: number) {
     setEtapa("gravando");
 
     const r = await fetch(`/api/v1/contas/${conta.id}/conciliacao/desfazer`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ linhaId }),
+      body: JSON.stringify({ linhaId, pagamentoId }),
     });
 
     setEtapa(null);
@@ -347,7 +355,14 @@ export function ConciliacaoDrawer({
 
   const linhas = painel?.linhas ?? [];
 
-  /** Os lancamentos que ainda podem receber vinculo, para o seletor da linha. */
+  /**
+   * Os lancamentos que ainda podem receber vinculo, para o seletor da linha.
+   *
+   * ⚠️ Conciliado sai da lista porque o lancamento pertence a UMA linha so.
+   * Oferece-lo de novo convidaria a amarrar o mesmo recebimento a dois creditos
+   * do extrato — o servidor recusa, mas o convite ja seria o erro. O caminho de
+   * corrigir e desfazer no lugar onde ele esta.
+   */
   const livres = (painel?.lancamentos ?? []).filter((l) => !l.conciliado);
 
   /**
@@ -772,7 +787,9 @@ export function ConciliacaoDrawer({
                       }
                       aoTrocar={(ligado) => setTrocando(ligado ? l.id : null)}
                       aoLigar={(pagamentoId) => void ligar(l.id, pagamentoId)}
-                      aoDesfazer={() => void desfazer(l.id)}
+                      aoDesfazer={(pagamentoId) =>
+                        void desfazer(l.id, pagamentoId)
+                      }
                       procurar={procurar}
                       /*
                         ⚠️ Cadastrar dali so no grupo SEM LANCAMENTO, e so na

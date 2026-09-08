@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   BotaoDeCabecalho,
-  BotaoHistorico,
   Drawer,
 } from "@/components/ui/drawer";
+import { useRouter } from "next/navigation";
 import { useAvisos } from "@/components/ui/avisos";
 import { NovoRecebimentoDrawer } from "../recebimentos/novo-recebimento-drawer";
 import { Icon } from "@/components/layout/icones";
@@ -43,6 +43,7 @@ import type { Fatura, Parcela } from "./fatura-tipos";
 import { curto, periodo, vencida } from "./fatura-datas";
 import { AnexarDocumento, Documentos } from "./fatura-documentos";
 import { ItemDoMenu, MenuDeLinha } from "@/components/ui/menu-de-linha";
+import { ItemDeHistorico, MenuDoCabecalho } from "@/components/ui/menu-de-cabecalho";
 
 /**
  * Detalhe da conta a receber.
@@ -124,6 +125,7 @@ function Conteudo({
   const [baixando, setBaixando] = useState<number | null>(null);
   const [dividindo, setDividindo] = useState(false);
   const { avisar, confirmar } = useAvisos();
+  const router = useRouter();
 
   async function cancelarConta() {
     const r = await fetch(`/api/v1/faturas/${faturaId}/cancelamento`, {
@@ -132,15 +134,15 @@ function Conteudo({
     const dados = await r.json().catch(() => null);
 
     if (!r.ok) {
-      avisar(
-        "atencao",
-        dados?.error?.message ?? "Não foi possível cancelar a cobrança",
-      );
+      avisar("erro", "Não foi possível cancelar a cobrança", dados?.error?.message);
       return;
     }
 
-    avisar("sucesso", "Cobrança cancelada", "A conta não é mais cobrável.");
     setFatura(dados.data);
+    /* ⚠️ A LISTA atrás também muda. Sem o refresh, a tabela e os indicadores do
+       topo continuavam mostrando a conta como cobrável até alguém apertar F5. */
+    router.refresh();
+    avisar("sucesso", "Cobrança cancelada", "A conta não é mais cobrável.");
   }
 
   async function excluirConta() {
@@ -148,14 +150,15 @@ function Conteudo({
 
     if (!r.ok) {
       const dados = await r.json().catch(() => null);
-      avisar(
-        "atencao",
-        dados?.error?.message ?? "Não foi possível excluir a conta",
-      );
+      avisar("erro", "Não foi possível excluir a conta", dados?.error?.message);
       return;
     }
-    avisar("sucesso", "Conta a receber excluída");
+
+    // Fecha antes de atualizar: o drawer aponta para uma conta que não existe
+    // mais, e recarregar com ele aberto daria 404 na tela.
     onClose();
+    router.refresh();
+    avisar("sucesso", "Conta a receber excluída");
   }
 
   /**
@@ -392,63 +395,101 @@ function Conteudo({
               <rect x="6" y="14" width="12" height="7" rx="1" />
             </BotaoDeCabecalho>
 
-            {/* Cancelar existe porque a falta dele custava caro: sem ele, a
-                saída para uma conta que não seria recebida era dar baixa com
-                valor zero, o que deixa no extrato um lançamento de R$ 0,00 e
-                marca como recebido um dinheiro que nunca entrou. */}
-            {!fatura.cancelada && (
-              <BotaoDeCabecalho
-                rotulo={
-                  temBaixa
-                    ? "Conta com parcela recebida não é cancelada; estorne o recebimento antes"
-                    : "Cancelar cobrança"
-                }
-                desabilitado={temBaixa}
-                onClick={() =>
-                  confirmar(
-                    `Cancelar a cobrança da conta ${fatura.numero}?`,
-                    "Cancelar cobrança",
-                    cancelarConta,
-                    "A conta para de ser cobrável e sai das listagens do dia a dia. O histórico e os documentos ficam.",
-                  )
-                }
-              >
-                {/* Círculo cortado: proibido, e não um X, que aqui significaria
-                    fechar o drawer. */}
-                <circle cx="12" cy="12" r="9" />
-                <path d="M5.6 5.6l12.8 12.8" />
-              </BotaoDeCabecalho>
-            )}
+            {/*
+              ⚠️ Cancelar, excluir e historico num MENU, e nao tres botoes.
 
-            <BotaoDeCabecalho
-              rotulo={
-                temBaixa
-                  ? "Conta com baixa não é excluída, é cancelada"
-                  : "Excluir conta a receber"
-              }
-              perigo
-              desabilitado={temBaixa}
-              onClick={() =>
-                confirmar(
-                  `Excluir a conta ${fatura.numero}?`,
-                  "Excluir",
-                  excluirConta,
-                  "Parcelas, anexos e o vínculo com os tickets vão junto. O saldo deles volta.",
-                )
-              }
-            >
-              <path d="M3 6h18" />
-              <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
-              <path d="M19 6l-1 14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1L5 6" />
-              <path d="M10 11v6M14 11v6" />
-            </BotaoDeCabecalho>
+              Eram cinco alvos de 28 pixels lado a lado — imprimir, cancelar,
+              excluir, historico e fechar —, com dois destrutivos encostados no
+              X. Numa barra assim o gesto de fechar fica a um pixel do de
+              apagar, e nenhum dos icones diz o que faz sem o hover.
 
-            <BotaoHistorico
-              criadoEm={fatura.historico.criadoEm}
-              criadoPor={fatura.historico.criadoPor}
-              editadoEm={fatura.historico.editadoEm}
-              editadoPor={fatura.historico.editadoPor}
-            />
+              Fica de fora so o imprimir: e o motivo mais comum de abrir a conta.
+              O mesmo desenho do drawer de ticket.
+            */}
+            <MenuDoCabecalho>
+              {(fechar) => (
+                <>
+                  <ItemDeHistorico autoria={fatura.historico} />
+
+                  {/* Cancelar existe porque a falta dele custava caro: sem ele,
+                      a saída para uma conta que não seria recebida era dar baixa
+                      com valor zero, o que deixa no extrato um lançamento de
+                      R$ 0,00 e marca como recebido um dinheiro que nunca
+                      entrou. */}
+                  {!fatura.cancelada && (
+                    <ItemDoMenu
+                      rotulo="Cancelar cobrança"
+                      desabilitado={temBaixa}
+                      motivo={
+                        temBaixa
+                          ? "Conta com parcela recebida não é cancelada; estorne o recebimento antes"
+                          : undefined
+                      }
+                      icone={
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                        >
+                          {/* Círculo cortado: proibido, e não um X, que aqui
+                              significaria fechar o drawer. */}
+                          <circle cx="12" cy="12" r="9" />
+                          <path d="M5.6 5.6l12.8 12.8" />
+                        </svg>
+                      }
+                      onClick={() => {
+                        fechar();
+                        confirmar(
+                          `Cancelar a cobrança da conta ${fatura.numero}?`,
+                          "Cancelar cobrança",
+                          cancelarConta,
+                          "A conta para de ser cobrável e sai das listagens do dia a dia. O histórico e os documentos ficam.",
+                        );
+                      }}
+                    />
+                  )}
+
+                  <ItemDoMenu
+                    rotulo="Excluir conta a receber"
+                    perigo
+                    desabilitado={temBaixa}
+                    motivo={
+                      temBaixa ? "Conta com baixa não é excluída, é cancelada" : undefined
+                    }
+                    icone={
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M3 6h18" />
+                        <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
+                        <path d="M19 6l-1 14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1L5 6" />
+                        <path d="M10 11v6M14 11v6" />
+                      </svg>
+                    }
+                    onClick={() => {
+                      fechar();
+                      confirmar(
+                        `Excluir a conta ${fatura.numero}?`,
+                        "Excluir",
+                        excluirConta,
+                        "Parcelas, anexos e o vínculo com os tickets vão junto. O saldo deles volta.",
+                      );
+                    }}
+                  />
+                </>
+              )}
+            </MenuDoCabecalho>
           </>
         ) : null
       }

@@ -22,7 +22,7 @@ export default async function FaturasPage() {
   const { itens } = await listarFaturas(
     ctx.empresaId,
     {},
-    { page: 1, perPage: 100 },
+    { page: 1, perPage: 500 },
   );
 
   return (

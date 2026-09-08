@@ -15,7 +15,7 @@ export default async function TicketsPage() {
   // Os cancelados vem na consulta e sao escondidos no cliente: quem decide e um
   // toggle de filtro, e ir ao servidor a cada clique dele nao paga o custo.
   const [{ itens }, colunas, pessoas, servicos] = await Promise.all([
-    listarTickets(ctx.empresaId, { incluirCancelados: true }, { page: 1, perPage: 200 }),
+    listarTickets(ctx.empresaId, { incluirCancelados: true }, { page: 1, perPage: 500 }),
     listarStatus(ctx.empresaId),
     arvoreDeClientes(ctx.empresaId),
     listarServicos(ctx.empresaId),

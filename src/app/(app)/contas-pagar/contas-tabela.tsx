@@ -9,6 +9,7 @@ import {
   IconeKanban,
   IconeTabela,
   IncluirButton,
+  Alert,
   PageHeader,
   PageLayout,
   Pagination,
@@ -64,9 +65,12 @@ const OPCOES_DE_FILTRO = [...SITUACOES_CONTA, VENCIDAS, CANCELADAS];
 
 export function ContasTabela({
   contas,
+  totalNoBanco,
   visaoInicial,
 }: {
   contas: ContaPagarResumo[];
+  /** Quantas existem de verdade. Maior que `contas.length` = a carga cortou. */
+  totalNoBanco?: number;
   visaoInicial: Visao;
 }) {
   const [busca, setBusca] = useState("");
@@ -124,12 +128,41 @@ export function ContasTabela({
       }
 
       if (!termo) return true;
+
+      /*
+       * ⚠️ Codigo e VALOR entram na busca, junto de descricao e fornecedor.
+       *
+       * Procurava-se por "26" e por "1.402,50" e a lista voltava vazia — dois
+       * dos tres jeitos naturais de achar uma conta nao funcionavam, e nada na
+       * tela dizia que a busca so olhava texto.
+       *
+       * O valor e comparado nos DOIS formatos: como a tela mostra ("1.402,50") e
+       * cru ("1402.5"). Quem le a linha digita o primeiro; quem copiou de um
+       * extrato ou de um e-mail traz o segundo.
+       */
+      const numero = conta.numero == null ? "" : String(conta.numero);
+      const valor = formatarSemSimbolo(conta.total as Centavos);
+      const valorCru = (conta.total / 100).toFixed(2);
+
       return (
         conta.descricao.toLowerCase().includes(termo) ||
-        (conta.fornecedorNome ?? "").toLowerCase().includes(termo)
+        (conta.fornecedorNome ?? "").toLowerCase().includes(termo) ||
+        numero === termo ||
+        valor.includes(termo) ||
+        valorCru.includes(termo)
       );
     });
   }, [comSituacao, busca, situacao]);
+
+  /*
+   * ⚠️ A carga cortou, e a tela precisa dizer.
+   *
+   * Filtro e paginacao acontecem no navegador: o que nao veio do servidor nao
+   * existe para esta tela. Sem este aviso, uma conta fora do corte sumia da
+   * lista E da busca sem nada explicando, e quem procurava concluia que ela
+   * nunca tinha sido lancada.
+   */
+  const cortadas = Math.max(0, (totalNoBanco ?? contas.length) - contas.length);
 
   const totalPaginas = Math.max(1, Math.ceil(filtradas.length / PAGE_SIZE));
   const paginaAtual = Math.min(pagina, totalPaginas);
@@ -175,8 +208,11 @@ export function ContasTabela({
               </select>
             </FilterItem>
           </FilterButton>
+          {/* O que a busca alcança, dito no campo: sem isso ela parece quebrada
+              quando alguém digita algo que ela não olha. */}
           <SearchInput
             value={busca}
+            placeholder="Fornecedor, descrição, código ou valor"
             onSearch={(v) => {
               setBusca(v);
               setPagina(1);
@@ -184,6 +220,18 @@ export function ContasTabela({
           />
           <IncluirButton onClick={() => setNova(true)} />
         </PageHeader>
+
+        {cortadas > 0 && (
+          <div style={{ marginBottom: 10 }}>
+            <Alert
+              variant="warning"
+              title={`${cortadas} conta${cortadas > 1 ? "s" : ""} não carregada${cortadas > 1 ? "s" : ""}`}
+            >
+              A tela busca e filtra sobre o que já veio do servidor, e a carga tem
+              limite. As mais antigas ficaram de fora.
+            </Alert>
+          </div>
+        )}
 
         {modo === "kanban" ? (
           <QuadroDeContas itens={filtradas} aoAbrir={setDetalhe} />

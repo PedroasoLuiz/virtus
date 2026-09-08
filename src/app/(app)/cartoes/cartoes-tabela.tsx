@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useAvisos } from "@/components/ui/avisos";
 import {
   AcoesDaLinha,
-  Badge,
+  ActiveToggle,
   BotaoDeAcao,
   EmptyRow,
   IncluirButton,
@@ -42,9 +44,47 @@ const NUM: React.CSSProperties = {
 };
 
 export function CartoesTabela({ cartoes }: { cartoes: CartaoDaBaixa[] }) {
+  const router = useRouter();
+  const { avisar, confirmar } = useAvisos();
+
   const [busca, setBusca] = useState("");
   const [criando, setCriando] = useState(false);
   const [faturasDe, setFaturasDe] = useState<CartaoDaBaixa | null>(null);
+
+  /*
+   * ⚠️ A lista vem do servidor e a tela nao guarda copia dela.
+   *
+   * Ligar o interruptor grava e chama `refresh`: o estado do cartao passa a ser
+   * o do banco, e nao um espelho local que pode divergir se a gravacao falhar.
+   */
+  async function alternarAtivo(c: CartaoDaBaixa) {
+    const r = await fetch(`/api/v1/contas-pagar/cartoes/${c.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ativo: !c.ativo }),
+    });
+
+    if (!r.ok) {
+      const dados = await r.json().catch(() => null);
+      avisar("erro", "Não foi possível mudar a situação do cartão", dados?.error?.message);
+      return;
+    }
+
+    router.refresh();
+  }
+
+  async function excluir(c: CartaoDaBaixa) {
+    const r = await fetch(`/api/v1/contas-pagar/cartoes/${c.id}`, { method: "DELETE" });
+
+    if (!r.ok) {
+      const dados = await r.json().catch(() => null);
+      avisar("erro", "Não foi possível excluir o cartão", dados?.error?.message);
+      return;
+    }
+
+    router.refresh();
+    avisar("sucesso", "Cartão excluído");
+  }
 
   const termo = busca.trim().toLowerCase();
 
@@ -104,10 +144,16 @@ export function CartoesTabela({ cartoes }: { cartoes: CartaoDaBaixa[] }) {
                     {c.limite > 0 ? formatarSemSimbolo(c.limite as Centavos) : "—"}
                   </Td>
 
+                  {/*
+                    ⚠️ Interruptor, e não pastilha.
+
+                    A pastilha só CONTAVA a situação, e mudá-la exigia abrir o
+                    cadastro — dois cliques e uma tela para um estado de sim ou
+                    não. O interruptor conta e muda no mesmo lugar, que é como o
+                    resto do sistema trata "ativo".
+                  */}
                   <Td>
-                    <Badge tom={c.ativo ? "success" : "neutral"}>
-                      {c.ativo ? "ATIVO" : "INATIVO"}
-                    </Badge>
+                    <ActiveToggle active={c.ativo} onChange={() => void alternarAtivo(c)} />
                   </Td>
 
                   <Td>
@@ -116,6 +162,31 @@ export function CartoesTabela({ cartoes }: { cartoes: CartaoDaBaixa[] }) {
                         {/* Recibo com linhas: os ciclos daquele cartão. */}
                         <path d="M3.4 2.4h9.2v11.2l-1.5-1-1.5 1-1.6-1-1.5 1-1.6-1-1.5 1z" />
                         <path d="M5.8 6h4.4M5.8 8.6h3" />
+                      </BotaoDeAcao>
+
+                      {/*
+                        ⚠️ Excluir vale só para o cartão que NUNCA teve fatura —
+                        quem recusa é o servidor, com o número de faturas na
+                        mensagem. Com fatura, as compras já contaram na DRE: o
+                        histórico ficaria sem dono, e o caminho é o interruptor
+                        ao lado.
+                      */}
+                      <BotaoDeAcao
+                        rotulo="Excluir cartão"
+                        perigo
+                        onClick={() =>
+                          confirmar(
+                            `Excluir o cartão ${c.apelido ?? c.id}?`,
+                            "Excluir",
+                            () => excluir(c),
+                            "Só é possível enquanto ele não tiver nenhuma fatura. Se já tiver, inative pelo interruptor da linha.",
+                          )
+                        }
+                      >
+                        <path d="M2.5 4h11" />
+                        <path d="M5.5 4V2.8a.8.8 0 0 1 .8-.8h3.4a.8.8 0 0 1 .8.8V4" />
+                        <path d="M12.3 4l-.7 9a.8.8 0 0 1-.8.8H5.2a.8.8 0 0 1-.8-.8L3.7 4" />
+                        <path d="M6.5 6.8v4.4M9.5 6.8v4.4" />
                       </BotaoDeAcao>
                     </AcoesDaLinha>
                   </Td>

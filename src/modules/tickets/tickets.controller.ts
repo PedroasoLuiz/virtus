@@ -20,6 +20,15 @@ export async function obterTicket({ params, ctx }: Entrada<undefined, undefined,
   return ok(await service.obterTicket(empresaObrigatoria(ctx), params.id));
 }
 
+export async function cancelarTicket({ params, ctx }: Entrada<undefined, undefined, IdParam>) {
+  return ok(await service.cancelarTicket(empresaObrigatoria(ctx), ctx.usuarioId, params.id));
+}
+
+export async function excluirTicket({ params, ctx }: Entrada<undefined, undefined, IdParam>) {
+  await service.excluirTicket(empresaObrigatoria(ctx), params.id);
+  return noContent();
+}
+
 export async function criarTicket({ body, ctx }: Entrada<CriarTicketBody, undefined, unknown>) {
   return created(await service.criarTicket(empresaObrigatoria(ctx), ctx.usuarioId, body));
 }

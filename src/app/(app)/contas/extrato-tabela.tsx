@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { TableArea, TableHead, Td, Th, Tr } from "@/components/ui/kit";
+import { ItemDoMenu, MenuDeLinha } from "@/components/ui/menu-de-linha";
 import { formatarSemSimbolo, type Centavos } from "@/shared/utils/money";
 import { paraFormatoBR, type DataISO } from "@/shared/utils/datas";
 import { IconeDoPagamento } from "./icones-pagamento";
@@ -276,7 +277,7 @@ function FragmentoDoDia({
 }
 
 /**
- * O registro de onde a linha veio: "CR 180", "CP 149" ou "MOV 910".
+ * O registro de onde a linha veio: "CR 180", "CP 149 +1" ou "MOV 910".
  *
  * ⚠️ CLICÁVEL quando há título, e texto puro quando não há. O `MOV` não abre
  * nada porque não há nada para abrir — e um alvo que parece botão e não responde
@@ -286,6 +287,13 @@ function FragmentoDoDia({
  * ⚠️ A PARCELA fica na dica, e não no rótulo. "CR 180 P 2" não cabe na coluna
  * sem empurrar o histórico, e o que se procura primeiro é a conta; a parcela
  * responde a segunda pergunta, de quem já achou a conta.
+ *
+ * ⚠️ Com MAIS DE UMA conta, o clique PERGUNTA qual abrir.
+ *
+ * Um boleto único pode quitar duas contas — o banco compensa as duas na mesma
+ * linha. Antes o rótulo dizia "+1" e o clique abria sempre a primeira, calado:
+ * quem procurava a outra não tinha como chegar nela, e nem sabia qual era. Agora
+ * a dica lista número e valor de cada uma, e o menu deixa escolher.
  */
 function RegistroDaLinha({
   documento,
@@ -300,13 +308,31 @@ function RegistroDaLinha({
     return <span style={{ color: "var(--text-disabled)" }}>—</span>;
 
   const curto = documento.rotulo.replace(/ P \d+$/, "");
-  const dica =
-    documento.tipo === "MOV"
-      ? "Movimento sem título por trás: tarifa, rendimento ou baixa antiga"
-      : `${documento.tipo === "CR" ? "Conta a receber" : "Conta a pagar"} ${documento.contaId}` +
-        (documento.parcela != null ? ` · parcela ${documento.parcela}` : "");
+  const origens = documento.origens ?? [];
 
-  if (documento.tipo === "MOV" || documento.contaId == null) {
+  /*
+    ⚠️ Uma LINHA por conta, e não tudo numa frase.
+
+    Com duas contas a dica precisa responder "quais, e quanto em cada" — e
+    "CP 168 · 1.600,00 · CP 169 · 700,00" numa linha só faz o olho contar
+    separadores para saber onde um documento acaba e o outro começa.
+  */
+  const dica =
+    documento.tipo === "MOV" || origens.length === 0
+      ? "Movimento sem título por trás: tarifa, rendimento ou baixa antiga"
+      : origens
+          .map((o) =>
+            [
+              `${o.tipo} ${o.numero}`,
+              o.parcela != null ? `parcela ${o.parcela}` : null,
+              formatarSemSimbolo(o.valor as Centavos),
+            ]
+              .filter(Boolean)
+              .join(" · "),
+          )
+          .join("\n");
+
+  if (documento.tipo === "MOV" || origens.length === 0) {
     return (
       <span title={dica} style={{ color: "var(--text-disabled)" }}>
         {curto}
@@ -314,36 +340,15 @@ function RegistroDaLinha({
     );
   }
 
-  const tipo = documento.tipo;
-  const contaId = documento.contaId;
+  /*
+    ⚠️ O mesmo desenho nos dois caminhos, e por isso ele é uma constante.
 
-  return (
-    <button
-      type="button"
-      title={dica}
-      onClick={() => aoAbrir({ tipo, contaId })}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 3,
-        padding: 0,
-        border: "none",
-        background: "none",
-        font: "inherit",
-        /*
-          ⚠️ Em repouso ele é TEXTO, e a cor só entra no hover.
-
-          Sublinhado e azul em toda linha punham trinta links coloridos numa
-          coluna que se lê de cima a baixo, e a cor deixava de dizer "isto abre"
-          para virar o fundo da coluna. Assim, quem varre lê números; quem
-          procura o caminho encontra ao passar o mouse.
-        */
-        color: hover ? "var(--primary)" : "var(--text-secondary)",
-        cursor: "pointer",
-      }}
-    >
+    Abrir direto e escolher entre duas são gestos diferentes por dentro, mas a
+    coluna não pode mudar de aparência por causa disso: quem varre trinta linhas
+    veria dois estilos de número sem saber o que os separa.
+  */
+  const conteudo = (
+    <>
       {curto}
       {/*
         ⚠️ O ícone OCUPA o lugar dele sempre, e só aparece no hover. Surgindo do
@@ -358,23 +363,107 @@ function RegistroDaLinha({
           transition: "opacity var(--dur-fast) var(--ease)",
         }}
       >
-        <svg
-          width="10"
-          height="10"
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          {/* Seta saindo da caixa: abre em outro lugar, sem sair daqui. */}
-          <path d="M9.5 3h3.5v3.5" />
-          <path d="M13 3L8.2 7.8" />
-          <path d="M12 9.6V12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h2.4" />
-        </svg>
+        <IconeAbrir />
       </span>
+    </>
+  );
+
+  /*
+    ⚠️ Em repouso ele é TEXTO, e a cor só entra no hover.
+
+    Sublinhado e azul em toda linha punham trinta links coloridos numa coluna que
+    se lê de cima a baixo, e a cor deixava de dizer "isto abre" para virar o
+    fundo da coluna. Assim, quem varre lê números; quem procura o caminho
+    encontra ao passar o mouse.
+  */
+  const aparencia: React.CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 3,
+    padding: 0,
+    width: "auto",
+    height: "auto",
+    border: "none",
+    borderRadius: 0,
+    background: "none",
+    font: "inherit",
+    color: hover ? "var(--primary)" : "var(--text-secondary)",
+    cursor: "pointer",
+  };
+
+  if (origens.length > 1) {
+    return (
+      <span onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
+        {/*
+          ⚠️ O menu do sistema, e não um cartão escrito aqui.
+
+          A tabela do extrato rola dentro de si, e todo painel posicionado dentro
+          dela é recortado pela borda — o da última linha simplesmente sumiria.
+          O `MenuDeLinha` já resolve isso por portal, e já fecha ao rolar. O que
+          faltava era poder trocar os três pontos pelo próprio número.
+        */}
+        <MenuDeLinha gatilho={conteudo} rotulo={dica} moldura={aparencia}>
+          {(fechar) => (
+            <>
+              {origens.map((o) => (
+                <ItemDoMenu
+                  key={`${o.tipo}-${o.contaId}`}
+                  rotulo={`${o.tipo} ${o.numero} · ${formatarSemSimbolo(o.valor as Centavos)}`}
+                  /* A MESMA seta saindo da caixa do gatilho: as duas dizem
+                     "abre em outro lugar", e desenhos diferentes para o mesmo
+                     gesto fariam pensar que são gestos diferentes. */
+                  icone={<IconeAbrir />}
+                  onClick={() => {
+                    fechar();
+                    aoAbrir({ tipo: o.tipo, contaId: o.contaId });
+                  }}
+                />
+              ))}
+            </>
+          )}
+        </MenuDeLinha>
+      </span>
+    );
+  }
+
+  const unica = origens[0];
+
+  return (
+    <button
+      type="button"
+      title={dica}
+      onClick={() => aoAbrir({ tipo: unica.tipo, contaId: unica.contaId })}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={aparencia}
+    >
+      {conteudo}
     </button>
+  );
+}
+
+/**
+ * Seta saindo da caixa: abre em outro lugar, sem sair daqui.
+ *
+ * ⚠️ Uma so, usada no gatilho e no menu. Desenhada duas vezes, as duas versoes
+ * divergiriam no primeiro ajuste de traco — e sao o mesmo gesto.
+ */
+function IconeAbrir() {
+  return (
+    <svg
+      width="10"
+      height="10"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M9.5 3h3.5v3.5" />
+      <path d="M13 3L8.2 7.8" />
+      <path d="M12 9.6V12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h2.4" />
+    </svg>
   );
 }
 

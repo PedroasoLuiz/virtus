@@ -44,7 +44,8 @@ export function LinhaDaConciliacao({
   aoMarcar: () => void;
   aoTrocar: (trocando: boolean) => void;
   aoLigar: (pagamentoId: number) => void;
-  aoDesfazer: () => void;
+  /** Sem argumento solta a linha inteira; com ele, so aquele vinculo. */
+  aoDesfazer: (pagamentoId?: number) => void;
   procurar: (
     valorDaLinha: number,
     termo: string,
@@ -59,8 +60,46 @@ export function LinhaDaConciliacao({
   aoCadastrar?: () => void;
 }) {
   const sugestao = painel?.sugestoes.find((s) => s.linhaId === l.id);
-  const par = painel?.lancamentos.find((p) => p.id === l.pagamentoId);
   const aba = pilha;
+
+  /*
+    ⚠️ LISTA de pares, e nao um. O banco compensa varios boletos num
+    credito so — 2.220 que sao 2.000 de um cliente e 220 de outro —, e no
+    sistema aquilo e dois recebimentos, porque um pagamento e de um pagador
+    so. `undefined` guarda o lugar do lancamento que caiu fora do periodo
+    consultado: ele existe, so nao esta carregado.
+  */
+  const pares = l.pagamentoIds.map((id) => ({
+    id,
+    lancamento: painel?.lancamentos.find((p) => p.id === id),
+  }));
+
+  /*
+    ⚠️ A sobra so aparece quando ha DOIS OU MAIS vinculos e algum falta.
+
+    Com um par so, valor diferente e a conciliacao normal de juros ou tarifa,
+    e ninguem quer um alerta ali. Com varios, a soma que nao fecha e o unico
+    sinal de que o deposito ainda esconde um boleto — e e exatamente o que
+    esta tela existe para achar.
+  */
+  const somaDosPares = pares.reduce((t, p) => t + (p.lancamento?.valor ?? 0), 0);
+  const faltaCarregar = pares.some((p) => !p.lancamento);
+  const sobra =
+    pares.length > 1 && !faltaCarregar ? l.valor - somaDosPares : 0;
+
+  /*
+    ⚠️ FECHADA quando o que já casou soma exatamente o valor da linha.
+
+    Dali em diante somar mais um lançamento seria afirmar que o mesmo movimento
+    do banco pagou mais do que o banco moveu. O servidor recusa de qualquer
+    forma; o campo sai da tela para o convite não existir — oferecer uma busca
+    que só pode terminar em erro é pior que não oferecer nada.
+
+    ⚠️ Só fecha com os pares CARREGADOS. Faltando um lançamento fora do período,
+    a soma não é a verdade, e travar por ela esconderia o campo de quem ainda
+    precisa dele.
+  */
+  const fechada = !faltaCarregar && pares.length > 0 && somaDosPares === l.valor;
 
   return (
     <div
@@ -123,29 +162,108 @@ export function LinhaDaConciliacao({
         }}
       >
         {aba === "conciliados" ? (
-          <>
-            <SetaDoPar />
-            {/*
-              ⚠️ O numero da CONTA vem na frente da data.
+          /*
+            ⚠️ Uma coluna, e nao uma linha: os pares se empilham.
 
-              E o mesmo lugar em que o kanban o poe, e pela mesma
-              razao: e por ele que se acha o documento — a conta a
-              receber que se combinou com o cliente, a conta a pagar
-              que se combinou com o fornecedor. Data e valor dizem se
-              bate; o numero diz do que se trata.
+            Com um vinculo so a coluna tem uma linha e fica igual ao que era.
+            Com tres, cada um ganha a sua — e o "Desfazer" fica ao lado do
+            lancamento a que pertence, e nao na ponta de uma fila em que nao
+            da para saber qual dos tres ele desfaz.
+          */
+          <div
+            style={{
+              flex: 1,
+              minWidth: 0,
+              display: "flex",
+              flexDirection: "column",
+              gap: 4,
+            }}
+          >
+            {pares.map((p) => (
+              <div
+                key={p.id}
+                style={{ display: "flex", alignItems: "center", gap: 8 }}
+              >
+                <SetaDoPar />
+                {/*
+                  ⚠️ O numero da CONTA vem na frente da data.
+
+                  E o mesmo lugar em que o kanban o poe, e pela mesma
+                  razao: e por ele que se acha o documento — a conta a
+                  receber que se combinou com o cliente, a conta a pagar
+                  que se combinou com o fornecedor. Data e valor dizem se
+                  bate; o numero diz do que se trata.
+                */}
+                {p.lancamento?.documento && (
+                  <Documento texto={p.lancamento.documento} />
+                )}
+                <span style={TEXTO_DO_PAR}>
+                  {p.lancamento
+                    ? `${paraFormatoBR(p.lancamento.data)} · ${formatarSemSimbolo(
+                        Math.abs(p.lancamento.valor) as Centavos,
+                      )} · ${p.lancamento.nome || `Lançamento ${p.id}`}`
+                    : "Lançamento fora do período consultado"}
+                </span>
+                {/*
+                  ⚠️ Desfaz SO ESTE, e por isso vai o id junto. Com tres
+                  vinculos, o botao sem argumento soltaria os tres para
+                  corrigir um.
+                */}
+                <Button
+                  size="xs"
+                  disabled={ocupado}
+                  onClick={() => aoDesfazer(p.id)}
+                >
+                  Desfazer
+                </Button>
+              </div>
+            ))}
+
+            {/*
+              ⚠️ A busca CONTINUA aqui embaixo enquanto a linha NAO fechou.
+
+              E por ela que o segundo boleto do mesmo deposito entra. Sem
+              isso, casar o credito de 2.220 com o primeiro recebimento
+              fechava a linha, e o segundo nao tinha mais onde ser
+              conciliado — que era exatamente o beco de antes.
+
+              ⚠️ E ela SOME quando a soma bate. Fechado o valor, todo
+              lancamento a mais seria dinheiro que o banco nao moveu.
             */}
-            {par?.documento && <Documento texto={par.documento} />}
-            <span style={TEXTO_DO_PAR}>
-              {par
-                ? `${paraFormatoBR(par.data)} · ${formatarSemSimbolo(
-                    Math.abs(par.valor) as Centavos,
-                  )} · ${par.nome || `Lançamento ${par.id}`}`
-                : "Lançamento fora do período consultado"}
-            </span>
-            <Button size="xs" disabled={ocupado} onClick={aoDesfazer}>
-              Desfazer
-            </Button>
-          </>
+            <div
+              hidden={fechada}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                minHeight: 28,
+              }}
+            >
+              <SetaDoPar />
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <SeletorBuscavel
+                  valor={null}
+                  rotulo={null}
+                  sublinhado
+                  placeholder={
+                    sobra !== 0
+                      ? `Falta ${formatarSemSimbolo(Math.abs(sobra) as Centavos)}: buscar o outro lançamento…`
+                      : "Somar outro lançamento a esta linha…"
+                  }
+                  desabilitado={ocupado}
+                  buscar={(termo) => procurar(l.valor, termo)}
+                  aoEscolher={(escolhido) => {
+                    if (escolhido) aoLigar(escolhido.id);
+                  }}
+                />
+              </span>
+              {sobra !== 0 && (
+                <Badge tom="warning">
+                  Faltam {formatarSemSimbolo(Math.abs(sobra) as Centavos)}
+                </Badge>
+              )}
+            </div>
+          </div>
         ) : sugestao && !trocando ? (
           <>
             {/*

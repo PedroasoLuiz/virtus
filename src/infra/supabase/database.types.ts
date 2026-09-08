@@ -1038,7 +1038,9 @@ export type MenuFavoritoRow = {
  *
  * ⚠️ Nao e `pagamentos`. Esta tabela e o que o BANCO diz que aconteceu;
  * `pagamentos` e o que a empresa registrou. Conciliar e afirmar que uma linha de
- * cada lado sao o mesmo dinheiro, e e `fkPagamento` que guarda essa afirmacao.
+ * cada lado sao o mesmo dinheiro, e quem guarda essa afirmacao e
+ * `extratovinculos` — aqui fica so `conciliado`, que diz SE a linha ja foi
+ * resolvida, e nao com quem.
  */
 export type ExtratoBancarioRow = {
   id: number;
@@ -1057,8 +1059,37 @@ export type ExtratoBancarioRow = {
    * o formato espelha o das linhas ja gravadas, e mudar duplica o extrato.
    */
   hash: string | null;
+  /**
+   * A linha ja foi resolvida.
+   *
+   * ⚠️ E consequencia dos vinculos, e nao o registro deles. Verdadeiro quando ha
+   * ao menos uma linha em `extratovinculos` apontando para ca; falso quando a
+   * ultima foi desfeita. Existe porque as listas filtram por ele e contar
+   * vinculos a cada leitura seria uma junta para responder sim ou nao.
+   */
   conciliado: boolean | null;
-  fkPagamento: number | null;
+};
+
+/**
+ * Uma linha do extrato e um lancamento sao o mesmo dinheiro.
+ *
+ * ⚠️ Tabela, e nao coluna em `extratobancario`. Um credito unico de 2.220 pode
+ * pagar uma conta de 2.000 de um cliente e uma de 220 de outro: o banco compensou
+ * os dois boletos junto, e cada um e um recebimento separado no sistema, porque
+ * um pagamento e de um pagador so. Com uma coluna, so um dos dois conseguia
+ * conciliar e o outro ficava pendente para sempre.
+ *
+ * ⚠️ N:1, e nao N:N. `UNIQUE(fkPagamento)` — um lancamento pertence a no maximo
+ * UMA linha do banco. O contrario deixaria o mesmo dinheiro contado em duas
+ * linhas do extrato, e o saldo fecharia mentindo.
+ */
+export type ExtratoVinculoRow = {
+  id: number;
+  created_at: string;
+  fkEmpresa: number;
+  fkExtrato: number;
+  fkPagamento: number;
+  fkUserCriacao: string | null;
 };
 
 /**
@@ -1249,6 +1280,7 @@ export type Database = {
       ordensservicostatus: { Row: TicketStatusRow; Insert: Partial<TicketStatusRow>; Update: Partial<TicketStatusRow>; Relationships: [] };
       menufavoritos: { Row: MenuFavoritoRow; Insert: Partial<MenuFavoritoRow>; Update: Partial<MenuFavoritoRow>; Relationships: [] };
       extratobancario: { Row: ExtratoBancarioRow; Insert: Partial<ExtratoBancarioRow>; Update: Partial<ExtratoBancarioRow>; Relationships: [] };
+      extratovinculos: { Row: ExtratoVinculoRow; Insert: Partial<ExtratoVinculoRow>; Update: Partial<ExtratoVinculoRow>; Relationships: [] };
       idempotencia: { Row: IdempotenciaRow; Insert: Partial<IdempotenciaRow>; Update: Partial<IdempotenciaRow>; Relationships: [] };
       usuariopreferencias: { Row: UsuarioPreferenciasRow; Insert: Partial<UsuarioPreferenciasRow>; Update: Partial<UsuarioPreferenciasRow>; Relationships: [] };
       assinaturas: { Row: AssinaturaRow; Insert: Partial<AssinaturaRow>; Update: Partial<AssinaturaRow>; Relationships: [] };
@@ -1318,6 +1350,27 @@ export type Database = {
        */
       dre_por_ano: {
         Args: { pano: number; pfkempresa: number };
+        Returns: unknown;
+      };
+      /**
+       * A projecao de caixa: o saldo de hoje e o previsto a cada mes ate a data
+       * pedida.
+       *
+       * Devolve `contas`, `saldototal` e `meses` numa chamada. A forma vem do
+       * banco e e conferida por Zod no repositorio — o `unknown` aqui e honesto,
+       * porque `jsonb` nao carrega tipo.
+       *
+       * ⚠️ Nao confundir com `get_projecao_caixa_json`, do legado, que continua
+       * no banco sem ninguem chamar.
+       */
+      projecao_de_caixa: {
+        Args: {
+          pdatafim: string;
+          pfkempresa: number;
+          /** Nulo ou vazio = todas as contas. */
+          pcontas?: number[] | null;
+          pincluirvencidos?: boolean;
+        };
         Returns: unknown;
       };
       /** Le o token de uma conexao, conferindo o tenant antes de decifrar. */

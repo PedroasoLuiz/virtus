@@ -50,7 +50,15 @@ export const conciliarBodySchema = z.object({
   confirmaMudancaDeMes: z.boolean().default(false),
 });
 
-export const desfazerBodySchema = z.object({ linhaId: idSchema });
+/**
+ * ⚠️ `pagamentoId` OPCIONAL: sem ele a linha inteira se solta, com ele sai so
+ * aquele vinculo. Uma linha do banco pode ter casado com varios lancamentos, e
+ * corrigir um dos tres nao pode obrigar a refazer os tres.
+ */
+export const desfazerBodySchema = z.object({
+  linhaId: idSchema,
+  pagamentoId: idSchema.optional(),
+});
 
 /** Os pares que a pessoa conferiu na tela e mandou de uma vez. */
 export const loteBodySchema = z.object({

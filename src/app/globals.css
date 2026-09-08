@@ -610,30 +610,57 @@ h1, h2, h3, h4 {
 }
 
 /* Entrada do aviso: sobe e aparece. Vem da direita seria movimento contra a
-   leitura — o olho volta ao canto depois de ler, não antes. */
+   leitura — o olho volta ao canto depois de ler, não antes.
+
+   ⚠️ Sem o "passa do lugar e volta" de antes. O salto existia para levar o olho
+   ao canto quando o cartão não tinha borda e se perdia no fundo claro; com a
+   borda e a sombra, o gesto virou enfeite — e enfeite que repete a cada aviso
+   numa fila de três lê como falha de renderização. */
 @keyframes aviso-entra {
-  0% {
+  from {
     opacity: 0;
-    transform: translateY(20px) scale(0.94);
+    transform: translateY(10px) scale(0.98);
   }
-  /* Passa do lugar e volta: o movimento e o que leva o olho ao canto sem que o
-     aviso precise piscar ou gritar de cor. */
-  60% {
-    opacity: 1;
-    transform: translateY(-4px) scale(1.015);
-  }
-  100% {
+  to {
     opacity: 1;
     transform: none;
   }
 }
 
+/* O véu que escurece o canto atrás da pilha de avisos. */
 @keyframes veu-entra {
   from {
     opacity: 0;
   }
   to {
     opacity: 1;
+  }
+}
+
+/*
+ * ⚠️ Quem pediu menos movimento não ganha movimento nenhum.
+ *
+ * O aviso aparece pronto, no lugar. A informação é a mesma; o que sai é a
+ * animação, que para quem tem sensibilidade vestibular é o problema.
+ */
+@media (prefers-reduced-motion: reduce) {
+  @keyframes aviso-entra {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+}
+
+/*
+ * Em tela estreita o aviso encosta menos na borda: 16 de margem numa largura de
+ * 360 deixa o cartão com 328, e o título de duas palavras já quebra.
+ */
+@media (max-width: 520px) {
+  :root {
+    --aviso-margem: 12px;
   }
 }
 
