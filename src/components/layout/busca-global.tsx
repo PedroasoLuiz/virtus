@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { TODAS_AS_ROTAS, type Item } from "@/components/layout/rotas";
 import { useBuscaDaTela } from "@/components/layout/busca-da-tela";
@@ -23,10 +24,21 @@ import { useBuscaDaTela } from "@/components/layout/busca-da-tela";
  * a caixa nao poderia filtrar coisa nenhuma: numa tela de dinheiro, uma lista
  * curta filtrada em silencio se le como "nao ha nada a pagar".
  *
- * ⚠️ Sem tela anunciada — painel, DRE, um grafico — ela e so navegacao, como
+ * ⚠️ Sem tela anunciada — um painel, um grafico — ela e so navegacao, como
  * sempre foi. A secao da tela simplesmente nao aparece.
+ *
+ * ⚠️ As rotas CHEGAM DE FORA, e o portal manda uma lista vazia.
+ *
+ * A casca do portal e a mesma do sistema, e por isso esta caixa vivia lendo
+ * `TODAS_AS_ROTAS` tambem la — quer dizer, oferecendo "Contas a pagar", "DRE" e
+ * "Conciliacao" a quem e CLIENTE da empresa. Nenhum daqueles caminhos abriria
+ * para ele, mas a lista sozinha ja conta como o sistema por dentro se organiza,
+ * e isso nao e assunto de quem so vem ver a propria cobranca.
+ *
+ * Com a lista vazia a secao inteira desaparece e a caixa vira o que ela precisa
+ * ser la: o filtro da tela aberta, e mais nada.
  */
-export function BuscaGlobal() {
+export function BuscaGlobal({ rotas = TODAS_AS_ROTAS }: { rotas?: Item[] }) {
   const router = useRouter();
   const tela = useBuscaDaTela();
   const [aberta, setAberta] = useState(false);
@@ -34,6 +46,12 @@ export function BuscaGlobal() {
   const [rascunho, setRascunho] = useState("");
   const caixa = useRef<HTMLDivElement>(null);
   const campo = useRef<HTMLInputElement>(null);
+  /* O painel vive fora desta arvore (portal): sem uma referencia propria, o
+     clique DENTRO dele contaria como clique fora e o fecharia antes de o botao
+     receber o clique — o resultado escolhido nunca navegaria. */
+  const painel = useRef<HTMLDivElement>(null);
+  /* Onde o painel de resultados nasce, em coordenada de TELA. Ver o portal. */
+  const [onde, setOnde] = useState<{ top: number; left: number; width: number } | null>(null);
 
   const termo = tela ? tela.termo : rascunho;
 
@@ -53,7 +71,10 @@ export function BuscaGlobal() {
     };
 
     const aoClicarFora = (e: MouseEvent) => {
-      if (caixa.current && !caixa.current.contains(e.target as Node)) setAberta(false);
+      const alvo = e.target as Node;
+      if (caixa.current?.contains(alvo)) return;
+      if (painel.current?.contains(alvo)) return;
+      setAberta(false);
     };
 
     document.addEventListener("keydown", aoTeclar);
@@ -64,10 +85,29 @@ export function BuscaGlobal() {
     };
   }, []);
 
+  /*
+   * ⚠️ O painel sai por PORTAL, preso na tela.
+   *
+   * A caixa deixou de morar numa faixa propria e passou a se desenhar dentro do
+   * cabecalho da tela, que fica dentro de um `main` com `overflow: hidden` — e
+   * ali um painel absoluto e CORTADO na borda de baixo. Mesma mecanica dos
+   * menus da barra de ferramentas e do cartao do usuario.
+   *
+   * ⚠️ `useLayoutEffect` e nao `useEffect`: com o segundo, o painel aparecia por
+   * um quadro no canto da tela antes de pular para debaixo da caixa.
+   */
+  useLayoutEffect(() => {
+    if (!aberta || !caixa.current) return setOnde(null);
+
+    const r = caixa.current.getBoundingClientRect();
+    setOnde({ top: r.bottom + 6, left: r.left, width: r.width });
+  }, [aberta]);
+
   const busca = termo.trim().toLowerCase();
-  const resultados = busca
-    ? TODAS_AS_ROTAS.filter((i) => i.label.toLowerCase().includes(busca))
-    : TODAS_AS_ROTAS;
+  const resultados = busca ? rotas.filter((i) => i.label.toLowerCase().includes(busca)) : rotas;
+  /* Sem rotas para oferecer, a caixa e so o filtro da tela — e ate o painel
+     perde a razao de abrir quando nao ha tela anunciada. */
+  const soFiltra = rotas.length === 0;
 
   function ir(item: Item) {
     setAberta(false);
@@ -82,7 +122,17 @@ export function BuscaGlobal() {
   }
 
   return (
-    <div ref={caixa} style={{ position: "relative", width: 340 }}>
+    /*
+      ⚠️ SEM corpo proprio: nem fundo, nem sombra, nem canto.
+
+      A caixa e o sino passaram a morar dentro da MESMA pilula branca, no topo
+      (ver `Topbar`). Duas superficies brancas encostadas, cada uma com a sua
+      sombra, desenhavam uma emenda no meio de uma peca so.
+
+      ⚠️ E mais estreita do que era. Com o sino ao lado dentro da mesma pilula, os
+      340 de antes empurravam o conjunto para cima do titulo da tela.
+    */
+    <div ref={caixa} style={{ position: "relative", width: 236, height: "100%" }}>
       <div
         onClick={() => {
           setAberta(true);
@@ -92,10 +142,8 @@ export function BuscaGlobal() {
           display: "flex",
           alignItems: "center",
           gap: 7,
-          height: 28,
-          padding: "0 10px",
-          borderRadius: "var(--radius-sm)",
-          background: "var(--surface)",
+          height: "100%",
+          padding: "0 4px 0 13px",
           cursor: "text",
         }}
       >
@@ -127,7 +175,13 @@ export function BuscaGlobal() {
             if (tela && busca) return setAberta(false);
             if (resultados[0]) ir(resultados[0]);
           }}
-          placeholder={tela ? `Pesquisar em ${tela.rotulo}...` : "Buscar módulos e funções..."}
+          placeholder={
+            tela
+              ? `Pesquisar em ${tela.rotulo}...`
+              : soFiltra
+                ? "Pesquisar..."
+                : "Buscar módulos e funções..."
+          }
           style={{
             flex: 1,
             minWidth: 0,
@@ -147,11 +201,13 @@ export function BuscaGlobal() {
                 key={k}
                 style={{
                   fontSize: 9,
-                  padding: "1px 4px",
-                  borderRadius: 3,
+                  padding: "2px 5px",
+                  borderRadius: 5,
+                  /* ⚠️ SEM contorno: a tecla ja e um cinza sobre o branco do
+                     campo, e a borda por cima disso desenhava uma caixinha
+                     dentro de outra caixinha, a nove pixels de altura. */
                   background: "var(--kbd-bg)",
                   color: "var(--kbd-color)",
-                  border: "1px solid var(--kbd-border)",
                   fontFamily: "inherit",
                 }}
               >
@@ -162,16 +218,24 @@ export function BuscaGlobal() {
         )}
       </div>
 
-      {aberta && (
-        <div
-          style={{
-            position: "absolute",
-            top: 35,
-            left: 0,
-            right: 0,
+      {aberta &&
+        !(soFiltra && !tela) &&
+        createPortal(
+          <div
+            ref={painel}
+            style={{
+            position: "fixed",
+            top: onde?.top ?? 0,
+            left: onde?.left ?? 0,
+            width: onde?.width ?? 340,
+            /* Enquanto nao mediu, ocupa espaco e nao aparece: e assim que a
+               posicao fica conhecida antes do primeiro quadro pintado. */
+            visibility: onde ? "visible" : "hidden",
             zIndex: 200,
             background: "var(--surface)",
-            border: "1px solid var(--border-strong)",
+            /* ⚠️ SEM borda: a sombra ja separa o cartao do que esta atras.
+            Contorno mais sombra e a mesma coisa dita duas vezes. Ver
+            `07-DESIGN-TOKENS`, cartao flutuante. */
             borderRadius: "var(--radius-lg)",
             boxShadow: "var(--shadow-md)",
             overflow: "hidden",
@@ -213,11 +277,14 @@ export function BuscaGlobal() {
               </>
             )}
 
-            <div className="rotulo" style={{ padding: "2px 6px 6px" }}>
-              {busca ? "Ir para" : "Módulos"}
-            </div>
+            {/* A secao de navegacao so existe quando ha para onde navegar. */}
+            {!soFiltra && (
+              <div className="rotulo" style={{ padding: "2px 6px 6px" }}>
+                {busca ? "Ir para" : "Módulos"}
+              </div>
+            )}
 
-            {resultados.length === 0 ? (
+            {soFiltra ? null : resultados.length === 0 ? (
               <div
                 style={{
                   padding: "10px 6px",
@@ -270,8 +337,9 @@ export function BuscaGlobal() {
               ))
             )}
           </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

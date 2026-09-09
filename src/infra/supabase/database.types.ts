@@ -821,6 +821,10 @@ export type EmpresaRow = {
   fantasia: string | null;
   nome: string | null;
   cnpj: string | null;
+  /* Inscricoes estadual e municipal. Ja existiam na tabela e faltavam aqui; sem
+     elas o cadastro da empresa nao tinha como gravar os dois campos. */
+  ie: string | null;
+  inscricaomunicipal: string | null;
   logo: string | null;
   ativo: boolean | null;
   /* Contato do emitente. O e-mail vira `reply-to` quando a cobranca sai de um
@@ -837,6 +841,10 @@ export type EmpresaRow = {
   cidade: string | null;
   estado: string | null;
   cep: string | null;
+  /* Codigo do municipio no IBGE. E o que a emissao de nota pede; o ViaCEP ja o
+     devolve junto do endereco. */
+  codigoibge: string | null;
+  urlcertificadodigital: string | null;
 };
 
 /** Perfil do usuario. PK e `fkUser` (uuid de auth.users), nao ha `id`. */
@@ -2019,6 +2027,16 @@ export type Database = {
       whatsapp_app_secret_do_numero: {
         Args: { p_segredo: string; p_phone_number_id: string };
         Returns: string | null;
+      };
+      /**
+       * Bytes que a empresa ocupa no bucket `documentos`.
+       *
+       * `security definer` porque `storage.objects` nao e exposta pela API. A
+       * propria funcao confere o acesso antes de somar.
+       */
+      armazenamento_da_empresa: {
+        Args: { p_empresa: number };
+        Returns: number;
       };
       whatsapp_registrar_evento: {
         Args: { p_segredo: string; p_payload: unknown };

@@ -223,7 +223,7 @@ export function PessoasTela() {
             display: "flex",
             /* Sem margem a DIREITA: aquele respiro e da propria barra, que o
                carrega na largura. Ver `BarraDeFerramentas`. */
-            margin: "0 0 16px 16px",
+            margin: "0 0 var(--vao-da-pagina) var(--vao-da-pagina)",
           }}
         >
           <TableFrame solto>
@@ -333,7 +333,6 @@ export function PessoasTela() {
           <BarraDeFerramentas>
             <BotaoDaBarra
               rotulo="Nova pessoa"
-              legenda="Nova"
               destaque
               icone={<IconeMais />}
               onClick={() => setEdicao({ pessoa: null })}
@@ -349,7 +348,6 @@ export function PessoasTela() {
               rotulo={
                 filtrosAtivos > 0 ? `Filtros (${filtrosAtivos} em uso)` : "Filtrar as pessoas"
               }
-              legenda="Filtros"
               aceso={filtrosAtivos > 0}
               icone={<IconeFunil ativo={filtrosAtivos > 0} />}
               painel={() => (

@@ -31,9 +31,11 @@ export default async function PortalLayout({ children }: { children: React.React
 
   const recolhida = (await cookies()).get(COOKIE_SIDEBAR)?.value === "1";
 
-  // A empresa emissora ativa vive no rodape da barra, no mesmo lugar em que o
-  // sistema mostra o tenant — e a troca sai do mesmo menu.
-  const { emitentes, emitenteAtual } = await carteira(await emitenteEscolhido());
+  // A empresa emissora ativa aparece no cartao do topo da barra, no mesmo lugar
+  // em que o sistema mostra o tenant. A TROCA, aqui, nao sai dali: ela tem tela
+  // propria (`/portal-empresa`), porque escolher emissor muda a cobranca que o
+  // cliente enxerga, e nao o tenant que se administra.
+  const { emitenteAtual } = await carteira(await emitenteEscolhido());
 
   return (
     <Avisos>
@@ -51,15 +53,23 @@ export default async function PortalLayout({ children }: { children: React.React
           modulos={[]}
           empresa={emitenteAtual?.nome ?? null}
           recolhidaInicial={recolhida}
-          // Mesma mecânica do sistema, outro significado: aqui a empresa é quem
-          // ESTÁ COBRANDO, e não o tenant que se administra.
-          podeTrocarEmpresa={emitentes.length > 1}
-          hrefTrocarEmpresa="/portal-empresa"
+          /*
+            ⚠️ O portal NAO troca de empresa pelo cartao.
+
+            No sistema o cartao lista os tenants do acesso e troca com um clique.
+            Aqui a "empresa" e quem esta COBRANDO, a escolha muda o que o cliente
+            ve de cobranca, e ela tem tela propria (`/portal-empresa`). Passar os
+            emitentes por esta prop faria o cartao trocar de tenant, que e outra
+            coisa.
+          */
         />
 
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
           <Topbar
             aviso={sessao.demo ? "demo" : null}
+            /* Sem destino nenhum a oferecer: a busca do portal e so o filtro da
+               tela aberta. Ver `BuscaGlobal`. */
+            rotas={[]}
             email={sessao.ctx.email}
             usuarioNome={sessao.usuarioNome}
             usuarioFoto={sessao.usuarioFoto}

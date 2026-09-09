@@ -1,6 +1,9 @@
 "use client";
 
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
+import { caminhoDoMenu } from "@/components/layout/rotas";
+import { registrarSlotDoTopo } from "@/components/layout/slot-do-topo";
 import { useBuscaDaTela } from "@/components/layout/busca-da-tela";
 import { createPortal } from "react-dom";
 
@@ -94,7 +97,7 @@ export function TableFrame({
         display: "flex",
         flexDirection: "column",
         minHeight: 0,
-        margin: solto ? 0 : "0 16px 16px",
+        margin: solto ? 0 : "0 var(--vao-da-pagina) var(--vao-da-pagina)",
         padding: "0 16px",
         backgroundColor: "var(--surface)",
         borderRadius: "var(--radius-lg)",
@@ -106,16 +109,28 @@ export function TableFrame({
   );
 }
 
+/**
+ * O cabecalho da tela: o caminho, e o nome do modulo. So isso.
+ *
+ * ⚠️ A `description` foi EMBORA, e nao por espaco.
+ *
+ * Desde que o topo e o cabecalho viraram uma linha so, esta faixa e a unica
+ * regua entre a barra lateral e o cartao branco da tabela: qualquer linha a mais
+ * aqui empurra o conteudo para baixo e desalinha os dois lados da tela. E o que
+ * ela dizia nao pagava esse preco — ora um contador que a propria tabela mostra,
+ * ora uma frase explicando a tela para quem ja esta dentro dela.
+ *
+ * O que era informacao de verdade desceu para o corpo da pagina, onde tem
+ * espaco: e o caso do plano vigente e do que falta numa tela em obra.
+ */
 export function PageHeader({
   title,
-  description,
   acima,
   onIncluir,
   rotuloIncluir = "Adicionar",
   children,
 }: {
   title: string;
-  description?: string;
   /**
    * O mais COLADO no titulo, como no cabecalho de secao dos drawers.
    *
@@ -144,8 +159,24 @@ export function PageHeader({
     <div
       style={{
         flexShrink: 0,
-        padding: "14px 16px",
-        minHeight: "var(--h-header)",
+        /*
+          ⚠️ Os recuos laterais sao o `--vao-da-pagina`, e nao outro numero.
+
+          A direita, quem encosta e o berco do avatar, que ja carrega os oito
+          pixels da barra de ferramentas por dentro. A esquerda, o titulo precisa
+          nascer na mesma coluna do cartao branco logo abaixo: com 16 aqui e 8 la,
+          o nome da tela ficava oito pixels a direita da tabela que ele nomeia.
+        */
+        /*
+          ⚠️ O recuo de baixo e IGUAL ao de cima. Com 6 embaixo e 16 em cima, a
+          linha inteira subia dentro da propria faixa: a pilula e o titulo ficavam
+          encostados no topo da tela, e o que se via era um cabecalho torto, nao
+          um vao menor.
+        */
+        padding: "16px var(--vao-da-pagina) 16px var(--vao-da-pagina)",
+        /* A mesma regua da faixa de topo da barra lateral: e o que faz o cartao
+           branco da tabela e o cartao da empresa comecarem na mesma altura. */
+        minHeight: "var(--h-topo)",
         display: "flex",
         alignItems: "center",
       }}
@@ -160,7 +191,7 @@ export function PageHeader({
         }}
       >
         <div style={{ flex: 1, minWidth: 0 }}>
-          {acima && <Migalha rotulo={acima.rotulo} href={acima.href} />}
+          {acima ? <Migalha rotulo={acima.rotulo} href={acima.href} /> : <CaminhoDoMenu />}
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <h1
               style={{
@@ -181,19 +212,6 @@ export function PageHeader({
 
             <EtiquetaDaBusca />
           </div>
-          {description && (
-            <p
-              style={{
-                fontSize: "var(--text-sm)",
-                color: "var(--text-tertiary)",
-                marginTop: 2,
-                marginBottom: 0,
-                lineHeight: "var(--lh-snug)",
-              }}
-            >
-              {description}
-            </p>
-          )}
         </div>
         {children && (
           <div
@@ -208,6 +226,23 @@ export function PageHeader({
             {children}
           </div>
         )}
+
+        {/*
+          ⚠️ O ENCAIXE do topo: busca, sino e identidade se desenham aqui dentro.
+
+          Eles moram no layout, que e de servidor e tem a sessao; este e o lugar
+          na linha onde eles aparecem. Ver `slot-do-topo`. Vazio ele nao ocupa
+          nada, entao a tela que nao esta sob a casca do app (uma impressao, por
+          exemplo) continua com o cabecalho de sempre.
+
+          `ml: auto` mesmo tendo `children` antes: os filtros da tela ficam
+          colados no titulo, e a identidade vai para a outra ponta. Sao coisas de
+          donos diferentes e nao devem parecer um grupo so.
+        */}
+        <div
+          ref={registrarSlotDoTopo}
+          style={{ marginLeft: "auto", display: "flex", alignItems: "center", flexShrink: 0 }}
+        />
       </div>
     </div>
   );
@@ -301,6 +336,51 @@ function EtiquetaDaBusca() {
 // ════════════════════════════════════════════════════════════════
 
 /** Rótulo clicável + seta que aponta adiante. */
+/**
+ * Onde esta tela mora no menu: "Financeiro › Contas a receber".
+ *
+ * ⚠️ Nasceu quando a barra lateral virou um nivel por vez. Antes a arvore
+ * aberta ja respondia isso o tempo todo; agora ela mostra ate onde a pessoa
+ * DESCEU procurando, que nem sempre e onde ela esta. O titulo da tela nao muda
+ * de assunto, e por isso o caminho passou a morar aqui.
+ *
+ * ⚠️ NAO e clicavel, ao contrario da `Migalha`. Grupo e subgrupo sao gavetas do
+ * menu, e nao telas: um link prometeria abrir alguma coisa que nao existe.
+ *
+ * ⚠️ Cede a vez para o `acima`. Quando a tela e detalhe de outra (o projeto
+ * dentro de Projetos), de onde ela veio importa mais do que em que gaveta do
+ * menu ela mora, e dois caminhos empilhados sobre o titulo seriam dois.
+ */
+function CaminhoDoMenu() {
+  const caminho = caminhoDoMenu(usePathname());
+  if (caminho.length === 0) return null;
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 4,
+        marginBottom: 3,
+        fontSize: "var(--text-sm)",
+        fontWeight: "var(--fw-medium)",
+        color: "var(--text-tertiary)",
+      }}
+    >
+      {caminho.map((parte, i) => (
+        <React.Fragment key={parte}>
+          {i > 0 && (
+            <span aria-hidden style={{ color: "var(--text-disabled)" }}>
+              ›
+            </span>
+          )}
+          <span>{parte}</span>
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
+
 function Migalha({ rotulo, href }: { rotulo: string; href: string }) {
   const [hover, setHover] = useState(false);
 
@@ -1810,7 +1890,9 @@ export function ViewButton({
             zIndex: 300,
             minWidth: 130,
             backgroundColor: "var(--surface)",
-            border: "1px solid var(--border-strong)",
+            /* ⚠️ SEM borda: a sombra ja separa o cartao do que esta atras.
+            Contorno mais sombra e a mesma coisa dita duas vezes. Ver
+            `07-DESIGN-TOKENS`, cartao flutuante. */
             borderRadius: "var(--radius-lg)",
             boxShadow: "var(--shadow-md)",
             padding: 4,

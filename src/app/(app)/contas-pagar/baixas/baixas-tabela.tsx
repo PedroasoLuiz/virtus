@@ -143,7 +143,7 @@ export function BaixasTabela({
             display: "flex",
             /* Sem margem a DIREITA: aquele respiro e da propria barra, que o
                carrega na largura. Ver `BarraDeFerramentas`. */
-            margin: "0 0 16px 16px",
+            margin: "0 0 var(--vao-da-pagina) var(--vao-da-pagina)",
           }}
         >
           <TableFrame solto>
@@ -216,7 +216,6 @@ export function BaixasTabela({
           <BarraDeFerramentas>
             <BotaoDaBarra
               rotulo="Nova baixa"
-              legenda="Nova"
               destaque
               icone={<IconeMais />}
               onClick={() => setCriando(true)}
@@ -227,7 +226,6 @@ export function BaixasTabela({
                 escondido atras de icone vira lista curta sem explicacao. */}
             <BotaoDaBarra
               rotulo={filtrosAtivos > 0 ? `Período (${filtrosAtivos} em uso)` : "Filtrar por período"}
-              legenda="Período"
               aceso={filtrosAtivos > 0}
               icone={<IconeFunil ativo={filtrosAtivos > 0} />}
               painel={() => (

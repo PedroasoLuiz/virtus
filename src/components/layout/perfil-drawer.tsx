@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { MarcaDaEmpresa } from "@/components/layout/marca-da-empresa";
 import {
   Badge,
   Button,
@@ -27,7 +29,7 @@ import {
   editarPerfilAction,
   meuPedidoDeExclusaoAction,
   pedirExclusaoAction,
-  selecionarEmpresaAction,
+  assumirEmpresaAction,
   trocarEmailAction,
   trocarFotoAction,
 } from "@/modules/sessao/sessao.actions";
@@ -132,6 +134,7 @@ export function PerfilDrawer({
   const [aba, setAba] = useState(ABA_EMPRESAS);
   const { avisar } = useAvisos();
   const [salvando, setSalvando] = useState(false);
+  const router = useRouter();
   /* Qual empresa esta sendo assumida agora: trava a linha e diz onde o clique
      pegou, porque a troca recarrega a casca inteira e demora um instante. */
   const [assumindo, setAssumindo] = useState<number | null>(null);
@@ -329,24 +332,31 @@ export function PerfilDrawer({
   /**
    * Assume outra empresa dali mesmo.
    *
-   * ⚠️ E a MESMA acao do cartao da empresa e da tela de selecao: ela grava o
-   * cookie do tenant e redireciona. Escrever uma troca propria aqui daria dois
-   * caminhos para a mesma decisao, e um deles envelheceria.
+   * ⚠️ `assumirEmpresaAction`, e nao a da tela de selecao.
    *
-   * ⚠️ Nao ha "voltar": a gaveta morre junto com a navegacao, e e o certo — o
-   * perfil que estava aberto era o da sessao anterior.
+   * Aquela termina em `redirect`, que serve ao formulario de onde ela nasceu.
+   * Chamada com `await` de dentro desta gaveta, o redirecionamento voltava como
+   * uma resposta que o cliente nao esperava e a tela quebrava. Esta grava o
+   * cookie e responde; quem recarrega e o `router.refresh()` daqui.
    */
   async function assumir(empresaId: number) {
     setAssumindo(empresaId);
 
     const form = new FormData();
     form.set("empresaId", String(empresaId));
-    const { erro } = await selecionarEmpresaAction({ erro: null }, form);
+    const { erro } = await assumirEmpresaAction({ erro: null }, form);
 
-    /* So se chega aqui quando a acao RECUSOU: no caminho feliz ela redireciona
-       e esta linha nunca roda. */
     setAssumindo(null);
-    if (erro) avisar("atencao", erro);
+
+    if (erro) {
+      avisar("atencao", erro);
+      return;
+    }
+
+    /* Fecha antes de recarregar: o perfil aberto era o da empresa anterior, e a
+       lista atras dele vai inteira ser outra. */
+    onClose();
+    router.refresh();
   }
 
   async function enviarFoto(arquivo: File | null) {
@@ -519,7 +529,9 @@ export function PerfilDrawer({
                       minWidth: 170,
                       padding: 4,
                       borderRadius: "var(--radius-md)",
-                      border: "1px solid var(--border-strong)",
+                      /* ⚠️ SEM borda: a sombra ja separa o cartao do que esta atras.
+                      Contorno mais sombra e a mesma coisa dita duas vezes. Ver
+                      `07-DESIGN-TOKENS`, cartao flutuante. */
                       background: "var(--surface)",
                       boxShadow: "var(--shadow-md)",
                     }}
@@ -1062,47 +1074,3 @@ function IconeCamera() {
   );
 }
 
-/**
- * A marca da empresa na tabela, ou as iniciais dela.
- *
- * ⚠️ MESMO desenho do cartao da empresa no topo do menu: quadrado de 26px com
- * canto arredondado, e as iniciais em azul quando nao ha logo cadastrado. Um
- * segundo jeito de desenhar a mesma empresa faria a pessoa duvidar se e a mesma.
- */
-function MarcaDaEmpresa({ nome, logo }: { nome: string; logo: string | null }) {
-  const molde: React.CSSProperties = {
-    width: 26,
-    height: 26,
-    flexShrink: 0,
-    display: "grid",
-    placeItems: "center",
-    borderRadius: "var(--radius-sm)",
-    overflow: "hidden",
-  };
-
-  if (logo) {
-    return (
-      /*
-        `img` e nao `next/image`: a URL vem do storage e muda por empresa, e o
-        otimizador exigiria cadastrar cada host.
-      */
-      // eslint-disable-next-line @next/next/no-img-element
-      <img src={logo} alt="" style={{ ...molde, objectFit: "contain" }} />
-    );
-  }
-
-  return (
-    <span
-      aria-hidden
-      style={{
-        ...molde,
-        background: "var(--primary-subtle)",
-        color: "var(--primary)",
-        fontSize: 10,
-        fontWeight: "var(--fw-bold)",
-      }}
-    >
-      {nome.trim().slice(0, 2).toUpperCase()}
-    </span>
-  );
-}

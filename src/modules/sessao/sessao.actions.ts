@@ -296,6 +296,47 @@ export async function pedirExclusaoAction(
   return { erro: null };
 }
 
+/**
+ * Assume outra empresa e NAO redireciona.
+ *
+ * ⚠️ Existe separada de `selecionarEmpresaAction` por causa de quem a chama.
+ *
+ * Aquela nasceu para o formulario da tela de selecao, onde o `redirect` no fim e
+ * o que leva a pessoa para dentro do sistema. Chamada de dentro de um menu ou de
+ * uma gaveta, com `await` direto, o redirecionamento volta para o cliente como
+ * uma resposta que ele nao esperava daquela chamada e a tela quebra com "an
+ * unexpected response was received from the server".
+ *
+ * Aqui a acao so grava o cookie e responde. Quem chamou decide o que fazer
+ * depois, que no caso e recarregar a tela em que a pessoa ja estava.
+ */
+export async function assumirEmpresaAction(
+  _anterior: EstadoFormulario,
+  form: FormData,
+): Promise<EstadoFormulario> {
+  const entrada = selecionarEmpresaSchema.safeParse({ empresaId: form.get("empresaId") });
+  if (!entrada.success) return { erro: "Selecione uma empresa" };
+
+  try {
+    const usuario = await service.usuarioLogado();
+    if (!usuario) return { erro: "Sessao expirada. Entre novamente." };
+
+    await service.escolherEmpresa(usuario.id, entrada.data.empresaId);
+    await gravarEmpresa(entrada.data.empresaId);
+  } catch (err) {
+    if (isAppError(err)) return { erro: err.message };
+    logger.error("falha ao assumir empresa", {
+      erro: err instanceof Error ? err.message : String(err),
+    });
+    return { erro: "Nao foi possivel trocar de empresa." };
+  }
+
+  /* A empresa ativa decide o que TODA tela mostra: o cache do layout e de tudo
+     que ele carregou precisa cair junto com o cookie. */
+  revalidatePath("/", "layout");
+  return { erro: null };
+}
+
 export async function logoutAction(): Promise<void> {
   await service.sair();
   const store = await cookies();

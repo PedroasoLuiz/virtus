@@ -129,7 +129,7 @@ export function ContratosTela({
             display: "flex",
             /* Sem margem a DIREITA: aquele respiro e da propria barra, que o
                carrega na largura. Ver `BarraDeFerramentas`. */
-            margin: "0 0 16px 16px",
+            margin: "0 0 var(--vao-da-pagina) var(--vao-da-pagina)",
           }}
         >
           <TableFrame solto>
@@ -236,7 +236,6 @@ export function ContratosTela({
           <BarraDeFerramentas>
             <BotaoDaBarra
               rotulo="Novo contrato"
-              legenda="Novo"
               destaque
               icone={<IconeMais />}
               onClick={() => setCriando(true)}

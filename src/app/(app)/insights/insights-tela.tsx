@@ -241,7 +241,7 @@ export function InsightsTela({ alvos }: { alvos: AlvoDoPainel[] }) {
           intervalo escondido atrás do botão, "investido 4.000" numa reunião não
           diz de quando.
         */}
-        <PageHeader title="Insights" description="Direto da Meta, sem nada guardado.">
+        <PageHeader title="Insights">
           {/*
             ⚠️ O cliente fica FORA do filtro, e visível. Ele não recorta o dado:
             ele é o assunto da tela. Dentro do botão, a pessoa não veria de quem

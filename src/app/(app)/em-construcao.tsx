@@ -19,8 +19,12 @@ export function EmConstrucao({
   return (
     <PageLayout>
       <Panel>
-        <PageHeader title={titulo} description={descricao} />
+        <PageHeader title={titulo} />
         <div style={{ padding: 16 }}>
+          {/* ⚠️ A descricao mora AQUI, e nao no cabecalho: la ela empurrava o
+              cartao branco para baixo e desalinhava a tela com a barra lateral.
+              Dentro do quadro tracejado ela ainda e a primeira coisa que se le, e
+              agora fica junto do que falta, que e o assunto dela. */}
           <div
             style={{
               border: "1px dashed var(--border-strong)",
@@ -29,9 +33,20 @@ export function EmConstrucao({
               background: "var(--surface-2)",
             }}
           >
-            <div className="rotulo" style={{ marginBottom: 10 }}>
+            <div className="rotulo" style={{ marginBottom: 6 }}>
               Ainda não implementado
             </div>
+
+            <p
+              style={{
+                margin: "0 0 14px",
+                fontSize: "var(--text-md)",
+                color: "var(--text-primary)",
+                lineHeight: "var(--lh-snug)",
+              }}
+            >
+              {descricao}
+            </p>
             <ul
               style={{
                 display: "flex",

@@ -196,7 +196,7 @@ export function MovimentacoesTela({
         {/*
           ⚠️ O recuo da pagina mora AQUI, e a tabela entra `solto`.
 
-          O `TableFrame` traz `0 16px 16px` de margem propria. Com a barra ao
+          O `TableFrame` traz o `--vao-da-pagina` de margem propria. Com a barra ao
           lado, essa margem viraria um vao entre o cartao e a barra — e o pedido
           era justamente que eles se encostassem. Passando o recuo para a linha,
           os dois ficam colados e o conjunto continua alinhado com o resto da
@@ -209,7 +209,7 @@ export function MovimentacoesTela({
             display: "flex",
             /* Sem margem a DIREITA: o respiro daquele lado e da propria barra,
                que o carrega na largura. Ver `BarraDeFerramentas`. */
-            margin: "0 0 16px 16px",
+            margin: "0 0 var(--vao-da-pagina) var(--vao-da-pagina)",
           }}
         >
           <TableFrame solto>
@@ -347,7 +347,6 @@ export function MovimentacoesTela({
             */}
             <BotaoDaBarra
               rotulo="Nova movimentação"
-              legenda="Nova"
               destaque
               icone={<IconeMais />}
               onClick={() => setCriando(true)}
@@ -364,7 +363,6 @@ export function MovimentacoesTela({
             */}
             <BotaoDaBarra
               rotulo={`Período: ${periodoBR}`}
-              legenda="Período"
               aceso={de !== deInicial || ate !== ateInicial}
               icone={<IconeCalendario />}
               painel={() => (
@@ -390,7 +388,6 @@ export function MovimentacoesTela({
 
             <BotaoDaBarra
               rotulo="Imprimir o histórico em PDF"
-              legenda="Imprimir"
               desabilitado={visiveis.length === 0}
               icone={<IconeImpressora />}
               painel={(fechar) => (

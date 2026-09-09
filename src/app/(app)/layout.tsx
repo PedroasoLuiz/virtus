@@ -58,11 +58,20 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         empresa={sessao.empresaNome}
         empresaLogo={sessao.empresaLogo}
         recolhidaInicial={recolhida}
-        podeTrocarEmpresa={sessao.podeTrocarEmpresa}
+        empresas={sessao.empresas}
+        empresaAtualId={sessao.ctx.empresaId ?? null}
         whatsapp={!sessao.demo}
         interno={sessao.interno}
       />
-      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+      {/*
+        ⚠️ O `Topbar` NAO ocupa linha nenhuma aqui.
+
+        Ele se desenha dentro do cabecalho da tela, pelo encaixe que o
+        `PageHeader` anuncia (ver `slot-do-topo`) — e cai num canto preso na tela
+        so enquanto esse encaixe nao existe. Fica montado neste ponto da arvore
+        porque e aqui que a sessao chega.
+      */}
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", position: "relative" }}>
         <Topbar
           aviso={sessao.demo ? "demo" : null}
           email={sessao.ctx.email}

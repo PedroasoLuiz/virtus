@@ -1,706 +1,519 @@
 "use client";
 
-import { useState } from "react";
-import {
-  Alert,
-  EmptyRow,
-  PageHeader,
-  PageLayout,
-  TableArea,
-  TableFrame,
-  TableHead,
-  Td,
-  Th,
-  Tr,
-  inputStyle,
-  selectStyle,
-} from "@/components/ui/kit";
-import { CartaoDeIndicador } from "@/components/ui/cartao-de-indicador";
-import { formatarSemSimbolo, type Centavos } from "@/shared/utils/money";
-import { ehDataISO, paraFormatoBR } from "@/shared/utils/datas";
-import type {
-  LadoDoRelatorio,
-  Relatorio,
-} from "@/modules/relatorios/relatorios.types";
+import { useEffect, useState } from "react";
+import { Alert, Button, Field, PageHeader, PageLayout, Panel, inputStyle, selectStyle } from "@/components/ui/kit";
+import { Drawer } from "@/components/ui/drawer";
+import { ehDataISO, hoje, type DataISO } from "@/shared/utils/datas";
+import type { LadoDoRelatorio, Relatorio } from "@/modules/relatorios/relatorios.types";
+import type { Dre } from "@/modules/dre/dre.types";
+import type { ProjecaoDeCaixa } from "@/modules/fluxo-caixa/fluxo-caixa.types";
 import type { EmpresaParaDocumento } from "@/modules/empresa/empresa.repository";
+import { OpcoesDoFluxo } from "./opcoes-do-fluxo";
 
-const MESES = [
-  "janeiro",
-  "fevereiro",
-  "março",
-  "abril",
-  "maio",
-  "junho",
-  "julho",
-  "agosto",
-  "setembro",
-  "outubro",
-  "novembro",
-  "dezembro",
-];
-
-/** "2026-09-01" -> "Setembro de 2026". */
-function mesPorExtenso(iso: string): string {
-  const nome = MESES[Number(iso.slice(5, 7)) - 1] ?? "";
-  return `${nome.charAt(0).toUpperCase()}${nome.slice(1)} de ${iso.slice(0, 4)}`;
-}
-
+/**
+ * A pasta de relatorios.
+ *
+ * ⚠️ Uma LISTA de documentos, e nao uma tela de analise.
+ *
+ * A DRE e o fluxo de caixa eram telas proprias, cada uma com indicador, grafico
+ * e grade — e as tres viviam soltas dentro de "Analitico", que era um nome que
+ * nao dizia o que se ganhava clicando. Elas tem uma coisa em comum e so uma: sao
+ * DOCUMENTOS que se emite para um periodo. Reunidas aqui, o menu perdeu um nivel
+ * inteiro e a pergunta "onde tiro o relatorio de X" passou a ter um lugar so.
+ *
+ * ⚠️ Sem numero, sem grafico e sem contagem nesta tela. Um total aqui seria o
+ * resultado de um periodo que ninguem escolheu ainda: ele estaria certo por
+ * acaso, e o gesto desta tela e escolher, nao conferir.
+ *
+ * ⚠️ Cada documento sai de uma consulta NOVA, com os parametros do momento. Nada
+ * e carregado ao abrir a pasta: quem entra aqui vem escolher qual relatorio
+ * quer, e carregar os quatro para mostrar uma grade de icones seria pagar quatro
+ * consultas para nao usar nenhuma.
+ */
 export function RelatoriosTela({
-  inicial,
   empresa,
   emitidoPor,
 }: {
-  inicial: Relatorio;
   empresa: EmpresaParaDocumento;
   emitidoPor: string;
 }) {
-  const [relatorio, setRelatorio] = useState(inicial);
-  const [lado, setLado] = useState<LadoDoRelatorio>(inicial.lado);
-  const [de, setDe] = useState<string>(inicial.de);
-  const [ate, setAte] = useState<string>(inicial.ate);
-  const [carregando, setCarregando] = useState(false);
-  const [erro, setErro] = useState<string | null>(null);
-  /*
-   * ⚠️ Considerar o cartão é ESCOLHA, e o padrão é não considerar.
-   *
-   * Somá-lo sem pedir mudaria o total de um relatório que a pessoa já conhece.
-   * Quem quer o compromisso completo marca, e o cartão aparece em tabela própria
-   * — resumido por ciclo, porque a fatura é um compromisso só.
-   */
-  const [comCartao, setComCartao] = useState(false);
-
-  async function buscar(novo: {
-    lado?: LadoDoRelatorio;
-    de?: string;
-    ate?: string;
-    cartao?: boolean;
-  }) {
-    const alvo = {
-      lado: novo.lado ?? lado,
-      de: novo.de ?? de,
-      ate: novo.ate ?? ate,
-      cartao: novo.cartao ?? comCartao,
-    };
-
-    if (novo.lado) setLado(novo.lado);
-    if (novo.de !== undefined) setDe(novo.de);
-    if (novo.ate !== undefined) setAte(novo.ate);
-    if (novo.cartao !== undefined) setComCartao(novo.cartao);
-
-    // Data pela metade nao vira consulta: enquanto se digita "2026-0", o valor
-    // ja chega aqui e voltaria 422 a cada tecla.
-    if (!ehDataISO(alvo.de) || !ehDataISO(alvo.ate)) return;
-
-    setCarregando(true);
-    setErro(null);
-
-    try {
-      const r = await fetch(
-        `/api/v1/relatorios/parcelas?lado=${alvo.lado}&de=${alvo.de}&ate=${alvo.ate}` +
-          (alvo.cartao ? "&cartao=true" : ""),
-      );
-      const dados = await r.json().catch(() => null);
-
-      if (!r.ok) {
-        setErro(dados?.error?.message ?? "Não foi possível carregar o período");
-        return;
-      }
-      setRelatorio(dados.data as Relatorio);
-    } finally {
-      setCarregando(false);
-    }
-  }
-
-  /*
-   * ⚠️ O gerador entra por `import()` dentro do clique, e nao no topo do
-   * arquivo. `jspdf` e `jspdf-autotable` sao a maior dependencia desta tela, e
-   * no topo viajariam com o bundle de quem so quer LER o relatorio — que e quase
-   * todo mundo, quase sempre. Mesmo caminho da DRE, do extrato e do fluxo.
-   */
-  async function imprimir() {
-    const { imprimirParcelas } = await import("./pdf-parcelas");
-    await imprimirParcelas(relatorio, empresa, emitidoPor);
-  }
-
-  /* Vazio de verdade: sem parcelas E sem ciclo de cartão para mostrar. */
-  const vazio =
-    relatorio.meses.length === 0 &&
-    (relatorio.cartao?.ciclos.length ?? 0) === 0;
-  const recebe = relatorio.lado === "receber";
+  const [aberto, setAberto] = useState<Documento | null>(null);
 
   return (
     <PageLayout>
-      {/* Sem legenda: modulo nao tem subtitulo nesta casa. */}
-      <PageHeader title="Relatórios">
-        <select
-          style={{
-            ...selectStyle,
-            width: 150,
-            height: "var(--toolbar-input-h)",
-          }}
-          value={lado}
-          disabled={carregando}
-          onChange={(e) => void buscar({ lado: e.target.value as LadoDoRelatorio })}
-        >
-          <option value="receber">Contas a receber</option>
-          <option value="pagar">Contas a pagar</option>
-        </select>
-
-        <input
-          type="date"
-          value={de}
-          disabled={carregando}
-          onChange={(e) => void buscar({ de: e.target.value })}
-          style={{ ...inputStyle, width: 145, height: "var(--toolbar-input-h)" }}
-        />
-        <input
-          type="date"
-          value={ate}
-          disabled={carregando}
-          onChange={(e) => void buscar({ ate: e.target.value })}
-          style={{ ...inputStyle, width: 145, height: "var(--toolbar-input-h)" }}
-        />
+      <Panel>
+        <PageHeader title="Relatórios" />
 
         {/*
-          ⚠️ O interruptor do cartão só existe do lado que PAGA.
-
-          Cartão de crédito é dívida da empresa; não há equivalente do lado que
-          recebe, e um controle desabilitado ali faria procurar o que ele
-          significa.
+          O cartao branco ocupa a area inteira, como a moldura de uma tabela: e o
+          mesmo material, e esta tela e a listagem de uma pasta.
         */}
-        {lado === "pagar" && (
-          <button
-            type="button"
-            onClick={() => void buscar({ cartao: !comCartao })}
-            disabled={carregando}
-            /* `aria-pressed` vinha do `MarcaDeUso`; sem ele o leitor de tela
-               anunciaria um botao comum, sem dizer se esta ligado. */
-            aria-pressed={comCartao}
-            title="Somar as faturas de cartão ainda abertas que vencem no período"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              height: "var(--toolbar-input-h)",
-              padding: "0 10px",
-              borderRadius: "var(--radius-md)",
-              border: "1px solid var(--border)",
-              background: "var(--surface)",
-              color: "var(--text-secondary)",
-              fontSize: "var(--text-sm)",
-              cursor: carregando ? "not-allowed" : "pointer",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {/*
-              ⚠️ A caixinha é DESENHADA aqui, e não o `MarcaDeUso` do kit.
-
-              Aquele componente é um `<button>`, e um botão dentro de outro é
-              HTML inválido: o navegador desmonta a árvore e o React acusa erro
-              de hidratação. Quem recebe o clique é o botão de fora, que cobre o
-              rótulo junto — mirar uma caixa de 15px ao lado de um texto clicável
-              seria trabalho que o rótulo absorve.
-            */}
-            <MarcaDoInterruptor marcado={comCartao} />
-            Cartão de crédito
-          </button>
-        )}
-
-        {/*
-          ⚠️ Imprimir vem por ÚLTIMO, indo da esquerda para a direita.
-
-          A ordem é a do trabalho: escolhe-se o lado, o período, e só então se
-          leva ao papel o que ficou na tela. Mesma decisão da DRE e do fluxo.
-        */}
-        <BotaoDeImpressao
-          rotulo={vazio ? "Nada a imprimir" : "Imprimir o relatório em PDF"}
-          desabilitado={vazio || carregando}
-          onClick={() => void imprimir()}
-        />
-      </PageHeader>
-
-      {/*
-        ⚠️ Esta tela ROLA como documento, e não como listagem — mesma anatomia da
-        DRE e do fluxo. No padrão de listagem quem rola é a `TableArea`; aqui há
-        cartões e vários blocos de mês empilhados, e sem um roladouro próprio
-        tudo abaixo da dobra some sem barra e sem nada que explique.
-      */}
-      <div
-        style={{
-          flex: 1,
-          minHeight: 0,
-          overflowY: "auto",
-          padding: "0 16px 16px",
-          display: "flex",
-          flexDirection: "column",
-          gap: 12,
-        }}
-      >
-        {erro && <Alert variant="warning">{erro}</Alert>}
-
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(3, 1fr)",
-            gap: 12,
+            flex: 1,
+            minHeight: 0,
+            margin: "0 var(--vao-da-pagina) var(--vao-da-pagina)",
+            padding: 20,
+            overflowY: "auto",
+            background: "var(--surface)",
+            borderRadius: "var(--radius-lg)",
           }}
         >
-          <CartaoDeIndicador
-            label={recebe ? "A receber no período" : "A pagar no período"}
-            valor={formatarSemSimbolo(relatorio.total)}
-            icone={<Seta sentido={recebe ? "entra" : "sai"} />}
-            detalhe={`${relatorio.quantidade} ${relatorio.quantidade === 1 ? "parcela" : "parcelas"}`}
-          />
-          <CartaoDeIndicador
-            label="Já vencido"
-            valor={formatarSemSimbolo(relatorio.vencido)}
-            icone={<Relogio />}
-            tom={relatorio.vencido > 0 ? "atencao" : "normal"}
-            detalhe={
-              relatorio.vencido > 0
-                ? "Venceu e continua em aberto"
-                : "Nada em atraso"
-            }
-          />
-          <CartaoDeIndicador
-            label="A vencer"
-            valor={formatarSemSimbolo(
-              (relatorio.total - relatorio.vencido) as Centavos,
-            )}
-            icone={<Relogio />}
-            detalhe="Ainda dentro do prazo"
-          />
-        </div>
-
-        {vazio && (
-          <TableFrame solto>
-            <TableArea minWidth={0}>
-              <tbody>
-                <EmptyRow
-                  colSpan={1}
-                  message={
-                    recebe
-                      ? "Nada a receber neste período."
-                      : "Nada a pagar neste período."
-                  }
-                />
-              </tbody>
-            </TableArea>
-          </TableFrame>
-        )}
-
-        {/*
-          ⚠️ Uma TABELA POR MÊS, e não uma tabela só com linhas de separação.
-
-          O subtotal é o que se veio ler, e como linha no meio de uma grade longa
-          ele se perde entre as parcelas. Cada mês fechando a sua própria tabela
-          deixa o total onde o olho já está quando termina de ler o bloco.
-        */}
-        {relatorio.meses.map((m) => (
-          <div key={m.mes}>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "baseline",
-                justifyContent: "space-between",
-                marginBottom: 6,
-              }}
-            >
-              <span
-                style={{
-                  fontSize: "var(--text-sm)",
-                  fontWeight: "var(--fw-semi)",
-                  color: "var(--text-primary)",
-                }}
-              >
-                {mesPorExtenso(m.mes)}
-              </span>
-              <span
-                style={{
-                  fontSize: "var(--text-sm)",
-                  fontWeight: "var(--fw-semi)",
-                  fontVariantNumeric: "tabular-nums",
-                }}
-              >
-                {formatarSemSimbolo(m.total)}
-              </span>
-            </div>
-
-            <TableFrame solto>
-              <TableArea minWidth={720}>
-                <TableHead>
-                  <Th minWidth={96}>Vencimento</Th>
-                  <Th minWidth={70}>Nº</Th>
-                  <Th minWidth={64}>Parcela</Th>
-                  <Th>{recebe ? "Cliente" : "Fornecedor"}</Th>
-                  <Th minWidth={70} align="right">
-                    Atraso
-                  </Th>
-                  <Th minWidth={110} align="right">
-                    Em aberto
-                  </Th>
-                </TableHead>
-
-                <tbody>
-                  {m.parcelas.map((p) => (
-                    <Tr key={p.parcelaId}>
-                      <Td style={NUM}>{paraFormatoBR(p.vencimento)}</Td>
-                      <Td style={NUM}>{p.documentoNumero}</Td>
-                      <Td style={NUM}>
-                        {p.numero}/{p.deQuantas}
-                      </Td>
-                      <Td>
-                        <span style={CORTA}>{p.pessoa}</span>
-                        {/*
-                          ⚠️ A descrição é LEGENDA do nome, e não coluna própria.
-                          Ela é texto livre e comprido; em coluna, empurraria o
-                          valor para fora da folha no primeiro título com uma
-                          frase inteira.
-                        */}
-                        {p.descricao && (
-                          <span
-                            style={{
-                              ...CORTA,
-                              display: "block",
-                              marginTop: 1,
-                              fontSize: "var(--text-xs)",
-                              color: "var(--text-tertiary)",
-                            }}
-                          >
-                            {p.descricao}
-                          </span>
-                        )}
-                      </Td>
-                      {/*
-                        ⚠️ Só o atraso ganha cor, e só quando existe. Pintar toda
-                        linha vencida faria um relatório de cobrança inteiro
-                        vermelho, e aí a cor deixa de apontar alguma coisa.
-                      */}
-                      <Td
-                        style={{
-                          ...NUM,
-                          textAlign: "right",
-                          color:
-                            p.diasDeAtraso > 0
-                              ? "var(--danger-text)"
-                              : "var(--text-tertiary)",
-                        }}
-                      >
-                        {p.diasDeAtraso > 0 ? `${p.diasDeAtraso} d` : "—"}
-                      </Td>
-                      <Td
-                        style={{
-                          ...NUM,
-                          textAlign: "right",
-                          fontWeight: "var(--fw-medium)",
-                        }}
-                      >
-                        {formatarSemSimbolo(p.emAberto)}
-                        {/*
-                          ⚠️ A parcela paga pela metade mostra de quanto ela era.
-                          Sem isso, "250,00" numa parcela de 2.500 parece erro de
-                          cadastro — e é justamente o caso que o relatório antigo
-                          errava, cobrando o valor cheio.
-                        */}
-                        {p.jaPago > 0 && (
-                          <span
-                            style={{
-                              display: "block",
-                              marginTop: 1,
-                              fontSize: "var(--text-xs)",
-                              color: "var(--text-tertiary)",
-                              fontWeight: "var(--fw-regular)",
-                            }}
-                          >
-                            de {formatarSemSimbolo(p.valor)}
-                          </span>
-                        )}
-                      </Td>
-                    </Tr>
-                  ))}
-                </tbody>
-              </TableArea>
-            </TableFrame>
-          </div>
-        ))}
-
-        {/*
-          ⚠️ O cartão vem em TABELA SEPARADA, e não misturado nos meses.
-
-          Ele não é parcela de título: não tem número de documento, não tem
-          fornecedor único e não se cobra dele parcela a parcela. Uma linha por
-          ciclo, que é como o compromisso existe — a fatura vence inteira, num dia
-          só. Misturado, precisaria de colunas vazias em toda linha para caber na
-          grade das parcelas.
-        */}
-        {relatorio.cartao && relatorio.cartao.ciclos.length > 0 && (
-          <div>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "baseline",
-                justifyContent: "space-between",
-                marginBottom: 6,
-              }}
-            >
-              <span
-                style={{
-                  fontSize: "var(--text-sm)",
-                  fontWeight: "var(--fw-semi)",
-                  color: "var(--text-primary)",
-                }}
-              >
-                Cartão de crédito
-              </span>
-              <span
-                style={{
-                  fontSize: "var(--text-sm)",
-                  fontWeight: "var(--fw-semi)",
-                  fontVariantNumeric: "tabular-nums",
-                }}
-              >
-                {formatarSemSimbolo(relatorio.cartao.total)}
-              </span>
-            </div>
-
-            <TableFrame solto>
-              <TableArea minWidth={600}>
-                <TableHead>
-                  <Th minWidth={96}>Vencimento</Th>
-                  <Th minWidth={110}>Ciclo</Th>
-                  <Th>Cartão</Th>
-                  <Th minWidth={80} align="right">
-                    Compras
-                  </Th>
-                  <Th minWidth={110} align="right">
-                    Total
-                  </Th>
-                </TableHead>
-
-                <tbody>
-                  {relatorio.cartao.ciclos.map((c) => (
-                    <Tr key={c.faturaId}>
-                      <Td style={NUM}>{paraFormatoBR(c.vencimento)}</Td>
-                      <Td style={NUM}>
-                        Ciclo {c.competencia.slice(5, 7)}/
-                        {c.competencia.slice(0, 4)}
-                      </Td>
-                      <Td>
-                        <span style={CORTA}>{c.cartao}</span>
-                      </Td>
-                      <Td style={{ ...NUM, textAlign: "right" }}>{c.compras}</Td>
-                      <Td
-                        style={{
-                          ...NUM,
-                          textAlign: "right",
-                          fontWeight: "var(--fw-medium)",
-                        }}
-                      >
-                        {formatarSemSimbolo(c.total)}
-                      </Td>
-                    </Tr>
-                  ))}
-                </tbody>
-              </TableArea>
-            </TableFrame>
-
-            <p
-              style={{
-                margin: "6px 0 0",
-                fontSize: "var(--text-xs)",
-                color: "var(--text-tertiary)",
-                lineHeight: "var(--lh-normal)",
-              }}
-            >
-              Só os ciclos ainda abertos, pelo vencimento da fatura. O ciclo já
-              fechado virou conta a pagar e aparece nos meses acima.
-            </p>
-          </div>
-        )}
-
-        {!vazio && (
           <div
             style={{
-              display: "flex",
-              justifyContent: "space-between",
-              paddingTop: 8,
-              borderTop: "1px solid var(--border-strong)",
-              fontSize: "var(--text-sm)",
-              fontWeight: "var(--fw-semi)",
+              display: "grid",
+              /* Colunas que se ajustam a largura, como um gerenciador de
+                 arquivos: em tela estreita cabem tres, em tela larga oito. */
+              gridTemplateColumns: "repeat(auto-fill, minmax(124px, 1fr))",
+              gap: 8,
             }}
           >
-            <span>Total do período</span>
-            <span style={{ fontVariantNumeric: "tabular-nums" }}>
-              {formatarSemSimbolo(relatorio.total)}
-            </span>
+            {DOCUMENTOS.map((doc) => (
+              <CartaoDeDocumento key={doc.id} doc={doc} onClick={() => setAberto(doc)} />
+            ))}
           </div>
-        )}
+        </div>
+      </Panel>
 
-        {!vazio && (
-          <p
-            style={{
-              margin: 0,
-              fontSize: "var(--text-xs)",
-              color: "var(--text-tertiary)",
-              lineHeight: "var(--lh-normal)",
-            }}
-          >
-            Os valores são o saldo que falta, e não o valor combinado da parcela:
-            a que já recebeu parte entra apenas pelo restante. Parcelas
-            canceladas e títulos cancelados não aparecem.
-          </p>
-        )}
-      </div>
+      {aberto?.id === "receber" && (
+        <ParametrosDeParcelas
+          lado="receber"
+          empresa={empresa}
+          emitidoPor={emitidoPor}
+          onClose={() => setAberto(null)}
+        />
+      )}
+
+      {aberto?.id === "pagar" && (
+        <ParametrosDeParcelas
+          lado="pagar"
+          empresa={empresa}
+          emitidoPor={emitidoPor}
+          onClose={() => setAberto(null)}
+        />
+      )}
+
+      {aberto?.id === "dre" && (
+        <ParametrosDaDre empresa={empresa} emitidoPor={emitidoPor} onClose={() => setAberto(null)} />
+      )}
+
+      {aberto?.id === "fluxo" && (
+        <ParametrosDoFluxo
+          empresa={empresa}
+          emitidoPor={emitidoPor}
+          onClose={() => setAberto(null)}
+        />
+      )}
     </PageLayout>
   );
 }
 
+type Documento = {
+  id: "receber" | "pagar" | "dre" | "fluxo";
+  nome: string;
+  /** O que ele responde. Aparece na dica, e nao embaixo do nome. */
+  sobre: string;
+  icone: React.ReactNode;
+};
+
 /**
- * O botao de imprimir do cabecalho.
- *
- * ⚠️ So o icone, e nao um botao primario com rotulo. Imprimir nao e a acao
- * principal desta tela — a principal e olhar o que falta —, e com rotulo ele
- * ganharia o peso do botao que salva nos outros lugares. Mesma peca da DRE.
+ * ⚠️ A ORDEM e a do ciclo do dinheiro, e nao alfabetica: o que entra, o que sai,
+ * o resultado dos dois, e o que ainda vai acontecer. Quem procura pelo nome usa
+ * a busca do topo; quem esta olhando a pasta le uma historia.
  */
-function BotaoDeImpressao({
-  rotulo,
-  desabilitado,
-  onClick,
-}: {
-  rotulo: string;
-  desabilitado?: boolean;
-  onClick: () => void;
-}) {
+const DOCUMENTOS: Documento[] = [
+  {
+    id: "receber",
+    nome: "Contas a receber",
+    sobre: "Parcelas a receber no período, mês a mês, com o que já venceu.",
+    icone: <IconeDocumento tom="entra" />,
+  },
+  {
+    id: "pagar",
+    nome: "Contas a pagar",
+    sobre: "Parcelas a pagar no período, mês a mês, com o que já venceu.",
+    icone: <IconeDocumento tom="sai" />,
+  },
+  {
+    id: "dre",
+    nome: "DRE",
+    sobre: "Receitas e despesas por centro de custo, mês a mês, no ano escolhido.",
+    icone: <IconeDocumento tom="grade" />,
+  },
+  {
+    id: "fluxo",
+    nome: "Fluxo de caixa",
+    sobre: "A projeção do saldo daqui para a frente, partindo das contas.",
+    icone: <IconeDocumento tom="curva" />,
+  },
+];
+
+/**
+ * Um documento na pasta: icone grande, nome embaixo.
+ *
+ * ⚠️ Nome EMBAIXO do icone, e nao ao lado. E a forma que gerenciador de arquivo
+ * usa desde sempre, e ela existe porque o icone e o que se reconhece de longe:
+ * ao lado, ele viraria um marcador de lista e a coluna de nomes e que faria o
+ * trabalho — que e o que uma tabela ja faz melhor.
+ */
+function CartaoDeDocumento({ doc, onClick }: { doc: Documento; onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      disabled={desabilitado}
-      title={rotulo}
-      aria-label={rotulo}
+      title={doc.sobre}
       style={{
-        height: "var(--toolbar-input-h)",
-        width: "var(--toolbar-input-h)",
-        display: "grid",
-        placeItems: "center",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 8,
+        padding: "16px 8px 14px",
+        border: "none",
         borderRadius: "var(--radius-md)",
-        border: "1px solid var(--border)",
-        backgroundColor: "var(--surface)",
-        color: "var(--text-secondary)",
-        cursor: desabilitado ? "not-allowed" : "pointer",
-        opacity: desabilitado ? 0.4 : 1,
-        flexShrink: 0,
+        background: "transparent",
+        cursor: "pointer",
+        fontFamily: "var(--font)",
+        transition: "background var(--dur-fast) var(--ease)",
       }}
+      onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-3)")}
+      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
     >
-      {/* Impressora: papel saindo por cima, corpo no meio, bandeja embaixo. */}
-      <svg
-        width="14"
-        height="14"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
+      {doc.icone}
+      <span
+        style={{
+          fontSize: "var(--text-base)",
+          color: "var(--text-primary)",
+          textAlign: "center",
+          lineHeight: "var(--lh-snug)",
+        }}
       >
-        <path d="M7 8V4h10v4" />
-        <path d="M6 18H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-1" />
-        <path d="M7 14h10v6H7z" />
-      </svg>
+        {doc.nome}
+      </span>
     </button>
   );
 }
 
 /**
- * A caixinha do interruptor, desenhada e nao clicavel.
+ * A folha de papel, com uma marca dentro que diz de que assunto ela e.
  *
- * ⚠️ Copia o desenho do `MarcaDeUso` do kit — mesma medida, mesma borda, mesmo
- * check — sem ser um botao. O kit nao tem versao passiva dela, e aqui ela vive
- * DENTRO de um botao: usar o componente produziria botao dentro de botao, que e
- * HTML invalido.
+ * ⚠️ A MESMA folha para os quatro, mudando so o miolo. Quatro desenhos
+ * diferentes fariam a pasta parecer ter quatro tipos de coisa; sao todos o mesmo
+ * tipo — um documento que se emite —, e o que muda e o conteudo.
  */
-function MarcaDoInterruptor({ marcado }: { marcado: boolean }) {
+function IconeDocumento({ tom }: { tom: "entra" | "sai" | "grade" | "curva" }) {
+  const miolo = {
+    entra: <path d="M17 30v-9M17 21l-3 3M17 21l3 3" />,
+    sai: <path d="M17 21v9M17 30l-3-3M17 30l3-3" />,
+    grade: <path d="M11 22h12M11 26h12M11 30h12" />,
+    curva: <path d="M11 30l4-5 3 3 5-7" />,
+  }[tom];
+
   return (
-    <span
-      aria-hidden
-      style={{
-        width: 15,
-        height: 15,
-        display: "grid",
-        placeItems: "center",
-        borderRadius: 4,
-        border: `1px solid ${marcado ? "var(--primary)" : "var(--border-strong)"}`,
-        background: marcado ? "var(--primary)" : "transparent",
-        color: "var(--primary-fg)",
-        flexShrink: 0,
+    <svg width="46" height="46" viewBox="0 0 34 44" fill="none" aria-hidden>
+      {/* A folha, com a orelha dobrada. Preenchida no tom mais fraco da marca:
+          vazada, ela some contra o branco do cartao. */}
+      <path
+        d="M4 3.5h16L30 13v27.5H4z"
+        fill="var(--primary-subtle)"
+        stroke="var(--primary)"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+      <path d="M20 3.5V13h10" stroke="var(--primary)" strokeWidth="1.6" strokeLinejoin="round" />
+      <g stroke="var(--primary)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        {miolo}
+      </g>
+    </svg>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Os parametros de cada documento
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Contas a receber e a pagar.
+ *
+ * ⚠️ Um componente para os dois lados. Eles sao o mesmo documento visto das duas
+ * pontas — mesmo periodo, mesmo agrupamento por mes, mesma coluna de vencido —, e
+ * dois arquivos divergiriam na primeira correcao.
+ */
+function ParametrosDeParcelas({
+  lado,
+  empresa,
+  emitidoPor,
+  onClose,
+}: {
+  lado: LadoDoRelatorio;
+  empresa: EmpresaParaDocumento;
+  emitidoPor: string;
+  onClose: () => void;
+}) {
+  const [de, ate] = mesCorrente();
+  const [inicio, setInicio] = useState<string>(de);
+  const [fim, setFim] = useState<string>(ate);
+  const [comCartao, setComCartao] = useState(false);
+
+  const recebe = lado === "receber";
+
+  return (
+    <Emissao
+      titulo={recebe ? "Contas a receber" : "Contas a pagar"}
+      onClose={onClose}
+      podeEmitir={ehDataISO(inicio) && ehDataISO(fim)}
+      emitir={async () => {
+        const params = new URLSearchParams({ lado, de: inicio, ate: fim });
+        if (comCartao) params.set("cartao", "true");
+
+        const dados = await buscar<Relatorio>(`/api/v1/relatorios/parcelas?${params}`);
+        const { imprimirParcelas } = await import("./pdf-parcelas");
+        await imprimirParcelas(dados, empresa, emitidoPor);
       }}
     >
-      {marcado && (
-        <svg
-          width="9"
-          height="9"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="3.4"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M4 12.5l5.5 5.5L20 6.5" />
-        </svg>
+      <Field label="De">
+        <input
+          type="date"
+          style={{ ...inputStyle, width: 160 }}
+          value={inicio}
+          onChange={(e) => setInicio(e.target.value)}
+        />
+      </Field>
+
+      <Field label="Até">
+        <input
+          type="date"
+          style={{ ...inputStyle, width: 160 }}
+          value={fim}
+          onChange={(e) => setFim(e.target.value)}
+        />
+      </Field>
+
+      {/* So o lado que PAGA tem fatura de cartao: do lado que recebe, cartao e
+          forma de recebimento e ja entra pela parcela. */}
+      {!recebe && (
+        <Field label="Cartão de crédito" hint="Inclui os ciclos de fatura no documento.">
+          <label style={{ display: "flex", alignItems: "center", gap: 7, cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={comCartao}
+              onChange={(e) => setComCartao(e.target.checked)}
+            />
+            <span style={{ fontSize: "var(--text-base)" }}>Incluir os ciclos de fatura</span>
+          </label>
+        </Field>
       )}
-    </span>
+    </Emissao>
   );
 }
 
-/** A seta do indicador: para cima entra, para baixo sai. */
-function Seta({ sentido }: { sentido: "entra" | "sai" }) {
+/** A DRE, por exercício. */
+function ParametrosDaDre({
+  empresa,
+  emitidoPor,
+  onClose,
+}: {
+  empresa: EmpresaParaDocumento;
+  emitidoPor: string;
+  onClose: () => void;
+}) {
+  const anoCorrente = Number(hoje().slice(0, 4));
+  const [ano, setAno] = useState(anoCorrente);
+
   return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.7"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      style={{ transform: sentido === "sai" ? "rotate(180deg)" : undefined }}
+    <Emissao
+      titulo="DRE"
+      onClose={onClose}
+      podeEmitir
+      emitir={async () => {
+        const dados = await buscar<Dre>(`/api/v1/relatorios/dre?ano=${ano}`);
+        const { imprimirDre } = await import("./pdf-dre");
+        await imprimirDre(dados, empresa, emitidoPor);
+      }}
     >
-      <path d="M8 13V3M4.5 6.5L8 3l3.5 3.5" />
-    </svg>
+      <Field label="Exercício">
+        <select
+          style={{ ...selectStyle, width: 120 }}
+          value={ano}
+          onChange={(e) => setAno(Number(e.target.value))}
+        >
+          {/* Cinco anos para tras: e o que a base cobre. */}
+          {Array.from({ length: 5 }, (_, i) => anoCorrente - i).map((a) => (
+            <option key={a} value={a}>
+              {a}
+            </option>
+          ))}
+        </select>
+      </Field>
+    </Emissao>
   );
 }
 
-/** Prazo: o que separa o vencido do que ainda vence. */
-function Relogio() {
+/**
+ * O fluxo de caixa.
+ *
+ * ⚠️ Este NAO usa o `Emissao` dos outros: as opcoes dele sao uma tela inteira
+ * (quais contas, com ou sem os meses vencidos, e o saldo de partida que muda
+ * conforme a escolha), e essa peca ja existe pronta em `OpcoesDoFluxo`.
+ *
+ * ⚠️ Ele carrega a projecao ANTES de abrir as opcoes, porque a lista de contas e
+ * o saldo de cada uma sao o que se escolhe la dentro. Sem isso, o drawer abriria
+ * com um vazio pedindo para a pessoa escolher entre nada.
+ */
+function ParametrosDoFluxo({
+  empresa,
+  emitidoPor,
+  onClose,
+}: {
+  empresa: EmpresaParaDocumento;
+  emitidoPor: string;
+  onClose: () => void;
+}) {
+  const [contas, setContas] = useState<ProjecaoDeCaixa["contas"] | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+  const horizonte = daquiAUmAno();
+
+  useEffect(() => {
+    let vivo = true;
+
+    void buscar<ProjecaoDeCaixa>(`/api/v1/relatorios/fluxo-caixa?ate=${horizonte}`)
+      .then((p) => vivo && setContas(p.contas))
+      .catch((e: Error) => vivo && setErro(e.message));
+
+    return () => {
+      vivo = false;
+    };
+    /* O horizonte inicial nao muda enquanto a gaveta esta aberta: quem o move e
+       o campo de dentro do `OpcoesDoFluxo`, e ele refaz a consulta na hora de
+       emitir. Buscar de novo aqui a cada digito da data seria uma consulta por
+       tecla para atualizar uma lista de contas que nao depende dela. */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (erro) {
+    return (
+      <Drawer open onClose={onClose} title="Fluxo de caixa">
+        <Alert variant="warning">{erro}</Alert>
+      </Drawer>
+    );
+  }
+
+  if (!contas) {
+    return (
+      <Drawer open onClose={onClose} title="Fluxo de caixa">
+        <p style={{ fontSize: "var(--text-md)", color: "var(--text-tertiary)" }}>
+          Carregando as contas…
+        </p>
+      </Drawer>
+    );
+  }
+
   return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <circle cx="8" cy="8" r="6" />
-      <path d="M8 4.6V8l2.2 1.3" />
-    </svg>
+    <OpcoesDoFluxo
+      contas={contas}
+      ateInicial={horizonte}
+      onClose={onClose}
+      aoGerar={async (projecao) => {
+        const { imprimirFluxo } = await import("./pdf-fluxo");
+        await imprimirFluxo(projecao, empresa, emitidoPor);
+      }}
+    />
   );
 }
 
-/** O texto que nao pode empurrar a coluna: corta com reticencias. */
-const CORTA: React.CSSProperties = {
-  display: "block",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-};
+/**
+ * A moldura de todo documento: os parametros, e o botao que emite.
+ *
+ * ⚠️ O erro aparece AQUI dentro, e nao como aviso de canto de tela. A gaveta
+ * continua aberta com o que a pessoa escolheu, entao ela corrige a data e tenta
+ * de novo — um aviso que some levaria junto a unica pista do que deu errado.
+ */
+function Emissao({
+  titulo,
+  podeEmitir,
+  emitir,
+  onClose,
+  children,
+}: {
+  titulo: string;
+  podeEmitir: boolean;
+  emitir: () => Promise<void>;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  const [emitindo, setEmitindo] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
 
-/** Numero em coluna: tabular e sem quebra, para o digito alinhar com o de cima. */
-const NUM: React.CSSProperties = {
-  whiteSpace: "nowrap",
-  fontVariantNumeric: "tabular-nums",
-};
+  async function gerar() {
+    setEmitindo(true);
+    setErro(null);
+
+    try {
+      await emitir();
+      onClose();
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Não foi possível emitir o documento.");
+    } finally {
+      setEmitindo(false);
+    }
+  }
+
+  return (
+    <Drawer
+      open
+      onClose={onClose}
+      title={titulo}
+      footer={
+        <Button variant="primary" disabled={!podeEmitir || emitindo} onClick={() => void gerar()}>
+          {emitindo ? "Emitindo…" : "Emitir PDF"}
+        </Button>
+      }
+    >
+      <div style={{ display: "flex", flexDirection: "column", gap: "var(--form-gap-campo)" }}>
+        {erro && <Alert variant="warning">{erro}</Alert>}
+        {children}
+        {/* O aviso existe para o caso de o PDF abrir em outra aba e o navegador
+            engolir: sem ele, o clique parece não ter feito nada. */}
+        <p style={{ margin: "10px 0 0", fontSize: "var(--text-sm)", color: "var(--text-tertiary)" }}>
+          O documento abre numa aba nova, pronto para imprimir ou salvar.
+        </p>
+      </div>
+    </Drawer>
+  );
+}
+
+/** Uma consulta da API, com o erro do servidor virando exceção legível. */
+async function buscar<T>(url: string): Promise<T> {
+  const r = await fetch(url);
+  const corpo = await r.json().catch(() => null);
+
+  if (!r.ok) {
+    throw new Error(corpo?.error?.message ?? "Não foi possível carregar os dados.");
+  }
+  return corpo.data as T;
+}
+
+/**
+ * Primeiro e ultimo dia do mes de hoje.
+ *
+ * ⚠️ O padrao e o MES CORRENTE, e nao "de hoje em diante". O relatorio serve
+ * para fechar o mes: o que venceu na primeira quinzena e continua em aberto e
+ * justamente o que se veio cobrar, e um periodo comecando hoje o esconderia.
+ */
+function mesCorrente(): [DataISO, DataISO] {
+  const [ano, mes] = hoje().split("-").map(Number);
+
+  /* Dia zero do mes SEGUINTE e o ultimo dia deste: evita a tabela de quantos
+     dias tem cada mes, e acerta fevereiro bissexto sozinho. */
+  const ultimo = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
+  const doisDigitos = String(mes).padStart(2, "0");
+
+  return [
+    `${ano}-${doisDigitos}-01` as DataISO,
+    `${ano}-${doisDigitos}-${String(ultimo).padStart(2, "0")}` as DataISO,
+  ];
+}
+
+function daquiAUmAno(): DataISO {
+  const [ano, mes, dia] = hoje().split("-");
+  return `${Number(ano) + 1}-${mes}-${dia}` as DataISO;
+}

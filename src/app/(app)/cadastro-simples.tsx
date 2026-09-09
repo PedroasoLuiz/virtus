@@ -70,7 +70,7 @@ export function CadastroSimples<T extends { id: number; ativo: boolean }>({
   return (
     <PageLayout>
       <Panel>
-        <PageHeader title={titulo} description={`${filtrados.length} de ${itens.length}`}>
+        <PageHeader title={titulo}>
           <SearchInput
             value={busca}
             onSearch={(v) => {

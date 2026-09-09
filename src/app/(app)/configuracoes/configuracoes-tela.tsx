@@ -122,7 +122,6 @@ export function ConfiguracoesTela({
       <Panel>
         <PageHeader
           title="Integrações"
-          description="As contas de fora que alimentam o sistema, e as credenciais que dão acesso a elas."
         />
 
         <LayoutComMenu

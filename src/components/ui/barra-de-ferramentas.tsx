@@ -57,7 +57,7 @@ export function BarraDeFerramentas({ children }: { children: React.ReactNode }) 
 }
 
 /** O alvo de clique, e o vao ate o cartao e ate a borda da janela. */
-const LARGURA_DO_BOTAO = 48;
+const LARGURA_DO_BOTAO = 44;
 const RESPIRO_LATERAL = 8;
 
 /**
@@ -73,7 +73,6 @@ const RESPIRO_LATERAL = 8;
  */
 export function BotaoDaBarra({
   rotulo,
-  legenda,
   icone,
   aceso,
   destaque,
@@ -81,18 +80,17 @@ export function BotaoDaBarra({
   onClick,
   painel,
 }: {
-  rotulo: string;
   /**
-   * A palavra embaixo do icone.
+   * O nome da ferramenta.
    *
-   * ⚠️ Ela existe porque icone sozinho se aprende por tentativa. Calendario e
-   * impressora sao reconheciveis, mas a terceira e a quarta ferramenta ja nao
-   * sao — e a dica do mouse so aparece depois que a pessoa parou em cima, ou
-   * seja, depois de ela ja ter adivinhado.
-   *
-   * Curta: uma palavra. Duas linhas de legenda transformam a barra num menu.
+   * ⚠️ Ele e a dica do mouse e o rotulo de acessibilidade, e nao ha mais palavra
+   * NENHUMA desenhada no botao. A legenda embaixo do icone existia porque icone
+   * sozinho se aprende por tentativa — e ainda e verdade —, mas ela obrigava a
+   * placa a ser um quadrado de 48 com texto de 9px dentro. Com o disco, a barra
+   * virou uma coluna de gestos; o preco e que a terceira ferramenta se aprende
+   * pela dica, e nao de relance.
    */
-  legenda: string;
+  rotulo: string;
   icone: React.ReactNode;
   /** Marca o botao cujo painel esta aberto, ou cujo filtro esta em uso. */
   aceso?: boolean;
@@ -161,15 +159,25 @@ export function BotaoDaBarra({
            * icone mora DENTRO da tabela, cercado de texto; aqui a barra ja e uma
            * faixa propria, fora do cartao.
            */
+          /*
+           * ⚠️ DISCO branco com elevacao, e nao placa quadrada.
+           *
+           * O quadrado vinha de quando havia uma legenda embaixo do icone, que
+           * pedia largura de texto. Sem ela, sobrou um icone de 16 no meio de um
+           * quadrado de 48 — e o circulo e a forma que um gesto isolado pede: ele
+           * nao tem lado maior, entao nao sugere que continue para algum lado.
+           *
+           * ⚠️ A sombra e a mesma da busca la em cima. Branco com elevacao virou,
+           * na casa inteira, o corpo do que se clica; o disco sem ela ficaria
+           * chapado contra o cinza e voltaria a parecer so um icone pousado.
+           */
           width: LARGURA_DO_BOTAO,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 3,
-          padding: "7px 0 6px",
+          height: LARGURA_DO_BOTAO,
+          display: "grid",
+          placeItems: "center",
           border: "none",
-          borderRadius: "var(--radius-sm)",
+          borderRadius: "var(--radius-full)",
+          boxShadow: desabilitado ? "none" : "var(--shadow-sm)",
           background: destaque
             ? "var(--primary)"
             : aberto
@@ -198,20 +206,6 @@ export function BotaoDaBarra({
         }}
       >
         {icone}
-        <span
-          style={{
-            /* `--text-xs`, e nao `--text-2xs`: o menor da casa e de 8px e vive
-               em pastilha de contador, onde se le um numero. Uma palavra ali
-               vira borrao. */
-            fontSize: "var(--text-xs)",
-            fontWeight: aceso ? "var(--fw-semi)" : "var(--fw-regular)",
-            lineHeight: 1,
-            /* Uma palavra numa linha: cortada, ela deixa de ser legenda. */
-            whiteSpace: "nowrap",
-          }}
-        >
-          {legenda}
-        </span>
       </button>
 
       {painel &&
@@ -240,7 +234,9 @@ export function BotaoDaBarra({
                 minWidth: 240,
                 padding: 12,
                 borderRadius: "var(--radius-md)",
-                border: "1px solid var(--border)",
+                /* ⚠️ SEM borda: a sombra ja separa o cartao do que esta atras.
+                Contorno mais sombra e a mesma coisa dita duas vezes. Ver
+                `07-DESIGN-TOKENS`, cartao flutuante. */
                 background: "var(--surface)",
                 boxShadow: "var(--shadow-md)",
                 display: "flex",

@@ -123,7 +123,7 @@ export function CartoesTabela({ cartoes }: { cartoes: CartaoDaBaixa[] }) {
             display: "flex",
             /* Sem margem a DIREITA: aquele respiro e da propria barra, que o
                carrega na largura. Ver `BarraDeFerramentas`. */
-            margin: "0 0 16px 16px",
+            margin: "0 0 var(--vao-da-pagina) var(--vao-da-pagina)",
           }}
         >
           <TableFrame solto>
@@ -221,7 +221,6 @@ export function CartoesTabela({ cartoes }: { cartoes: CartaoDaBaixa[] }) {
           <BarraDeFerramentas>
             <BotaoDaBarra
               rotulo="Novo cartão"
-              legenda="Novo"
               destaque
               icone={<IconeMais />}
               onClick={() => setCriando(true)}

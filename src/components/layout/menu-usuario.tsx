@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTheme } from "next-themes";
 import { logoutAction } from "@/modules/sessao/sessao.actions";
+import { EmpresaDrawer } from "@/components/layout/empresa-drawer";
 import {
   PerfilDrawer,
   type DadosDoPerfil,
@@ -47,6 +48,7 @@ export function MenuUsuario({
 }) {
   const [aberto, setAberto] = useState(false);
   const [editando, setEditando] = useState(false);
+  const [configurandoEmpresa, setConfigurandoEmpresa] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const botao = useRef<HTMLButtonElement>(null);
   const cartao = useRef<HTMLDivElement>(null);
@@ -117,19 +119,22 @@ export function MenuUsuario({
            * quadrado por tras dele — e era esse quadrado que se via.
            */
           /*
-           * ⚠️ 34 num topo de 48: sobram 7 pixels de cada lado.
+           * ⚠️ A MESMA medida dos outros controles (`--h-controle`, hoje 44), que
+           * e a do disco da barra de ferramentas.
            *
            * Com 28 ele ficava perdido na faixa, do tamanho de um icone de menu —
-           * e a identidade nao e um icone. Passando disso, encosta nas bordas do
-           * topo e a barra parece apertada.
+           * e a identidade nao e um icone. Com 34, ao lado de uma pilula e de
+           * discos de 44, ele virava o unico controle menor da tela sem ter por
+           * que. Redondo ele continua: e o que o separa das ferramentas, que sao
+           * discos brancos, e diz que ali esta uma pessoa e nao um gesto.
            */
-          width: 34,
-          height: 34,
+          width: "var(--h-controle)",
+          height: "var(--h-controle)",
           display: "block",
           padding: 0,
           border: "none",
           background: "none",
-          borderRadius: "var(--radius-full)",
+          borderRadius: "var(--radius-md)",
           cursor: "pointer",
           lineHeight: 0,
         }}
@@ -138,7 +143,7 @@ export function MenuUsuario({
           if (!aberto) e.currentTarget.style.background = "transparent";
         }}
       >
-        <AvatarDoUsuario nome={nome} email={email} foto={foto} tamanho={34} />
+        <AvatarDoUsuario nome={nome} email={email} foto={foto} tamanho={44} forma="arredondado" />
       </button>
 
       {/*
@@ -176,7 +181,11 @@ export function MenuUsuario({
                 zIndex: 301,
                 minWidth: 220,
                 background: "var(--surface)",
-                border: "1px solid var(--border-strong)",
+                /*
+                  ⚠️ SEM borda. A sombra ja separa o cartao do que esta atras, e
+                  contorno mais sombra e a mesma coisa dita duas vezes: o cartao
+                  ganha peso de caixa de dialogo para oferecer tres linhas.
+                */
                 borderRadius: "var(--radius-lg)",
                 boxShadow: "var(--shadow-lg)",
                 overflow: "hidden",
@@ -192,9 +201,15 @@ export function MenuUsuario({
             style={{
               display: "flex",
               alignItems: "center",
+              /*
+                ⚠️ SEM divisoria sob a identidade.
+
+                O nome e o e-mail ja se separam das acoes pelo tamanho e pela
+                cor; o fio no meio partia um cartao de trezentos pixels em duas
+                metades e o fazia parecer dois cartoes colados.
+              */
               gap: 10,
-              padding: "12px 12px",
-              borderBottom: "1px solid var(--border)",
+              padding: "12px 12px 8px",
             }}
           >
             <AvatarDoUsuario
@@ -243,19 +258,51 @@ export function MenuUsuario({
               tela inteira para isso faria a pessoa sair de onde estava
               trabalhando para trocar uma palavra.
             */}
-            <ItemMenu onClick={() => { fechar(); setEditando(true); }}>
+            <ItemMenu
+              icone={<IconeLapis />}
+              onClick={() => {
+                fechar();
+                setEditando(true);
+              }}
+            >
               Editar perfil
             </ItemMenu>
 
-            <ItemMenu onClick={() => setTheme(escuro ? "light" : "dark")}>
+            {/*
+              ⚠️ O cadastro da EMPRESA mora aqui, junto do cadastro da pessoa.
+
+              E o mesmo gesto um degrau acima: quem opera, e a casa em que se
+              opera. No cartao da empresa, na barra, ele disputaria espaco com a
+              troca de tenant — que e a pergunta daquele cartao e se usa todo
+              dia; abrir formulario dali faria um cartao servir a duas coisas.
+            */}
+            <ItemMenu
+              icone={<IconePredio />}
+              onClick={() => {
+                fechar();
+                setConfigurandoEmpresa(true);
+              }}
+            >
+              Cadastro da empresa
+            </ItemMenu>
+
+            <ItemMenu
+              icone={escuro ? <IconeSol /> : <IconeLua />}
+              onClick={() => setTheme(escuro ? "light" : "dark")}
+            >
               {escuro ? "Tema claro" : "Tema escuro"}
             </ItemMenu>
           </div>
 
-          <form action={logoutAction} style={{ borderTop: "1px solid var(--border)", padding: 4 }}>
+          {/* Sem fio acima do sair: o vermelho ja o separa do resto, e ele e a
+              ultima linha de um cartao curto. */}
+          <form action={logoutAction} style={{ padding: "0 4px 4px" }}>
             <button
               type="submit"
               style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 9,
                 width: "100%",
                 textAlign: "left",
                 padding: "7px 8px",
@@ -268,6 +315,7 @@ export function MenuUsuario({
                 color: "var(--danger-text)",
               }}
             >
+              <IconeSaida />
               Sair
             </button>
           </form>
@@ -299,21 +347,47 @@ export function MenuUsuario({
           />,
           document.body,
         )}
+
+      {/* Mesmo portal, e pelo mesmo motivo do de cima: presa no `header`, que
+          cria contexto de empilhamento, a gaveta ficaria atras da barra. */}
+      {configurandoEmpresa &&
+        createPortal(
+          <EmpresaDrawer
+            aberto
+            nome={empresas.find((e) => e.id === empresaAtualId)?.nome ?? null}
+            logo={empresas.find((e) => e.id === empresaAtualId)?.logo ?? null}
+            onClose={() => setConfigurandoEmpresa(false)}
+          />,
+          document.body,
+        )}
     </div>
   );
 }
 
+/**
+ * Uma linha do cartao.
+ *
+ * ⚠️ SEMPRE com icone a esquerda.
+ *
+ * Sem ele, as opcoes viram uma lista de frases alinhadas pela margem, e a pessoa
+ * le todas para achar uma. O icone e o que se reconhece antes da palavra, e e o
+ * mesmo desenho que aparece nos outros cartoes flutuantes da casa.
+ */
 function ItemMenu({
   children,
+  icone,
   onClick,
   href,
 }: {
   children: React.ReactNode;
+  icone: React.ReactNode;
   onClick?: () => void;
   href?: string;
 }) {
   const estilo: React.CSSProperties = {
-    display: "block",
+    display: "flex",
+    alignItems: "center",
+    gap: 9,
     width: "100%",
     textAlign: "left",
     padding: "7px 8px",
@@ -329,14 +403,78 @@ function ItemMenu({
   if (href) {
     return (
       <a href={href} style={estilo}>
+        {icone}
         {children}
       </a>
     );
   }
   return (
     <button type="button" onClick={onClick} style={estilo}>
+      {icone}
       {children}
     </button>
   );
 }
 
+
+/** O traco comum dos icones do cartao: mesma bitola dos demais menus da casa. */
+const TRACO = {
+  width: 15,
+  height: 15,
+  viewBox: "0 0 24 24",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 1.8,
+  strokeLinecap: "round",
+  strokeLinejoin: "round",
+} as const;
+
+/** Lapis: editar o proprio cadastro. */
+function IconeLapis() {
+  return (
+    <svg {...TRACO}>
+      <path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17v3z" />
+      <path d="M14.5 6.5l3 3" />
+    </svg>
+  );
+}
+
+/** Lua: passar para o tema escuro. */
+function IconeLua() {
+  return (
+    <svg {...TRACO}>
+      <path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" />
+    </svg>
+  );
+}
+
+/** Sol: voltar para o tema claro. */
+function IconeSol() {
+  return (
+    <svg {...TRACO}>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+    </svg>
+  );
+}
+
+/** Porta com a seta saindo: encerrar a sessao. */
+function IconeSaida() {
+  return (
+    <svg {...TRACO}>
+      <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3" />
+      <path d="M10 17l-5-5 5-5M5 12h9" />
+    </svg>
+  );
+}
+
+/** Predio: o cadastro da empresa, e nao o da pessoa. */
+function IconePredio() {
+  return (
+    <svg {...TRACO}>
+      <path d="M4 21V6a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v15" />
+      <path d="M13 10h6a1 1 0 0 1 1 1v10" />
+      <path d="M7 9h2M7 13h2M16 14h1M16 17.5h1M2.5 21h19" />
+    </svg>
+  );
+}

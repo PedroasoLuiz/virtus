@@ -31,17 +31,19 @@ export function BotaoLateralDoWhatsapp({ recolhida }: { recolhida: boolean }) {
       aria-pressed={aberto}
       style={{
         position: "relative",
-        width: "100%",
         display: "flex",
         alignItems: "center",
         justifyContent: recolhida ? "center" : "flex-start",
         /* 8, e nao 9: e o vao dos itens do menu, e um pixel a mais deslocava
            o rotulo do WhatsApp da coluna de texto de todos os outros. */
         gap: 8,
-        height: "var(--nav-item-h)",
+        /* Recolhido ele e um controle da coluna, na medida da barra de
+           ferramentas, e nao mais uma linha de menu sem texto. */
+        width: recolhida ? "var(--h-controle)" : "100%",
+        height: recolhida ? "var(--h-controle)" : "var(--nav-item-h)",
         padding: recolhida ? 0 : "0 8px",
         border: "none",
-        borderRadius: "var(--radius-sm)",
+        borderRadius: recolhida ? "var(--radius-full)" : "var(--radius-sm)",
         background: aberto ? "var(--primary-subtle)" : "transparent",
         color: aberto ? "var(--primary)" : "var(--sidebar-item-sub)",
         fontFamily: "var(--font)",

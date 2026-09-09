@@ -162,18 +162,19 @@ export const GRUPOS_POR_MODULO: Partial<Record<Modulo, Grupo[]>> = {
             { label: "Cartões", href: "/cartoes" },
           ],
         },
-        {
-          // "Analitico" e um subgrupo que se repete: cada modulo tem o seu.
-          // Por isso a chave leva o nome do grupo — duas chaves iguais fariam
-          // os dois abrirem e fecharem juntos.
-          key: "financeiro-analitico",
-          label: "Analítico",
-          items: [
-            { label: "DRE", href: "/dre" },
-            { label: "Fluxo de caixa", href: "/fluxo-caixa" },
-            { label: "Relatórios", href: "/relatorios" },
-          ],
-        },
+        /*
+         * ⚠️ Um ITEM, e nao mais o subgrupo "Analitico".
+         *
+         * Ali dentro moravam DRE, Fluxo de caixa e Relatorios — tres telas que
+         * tinham uma coisa em comum e so uma: sao documentos que se emite para
+         * um periodo. Hoje as tres sao o mesmo destino, e o subgrupo virou um
+         * nivel de menu para separar coisas que nao eram diferentes.
+         *
+         * ⚠️ E "Relatorios", e nao "Analitico". Aquele nome descrevia a natureza
+         * do assunto e nao o que se ganha clicando: quem precisa da DRE do ano
+         * passado nao procura por "analitico".
+         */
+        { label: "Relatórios", href: "/relatorios" },
       ],
     },
     {
@@ -232,8 +233,24 @@ export const GRUPO_PLATAFORMA: Grupo = {
   items: [{ label: "Plano e módulos", href: "/plano" }],
 };
 
+/**
+ * A tela de abertura.
+ *
+ * ⚠️ Fora dos grupos, e no TOPO do menu.
+ *
+ * Ela nao pertence a assunto nenhum: e o resumo de todos eles, e a primeira
+ * coisa que se ve depois de entrar. Dentro de "Financeiro" ela viraria mais um
+ * item entre doze, e para chegar nela seria preciso descer um nivel — na tela
+ * que existe justamente para nao precisar procurar nada.
+ *
+ * ⚠️ Ela ESTAVA fora do menu por completo, e isso era um esquecimento: dava para
+ * chegar nela pela marca no topo da barra ou pela busca, e nenhum dos dois se
+ * parece com navegacao.
+ */
+export const VISAO_GERAL: Item = { label: "Visão geral", href: "/dashboard" };
+
 /** Rotas que existem fora dos grupos do menu. */
-const AVULSAS: Item[] = [{ label: "Visão geral", href: "/dashboard" }];
+const AVULSAS: Item[] = [VISAO_GERAL];
 
 /** Achata grupo e subgrupo numa lista de telas. */
 function itensDe(grupo: Grupo): Item[] {
@@ -270,6 +287,51 @@ export function paiDaRota(href: string): string | null {
     }
   }
   return null;
+}
+
+/**
+ * O caminho ate a tela aberta, do assunto ao subgrupo: ["Financeiro", "Contas a
+ * receber"].
+ *
+ * ⚠️ Existe para o CABECALHO da pagina, e nao para o menu.
+ *
+ * Com a barra mostrando um nivel por vez, ela deixou de responder "onde estou"
+ * a toda hora: quem esta em Titulos pode ter descido ate Cadastros procurando
+ * outra coisa, e a barra passa a mostrar Cadastros. O titulo da tela e o lugar
+ * que nao muda de assunto, e por isso e onde o caminho passou a morar.
+ *
+ * ⚠️ Casa por PREFIXO MAIS LONGO, e nao por igualdade. A tela de detalhe
+ * (`/projetos/5`) nao e item de menu, e sem isso ela ficaria sem caminho —
+ * justamente a tela que mais precisa dizer de onde veio. O mais longo ganha
+ * porque `/contas-pagar/baixas` tambem comeca com `/contas-pagar`.
+ */
+export function caminhoDoMenu(pathname: string): string[] {
+  let melhor: { caminho: string[]; tamanho: number } | null = null;
+
+  const considerar = (href: string, caminho: string[]) => {
+    if (pathname !== href && !pathname.startsWith(href + "/")) return;
+    if (melhor && melhor.tamanho >= href.length) return;
+    melhor = { caminho, tamanho: href.length };
+  };
+
+  for (const grupos of [
+    ...Object.values(GRUPOS_POR_MODULO).map((g) => g ?? []),
+    [GRUPO_PLATAFORMA],
+  ]) {
+    for (const grupo of grupos) {
+      for (const filho of grupo.items) {
+        if (ehSubgrupo(filho)) {
+          for (const item of filho.items) {
+            considerar(item.href, [grupo.label, filho.label]);
+          }
+        } else {
+          considerar(filho.href, [grupo.label]);
+        }
+      }
+    }
+  }
+
+  return melhor ? (melhor as { caminho: string[] }).caminho : [];
 }
 
 export function rotuloDaRota(href: string): string | null {

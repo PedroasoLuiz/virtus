@@ -217,7 +217,7 @@ export function TicketsTabela({
             display: "flex",
             /* Sem margem a DIREITA: aquele respiro e da propria barra, que o
                carrega na largura. Ver `BarraDeFerramentas`. */
-            margin: "0 0 16px 16px",
+            margin: "0 0 var(--vao-da-pagina) var(--vao-da-pagina)",
           }}
         >
           {modo === "kanban" ? (
@@ -330,7 +330,6 @@ export function TicketsTabela({
           <BarraDeFerramentas>
             <BotaoDaBarra
               rotulo="Novo ticket"
-              legenda="Novo"
               destaque
               icone={<IconeMais />}
               onClick={() => setCriando(true)}
@@ -346,7 +345,6 @@ export function TicketsTabela({
             */}
             <BotaoDaBarra
               rotulo={`Exibição: ${modo === "kanban" ? "Kanban" : "Tabela"}`}
-              legenda="Exibir"
               icone={modo === "kanban" ? <IconeKanban /> : <IconeTabela />}
               painel={(fechar) => (
                 <>
@@ -382,7 +380,6 @@ export function TicketsTabela({
                   ? `Filtros (${filtrosAtivos} em uso)`
                   : "Filtrar os tickets"
               }
-              legenda="Filtros"
               aceso={filtrosAtivos > 0}
               icone={<IconeFunil ativo={filtrosAtivos > 0} />}
               painel={() => (

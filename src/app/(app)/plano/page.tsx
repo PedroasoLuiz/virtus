@@ -18,14 +18,32 @@ export default async function PlanoPage() {
   return (
     <PageLayout>
       <Panel>
-        <PageHeader
-        title="Plano e módulos"
-        description={
-          entitlements.plano ? `Plano atual: ${entitlements.plano.nome}` : "Nenhum plano identificado"
-        }
-        />
+        <PageHeader title="Plano e módulos" />
 
         <div style={{ padding: 16, overflowY: "auto" }}>
+          {/* ⚠️ O plano vigente desceu do cabecalho para ca. La ele custava uma
+              linha da unica faixa que alinha a barra lateral com o cartao branco
+              da tabela; aqui ele abre a lista dos planos, que e onde a pessoa
+              vai comparar o dela com os outros. */}
+          <p
+            style={{
+              margin: "0 0 16px",
+              fontSize: "var(--text-md)",
+              color: "var(--text-secondary)",
+            }}
+          >
+            {entitlements.plano ? (
+              <>
+                Plano atual:{" "}
+                <b style={{ fontWeight: "var(--fw-semi)", color: "var(--text-primary)" }}>
+                  {entitlements.plano.nome}
+                </b>
+              </>
+            ) : (
+              "Nenhum plano identificado."
+            )}
+          </p>
+
         {entitlements.usandoPadrao && (
           <div style={{ marginBottom: 16 }}>
             <Alert variant="warning" title="Empresa sem assinatura cadastrada">

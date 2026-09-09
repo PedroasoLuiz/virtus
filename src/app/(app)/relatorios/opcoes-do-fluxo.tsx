@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Alert, Button, MarcaDeUso } from "@/components/ui/kit";
+import { Alert, Button, MarcaDeUso, inputStyle } from "@/components/ui/kit";
 import { Drawer } from "@/components/ui/drawer";
 import { formatarSemSimbolo } from "@/shared/utils/money";
 import type { ProjecaoDeCaixa } from "@/modules/fluxo-caixa/fluxo-caixa.types";
@@ -21,14 +21,22 @@ import type { ProjecaoDeCaixa } from "@/modules/fluxo-caixa/fluxo-caixa.types";
  * erraria no resto: tirar o vencido muda o mes em que a serie comeca e todo o
  * saldo acumulado depois dele — e o acumulado e a coluna que se veio ler.
  */
-export function OpcoesDoPdf({
+export function OpcoesDoFluxo({
   contas,
-  ate,
+  ateInicial,
   aoGerar,
   onClose,
 }: {
   contas: ProjecaoDeCaixa["contas"];
-  ate: string;
+  /**
+   * Ate quando projetar, no primeiro desenho.
+   *
+   * ⚠️ O campo mora AQUI agora. Ele era do cabecalho da tela de fluxo, que
+   * deixou de existir quando o fluxo virou um documento da pasta de relatorios:
+   * sem ele, o horizonte ficaria cravado em um ano e a projecao de dois anos —
+   * que e o caso do consorcio — nao teria como ser pedida.
+   */
+  ateInicial: string;
   /** Recebe a projecao ja recortada, pronta para virar papel. */
   aoGerar: (projecao: ProjecaoDeCaixa) => Promise<void>;
   onClose: () => void;
@@ -39,6 +47,7 @@ export function OpcoesDoPdf({
     O padrao do relatorio e a empresa inteira; abrir vazio obrigaria a marcar
     quatro contas para obter o documento que se pede em nove de cada dez vezes.
   */
+  const [ate, setAte] = useState(ateInicial);
   const [marcadas, setMarcadas] = useState<number[]>(contas.map((c) => c.id));
   const [comVencidos, setComVencidos] = useState(true);
   const [gerando, setGerando] = useState(false);
@@ -89,17 +98,29 @@ export function OpcoesDoPdf({
   return (
     <Drawer
       open
-      nivel={2}
       onClose={onClose}
-      title="Imprimir projeção"
+      title="Fluxo de caixa"
       footer={
         <Button variant="primary" disabled={gerando} onClick={() => void gerar()}>
-          {gerando ? "Gerando…" : "Gerar PDF"}
+          {gerando ? "Emitindo…" : "Emitir PDF"}
         </Button>
       }
     >
       <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
         {erro && <Alert variant="warning">{erro}</Alert>}
+
+        <section>
+          <Titulo
+            texto="Horizonte"
+            legenda="Até quando a projeção vai. O saldo acumulado é somado mês a mês até esta data."
+          />
+          <input
+            type="date"
+            value={ate}
+            onChange={(e) => setAte(e.target.value)}
+            style={{ ...inputStyle, width: 170 }}
+          />
+        </section>
 
         <section>
           <Titulo

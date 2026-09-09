@@ -68,11 +68,41 @@
   --h-btn-sm: 30px;
   /* Altura dos icones do cabecalho do drawer. Ver `Button size="xs"`. */
   --h-btn-xs: 28px;
+  /*
+     ⚠️ A ALTURA E A LARGURA DE TODO CONTROLE DE ICONE, dos DOIS lados da tela.
+
+     O sino, o avatar e a busca mediam 28 e 34, cada um com material proprio — e
+     tres desenhos diferentes em tres controles vizinhos fazem a pessoa testar um
+     por um para descobrir quais sao botoes.
+
+     ⚠️ 44 e a medida do DISCO da barra de ferramentas (`LARGURA_DO_BOTAO`). Os
+     dois grupos ficam em cantos opostos da mesma tela, e a escala e a unica
+     coisa que os liga: com a pilula do topo em 34 e o disco da barra em 44, o
+     olho lia dois tamanhos de botao sem saber qual era a regra.
+  */
+  --h-controle: 44px;
+
   --h-btn-lg: 40px;
   --h-row: 46px;
   --h-th: 36px;
   --h-header: 54px;
   --h-topbar: 48px;
+
+  /*
+    ⚠️ A ALTURA DA FAIXA DE TOPO, dos DOIS lados da tela.
+
+    Desde que o topo e o cabecalho da pagina viraram uma linha so, a primeira
+    coisa da area de trabalho e o cartao branco da tabela, e a primeira da barra
+    lateral e o cartao da empresa. Os dois precisam comecar na mesma altura: com
+    a barra usando `--h-topbar` (48) e o cabecalho crescendo com o caminho mais o
+    titulo (~63), o cartao da empresa ficava onze pixels acima do branco ao lado
+    e a tela lia torta sem que se soubesse dizer por que.
+
+    76 = a pilula de 44 mais 16 de respiro de cada lado. Quem manda na altura e
+    a pilula, e nao mais o texto: caminho e titulo somam 39, e o controle passou
+    a ser a peca mais alta da linha.
+  */
+  --h-topo: 76px;
 
   /* Toolbar da pagina */
   --toolbar-gap: 8px;
@@ -221,7 +251,29 @@
      parecem um bloco unico e o realce do hover vaza de uma para a outra. */
   --nav-item-gap: 3px;
 
+  /* ── Moedas ────────────────────────────────────────────────────────────
+     O saldo no topo. Azul claro CHAPADO: o degrade que havia aqui puxava o
+     olho para a transicao em vez do numero, e uma pastilha de leitura nao
+     precisa de profundidade. Claro e nao `--primary`, porque azul cheio e o
+     que significa "clique aqui" em toda a interface. */
+  --moeda-bg: #d6e5ff;
+
   /* ── Layout ────────────────────────────────────────────────────────────── */
+  /*
+    ⚠️ O VAO ENTRE A CASCA E O CONTEUDO — o mesmo dos quatro lados.
+
+    Ele valia 16 a esquerda e embaixo, e 8 a direita, onde quem o carrega e a
+    barra de ferramentas (o `RESPIRO_LATERAL` dela). Dois numeros para a mesma
+    relacao: o cartao branco ficava mais longe do menu do que dos botoes que
+    agem sobre ele, e a tela pendia para a direita sem que se soubesse dizer por
+    que.
+
+    8 e nao 16 porque quem manda e a barra: ela carrega o respiro dentro da
+    propria largura, e mudar aquilo mexeria no eixo dos botoes, que ja esta em
+    prumo com o avatar la em cima.
+  */
+  --vao-da-pagina: 8px;
+
   --sidebar-w: 220px;
   --sidebar-w-collapsed: 56px;
   --sidebar-bg: #f4f5f7;
@@ -336,6 +388,10 @@
   --credito: #4ade80;
   --debito: #ff6961;
 
+  /* No escuro o azul e diluido, e nao claro: uma pastilha clara ali seria o
+     ponto mais brilhante da tela para dizer um numero pequeno. */
+  --moeda-bg: rgba(77, 155, 255, 0.18);
+
   --sidebar-bg: #141416;
   --sidebar-item-color: #d6d6da;
   --sidebar-item-hover: #ffffff;
@@ -425,6 +481,27 @@
 *::before,
 *::after {
   corner-shape: superellipse(2);
+}
+
+/*
+  ⚠️ A barra lateral mede em BORDER-BOX, e o resto do app nao.
+
+  O projeto nunca teve o reset `box-sizing: border-box`, entao a conta padrao
+  vale: `width: 100%` mais `padding: 0 8px` da 100% MAIS dezesseis pixels. No
+  menu isso aparecia do pior jeito, porque ali quase todo item e largura cheia
+  com recuo interno: as opcoes passavam por cima do respiro da direita e vazavam
+  para fora da coluna.
+
+  ⚠️ Escopo na barra, e nao um reset global. Trocar a caixa de medida do app
+  inteiro de uma vez mexeria em toda tela que hoje compensa esse comportamento
+  na mao, e o estrago apareceria espalhado. Aqui o alcance e uma coluna de
+  duzentos pixels, e o resultado se confere de uma olhada.
+*/
+.barra-lateral,
+.barra-lateral *,
+.barra-lateral *::before,
+.barra-lateral *::after {
+  box-sizing: border-box;
 }
 
 /*
@@ -661,6 +738,40 @@ h1, h2, h3, h4 {
 @media (max-width: 520px) {
   :root {
     --aviso-margem: 12px;
+  }
+}
+
+/*
+ * Qual dos dois logotipos do `LogotipoVope` aparece.
+ *
+ * ⚠️ No CSS, e nao em JavaScript lendo o tema. Os dois arquivos ja estao na
+ * pagina, e o navegador decide qual mostrar na primeira pintura: escolher em
+ * `useEffect` faria a marca trocar de cor na frente da pessoa a cada abertura da
+ * tela de entrada, que e justamente onde a identidade precisa estar firme.
+ */
+.logotipo-vope-escuro {
+  display: none;
+}
+
+:root[data-theme="dark"] .logotipo-vope-claro {
+  display: none;
+}
+
+:root[data-theme="dark"] .logotipo-vope-escuro {
+  display: block;
+}
+
+/*
+ * O painel de marca do login some em tela estreita.
+ *
+ * ⚠️ Ele e ambientacao, nao conteudo: nada se perde ao sair. Espremido ao lado
+ * do formulario, a foto viraria uma tira vertical onde nao se reconhece nada e
+ * a frase quebraria palavra por palavra, roubando a largura de quem so quer
+ * digitar e-mail e senha.
+ */
+@media (max-width: 900px) {
+  .painel-marca {
+    display: none;
   }
 }
 

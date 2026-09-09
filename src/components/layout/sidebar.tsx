@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { Modulo } from "@/modules/plataforma/plataforma.types";
 import {
   gruposDosModulos,
@@ -13,11 +14,22 @@ import {
   paiDaRota,
 } from "@/components/layout/rotas";
 import { useFavoritos } from "@/components/layout/favoritos";
-import { ArvoreNav, Chevron, GrupoFlutuante, ItemNav, ehAtivo } from "@/components/layout/nav";
+import {
+  Chevron,
+  GrupoFlutuante,
+  ItemNav,
+  NavPorNiveis,
+  ehAtivo,
+  trilhaDaRota,
+  type Trilha,
+} from "@/components/layout/nav";
 import { Icon } from "@/components/layout/icones";
-import { Marca } from "@/components/layout/marca";
+import { LogotipoVope } from "@/components/layout/marca";
 import { BotaoLateralDoWhatsapp } from "@/components/whatsapp/botao-lateral";
 import { COOKIE_SIDEBAR } from "@/components/layout/cookies";
+import { assumirEmpresaAction } from "@/modules/sessao/sessao.actions";
+import { MarcaDaEmpresa } from "@/components/layout/marca-da-empresa";
+import { useAvisos } from "@/components/ui/avisos";
 
 /**
  * Navegacao lateral, recolhivel.
@@ -36,8 +48,8 @@ export function Sidebar({
   recolhidaInicial,
   grupos: gruposFixos,
   inicio = "/dashboard",
-  podeTrocarEmpresa = false,
-  hrefTrocarEmpresa = "/selecionar-empresa",
+  empresas = [],
+  empresaAtualId = null,
   whatsapp = false,
   interno = false,
 }: {
@@ -52,16 +64,18 @@ export function Sidebar({
   empresaLogo?: string | null;
   recolhidaInicial: boolean;
   /**
-   * Se ha mais de uma empresa para escolher.
+   * As empresas deste acesso, para a lista do cartao do topo.
    *
    * ⚠️ Isto e do CARTAO DA EMPRESA, e nao do menu do usuario. Trocar de empresa
    * responde "com qual empresa estou trabalhando?", que e a pergunta que o
-   * cartao do topo ja faz — e nao "quem sou eu?", que e a do avatar. Enquanto
+   * cartao do topo ja faz, e nao "quem sou eu?", que e a do avatar. Enquanto
    * moravam juntas no perfil, a troca ficava escondida atras da identidade.
+   *
+   * ⚠️ Uma so (ou nenhuma) e o cartao deixa de ser botao: sem para onde ir, um
+   * alvo de clique que nada faz ensina a nao clicar nele.
    */
-  podeTrocarEmpresa?: boolean;
-  /** Destino da troca. O portal escolhe entre EMISSORES, nao entre tenants. */
-  hrefTrocarEmpresa?: string;
+  empresas?: EmpresaDaBarra[];
+  empresaAtualId?: number | null;
   /**
    * Menu pronto, no lugar do derivado dos modulos do plano.
    *
@@ -91,8 +105,23 @@ export function Sidebar({
 }) {
   const pathname = usePathname();
   const [recolhida, setRecolhida] = useState(recolhidaInicial);
-  const [abertoManual, setAbertoManual] = useState<string | null>(null);
   const favoritos = useFavoritos((s) => s.rotas);
+
+  /*
+   * Ate onde a pessoa desceu no menu.
+   *
+   * ⚠️ O padrao e DERIVADO da rota, e o clique so o sobrepoe. Assim chegar numa
+   * tela pela busca do topo, por um link de dentro de outra tela ou pelo voltar
+   * do navegador ja deixa a barra aberta no assunto daquela tela, sem ninguem
+   * ter de manter as duas coisas em dia na mao.
+   *
+   * ⚠️ A sobreposicao guarda a ROTA em que nasceu, e vale so enquanto ela nao
+   * muda. E o que faz o clique se desfazer sozinho ao navegar: a rota nova
+   * descarta a escolha antiga e a trilha volta a ser calculada, caindo
+   * exatamente no nivel de onde a pessoa clicou. Um `useEffect` que zerasse isso
+   * depois faria a barra renderizar uma vez com o nivel errado antes de corrigir.
+   */
+  const [descida, setDescida] = useState<{ rota: string; trilha: Trilha } | null>(null);
 
   function gravar(valor: boolean) {
     setRecolhida(valor);
@@ -101,6 +130,12 @@ export function Sidebar({
   }
 
   const grupos = gruposFixos ?? gruposDosModulos(modulos, interno);
+
+  const trilha = descida?.rota === pathname ? descida.trilha : trilhaDaRota(grupos, pathname);
+
+  function descer(t: Trilha) {
+    setDescida({ rota: pathname, trilha: t });
+  }
 
   // So telas que o plano libera entram nos favoritos: perder o modulo nao pode
   // deixar um atalho morto no topo do menu.
@@ -112,11 +147,19 @@ export function Sidebar({
 
   return (
     <aside
+      /* Ver `globals.css`: a barra mede em border-box, para item de largura
+         cheia com recuo interno parar em vez de transbordar. */
+      className="barra-lateral"
       style={{
         width: recolhida ? "var(--sidebar-w-collapsed)" : "var(--sidebar-w)",
         flexShrink: 0,
         backgroundColor: "var(--sidebar-bg)",
-        borderRight: "1px solid var(--border)",
+        /*
+          ⚠️ SEM divisoria vertical. O cinza da barra ja a separa do branco da
+          area de trabalho, e o fio por cima da troca de fundo era a mesma
+          separacao dita duas vezes. Com os itens encostando nele, ele deixou de
+          ser a borda de um vao e virou um risco atras do menu.
+        */
         display: "flex",
         flexDirection: "column",
         position: "sticky",
@@ -134,7 +177,15 @@ export function Sidebar({
     >
       <div
         style={{
-          height: "var(--h-topbar)",
+          /*
+            ⚠️ Menos os 4 do recuo de cima da `nav`.
+
+            O que precisa cair na mesma altura do cartao branco da tabela e o
+            CARTAO DA EMPRESA, e nao esta faixa: entre uma coisa e outra ha o
+            respiro da lista. Descontando aqui, a soma das duas da exatamente
+            `--h-topo` e os dois cartoes comecam na mesma linha.
+          */
+          height: "calc(var(--h-topo) - 4px)",
           display: "flex",
           alignItems: "center",
           justifyContent: recolhida ? "center" : "space-between",
@@ -142,9 +193,11 @@ export function Sidebar({
           flexShrink: 0,
         }}
       >
+        {/* O logotipo, e nao a marca escrita: e o mesmo desenho da tela de
+            entrada, no mesmo canto, entao quem entrou reconhece que chegou. */}
         {!recolhida && (
-          <Link href={inicio}>
-            <Marca />
+          <Link href={inicio} style={{ display: "inline-flex" }}>
+            <LogotipoVope altura={26} />
           </Link>
         )}
 
@@ -181,18 +234,53 @@ export function Sidebar({
           flex: 1,
           overflowY: recolhida ? "visible" : "auto",
           overflowX: recolhida ? "visible" : "hidden",
-          padding: "4px 8px",
+          /*
+            ⚠️ SEM recuo a direita quando expandida: o item vai ate a borda.
+
+            O respiro de 8px de antes abria um vao morto entre o fim do realce e
+            o comeco da area de trabalho. Sem ele, o item ativo encosta no branco
+            da pagina e le como uma aba presa nela, que e o que ele e.
+
+            ⚠️ Isto so vale porque a barra mede em border-box (ver `globals.css`).
+            Sem aquilo, `width: 100%` mais recuo interno vaza para fora da coluna.
+
+            ⚠️ Recolhida o recuo fica dos DOIS lados, e vale 6: o item ali e um
+            controle de 44 (a medida da barra de ferramentas) numa coluna de 56, e
+            6 de cada lado e exatamente o que sobra. Encostado numa borda so, ele
+            sairia do eixo — e uma coluna de icones nao tem outro alinhamento.
+          */
+          padding: recolhida ? "4px 6px" : "4px 0 4px 8px",
         }}
       >
         {recolhida ? (
-          <MenuRecolhido
-            grupos={grupos}
-            pathname={pathname}
-            expandir={(chave) => {
-              gravar(false);
-              setAbertoManual(chave);
-            }}
-          />
+          <>
+            {/*
+              ⚠️ Recolhida, a empresa e SO a marca.
+
+              O nome nao cabe em quarenta pixels, e cortado em duas letras ele
+              nao identifica ninguem. A marca sozinha identifica: e a mesma que
+              a pessoa ve expandida, no mesmo canto, e o nome inteiro continua
+              a um passe de mouse na dica.
+            */}
+            {empresa && (
+              <CartaoDaEmpresa
+                nome={empresa}
+                logo={empresaLogo ?? null}
+                empresas={empresas}
+                empresaAtualId={empresaAtualId}
+                soMarca
+              />
+            )}
+
+            <MenuRecolhido
+              grupos={grupos}
+              pathname={pathname}
+              expandir={(chave) => {
+                gravar(false);
+                descer({ grupo: chave, sub: null });
+              }}
+            />
+          </>
         ) : (
           <>
             {/*
@@ -208,8 +296,8 @@ export function Sidebar({
               <CartaoDaEmpresa
                 nome={empresa}
                 logo={empresaLogo ?? null}
-                podeTrocar={podeTrocarEmpresa}
-                hrefTrocar={hrefTrocarEmpresa}
+                empresas={empresas}
+                empresaAtualId={empresaAtualId}
               />
             )}
 
@@ -236,11 +324,11 @@ export function Sidebar({
               </p>
             )}
 
-            <ArvoreNav
+            <NavPorNiveis
               grupos={grupos}
               pathname={pathname}
-              abertoManual={abertoManual}
-              setAbertoManual={setAbertoManual}
+              trilha={trilha}
+              setTrilha={descer}
             />
           </>
         )}
@@ -257,7 +345,10 @@ export function Sidebar({
         rodape comecavam quatro pixels a direita dos icones dos grupos — pouco
         para nomear e o bastante para a coluna parecer torta.
       */}
-      <div style={{ flexShrink: 0, padding: recolhida ? "10px 6px" : "10px 8px" }}>
+      {/* Mesmo alinhamento da `nav`: o rodape e menu, e para na mesma linha. */}
+      {/* Recolhido, o mesmo 6 da lista: dois valores na mesma coluna deixavam os
+          icones do rodape fora do eixo dos grupos. */}
+      <div style={{ flexShrink: 0, padding: recolhida ? "10px 6px" : "10px 0 10px 8px" }}>
         {whatsapp && (
           <div style={{ marginBottom: 2 }}>
             <BotaoLateralDoWhatsapp recolhida={recolhida} />
@@ -299,16 +390,22 @@ export function Sidebar({
 function CartaoDaEmpresa({
   nome,
   logo,
-  podeTrocar,
-  hrefTrocar,
+  empresas,
+  empresaAtualId,
+  soMarca = false,
 }: {
   nome: string;
   logo: string | null;
-  podeTrocar: boolean;
-  hrefTrocar: string;
+  empresas: EmpresaDaBarra[];
+  empresaAtualId: number | null;
+  /** Barra recolhida: so a marca, sem o nome. */
+  soMarca?: boolean;
 }) {
   const [aberto, setAberto] = useState(false);
+  const [assumindo, setAssumindo] = useState<number | null>(null);
   const caixa = useRef<HTMLDivElement>(null);
+  const router = useRouter();
+  const { avisar } = useAvisos();
 
   useEffect(() => {
     if (!aberto) return;
@@ -319,94 +416,101 @@ function CartaoDaEmpresa({
     return () => document.removeEventListener("mousedown", fora);
   }, [aberto]);
 
+  /**
+   * Troca a empresa dali mesmo.
+   *
+   * ⚠️ `assumirEmpresaAction`, que NAO redireciona. A da tela de selecao termina
+   * em `redirect`, e chamada com `await` de dentro de um menu ela volta ao
+   * cliente como uma resposta que ele nao esperava, quebrando a tela. Aqui quem
+   * recarrega e o `router.refresh()`, e a pessoa continua onde estava.
+   */
+  async function assumir(id: number) {
+    setAssumindo(id);
+
+    const form = new FormData();
+    form.set("empresaId", String(id));
+    const { erro } = await assumirEmpresaAction({ erro: null }, form);
+
+    setAssumindo(null);
+
+    if (erro) {
+      avisar("atencao", erro);
+      return;
+    }
+
+    setAberto(false);
+    router.refresh();
+  }
+
+  const podeTrocar = empresas.length > 1;
+
   const conteudo = (
     <>
-      {logo ? (
-        /*
-          `img` e nao `next/image`: a URL vem do storage e muda por empresa, e o
-          otimizador exigiria cadastrar cada host. A marca ja e pequena, entao
-          nao ha o que otimizar.
-        */
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={logo}
-          alt=""
-          style={{
-            width: 26,
-            height: 26,
-            flexShrink: 0,
-            objectFit: "contain",
-            borderRadius: "var(--radius-sm)",
-          }}
-        />
-      ) : (
-        /* Sem marca cadastrada, as iniciais: um quadrado vazio faria parecer
-           que a imagem falhou ao carregar. */
+      <MarcaDaEmpresa nome={nome} logo={logo} tamanho={soMarca ? 34 : 26} />
+
+      {!soMarca && (
         <span
-          aria-hidden
           style={{
-            width: 26,
-            height: 26,
-            flexShrink: 0,
-            display: "grid",
-            placeItems: "center",
-            borderRadius: "var(--radius-sm)",
-            background: "var(--primary-subtle)",
-            color: "var(--primary)",
-            fontSize: 10,
-            fontWeight: "var(--fw-bold)",
+            minWidth: 0,
+            textAlign: "left",
+            fontSize: "var(--text-xs)",
+            fontWeight: "var(--fw-semi)",
+            color: "var(--text-primary)",
+            lineHeight: 1.25,
+            /* Duas linhas e entao reticencias. `-webkit-` porque `line-clamp` sem
+               prefixo ainda nao vale em todos os navegadores que o app suporta. */
+            display: "-webkit-box",
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: "vertical",
+            overflow: "hidden",
+            wordBreak: "break-word",
           }}
         >
-          {nome.trim().slice(0, 2).toUpperCase()}
+          {nome}
         </span>
       )}
-
-      <span
-        style={{
-          minWidth: 0,
-          textAlign: "left",
-          fontSize: "var(--text-xs)",
-          fontWeight: "var(--fw-semi)",
-          color: "var(--text-primary)",
-          lineHeight: 1.25,
-          /* Duas linhas e entao reticencias. `-webkit-` porque `line-clamp` sem
-             prefixo ainda nao vale em todos os navegadores que o app suporta. */
-          display: "-webkit-box",
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: "vertical",
-          overflow: "hidden",
-          wordBreak: "break-word",
-        }}
-      >
-        {nome}
-      </span>
     </>
   );
 
   const molde: React.CSSProperties = {
     display: "flex",
     alignItems: "center",
+    justifyContent: soMarca ? "center" : undefined,
     gap: 8,
-    width: "100%",
-    padding: 8,
-    borderRadius: "var(--radius-md)",
-    border: "1px solid var(--border)",
+    /* Recolhido, o cartao e um controle como os outros da coluna: mesma medida
+       da barra de ferramentas, e o mesmo canto. Expandido ele volta a ser um
+       cartao de largura cheia. */
+    width: soMarca ? "var(--h-controle)" : "100%",
+    height: soMarca ? "var(--h-controle)" : undefined,
+    padding: soMarca ? 4 : 8,
+    borderRadius: soMarca ? "var(--radius-full)" : "var(--radius-md)",
+    /* ⚠️ SEM borda, e COM elevacao. O contorno era a mesma separacao dita duas
+       vezes — e era ele que obrigava o cartao a se afastar da borda para nao
+       encostar nela. A sombra e a mesma dos discos da barra de ferramentas e da
+       pilula do topo: branco com elevacao virou, na casa inteira, o corpo do que
+       se clica, e este cartao abre a lista de empresas. */
     background: "var(--surface)",
+    boxShadow: "var(--shadow-sm)",
     fontFamily: "var(--font)",
   };
+
+  /* Mesma largura das opcoes do menu: sem borda, ele nao tem mais o que
+     proteger da borda da coluna, e um cartao mais estreito que a lista abaixo
+     dele deixava a barra com duas margens direitas diferentes. */
+  const respiro: React.CSSProperties = { marginBottom: 10 };
 
   /* Com uma empresa so, o cartao nao e botao: nao ha para onde ir, e um alvo de
      clique que nao faz nada ensina a nao clicar nele. */
   if (!podeTrocar) {
     return (
-      <div title={nome} style={{ ...molde, marginBottom: 10 }}>
+      <div title={nome} style={{ ...molde, ...respiro }}>
         {conteudo}
       </div>
     );
   }
 
   return (
-    <div ref={caixa} style={{ position: "relative", marginBottom: 10 }}>
+    <div ref={caixa} style={{ position: "relative", ...respiro }}>
       <button
         type="button"
         title={nome}
@@ -417,54 +521,114 @@ function CartaoDaEmpresa({
       >
         {conteudo}
 
-        {/* A seta so existe quando ha escolha: ela e a promessa de que algo abre. */}
-        <span style={{ marginLeft: "auto", flexShrink: 0, color: "var(--text-tertiary)" }}>
-          <Chevron aberto={aberto} tamanho={12} />
-        </span>
+        {/* A seta so existe quando ha escolha, e nao cabe na barra recolhida. */}
+        {!soMarca && (
+          <span style={{ marginLeft: "auto", flexShrink: 0, color: "var(--text-tertiary)" }}>
+            <Chevron aberto={aberto} tamanho={12} />
+          </span>
+        )}
       </button>
 
       {/*
-        ⚠️ ABSOLUTO e nao por portal, ao contrario do menu do usuario.
+        ⚠️ A LISTA, e nao um "trocar de empresa" que leva a outra tela.
 
-        Este cartao mora no TOPO da barra, dentro da area que nao rola e sobra
-        altura de sobra abaixo dele — nada a cortar. O do usuario precisava de
-        portal porque abria para cima, no rodape, contra a borda da tela.
+        Levar para o seletor era mandar a pessoa sair do trabalho, escolher e
+        voltar, para uma decisao de um clique. As empresas ja estao na mao da
+        sessao: mostrando as tres ou quatro que existem, trocar vira apontar.
+
+        ⚠️ ABSOLUTO e nao por portal: este cartao mora no topo da barra, na parte
+        que nao rola, e sobra altura abaixo dele. O menu do usuario precisava de
+        portal porque abria para cima, contra a borda da tela.
       */}
       {aberto && (
         <div
           role="menu"
           style={{
             position: "absolute",
-            left: 0,
-            right: 0,
-            top: "calc(100% + 4px)",
+            /* Recolhida a barra tem 48px: a lista nao cabe nela e abre para o
+               LADO, como os grupos flutuantes do menu fazem. Expandida, ela
+               ocupa a largura do proprio cartao. */
+            ...(soMarca
+              ? { left: "calc(100% + 6px)", minWidth: 230 }
+              : { left: 0, right: 0 }),
+            top: soMarca ? 0 : "calc(100% + 4px)",
             zIndex: 60,
             padding: 4,
             borderRadius: "var(--radius-md)",
-            border: "1px solid var(--border-strong)",
             background: "var(--surface)",
             boxShadow: "var(--shadow-md)",
           }}
         >
-          <Link
-            href={hrefTrocar}
-            onClick={() => setAberto(false)}
-            style={{
-              display: "block",
-              padding: "7px 8px",
-              borderRadius: "var(--radius-sm)",
-              fontSize: "var(--text-base)",
-              color: "var(--text-primary)",
-              textDecoration: "none",
-            }}
-          >
-            Trocar de empresa
-          </Link>
+          {empresas.map((e) => {
+            const emUso = e.id === empresaAtualId;
+
+            return (
+              <button
+                key={e.id}
+                type="button"
+                disabled={assumindo != null}
+                onClick={() => void assumir(e.id)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  width: "100%",
+                  padding: "6px 8px",
+                  border: "none",
+                  borderRadius: "var(--radius-sm)",
+                  background: emUso ? "var(--primary-subtle)" : "transparent",
+                  cursor: assumindo != null ? "wait" : "pointer",
+                  textAlign: "left",
+                  fontFamily: "var(--font)",
+                  fontSize: "var(--text-base)",
+                  fontWeight: emUso ? "var(--fw-semi)" : "var(--fw-regular)",
+                  color: "var(--text-primary)",
+                }}
+                onMouseEnter={(ev) => {
+                  if (!emUso) ev.currentTarget.style.background = "var(--sidebar-item-bg-hover)";
+                }}
+                onMouseLeave={(ev) => {
+                  if (!emUso) ev.currentTarget.style.background = "transparent";
+                }}
+              >
+                {/* O icone a esquerda e a MARCA da empresa: e por ela que se
+                    reconhece a linha antes de ler o nome. */}
+                <MarcaDaEmpresa nome={e.nome} logo={e.logo} tamanho={20} />
+
+                <span
+                  style={{
+                    minWidth: 0,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {e.nome}
+                </span>
+
+                {assumindo === e.id && (
+                  <span
+                    style={{
+                      marginLeft: "auto",
+                      flexShrink: 0,
+                      fontSize: "var(--text-xs)",
+                      color: "var(--text-tertiary)",
+                    }}
+                  >
+                    entrando…
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
+
+/** As empresas que a barra recebe para a lista do cartao do topo. */
+export type EmpresaDaBarra = { id: number; nome: string; logo: string | null };
 
 /**
  * Atalhos no topo do menu.
@@ -552,7 +716,7 @@ function Favoritos({ telas, pathname }: { telas: Item[]; pathname: string }) {
               </div>
 
               {itens.map((t) => (
-                <ItemNav key={t.href} item={t} ativo={ehAtivo(t.href, pathname)} nivel={2} />
+                <ItemNav key={t.href} item={t} ativo={ehAtivo(t.href, pathname)} recuo={20} />
               ))}
             </div>
           ))}
@@ -646,9 +810,13 @@ function ItemDoRodape({
     alignItems: "center",
     justifyContent: recolhida ? "center" : "flex-start",
     gap: 8,
-    height: "var(--nav-item-h)",
+    /* Recolhido ele e o mesmo controle dos grupos, na medida da barra de
+       ferramentas: dois desenhos na mesma coluna fariam o rodape parecer
+       remendo. */
+    width: recolhida ? "var(--h-controle)" : undefined,
+    height: recolhida ? "var(--h-controle)" : "var(--nav-item-h)",
     padding: recolhida ? 0 : "0 8px",
-    borderRadius: "var(--radius-sm)",
+    borderRadius: recolhida ? "var(--radius-full)" : "var(--radius-sm)",
     background: ativo ? "var(--primary-subtle)" : "transparent",
     color: ativo ? "var(--primary)" : "var(--sidebar-item-sub)",
     fontSize: "var(--text-base)",

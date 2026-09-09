@@ -6,6 +6,7 @@ import { useFavoritos } from "@/components/layout/favoritos";
 import {
   ehSubgrupo,
   telasDoGrupo,
+  VISAO_GERAL,
   TODAS_AS_ROTAS,
   type Grupo,
   type Item,
@@ -14,216 +15,295 @@ import {
 import { Icon } from "@/components/layout/icones";
 
 /**
- * Arvore de navegacao.
+ * Navegacao por NIVEIS: uma lista de cada vez, e o caminho por cima dela.
  *
- * Hierarquia se le por tres coisas, nesta ordem: o trilho vertical de 1px que
- * liga os itens de um grupo, o marcador circular no centro de cada item, e o
- * recuo do texto. Todos os valores vem de token (`--nav-*`), para que item de
- * menu novo caia exatamente sobre a mesma linha.
+ * ⚠️ Substituiu a arvore de tres niveis abertos ao mesmo tempo.
  *
- * Nivel 1 (grupo) tem icone; o trilho dos filhos desce do centro desse icone.
- * O texto do filho comeca na mesma coluna do rotulo do grupo — sem isso o
- * subitem parece estar mais a esquerda que o pai.
+ * A arvore mostrava dez linhas para oferecer duas telas, e cada linha de
+ * submenu carregava quatro sinais de hierarquia ao mesmo tempo (trilho,
+ * marcador, recuo e chevron) para dizer uma coisa so. O que sobrou aqui e a
+ * lista do nivel em que voce esta, com o caminho ate ele em cima: quem chega ve
+ * tres ou quatro nomes, e nao a estrutura inteira do sistema.
+ *
+ * ⚠️ O custo assumido: trocar de subgrupo passou a exigir subir e descer. Dentro
+ * de um mesmo nivel a troca continua sendo um clique, que e onde o dia inteiro
+ * acontece, e os FAVORITOS existem no topo justamente para os pulos longos.
  */
-
-export function ArvoreNav({
+export function NavPorNiveis({
   grupos,
   pathname,
-  abertoManual,
-  setAbertoManual,
+  trilha,
+  setTrilha,
 }: {
   grupos: Grupo[];
   pathname: string;
-  abertoManual: string | null;
-  setAbertoManual: (k: string | null) => void;
+  /** Onde a pessoa desceu. Grupo `null` e a lista de assuntos. */
+  trilha: Trilha;
+  setTrilha: (t: Trilha) => void;
 }) {
+  const grupo = grupos.find((g) => g.key === trilha.grupo) ?? null;
+  const subgrupo =
+    grupo && trilha.sub
+      ? ((grupo.items.find((f) => ehSubgrupo(f) && f.key === trilha.sub) as Subgrupo | undefined) ??
+        null)
+      : null;
+
+  /* A raiz: a visao geral, e depois os assuntos do sistema. */
+  if (!grupo) {
+    return (
+      <Coluna>
+        {/*
+          ⚠️ Ela vem ANTES dos grupos e nao desce nivel nenhum: e uma tela, e nao
+          uma gaveta. Por isso e um `ItemNav`, com o mesmo desenho de qualquer
+          tela final — e nao uma `LinhaQueDesce` com seta prometendo mais um
+          passo que nao existe.
+        */}
+        <ItemNav item={VISAO_GERAL} ativo={ehAtivo(VISAO_GERAL.href, pathname)} />
+
+        {grupos.map((g) => (
+          <LinhaQueDesce
+            key={g.key}
+            rotulo={g.label}
+            icone={<Icon name={g.icon} color={corDoIcone(g, pathname)} />}
+            forte
+            aceso={telasDoGrupo(g).some((i) => ehAtivo(i.href, pathname))}
+            onClick={() => setTrilha({ grupo: g.key, sub: null })}
+          />
+        ))}
+      </Coluna>
+    );
+  }
+
+  const filhos = subgrupo ? subgrupo.items : grupo.items;
+
   return (
-    <>
-      {grupos.map((g) => (
-        <GrupoNav
-          key={g.key}
-          grupo={g}
-          pathname={pathname}
-          abertoManual={abertoManual}
-          setAbertoManual={setAbertoManual}
-        />
-      ))}
-    </>
-  );
-}
+    <Coluna>
+      <Caminho grupo={grupo} subgrupo={subgrupo} aoVoltar={setTrilha} />
 
-function GrupoNav({
-  grupo,
-  pathname,
-  abertoManual,
-  setAbertoManual,
-}: {
-  grupo: Grupo;
-  pathname: string;
-  abertoManual: string | null;
-  setAbertoManual: (k: string | null) => void;
-}) {
-  // Considera as telas dentro de subgrupos: estar em "Extrato" tem de acender
-  // "Financeiro", nao so "Caixas e Bancos".
-  const grupoAtivo = telasDoGrupo(grupo).some((i) => ehAtivo(i.href, pathname));
-  const aberto = abertoManual === null ? grupoAtivo : abertoManual === grupo.key;
-
-  return (
-    <div style={{ marginBottom: "var(--nav-item-gap)" }}>
-      <button
-        onClick={() => setAbertoManual(aberto ? "" : grupo.key)}
-        style={{
-          width: "100%",
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          height: 32,
-          padding: "0 8px",
-          border: "none",
-          background: "transparent",
-          borderRadius: "var(--radius-sm)",
-          cursor: "pointer",
-          fontFamily: "var(--font)",
-          fontSize: "var(--text-base)",
-          fontWeight: grupoAtivo ? 650 : 550,
-          color: "var(--sidebar-item-color)",
-          textAlign: "left",
-          whiteSpace: "nowrap",
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--sidebar-item-bg-hover)")}
-        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-      >
-        <Icon name={grupo.icon} color={grupoAtivo ? "var(--primary)" : "var(--sidebar-item-sub)"} />
-        <span style={{ flex: 1 }}>{grupo.label}</span>
-        <Chevron aberto={aberto} tamanho={12} />
-      </button>
-
-      {aberto && (
-        <Trilho nivel={1}>
-          {grupo.items.map((filho) =>
-            ehSubgrupo(filho) ? (
-              <SubgrupoNav key={filho.key} subgrupo={filho} pathname={pathname} />
-            ) : (
-              <ItemNav key={filho.href} item={filho} ativo={ehAtivo(filho.href, pathname)} nivel={1} />
-            ),
-          )}
-        </Trilho>
+      {filhos.map((filho) =>
+        ehSubgrupo(filho) ? (
+          <LinhaQueDesce
+            key={filho.key}
+            rotulo={filho.label}
+            aceso={filho.items.some((i) => ehAtivo(i.href, pathname))}
+            onClick={() => setTrilha({ grupo: grupo.key, sub: filho.key })}
+          />
+        ) : (
+          <ItemNav key={filho.href} item={filho} ativo={ehAtivo(filho.href, pathname)} />
+        ),
       )}
-    </div>
+    </Coluna>
   );
 }
 
-/**
- * Segundo nivel.
- *
- * Sem icone e sem negrito: a hierarquia vem da indentacao e do chevron, nao de
- * peso de fonte competindo com o titulo do grupo. Abre sozinho quando a tela
- * atual esta dentro dele.
- */
-function SubgrupoNav({ subgrupo, pathname }: { subgrupo: Subgrupo; pathname: string }) {
-  const contemAtiva = subgrupo.items.some((i) => ehAtivo(i.href, pathname));
-  const [aberto, setAberto] = useState(contemAtiva);
+/** Onde a pessoa desceu no menu. */
+export type Trilha = { grupo: string | null; sub: string | null };
 
+function Coluna({ children }: { children: React.ReactNode }) {
   return (
-    <div>
-      {/* Marcador fora do botao: assim o realce do hover comeca depois da
-          bolinha, sem cobrir o trilho — mesma regra do item selecionado. */}
-      <div style={{ position: "relative" }}>
-        <Marcador x="var(--nav-trilho-x1)" aceso={contemAtiva} />
-
-        <button
-          onClick={() => setAberto((v) => !v)}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            width: "calc(100% - var(--nav-trilho-x1) - var(--nav-card-gap))",
-            marginLeft: "calc(var(--nav-trilho-x1) + var(--nav-card-gap))",
-            height: "var(--nav-item-h)",
-            padding:
-              "0 8px 0 calc(var(--nav-texto-x1) - var(--nav-trilho-x1) - var(--nav-card-gap))",
-            border: "none",
-            background: "transparent",
-            borderRadius: "var(--radius-sm)",
-            cursor: "pointer",
-            fontFamily: "var(--font)",
-            fontSize: "var(--text-base)",
-            fontWeight: 400,
-            color: contemAtiva ? "var(--sidebar-item-color)" : "var(--sidebar-item-sub)",
-            textAlign: "left",
-            whiteSpace: "nowrap",
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--sidebar-item-bg-hover)")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-        >
-          <span style={{ flex: 1 }}>{subgrupo.label}</span>
-          <Chevron aberto={aberto} tamanho={11} />
-        </button>
-      </div>
-
-      {aberto && (
-        <Trilho nivel={2}>
-          {subgrupo.items.map((item) => (
-            <ItemNav key={item.href} item={item} ativo={ehAtivo(item.href, pathname)} nivel={2} />
-          ))}
-        </Trilho>
-      )}
-    </div>
-  );
-}
-
-/**
- * Linha vertical que liga os itens de um mesmo nivel.
- *
- * Comeca e termina no centro do primeiro e do ultimo marcador: descer do topo
- * do bloco ou ate o fim deixaria pontas de linha sobrando fora da sequencia.
- */
-function Trilho({ nivel, children }: { nivel: 1 | 2; children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        position: "relative",
-        marginTop: "var(--nav-item-gap)",
-        display: "flex",
-        flexDirection: "column",
-        gap: "var(--nav-item-gap)",
-      }}
-    >
-      <span
-        aria-hidden
-        style={{
-          position: "absolute",
-          left: nivel === 1 ? "var(--nav-trilho-x1)" : "var(--nav-trilho-x2)",
-          top: "calc(var(--nav-item-h) / 2)",
-          bottom: "calc(var(--nav-item-h) / 2)",
-          width: "var(--nav-trilho-largura)",
-          background: "var(--nav-trilho-cor)",
-        }}
-      />
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--nav-item-gap)" }}>
       {children}
     </div>
   );
 }
 
-/** Bolinha do item sobre o trilho. */
-function Marcador({ x, aceso }: { x: string; aceso: boolean }) {
+/**
+ * De quem e a tela aberta, para a barra abrir ja no nivel dela.
+ *
+ * ⚠️ Devolve o SUBGRUPO quando ha um, e nao so o grupo. Chegar em Baixas pela
+ * busca do topo e cair na lista de assuntos obrigaria a descer de novo ate onde
+ * a pessoa acabou de chegar.
+ */
+export function trilhaDaRota(grupos: Grupo[], pathname: string): Trilha {
+  for (const g of grupos) {
+    for (const f of g.items) {
+      if (ehSubgrupo(f)) {
+        if (f.items.some((i) => ehAtivo(i.href, pathname))) return { grupo: g.key, sub: f.key };
+      } else if (ehAtivo(f.href, pathname)) {
+        return { grupo: g.key, sub: null };
+      }
+    }
+  }
+  return { grupo: null, sub: null };
+}
+
+function corDoIcone(grupo: Grupo, pathname: string): string {
+  return telasDoGrupo(grupo).some((i) => ehAtivo(i.href, pathname))
+    ? "var(--primary)"
+    : "var(--sidebar-item-sub)";
+}
+
+/**
+ * O caminho ate o nivel aberto, e a saida dele.
+ *
+ * ⚠️ Cada degrau anterior e um BOTAO, e o ultimo nao. Voltar e o que este menu
+ * cobra em troca de mostrar pouco, entao precisa estar sempre a vista; o degrau
+ * em que voce ja esta nao leva a lugar nenhum, e clicavel prometeria uma tela
+ * que nao existe.
+ */
+function Caminho({
+  grupo,
+  subgrupo,
+  aoVoltar,
+}: {
+  grupo: Grupo;
+  subgrupo: Subgrupo | null;
+  aoVoltar: (t: Trilha) => void;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        flexWrap: "wrap",
+        gap: 2,
+        /*
+          ⚠️ O recuo do caminho e o do rotulo das opcoes, menos o respiro que os
+          degraus tem por dentro. Os dois precisam nascer na mesma coluna: com o
+          caminho quatro pixels a direita, a lista abaixo dele parecia recuada
+          para tras e a barra inteira lia torta.
+        */
+        padding: "2px 8px 6px 4px",
+        fontSize: "var(--text-sm)",
+        color: "var(--sidebar-item-sub)",
+      }}
+    >
+      <Degrau rotulo="Início" onClick={() => aoVoltar({ grupo: null, sub: null })} />
+      <Seta />
+
+      {subgrupo ? (
+        <>
+          <Degrau rotulo={grupo.label} onClick={() => aoVoltar({ grupo: grupo.key, sub: null })} />
+          <Seta />
+          <Aqui rotulo={subgrupo.label} />
+        </>
+      ) : (
+        <Aqui rotulo={grupo.label} />
+      )}
+    </div>
+  );
+}
+
+function Aqui({ rotulo }: { rotulo: string }) {
   return (
     <span
-      aria-hidden
-      className="redondo"
       style={{
-        position: "absolute",
-        left: x,
-        top: "50%",
-        transform: "translate(-50%, -50%)",
-        width: "var(--nav-marcador)",
-        height: "var(--nav-marcador)",
-        borderRadius: "var(--radius-full)",
-        background: aceso ? "var(--primary)" : "var(--nav-marcador-cor)",
-        // O anel na cor do fundo abre um respiro entre a bolinha e a linha.
-        boxShadow: "0 0 0 2px var(--sidebar-bg)",
+        padding: "2px 4px",
+        fontWeight: "var(--fw-semi)",
+        color: "var(--sidebar-item-color)",
       }}
-    />
+    >
+      {rotulo}
+    </span>
+  );
+}
+
+function Degrau({ rotulo, onClick }: { rotulo: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        padding: "2px 4px",
+        border: "none",
+        borderRadius: "var(--radius-xs)",
+        background: "transparent",
+        fontFamily: "var(--font)",
+        fontSize: "var(--text-sm)",
+        color: "var(--sidebar-item-sub)",
+        cursor: "pointer",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = "var(--sidebar-item-bg-hover)";
+        e.currentTarget.style.color = "var(--sidebar-item-hover)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = "transparent";
+        e.currentTarget.style.color = "var(--sidebar-item-sub)";
+      }}
+    >
+      {rotulo}
+    </button>
+  );
+}
+
+function Seta() {
+  return (
+    <span aria-hidden style={{ color: "var(--nav-marcador-cor)" }}>
+      ›
+    </span>
+  );
+}
+
+/**
+ * Linha que leva a outro NIVEL, e nao a uma tela.
+ *
+ * ⚠️ A seta aponta para a direita, e nao para baixo. Chevron para baixo promete
+ * que a lista abre ali mesmo, empurrando o resto para baixo; aqui a lista
+ * SUBSTITUI esta, e a seta lateral e o que diz isso antes do clique.
+ */
+function LinhaQueDesce({
+  rotulo,
+  icone,
+  aceso,
+  forte = false,
+  onClick,
+}: {
+  rotulo: string;
+  icone?: React.ReactNode;
+  aceso: boolean;
+  /** Assunto de primeiro nivel: pesa mais que subgrupo. */
+  forte?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        width: "100%",
+        height: "var(--nav-item-h)",
+        padding: "0 8px",
+        border: "none",
+        background: "transparent",
+        borderRadius: "var(--radius-sm) 0 0 var(--radius-sm)",
+        cursor: "pointer",
+        fontFamily: "var(--font)",
+        fontSize: "var(--text-base)",
+        fontWeight: forte ? (aceso ? 650 : 550) : aceso ? 590 : 500,
+        /*
+          ⚠️ Tinta de TEXTO, e nao de legenda.
+
+          Em `--sidebar-item-sub` a opcao ficava do mesmo cinza dos rotulos
+          secundarios da casa, e cinza fraco o olho le como coisa desligada: a
+          lista parecia uma legenda de tres linhas, e nao tres alvos de clique.
+          O tom cheio e o que separa o que se clica do que so se le.
+        */
+        color: aceso ? "var(--primary)" : "var(--sidebar-item-color)",
+        textAlign: "left",
+        whiteSpace: "nowrap",
+      }}
+      onMouseEnter={(e) => (e.currentTarget.style.background = "var(--sidebar-item-bg-hover)")}
+      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+    >
+      {icone && <span style={{ display: "flex", flexShrink: 0 }}>{icone}</span>}
+      <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis" }}>{rotulo}</span>
+      <span aria-hidden style={{ display: "flex", flexShrink: 0, color: "var(--nav-marcador-cor)" }}>
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M9 6l6 6-6 6" />
+        </svg>
+      </span>
+    </button>
   );
 }
 
@@ -245,61 +325,57 @@ export function Chevron({ aberto, tamanho }: { aberto: boolean; tamanho: number 
 /**
  * Item de tela.
  *
+ * ⚠️ Sem marcador e sem recuo por nivel. Os dois existiam para desenhar a
+ * profundidade dentro da arvore; com uma lista por vez, a profundidade esta no
+ * caminho acima dela, e repeti-la em cada linha so gastava a coluna.
+ *
  * Ao passar o mouse, a estrela aparece na ponta direita: so telas finais podem
  * ser favoritadas — favoritar um grupo nao levaria a lugar nenhum.
  */
 export function ItemNav({
   item,
   ativo,
-  nivel,
+  recuo = 8,
 }: {
   item: Item;
   ativo: boolean;
-  /** 1 = filho de grupo, 2 = filho de subgrupo, 0 = lista de favoritos. */
-  nivel: 0 | 1 | 2;
+  /** Recuo do texto. So os favoritos usam outro, para caberem sob o nome do pai. */
+  recuo?: number;
 }) {
   const [sobre, setSobre] = useState(false);
   const favoritos = useFavoritos((s) => s.rotas);
   const alternar = useFavoritos((s) => s.alternar);
 
   const favoritado = favoritos.includes(item.href);
-  const trilhoX = nivel === 2 ? "var(--nav-trilho-x2)" : "var(--nav-trilho-x1)";
-  const textoX = nivel === 2 ? "var(--nav-texto-x2)" : "var(--nav-texto-x1)";
-
-  // O marcador fica FORA do link: assim o fundo do item selecionado comeca
-  // depois da bolinha, em vez de engolir o trilho.
-  const recuoDoCard = nivel === 0 ? "0px" : `calc(${trilhoX} + var(--nav-card-gap))`;
 
   return (
-    <div style={{ position: "relative" }}>
-      {nivel > 0 && <Marcador x={trilhoX} aceso={ativo} />}
-
-      <Link
-        href={item.href}
-        onMouseEnter={() => setSobre(true)}
-        onMouseLeave={() => setSobre(false)}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          height: "var(--nav-item-h)",
-          marginLeft: recuoDoCard,
-          padding: `0 4px 0 calc(${textoX} - ${recuoDoCard})`,
-          borderRadius: "var(--radius-sm)",
-          fontSize: "var(--text-base)",
-          fontWeight: ativo ? 600 : 450,
-          color: ativo ? "var(--primary)" : "var(--sidebar-item-sub)",
-          background: ativo ? "var(--primary-subtle)" : "transparent",
-          whiteSpace: "nowrap",
-          transition: "background var(--dur-fast) var(--ease)",
-        }}
-        onMouseOver={(e) => {
-          if (!ativo) e.currentTarget.style.background = "var(--sidebar-item-bg-hover)";
-        }}
-        onMouseOut={(e) => {
-          if (!ativo) e.currentTarget.style.background = "transparent";
-        }}
-      >
-        <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis" }}>{item.label}</span>
+    <Link
+      href={item.href}
+      onMouseEnter={() => setSobre(true)}
+      onMouseLeave={() => setSobre(false)}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        height: "var(--nav-item-h)",
+        padding: `0 4px 0 ${recuo}px`,
+        borderRadius: "var(--radius-sm) 0 0 var(--radius-sm)",
+        fontSize: "var(--text-base)",
+        fontWeight: ativo ? 590 : 500,
+        /* Mesma tinta cheia da `LinhaQueDesce`: as duas sao coisas que se
+           clicam, e uma mais apagada que a outra faria a lista parecer ter
+           opcoes ligadas e desligadas misturadas. */
+        color: ativo ? "var(--primary)" : "var(--sidebar-item-color)",
+        /* ⚠️ O item aceso NAO tem fundo: ele ja esta azul e em negrito, e o
+           retangulo tingido era a mesma frase pela terceira vez. Sem ele, fundo
+           na barra volta a significar so "o mouse esta aqui". */
+        background: "transparent",
+        whiteSpace: "nowrap",
+        transition: "background var(--dur-fast) var(--ease)",
+      }}
+      onMouseOver={(e) => (e.currentTarget.style.background = "var(--sidebar-item-bg-hover)")}
+      onMouseOut={(e) => (e.currentTarget.style.background = "transparent")}
+    >
+      <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis" }}>{item.label}</span>
 
       <button
         onClick={(e) => {
@@ -329,10 +405,9 @@ export function ItemNav({
           transition: "opacity var(--dur-fast) var(--ease)",
         }}
       >
-          <Estrela preenchida={favoritado} />
-        </button>
-      </Link>
-    </div>
+        <Estrela preenchida={favoritado} />
+      </button>
+    </Link>
   );
 }
 
@@ -424,13 +499,23 @@ export function GrupoFlutuante({
         aria-label={grupo.label}
         aria-expanded={aberto}
         style={{
-          width: "100%",
-          height: 36,
+          /*
+            ⚠️ QUADRADO, e com o canto dos controles da casa.
+
+            Recolhida, o item deixa de ser uma linha de lista e vira um alvo de
+            icone — a mesma coisa que os discos da barra de ferramentas sao. O
+            retangulo de 36 com canto pequeno era o desenho de quando isto era
+            uma lista espremida; quadrado, na medida da barra (`--h-controle`) e
+            com `--radius-full` — que a superelipse da casa transforma naquele
+            canto muito mole —, ele passa a pertencer a familia certa.
+          */
+          width: "var(--h-controle)",
+          height: "var(--h-controle)",
           display: "grid",
           placeItems: "center",
           border: "none",
           background: ativo || aberto ? "var(--primary-subtle)" : "transparent",
-          borderRadius: "var(--radius-sm)",
+          borderRadius: "var(--radius-full)",
           cursor: "pointer",
         }}
       >
@@ -459,7 +544,9 @@ export function GrupoFlutuante({
               {
                 minWidth: 216,
                 background: "var(--surface)",
-                border: "1px solid var(--border-strong)",
+                /* ⚠️ SEM borda: a sombra ja separa o cartao do que esta atras.
+                Contorno mais sombra e a mesma coisa dita duas vezes. Ver
+                `07-DESIGN-TOKENS`, cartao flutuante. */
                 borderRadius: "var(--radius-lg)",
                 boxShadow: "var(--shadow-md)",
                 padding: "4px 4px 8px",
@@ -480,22 +567,47 @@ export function GrupoFlutuante({
               {grupo.label}
             </div>
 
-            {/* Mesmo trilho e mesmos itens da barra expandida — nao ha por que
-                o cartao ter uma segunda linguagem de hierarquia. */}
-            <Trilho nivel={1}>
+            {/*
+              ⚠️ O grupo INTEIRO, aberto, e nao um nivel por vez.
+
+              Expandida a barra pede o caminho de volta para trocar de subgrupo;
+              aqui nao ha barra nenhuma, e o cartao existe por um instante sob o
+              mouse. Fazer descer e subir dentro de algo que fecha quando o mouse
+              escorrega seria cobrar duas vezes. Aqui o subgrupo vira TITULO de
+              bloco, e todas as telas do assunto ficam a um clique.
+            */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "var(--nav-item-gap)" }}>
               {grupo.items.map((filho) =>
                 ehSubgrupo(filho) ? (
-                  <SubgrupoNav key={filho.key} subgrupo={filho} pathname={pathname} />
+                  <div key={filho.key}>
+                    <div
+                      style={{
+                        padding: "6px 8px 2px",
+                        fontSize: "var(--text-sm)",
+                        color: "var(--text-tertiary)",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {filho.label}
+                    </div>
+                    {filho.items.map((it) => (
+                      <ItemNav
+                        key={it.href}
+                        item={it}
+                        ativo={ehAtivo(it.href, pathname)}
+                        recuo={18}
+                      />
+                    ))}
+                  </div>
                 ) : (
                   <ItemNav
                     key={filho.href}
                     item={filho}
                     ativo={ehAtivo(filho.href, pathname)}
-                    nivel={1}
                   />
                 ),
               )}
-            </Trilho>
+            </div>
           </div>
         </div>
       )}

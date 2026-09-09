@@ -478,7 +478,9 @@ export function BotaoHistorico({
             zIndex: 402,
             minWidth: 240,
             background: "var(--surface)",
-            border: "1px solid var(--border-strong)",
+            /* ⚠️ SEM borda: a sombra ja separa o cartao do que esta atras.
+            Contorno mais sombra e a mesma coisa dita duas vezes. Ver
+            `07-DESIGN-TOKENS`, cartao flutuante. */
             borderRadius: "var(--radius-lg)",
             boxShadow: "var(--shadow-md)",
             padding: 12,

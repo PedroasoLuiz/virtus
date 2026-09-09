@@ -7,6 +7,7 @@ import {
   type EstadoFormulario,
 } from "@/modules/sessao/sessao.actions";
 import type { EmpresaDoUsuario } from "@/modules/sessao/sessao.types";
+import { MarcaDaEmpresa } from "@/components/layout/marca-da-empresa";
 
 const INICIAL: EstadoFormulario = { erro: null };
 
@@ -64,23 +65,16 @@ export function SeletorEmpresa({
             onMouseEnter={(ev) => (ev.currentTarget.style.borderColor = "var(--primary)")}
             onMouseLeave={(ev) => (ev.currentTarget.style.borderColor = "var(--border-strong)")}
           >
-            <span
-              aria-hidden
-              style={{
-                width: 34,
-                height: 34,
-                flexShrink: 0,
-                display: "grid",
-                placeItems: "center",
-                borderRadius: "var(--radius-md)",
-                background: "var(--primary-subtle)",
-                color: "var(--primary)",
-                fontWeight: "var(--fw-bold)",
-                fontSize: "var(--text-md)",
-              }}
-            >
-              {iniciais(e.nome)}
-            </span>
+            {/*
+              ⚠️ O LOGOTIPO da empresa, e nao so as iniciais.
+
+              Esta e a unica tela em que a pessoa ainda nao esta dentro de
+              empresa nenhuma, e por isso e onde a marca mais serve: quem
+              administra quatro tenants reconhece o certo pelo desenho antes de
+              ler a lista inteira. O quadrado com iniciais continua para quem
+              nao cadastrou logo, dentro da mesma peca.
+            */}
+            <MarcaDaEmpresa nome={e.nome} logo={e.logo} tamanho={34} />
             <span style={{ flex: 1, minWidth: 0 }}>
               <span
                 style={{
@@ -140,14 +134,4 @@ export function SeletorEmpresa({
       </form>
     </div>
   );
-}
-
-function iniciais(nome: string): string {
-  return nome
-    .split(/\s+/)
-    .filter((p) => p.length > 2)
-    .slice(0, 2)
-    .map((p) => p[0])
-    .join("")
-    .toUpperCase();
 }

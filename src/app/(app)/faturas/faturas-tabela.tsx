@@ -172,7 +172,7 @@ export function FaturasTabela({
             display: "flex",
             /* Sem margem a DIREITA: aquele respiro e da propria barra, que o
                carrega na largura. Ver `BarraDeFerramentas`. */
-            margin: "0 0 16px 16px",
+            margin: "0 0 var(--vao-da-pagina) var(--vao-da-pagina)",
           }}
         >
           {modo === "tabela" ? (
@@ -274,7 +274,6 @@ export function FaturasTabela({
             <BarraDeFerramentas>
               <BotaoDaBarra
                 rotulo="Nova conta a receber"
-                legenda="Nova"
                 destaque
                 icone={<IconeMais />}
                 onClick={() => setCriando(true)}
@@ -284,7 +283,6 @@ export function FaturasTabela({
                   mesma listagem, muda so por onde se olha. */}
               <BotaoDaBarra
                 rotulo={`Exibição: ${modo === "kanban" ? "Kanban" : "Tabela"}`}
-                legenda="Exibir"
                 icone={modo === "kanban" ? <IconeKanban /> : <IconeTabela />}
                 painel={(fechar) => (
                   <>
@@ -313,7 +311,6 @@ export function FaturasTabela({
                   icone vira lista curta sem explicacao. */}
               <BotaoDaBarra
                 rotulo={filtrosAtivos > 0 ? `Filtros (${filtrosAtivos} em uso)` : "Filtrar as contas"}
-                legenda="Filtros"
                 aceso={filtrosAtivos > 0}
                 icone={<IconeFunil ativo={filtrosAtivos > 0} />}
                 painel={() => (
