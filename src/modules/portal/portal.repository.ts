@@ -168,10 +168,26 @@ export async function meusOrcamentos(
 
   const { data, error } = await supabase
     .from("ordensservico")
-    .select(
-      "id, idtenant, titulo, datainicio, fkCliente, fkEmpresa, empresas(id, fantasia, razaosocial), ordensservicoxservicos(total)",
-    )
-    .ilike("status", "ORCAMENTO")
+    /*
+      ⚠️ O status vem do EMBED, e nao da coluna `status`.
+
+      Aquela coluna e texto herdado do FlutterFlow e guarda "ABERTA",
+      "FATURADO", "CANCELADO" — nunca "ORCAMENTO". O status do sistema vive em
+      `fkStatus -> ordensservicostatus.chave` desde que o quadro de tickets foi
+      reescrito, e o filtro antigo simplesmente nunca casava: a raia de
+      orcamentos do portal ficou vazia para todo cliente, sem erro nenhum.
+
+      ⚠️ `!ordensservico_fkStatus_fkey` porque ha DUAS chaves estrangeiras desta
+      tabela para `ordensservicostatus`; sem nomear a constraint, o PostgREST
+      devolve PGRST201. E `!inner` porque o embed aqui FILTRA, e nao so traz
+      junto: sem ele o `eq` sobre a relacao nao descarta linha nenhuma.
+    */
+    // prettier-ignore
+    .select("id, idtenant, titulo, datainicio, fkCliente, fkEmpresa, empresas(id, fantasia, razaosocial), ordensservicoxservicos(total), coluna:ordensservicostatus!ordensservico_fkStatus_fkey!inner(chave)")
+    .eq("coluna.chave", "ORCAMENTO")
+    /* A policy ja exclui o cancelado, mas a lista se define AQUI: policy responde
+       "pode ver?", consulta responde "e disto que eu preciso?". */
+    .not("cancelada", "is", true)
     .order("datainicio", { ascending: true });
 
   if (error) throw error;

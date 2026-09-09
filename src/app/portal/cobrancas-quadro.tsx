@@ -135,12 +135,7 @@ export function CobrancasQuadro({
     }));
 
     return [...deOrcamento, ...deParcela]
-      .filter(
-        (c) =>
-          !termo ||
-          c.etiqueta.toLowerCase().includes(termo) ||
-          c.cliente.toLowerCase().includes(termo),
-      )
+      .filter((c) => !termo || casa(c, termo))
       // Sem data vai para o fim: não se sabe quando vence, e no topo empurraria
       // para baixo o que tem data e cobra ação.
       .sort((a, b) => (a.data ?? SEM_DATA).localeCompare(b.data ?? SEM_DATA));
@@ -415,4 +410,46 @@ function BaixarDocumento({ tipo, token }: { tipo: "boleto" | "nfs"; token: strin
       </svg>
     </a>
   );
+}
+
+/**
+ * O que a busca do topo alcança num cartão.
+ *
+ * ⚠️ Antes eram DOIS campos: a etiqueta e o nome do cliente. Quem procurava pelo
+ * valor ("2.400") ou pelo que a cobrança é ("instalação") não achava nada — e um
+ * quadro com quarenta cartões sem busca útil é uma lista para rolar.
+ *
+ * ⚠️ O valor entra JÁ FORMATADO, e não em centavos. É a forma que a pessoa vê
+ * na tela e a que ela vai digitar; procurar em `240000` seria pedir que ela
+ * soubesse como o sistema guarda dinheiro por dentro.
+ */
+function casa(c: Cartao, termo: string): boolean {
+  const campos = [
+    c.etiqueta,
+    c.cliente,
+    c.detalhe,
+    formatarSemSimbolo(c.valor),
+    formatarSemSimbolo(c.total),
+    c.data ? paraFormatoBR(c.data) : "",
+  ];
+
+  if (campos.some((f) => f.toLowerCase().includes(termo))) return true;
+
+  /*
+   * ⚠️ A segunda passada compara só os DÍGITOS, campo a campo.
+   *
+   * "2400" não casa com "2.400,00" por texto, e "1209" não casa com
+   * "12/09/2026" — mas é assim que se digita quando se tem o número na cabeça.
+   * Campo a campo, e não na frase inteira concatenada: junta, a busca acharia
+   * um número que atravessa a fronteira entre dois campos e não existe em
+   * nenhum deles.
+   */
+  const alvo = digitos(termo);
+  if (!alvo) return false;
+
+  return campos.some((f) => digitos(f).includes(alvo));
+}
+
+function digitos(t: string): string {
+  return t.replace(/\D/g, "");
 }
