@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { PageHeader, PageLayout, Panel, SearchInput } from "@/components/ui/kit";
+import { PageHeader, PageLayout, Panel } from "@/components/ui/kit";
+import { useRegistrarBusca } from "@/components/layout/busca-da-tela";
 import { Quadro, type ColunaQuadro } from "@/components/ui/quadro";
 import { formatarSemSimbolo, type Centavos } from "@/shared/utils/money";
 import { paraFormatoBR, type DataISO } from "@/shared/utils/datas";
@@ -145,12 +146,24 @@ export function CobrancasQuadro({
       .sort((a, b) => (a.data ?? SEM_DATA).localeCompare(b.data ?? SEM_DATA));
   }, [parcelas, orcamentos, busca]);
 
+  /*
+   * ⚠️ A tela se ANUNCIA para a caixa do topo, em vez de ter a propria.
+   *
+   * O portal usa a mesma casca do sistema, e a casca ja traz uma busca no
+   * cabecalho — entao aqui havia DUAS caixas na mesma linha, uma filtrando e a
+   * outra sem servir para nada. Duas caixas obrigam a escolher onde digitar
+   * antes de saber o que se procura, e a de cima, que e a que o olho acha
+   * primeiro, era justamente a que nao filtrava.
+   *
+   * O estado continua sendo daqui: quem sabe o que e "buscar uma cobranca" e
+   * esta tela. A caixa de cima so chama `setBusca`.
+   */
+  useRegistrarBusca("Minhas cobranças", busca, setBusca, cartoes.length);
+
   return (
     <PageLayout>
       <Panel>
-        <PageHeader title="Minhas cobranças">
-          <SearchInput value={busca} onSearch={setBusca} />
-        </PageHeader>
+        <PageHeader title="Minhas cobranças" />
 
         <Quadro
           colunas={COLUNAS}
